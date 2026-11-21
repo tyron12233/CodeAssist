@@ -53,11 +53,49 @@ internal fun KotlinResolver.smartCastTypeAt(name: String, offset: Int): KotlinTy
     var child: KtElement? = null
     var node: KtElement? = elementAt(offset)
     while (node != null) {
-        narrowingAtNode(node, child, offset, name)?.let { return it }
+        narrowingAtNode(node, child, offset, name)?.let { return keepDeclaredWhenNarrower(it, name, offset) }
         child = node
         node = node.parent
     }
-    return null
+    return flowNarrowing(name, offset)
+}
+
+/**
+ * A smart cast to a type the declaration already implies narrows nothing: the value is the intersection of the
+ * two, which is the declared type itself (`a: A<T>` checked `is Any` is still an `A<T>`). Returning the check's own type there loses members and type
+ * arguments the declaration had. [narrowed] is returned as is when it is genuinely narrower (or unrelated).
+ */
+private fun KotlinResolver.keepDeclaredWhenNarrower(narrowed: KotlinType, name: String, offset: Int): KotlinType? {
+    if (name == THIS_SUBJECT) return narrowed
+    val declared = localsAt(offset, name).firstOrNull()?.type as? KotlinType ?: return narrowed
+    if (declared.isTypeParameter || narrowed.isTypeParameter) return narrowed
+    // The same classifier is left to the check: its type arguments may say something new (`a as G<Int>` on a
+    // `G<Number>`), which the erased narrowing cannot carry but the declaration would contradict.
+    if (narrowed.qualifiedName == declared.qualifiedName) return narrowed
+    val nonNull = declared.withNullable(false)
+    return if (narrowed.isAssignableFrom(nonNull)) nonNull else narrowed
+}
+
+/**
+ * The narrowing the flow walk ([flowProvenTypes]) proves for the name read at [offset], when the guards enclosing
+ * it say nothing: a cast statement or argument before the use (`foo(a as B); a.bar()`), a failed earlier `when`
+ * branch (`!is A -> …` makes the next branches see an `A`), `(a as? T)!!`. Of several proven types the most
+ * specific wins, and [keepDeclaredWhenNarrower] keeps a declaration that is already narrower.
+ */
+private fun KotlinResolver.flowNarrowing(name: String, offset: Int): KotlinType? {
+    if (name == THIS_SUBJECT) return null
+    val ref = elementAt(offset)?.parent as? KtNameReferenceExpression ?: return null
+    if (ref.getReferencedName() != name || ref.textRange.startOffset != offset) return null
+    val proven = flowProvenTypes(ref, deep = false)
+    if (proven.isEmpty()) {
+        // No type is proven, but a null check may still be: the declared type, made non-null, is then what the
+        // value has here (`val x = if (p != null) p else "a"` is a `String`).
+        val declared = localsAt(offset, name).firstOrNull()?.type as? KotlinType ?: return null
+        if (!declared.nullable || declared.isTypeParameter) return null
+        return if (flowProvenNonNull(ref)) declared.withNullable(false) else null
+    }
+    val best = proven.firstOrNull { t -> proven.all { o -> o === t || o.isAssignableFrom(t) } } ?: proven.first()
+    return keepDeclaredWhenNarrower(best, name, offset)
 }
 
 /**

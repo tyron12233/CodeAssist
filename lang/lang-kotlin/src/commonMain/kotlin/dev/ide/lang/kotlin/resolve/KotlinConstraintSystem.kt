@@ -53,6 +53,11 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
     var hasContradiction = false
         private set
 
+    /** Record a contradiction found outside the constraints themselves (a lambda of the wrong arity). */
+    fun contradict() {
+        hasContradiction = true
+    }
+
     val isEmpty: Boolean get() = vars.isEmpty()
 
     fun registerVariable(name: String, upperBound: KotlinType? = null) {

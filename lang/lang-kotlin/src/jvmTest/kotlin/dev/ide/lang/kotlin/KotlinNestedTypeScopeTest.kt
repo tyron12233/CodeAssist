@@ -107,12 +107,20 @@ class KotlinNestedTypeScopeTest {
         val cases = mapOf(
             "direct supertype" to "open class Base {\n class N(val x: Int)\n}\nclass Sub : Base() {\n val n = N(1)\n}",
             "two levels up" to "open class Top {\n class N(val x: Int)\n}\nopen class Mid : Top()\nclass Sub : Mid() {\n val n = N(1)\n}",
-            "interface" to "interface I {\n class N(val x: Int)\n}\nclass Sub : I {\n val n = N(1)\n}",
         )
         for ((label, src) in cases) {
             val d = diagnose("package p\n$src")
             assertTrue(unresolved(d).isEmpty(), "an inherited nested type must resolve ($label); got ${unresolved(d)}")
         }
+    }
+
+    /** Only a superCLASS passes its nested types on. An interface's are reached through its name (`I.N`), as the
+     *  compiler's own `scopes/inheritance/nestedClassesFromInterface.kt` test data marks `B_` unresolved in
+     *  `class Y : B`. */
+    @Test
+    fun anInterfacesNestedTypeIsNotInherited() {
+        val d = diagnose("package p\ninterface I {\n class N(val x: Int)\n}\nclass Sub : I {\n val n = N(1)\n val m = I.N(1)\n}")
+        assertTrue(unresolved(d).size == 1, "only the bare `N` is unresolved; got ${unresolved(d)}")
     }
 
     @Test

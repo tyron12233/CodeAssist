@@ -12,7 +12,12 @@ import dev.ide.kotlin.syntax.psi.KtClassBody
 import dev.ide.kotlin.syntax.psi.KtClassOrObject
 import dev.ide.kotlin.syntax.psi.KtConstructorDelegationCall
 import dev.ide.kotlin.syntax.psi.KtContinueExpression
+import dev.ide.kotlin.syntax.psi.KtClass
+import dev.ide.kotlin.syntax.psi.KtTypeParameterListOwner
+import dev.ide.kotlin.syntax.psi.KtDeclaration
 import dev.ide.kotlin.syntax.psi.KtElement
+import dev.ide.kotlin.syntax.psi.KtSecondaryConstructor
+import dev.ide.lang.completion.CaretAction
 import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtImportDirective
@@ -21,6 +26,7 @@ import dev.ide.kotlin.syntax.psi.KtLabeledExpression
 import dev.ide.kotlin.syntax.psi.KtLambdaArgument
 import dev.ide.kotlin.syntax.psi.KtLambdaExpression
 import dev.ide.kotlin.syntax.psi.KtLoopExpression
+import dev.ide.kotlin.syntax.psi.KtObjectDeclaration
 import dev.ide.kotlin.syntax.psi.KtModifierKeywordToken
 import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtNamedDeclaration
@@ -374,6 +380,7 @@ class KotlinCompletion(
                 inLoop = KotlinKeywords.isInLoop(markerLeaf),
                 hasType = service::isKnownType,
             )
+            refineReceiverKeywords(tail, markerLeaf, offset, prefix, resolver)
         }
 
         // Reserve room so the (small) keyword/template/postfix tail is never starved by a large symbol set —
@@ -672,11 +679,10 @@ class KotlinCompletion(
         // arg being edited carries the marker, so its (now-garbled) name never matches a real parameter and so
         // doesn't suppress its own re-completion.
         namedArgCallOf(markerLeaf)?.let { call ->
-            val editingName = climbTo<KtValueArgumentName>(markerLeaf) != null
-            val supplied = suppliedArgNames(call)
-            resolver.callParameters(call)
-                .filter { it.name !in supplied && matcher.matches(it.name) }
-                .forEach { extra += KotlinCompletionItems.namedArgItem(it, bareName = editingName) }
+            val named = namedArgumentItems(call, markerLeaf, offset, matcher, resolver)
+            extra += named.items
+            // Past a named argument out of its own position only another named one may follow: nothing else fits.
+            if (named.onlyNamed) return PositionResult(emptyList(), extra = extra)
         }
         // Inside a constructor-DELEGATION call the KtCallExpression path above can't see: a supertype call in a
         // class header (`class X : Base(<caret>)`) or a secondary ctor's `: this(<caret>)` / `: super(<caret>)`.
@@ -703,6 +709,11 @@ class KotlinCompletion(
         // declaring keyword is already typed); a parameter / type-parameter name keeps its modifiers
         // (`val`/`var`/`vararg`/`reified`), so keyword context stays on there.
         val declName = declarationNameKind(markerLeaf)
+        // A function or constructor parameter being named: `name: Type` pairs, from the names other parameters
+        // in this file already use and from the type names the typed prefix fits (`fun f(b|` -> `bar: FooBar`).
+        if (declName == DeclNameKind.PARAM) extra += parameterNameAndTypeItems(markerLeaf, prefix, resolver, autoImport)
+        // The name of an `operator fun` that can be one (a member, or an extension): the operator conventions.
+        if (declName == DeclNameKind.DECL) extra += operatorNameItems(markerLeaf, matcher)
         if (declName != DeclNameKind.NONE) {
             // …with ONE exception: a `fun`/`val` name may be preceded by a RECEIVER TYPE (`fun String.shout()`,
             // `val List<T>.second`), which is the only way to declare an extension. So type names do belong at
@@ -743,6 +754,163 @@ class KotlinCompletion(
             kind = CompletionItemKind.PARAMETER,
             sortPriority = -1,
         )
+    }
+
+    /**
+     * IntelliJ's parameter name-and-type completion, at the name of a value parameter of a named function or a
+     * class/secondary constructor (not a lambda's, a setter's, a catch clause's or an annotation class's, where a
+     * free `name: Type` pair is not what is written). Two sources, deduplicated by the inserted text:
+     *  * the parameters other functions and constructors in this FILE declare, whose name fits the prefix
+     *    (`strings: List<String>`), as written;
+     *  * a TYPE whose name the prefix fits, named after it: each camel-case tail of the type name is a
+     *    suggestion (`FooBar` -> `fooBar`, `bar`), matched by prefix or camel humps against the typed text. A
+     *    typed head the user keeps is split off at an uppercase letter (`myB` -> `my` + `Bar`); the first split
+     *    that matches wins, so `myFooF` names a `FooFaa` `myFooFaa`, never `myFooFooFaa`. Only with a typed
+     *    prefix: with none, every type in the project would qualify.
+     */
+    private fun parameterNameAndTypeItems(
+        markerLeaf: KtElement?,
+        prefix: String,
+        resolver: KotlinResolver,
+        autoImport: KotlinAutoImport,
+    ): List<CompletionItem> {
+        val param = markerLeaf?.parent as? KtParameter ?: return emptyList()
+        if (param.typeReference != null) return emptyList()
+        val owner = (param.parent as? KtParameterList)?.parent ?: return emptyList()
+        val ok = when (owner) {
+            is KtNamedFunction -> owner.name != null
+            is KtPrimaryConstructor -> (owner.parent as? KtClass)?.isAnnotation() != true
+            is KtSecondaryConstructor -> true
+            else -> false
+        }
+        if (!ok) return emptyList()
+        val out = LinkedHashMap<String, CompletionItem>()
+        fun fits(m: PrefixMatcher, name: String): Boolean =
+            m.grade(name).let { it != null && it != PrefixMatcher.Grade.SUBSTRING }
+
+        // From this file's other parameters (not a local function's: those are not part of the file's vocabulary).
+        // A parameter typed with a type parameter that is not in scope here (another function's `T`, a class's
+        // `T` from outside that class) is left out: its type would not resolve.
+        val whole = PrefixMatcher(prefix)
+        val visibleTypeParams = HashSet<String>()
+        run {
+            var n: KtElement? = param
+            while (n != null) {
+                (n as? KtTypeParameterListOwner)?.typeParameters?.forEach { tp -> tp.name?.let(visibleTypeParams::add) }
+                n = n.parent
+            }
+        }
+        (markerLeaf.containingFile as? KtFile)?.let { kt ->
+            fun visit(decls: List<KtDeclaration>, outerTypeParams: Set<String>) {
+                for (d in decls) {
+                    val declared = outerTypeParams + ((d as? KtTypeParameterListOwner)?.typeParameters?.mapNotNull { it.name }.orEmpty())
+                    val hidden = declared - visibleTypeParams
+                    val params = when (d) {
+                        is KtNamedFunction -> d.valueParameters
+                        is KtClass -> d.primaryConstructorParameters
+                        is KtSecondaryConstructor -> d.valueParameters
+                        else -> emptyList()
+                    }
+                    for (p in params) {
+                        if (p === param) continue
+                        val name = p.name ?: continue
+                        val typeText = p.typeReference?.let(::parameterTypeText) ?: continue
+                        if (MARKER in name || !fits(whole, name)) continue
+                        if (hidden.any { tp -> Regex("\\b${Regex.escape(tp)}\\b").containsMatchIn(typeText) }) continue
+                        val text = "$name: $typeText"
+                        out.getOrPut(text) { paramNameTypeItem(text, null, emptyList()) }
+                    }
+                    if (d is KtClassOrObject) visit(d.declarations, declared)
+                }
+            }
+            visit(kt.declarations, emptySet())
+        }
+
+        if (prefix.isNotEmpty()) {
+            // Splits of the typed prefix into a kept head and a tail matched against a suggestion, shortest head
+            // first: the whole prefix, then at each uppercase letter.
+            val splits = buildList {
+                add("" to prefix)
+                for (i in 1 until prefix.length) if (prefix[i].isUpperCase()) add(prefix.substring(0, i) to prefix.substring(i))
+            }
+            val types = LinkedHashMap<String, KotlinSymbol>()
+            for ((_, tail) in splits) {
+                service.typeNameCandidates(tail.replaceFirstChar { it.uppercaseChar() }, currentFilePath = resolver.fileContext.path)
+                    .symbols.forEach { s -> (s.type as? KotlinType)?.qualifiedName?.let { types.putIfAbsent(it, s) } }
+            }
+            // A project type matches on any camel tail (`b` -> `FooBar`), which a name-index query cannot ask for.
+            service.sourceTypeSymbols(resolver.fileContext.path)
+                .forEach { s -> (s.type as? KotlinType)?.qualifiedName?.let { types.putIfAbsent(it, s) } }
+            for ((fqn, s) in types) {
+                if (s.kind != SymbolKind.CLASS && s.kind != SymbolKind.INTERFACE && s.kind != SymbolKind.ENUM) continue
+                if (service.isObject(fqn)) continue
+                val words = camelWords(s.name)
+                if (words.isEmpty()) continue
+                // `URLConnection` -> `urlConnection`: a leading acronym is lowercased whole.
+                val suggestions = words.indices.map { i ->
+                    val first = words[i]
+                    val head = if (first.length > 1 && first.all { it.isUpperCase() }) first.lowercase()
+                    else first.replaceFirstChar { it.lowercaseChar() }
+                    head + words.subList(i + 1, words.size).joinToString("")
+                }
+                for ((head, tail) in splits) {
+                    val m = PrefixMatcher(tail)
+                    val hits = suggestions.filter { fits(m, it) }
+                    if (hits.isEmpty()) continue
+                    val generic = service.classTypeParameters(fqn).isNotEmpty()
+                    for (h in hits) {
+                        val name = if (head.isEmpty()) h else head + h.replaceFirstChar { it.uppercaseChar() }
+                        val text = "$name: ${s.name}"
+                        out.getOrPut(text) { paramNameTypeItem(text, if (generic) "<>" else null, importEditFor(s, autoImport)) }
+                    }
+                    break
+                }
+            }
+        }
+        return out.values.toList()
+    }
+
+    /** The operator-convention names (`plus`, `get`, `invoke`, …) at the name of an `operator fun` that is a
+     *  member or an extension, each with the syntax it overloads as its detail. A top-level `operator fun`
+     *  with no receiver can overload nothing, so it gets none. */
+    private fun operatorNameItems(markerLeaf: KtElement?, matcher: PrefixMatcher): List<CompletionItem> {
+        val fn = markerLeaf?.parent as? KtNamedFunction ?: return emptyList()
+        if (!fn.hasModifier(KtTokens.OPERATOR_KEYWORD)) return emptyList()
+        if (fn.receiverTypeReference == null && fn.parent !is KtClassBody) return emptyList()
+        return OPERATOR_NAMES.filter { (name, _) -> matcher.matches(name) }.map { (name, syntax) ->
+            CompletionItem(name, name, CompletionItemKind.METHOD, detail = syntax.ifEmpty { null }, sortPriority = -1)
+        }
+    }
+
+    /** A `name: Type` item; a generic type inserts its `<>` with the caret inside, ready for the arguments. */
+    private fun paramNameTypeItem(text: String, typeArgs: String?, imports: List<TextEdit>): CompletionItem =
+        CompletionItem(
+            label = text,
+            insertText = text + typeArgs.orEmpty(),
+            kind = CompletionItemKind.PARAMETER,
+            sortPriority = -1,
+            additionalEdits = imports,
+            caret = if (typeArgs != null) CaretAction.At(text.length + 1) else CaretAction.AtEnd,
+        )
+
+    /** A parameter's type as written, without its type annotations (`@Foo Int` -> `Int`). */
+    private fun parameterTypeText(ref: KtTypeReference): String =
+        ref.text.replace(TYPE_ANNOTATIONS, "").trim()
+
+    /** `FooBar` -> [Foo, Bar]; `URLConnection` -> [URL, Connection]. */
+    private fun camelWords(name: String): List<String> {
+        val words = ArrayList<String>()
+        var start = 0
+        for (i in 1 until name.length) {
+            val boundary = name[i].isUpperCase() &&
+                (!name[i - 1].isUpperCase() || (i + 1 < name.length && name[i + 1].isLowerCase()))
+            if (boundary) {
+                words += name.substring(start, i)
+                start = i
+            }
+        }
+        if (name.isNotEmpty()) words += name.substring(start)
+        return words.filter { it.isNotEmpty() && it.first().isLetter() }
     }
 
     /** Whether the caret sits on the NAME identifier of a declaration, and if so which kind — so completion can
@@ -975,6 +1143,84 @@ class KotlinCompletion(
             .map { CompletionItem(it, it, CompletionItemKind.KEYWORD, sortPriority = -1) }
     }
 
+    /**
+     * The keyword items that depend on what encloses the caret, which [KotlinKeywords] (a PSI-shape table)
+     * cannot see:
+     *  * `this` only where there is a `this` (an enclosing class, an extension, a receiver lambda) and `super`
+     *    only inside a class: at a top-level function's statement neither means anything;
+     *  * the LABELED forms beside the plain ones, as IntelliJ offers them: `return@forEach` for each enclosing
+     *    lambda up to the function it is in, `break@outer`/`continue@outer` for each enclosing labeled loop
+     *    (not across a lambda or function), and `this@Outer` for each enclosing class, extension function and
+     *    receiver lambda.
+     */
+    private fun refineReceiverKeywords(
+        tail: MutableList<CompletionItem>,
+        leaf: KtElement?,
+        offset: Int,
+        prefix: String,
+        resolver: KotlinResolver,
+    ) {
+        fun has(k: String) = tail.any { it.kind == CompletionItemKind.KEYWORD && it.label == k }
+        val insideClass = run {
+            var n: KtElement? = leaf
+            while (n != null) {
+                if (n is KtClassOrObject) return@run true
+                n = n.parent
+            }
+            false
+        }
+        if (has("this") && resolver.implicitReceiversAt(offset).isEmpty()) tail.removeAll { it.kind == CompletionItemKind.KEYWORD && it.label == "this" }
+        if (has("super") && !insideClass) tail.removeAll { it.kind == CompletionItemKind.KEYWORD && it.label == "super" }
+
+        val labeled = LinkedHashSet<String>()
+        if (has("return")) {
+            var n: KtElement? = leaf
+            while (n != null && n !is KtNamedFunction && n !is KtClassOrObject) {
+                if (n is KtLambdaExpression) (explicitLabel(n) ?: lambdaImplicitLabel(n))?.let { labeled += "return@$it" }
+                n = n.parent
+            }
+        }
+        if (has("break") || has("continue")) {
+            var n: KtElement? = leaf
+            while (n != null && n !is KtLambdaExpression && n !is KtNamedFunction && n !is KtClassOrObject) {
+                if (n is KtLoopExpression) (n.parent as? KtLabeledExpression)?.getLabelName()?.let { label ->
+                    if (has("break")) labeled += "break@$label"
+                    if (has("continue")) labeled += "continue@$label"
+                }
+                n = n.parent
+            }
+        }
+        // Not at a constructor's delegation call (`constructor() : this(…)`), where `this` names the call.
+        if (has("this") && climbTo<KtConstructorDelegationCall>(leaf) == null) {
+            var n: KtElement? = leaf
+            // Past a nested class, an object or a companion, an outer class has no `this` here.
+            var outerClosed = false
+            while (n != null) {
+                when (n) {
+                    is KtClassOrObject -> {
+                        if (!(n is KtObjectDeclaration && n.isObjectLiteral()) && (!outerClosed || isSingletonScope(n))) {
+                            n.name?.let { labeled += "this@$it" }
+                        }
+                        if (closesOuterInstanceScope(n)) outerClosed = true
+                    }
+                    is KtNamedFunction -> if (!outerClosed && n.receiverTypeReference != null) n.name?.let { labeled += "this@$it" }
+                    is KtLambdaExpression -> if (!outerClosed && resolver.lambdaReceiverType(n) != null) {
+                        (explicitLabel(n) ?: lambdaImplicitLabel(n))?.let { labeled += "this@$it" }
+                    }
+                }
+                n = n.parent
+            }
+        }
+        for (k in labeled) {
+            if (!k.startsWith(prefix, ignoreCase = true)) continue
+            tail += CompletionItem(k, k, CompletionItemKind.KEYWORD, sortPriority = 50)
+        }
+    }
+
+    /** The label written on a lambda (`outer@ { … }`), or null. */
+    private fun explicitLabel(lambda: KtLambdaExpression): String? =
+        (lambda.parent as? KtLabeledExpression)?.getLabelName()
+
     /** The implicit label of a lambda that is a call argument — the callee's name (`list.forEach { }` →
      *  `forEach`, `run { }` → `run`), which `return@forEach` / `this@run` target. Null for a non-argument lambda. */
     private fun lambdaImplicitLabel(lambda: KtLambdaExpression): String? {
@@ -1019,8 +1265,122 @@ class KotlinCompletion(
         return if (service.sealedSubclassesOf(t.qualifiedName) != null) t else null
     }
 
-    private fun suppliedArgNames(call: KtCallExpression): Set<String> =
-        call.valueArguments.mapNotNull { it.getArgumentName()?.asName?.identifier }.toHashSet()
+    /** The named-argument items at the caret ([namedArgumentItems]), and whether ONLY a named argument may be
+     *  written there: after a named argument out of its own position, Kotlin admits no further positional one. */
+    private class NamedArgs(val items: List<CompletionItem>, val onlyNamed: Boolean)
+
+    /** The arguments before the caret mapped onto one overload's parameters: the filled indices, the positional
+     *  (index, argument) pairs, and the next positional index (-1 once only named arguments may follow). */
+    private class ArgMapping(val filled: Set<Int>, val positional: List<Pair<Int, KtValueArgument>>, val next: Int)
+
+    /**
+     * The named-argument items for the argument the caret is in, the way IntelliJ offers them:
+     *  * only where an argument NAME can go: the argument is a bare name being typed, or the caret is on the
+     *    name of an already-named one (then the bare name is inserted, the ` = ` being there already). In the
+     *    VALUE of a named argument (`foo(a = par|)`) none are offered;
+     *  * per callee overload the arguments before the caret map onto (see [mapArguments]) and whose positional
+     *    arguments' types fit, falling back to every overload they map onto when none type-checks;
+     *  * a parameter those arguments already fill is left out (a named argument written AFTER the caret is
+     *    not counted, as IntelliJ does not count it);
+     *  * for the parameter this argument would fill positionally, a Boolean one also gets `p = false` and
+     *    `p = true`, a nullable one `p = null`; and any parameter with a same-named value in scope whose type
+     *    fits gets `p = p`.
+     */
+    private fun namedArgumentItems(
+        call: KtCallExpression,
+        markerLeaf: KtElement?,
+        offset: Int,
+        matcher: PrefixMatcher,
+        resolver: KotlinResolver,
+    ): NamedArgs {
+        val none = NamedArgs(emptyList(), onlyNamed = false)
+        val arg = climbTo<KtValueArgument>(markerLeaf) ?: return none
+        val editingName = climbTo<KtValueArgumentName>(markerLeaf) != null
+        if (!editingName) {
+            if (arg.getArgumentName() != null) return none
+            if (arg.getArgumentExpression() !is KtNameReferenceExpression) return none
+        }
+        val args = call.valueArguments
+        val at = args.indexOf(arg).takeIf { it >= 0 } ?: return none
+        val before = args.subList(0, at)
+
+        fun usableNames(s: KotlinSymbol) =
+            s.paramNames.all { it.isNotEmpty() && (s.origin.fromSource || !resolver.isSyntheticParamName(it)) }
+        fun fitsTypes(s: KotlinSymbol, m: ArgMapping): Boolean = m.positional.all { (i, a) ->
+            val want = s.paramTypes.getOrNull(i) as? KotlinType ?: return@all true
+            val got = a.getArgumentExpression()?.let { resolver.inferType(it) } ?: return@all true
+            argumentFits(want, got)
+        }
+        val mapped = resolver.callTargets(call).filterNot { resolver.isJavaCallable(it) }
+            .filter(::usableNames).mapNotNull { s -> mapArguments(s, before)?.let { s to it } }
+        val applicable = mapped.filter { (s, m) -> fitsTypes(s, m) }.ifEmpty { mapped }
+
+        val out = LinkedHashMap<String, CompletionItem>()
+        for ((s, m) in applicable) {
+            s.paramNames.forEachIndexed { i, name ->
+                if ((i in m.filled && i != s.varargParamIndex) || !matcher.matches(name)) return@forEachIndexed
+                val type = s.paramTypes.getOrNull(i) as? KotlinType
+                val p = ParamInfo(name, type)
+                out.getOrPut("$name =") { KotlinCompletionItems.namedArgItem(p, bareName = editingName) }
+                if (editingName) return@forEachIndexed
+                if (i == m.next && type != null) {
+                    val boolean = type.qualifiedName == "kotlin.Boolean"
+                    val values = listOfNotNull(
+                        "false".takeIf { boolean }, "null".takeIf { type.nullable }, "true".takeIf { boolean },
+                    )
+                    for (v in values) out.getOrPut("$name = $v") { KotlinCompletionItems.namedArgValueItem(p, v) }
+                }
+                // A value declared in this file (a local, a parameter, an enclosing member, a top-level one); an
+                // imported one is not offered, as IntelliJ does not offer it.
+                val same = (resolver.localsAt(offset, name) + resolver.sameFileScopeSymbols(offset, name)).firstOrNull {
+                    it.name == name && it.kind in VALUE_KINDS
+                } ?: resolver.implicitReceiverMember(name, offset)?.takeIf { it.kind in VALUE_KINDS }
+                val sameType = same?.type as? KotlinType
+                if (same != null && (type == null || sameType == null || argumentFits(type, sameType))) {
+                    out.getOrPut("$name = $name") { KotlinCompletionItems.namedArgValueItem(p, name) }
+                }
+            }
+        }
+        val onlyNamed = !editingName && applicable.isNotEmpty() && applicable.all { (_, m) -> m.next < 0 }
+        return NamedArgs(out.values.toList(), onlyNamed)
+    }
+
+    /**
+     * [before] mapped onto [s]'s parameters the way the compiler maps them: a positional argument fills the
+     * next parameter, a named one in its own position does too, and a named one out of position ends the
+     * positional run, after which only named arguments may follow. Null when they do not map onto [s].
+     */
+    private fun mapArguments(s: KotlinSymbol, before: List<KtValueArgument>): ArgMapping? {
+        val names = s.paramNames
+        val filled = HashSet<Int>()
+        val positional = ArrayList<Pair<Int, KtValueArgument>>()
+        var next = 0
+        for (a in before) {
+            val named = a.getArgumentName()?.asName?.identifier
+            if (named != null) {
+                val i = names.indexOf(named).takeIf { it >= 0 } ?: return null
+                filled += i
+                next = if (next >= 0 && i == next) next + 1 else -1
+            } else {
+                if (next < 0) return null
+                val i = if (s.varargParamIndex in 0 until next) s.varargParamIndex else next
+                if (i >= names.size) return null
+                filled += i
+                positional += i to a
+                if (i != s.varargParamIndex) next++
+            }
+        }
+        return ArgMapping(filled, positional, next)
+    }
+
+    /** Whether a value of [got] can be passed for a parameter of type [want], erring towards yes: a type
+     *  parameter accepts anything, and an integer literal's type is fixed by the parameter it is passed to. */
+    private fun argumentFits(want: KotlinType, got: KotlinType): Boolean {
+        if (want.isTypeParameter || got.isTypeParameter) return true
+        if (got.nullable && !want.nullable && got.qualifiedName != "kotlin.Nothing") return false
+        if (want.qualifiedName in NUMERIC_TYPES && got.qualifiedName in NUMERIC_TYPES) return true
+        return runCatching { want.isAssignableFrom(got) }.getOrDefault(true)
+    }
 
     private val previewAnnotationNames =
         setOf("Preview") + PreviewConstants.builtinMultiPreviews.keys
@@ -1600,6 +1960,28 @@ class KotlinCompletion(
     private companion object {
         // The classic completion dummy identifier; unlikely to collide with real code.
         const val MARKER = "IntellijIdeaRulezzz"
+
+        /** Kotlin's operator conventions, with the syntax each one overloads (empty where it has none). */
+        private val OPERATOR_NAMES = listOf(
+            "compareTo" to "< > <= >=", "contains" to "in !in", "dec" to "--", "div" to "/", "divAssign" to "/=",
+            "equals" to "== !=", "get" to "[...]", "getValue" to "", "hasNext" to "", "inc" to "++",
+            "invoke" to "(...)", "iterator" to "", "minus" to "-", "minusAssign" to "-=", "next" to "",
+            "not" to "!", "plus" to "+", "plusAssign" to "+=", "rangeTo" to "..", "rangeUntil" to "..<",
+            "rem" to "%", "remAssign" to "%=", "set" to "[...] = ...", "setValue" to "", "times" to "*",
+            "timesAssign" to "*=", "unaryMinus" to "-", "unaryPlus" to "+", "provideDelegate" to "",
+            "component1" to "", "component2" to "", "component3" to "",
+        )
+
+        /** What a same-named value that prefills a named argument (`a = a`) can be. */
+        private val VALUE_KINDS = setOf(SymbolKind.LOCAL_VARIABLE, SymbolKind.PARAMETER, SymbolKind.FIELD)
+
+        private val NUMERIC_TYPES = setOf(
+            "kotlin.Int", "kotlin.Long", "kotlin.Short", "kotlin.Byte", "kotlin.Double", "kotlin.Float",
+            "kotlin.UInt", "kotlin.ULong", "kotlin.UShort", "kotlin.UByte",
+        )
+
+        /** Leading type annotations on a type reference (`@Foo Int`, `@Ann(x) T`). */
+        private val TYPE_ANNOTATIONS = Regex("""^(@[\w.]+(\([^)]*\))?\s*)+""")
 
         /** The conventional name of a property setter's parameter. */
         private const val SETTER_PARAMETER = "value"

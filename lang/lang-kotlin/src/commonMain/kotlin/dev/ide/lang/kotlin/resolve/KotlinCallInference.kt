@@ -1,6 +1,7 @@
 package dev.ide.lang.kotlin.resolve
 
 import dev.ide.kotlin.syntax.psi.KtCallExpression
+import dev.ide.kotlin.syntax.psi.KtCallableReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtElement
 import dev.ide.kotlin.syntax.psi.KtLambdaExpression
@@ -89,6 +90,15 @@ internal fun KotlinResolver.inferCallBindings(
                 (pt.typeArguments.firstOrNull() as? KotlinType)
                     ?.takeIf { r -> r.typeArguments.any { (it as? KotlinType)?.isTypeParameter == true } }
                     ?.let { inferBuilderVars(it, expr, cs) }
+            }
+        } else if (expr is KtCallableReferenceExpression && service.functionalShape(pt) != null) {
+            // A callable reference fills a functional parameter as a lambda does: its target's result
+            // constrains the functional return (`let(regex::find)` ⇒ `R = MatchResult?`). Its own type is a
+            // `KFunction`/`KProperty`, which never unifies with `(T) -> R`, so the generic branch bound nothing.
+            val shape = service.functionalShape(pt)!!
+            val functionalReturn = (shape.returnType as? KotlinType)?.let { service.substitute(it, cs.solve()) }
+            if (!coercesResultToUnit(functionalReturn)) {
+                callableReferenceResultType(expr)?.let { cs.addSubtypeConstraint(it, shape.returnType) }
             }
         } else {
             // A SPREAD argument (`listOf(*arr)`) passes the array's ELEMENTS to the vararg, whose parameter type

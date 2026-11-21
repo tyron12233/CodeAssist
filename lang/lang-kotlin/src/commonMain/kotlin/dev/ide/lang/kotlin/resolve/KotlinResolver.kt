@@ -2,6 +2,7 @@ package dev.ide.lang.kotlin.resolve
 
 import dev.ide.kotlin.syntax.psi.KtCallExpression
 import dev.ide.kotlin.syntax.psi.KtElement
+import dev.ide.kotlin.syntax.psi.KtTypeReference
 import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtLambdaExpression
@@ -70,6 +71,14 @@ class KotlinResolverCaches {
     /** Per-flow-root result of the CFG var-nullability pass: the var references it proves non-null (see
      *  [KotlinVarNullFlow]). Keyed by the analysed body block. */
     val varNonNull = HashMap<KtElement, Set<KtElement>>()
+
+    /** Per file: the `is`/`as`/`when`-pattern type references written against each simple name, the candidates
+     *  [flowProvenTypes] tries to prove at a use. Keyed by the file. */
+    val castTargets = HashMap<KtElement, Map<String, List<KtTypeReference>>>()
+
+    /** Per file: the names a null check could be written against (see `flowCheckedNames`), the cheap gate that
+     *  keeps type inference from walking the flow for a name nothing checks. Keyed by the file. */
+    val flowCheckedNames = HashMap<KtElement, Set<String>>()
 
     /**
      * Symbols for local `val`/`var` and value-parameter DECLARATIONS, keyed by the declaration.

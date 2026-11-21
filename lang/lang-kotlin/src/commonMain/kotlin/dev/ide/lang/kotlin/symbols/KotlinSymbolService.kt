@@ -1057,6 +1057,17 @@ class KotlinSymbolService(
         functionTypeFromText(trimmed, ctx, enclosingClassFqn)?.let { return it }
         val nullable = trimmed.endsWith("?")
         val core = trimmed.removeSuffix("?").trim()
+        // A qualified type whose OUTER segment carries arguments: `A<Int>.B`, `Outer<U>.Inner<S>` (an inner class
+        // of a generic outer). Splitting at the first `<` read it as `A` applied to `Int>.B`. The classifier is the
+        // dotted path without the outer arguments, with the last segment's own arguments.
+        qualifiedSegments(core)?.let { segs ->
+            val path = segs.joinToString(".") { it.substringBefore('<').trim() }
+            val lastArgs = segs.last().substringAfter('<', "").substringBeforeLast('>', "")
+            val fqn = resolveTypeName(path, ctx, enclosingClassFqn) ?: return null
+            val args = if (lastArgs.isBlank()) emptyList()
+            else splitTopLevel(lastArgs).mapNotNull { typeFromText(it, ctx, enclosingClassFqn) }
+            return KotlinType(fqn, args, nullable, this)
+        }
         val head = core.substringBefore('<').trim()
         val argText = core.substringAfter('<', "").substringBeforeLast('>', "")
         // Expand a NON-generic project typealias applied WITHOUT type arguments (`Board = List<Tile>`, used as
@@ -1078,6 +1089,27 @@ class KotlinSymbolService(
         val args = if (argText.isBlank()) emptyList()
         else splitTopLevel(argText).mapNotNull { typeFromText(it, ctx, enclosingClassFqn) }
         return KotlinType(fqn, args, nullable, this)
+    }
+
+    /** [core]'s segments split at top-level dots when some segment before the last carries type arguments
+     *  (`A<Int>.B` -> [`A<Int>`, `B`]), else null: a plain dotted name is left to [resolveTypeName]. */
+    private fun qualifiedSegments(core: String): List<String>? {
+        val lt = core.indexOf('<')
+        if (lt < 0) return null
+        val segs = ArrayList<String>()
+        var depth = 0
+        var from = 0
+        for (i in core.indices) {
+            when (core[i]) {
+                '<' -> depth++
+                '>' -> depth--
+                '(' , ')' -> if (depth == 0) return null // a function type or an annotation, not a path
+                '.' -> if (depth == 0) { segs += core.substring(from, i); from = i + 1 }
+            }
+        }
+        segs += core.substring(from)
+        if (segs.size < 2 || segs.dropLast(1).none { '<' in it }) return null
+        return segs
     }
 
     /** Re-entrancy depth for project-typealias expansion in [typeFromText] — bounds a cyclic/deeply-chained
@@ -1307,13 +1339,22 @@ class KotlinSymbolService(
         if (enclosingClassFqn != null && simple in model().nestedSimpleNames) {
             val classes = model().classByFqn
             var owner: String? = enclosingClassFqn
+            // A class's OWN companion object is part of its static scope: `class X { companion object { class Y };
+            // val y: Y }` names the companion's nested type bare. A supertype's companion is not: K2 reports
+            // `FromCompanionA` unresolved in a subclass of the class whose companion declares it.
+            fun companionNested(cls: String): String? =
+                classes[cls]?.companionObjectName?.let { "$cls.$it.$simple" }?.takeIf { it in classes }
             while (!owner.isNullOrEmpty()) {
                 "$owner.$simple".let { if (it in classes) return it }
+                companionNested(owner)?.let { return it }
                 // A nested classifier is INHERITED into the scope of a subclass, so `N` resolves inside
-                // `class Sub : Base()` when `Base` declares `class N`. The supertype chain is walked only for
-                // a name that is some class's nested type (the guard above), so the memoized walk stays off
-                // the common path.
+                // `class Sub : Base()` when `Base` declares `class N`. Only from a superCLASS: an interface's
+                // nested types are never inherited (`object : Iface { inner class I : Nested }` is unresolved
+                // in K2, and so is one reached through a class implementing that interface). The supertype
+                // chain is walked only for a name that is some class's nested type (the guard above), so the
+                // memoized walk stays off the common path.
                 for (sup in kotlinSupertypesMemo(owner)) {
+                    if (classes[sup]?.isInterface == true) continue
                     "$sup.$simple".let { if (it in classes) return it }
                 }
                 owner = owner.substringBeforeLast('.', "").ifEmpty { null }
@@ -3082,6 +3123,9 @@ class KotlinSymbolService(
             // so only a sealed family nested in an object or class lost its supertype, and with it every
             // `return Plan.Full` from a function declared to return `Plan`.
             rc.superTypeTexts.forEach { t -> sourceSupertypeFqn(t, rc.ctx, rc.fqn)?.let { direct += it } }
+            // Every `enum class` extends `kotlin.Enum<Self>` without naming it: `val a: Enum<E> = E.A` and an
+            // `Enum<*>` parameter both accept the entries.
+            if (rc.isEnum) direct += "kotlin.Enum"
         }
         // Classpath supertypes (@Metadata Kotlin AND plain Java bytecode) via the type-shape index, or a live
         // decode when no index is wired — null in dumb mode, so the chain is empty until the index is ready.
@@ -3721,6 +3765,17 @@ class KotlinSymbolService(
     /** A type-name completion page plus whether it was capped (more matches exist than [symbols] holds). */
     class TypeNameCandidates(val symbols: List<KotlinSymbol>, val capped: Boolean)
 
+    /** Every project-source type visible from [currentFilePath] by simple name, with no prefix: for a caller that
+     *  matches on something other than the name's start (parameter name-and-type completion matches a camel
+     *  tail, `bar` -> `FooBar`). Same visibility as [typeNameCandidates]' source half. */
+    fun sourceTypeSymbols(currentFilePath: String? = null): List<KotlinSymbol> {
+        val currentFileName = currentFilePath?.substringAfterLast('/')
+        return model().classByFqn.values.filter {
+            !it.isCompanion && !it.isLocal &&
+                !(it.isPrivate && currentFileName != null && it.ctx.path.substringAfterLast('/') != currentFileName)
+        }.map { KotlinSymbol(it.simpleName, rawClassKind(it), typeByFqn(it.fqn), origin = SOURCE, declarationNode = it.node) }
+    }
+
     /** Type-name candidates by prefix: source classes + defaults + the classpath `classNames` index. */
     fun typeNamesByPrefix(prefix: String, limit: Int = 100): List<KotlinSymbol> =
         typeNameCandidates(prefix, limit).symbols
@@ -4119,11 +4174,29 @@ class KotlinSymbolService(
      */
     private fun sourceSupertypeFqn(text: String, ctx: FileContext?, ownerFqn: String): String? {
         if ("->" in text) return typeFromText(text, ctx, ownerFqn)?.qualifiedName
-        val resolved = resolveTypeName(text, ctx, ownerFqn) ?: return null
+        // A supertype written through a PROJECT typealias (`typealias TA = Foo<String>; class B : TA()`) is the
+        // aliased class, and that class's members and nested types are what `B` inherits. Generic aliases
+        // count too, since only the head classifier matters for the chain.
+        val head = text.substringBefore('<').removeSuffix("?").trim()
+        val direct = resolveTypeName(text, ctx, ownerFqn)
+        if (direct == null || direct !in model().classByFqn && !isKnownType(direct)) {
+            projectAliasClassifier(head, ctx)?.let { return it }
+        }
+        val resolved = direct ?: return null
         if ('.' !in resolved && !isKnownType(resolved) && TypeRendering.isFunctionType("kotlin.$resolved")) {
             return "kotlin.$resolved"
         }
         return resolved
+    }
+
+    /** The classifier a project typealias named [name] finally denotes, following alias-of-alias chains, or
+     *  null when [name] is not a visible project alias or its target is unknown. */
+    private fun projectAliasClassifier(name: String, ctx: FileContext?, depth: Int = 0): String? {
+        if (depth > 8) return null
+        val alias = visibleTypeAlias(name, ctx)?.takeIf { it.targetText.isNotBlank() } ?: return null
+        val target = alias.targetText.substringBefore('<').removeSuffix("?").trim()
+        resolveTypeName(target, alias.ctx)?.takeIf { it in model().classByFqn || isKnownType(it) }?.let { return it }
+        return projectAliasClassifier(target, alias.ctx, depth + 1)
     }
 
     private fun superHeadFqn(superText: String, ctx: FileContext?, enclosingClassFqn: String? = null): String? {
@@ -4219,8 +4292,10 @@ class KotlinSymbolService(
      *  CALL rather than a (forbidden) constructor invocation. The abstract-instantiation check backs off when
      *  this is true, so it never false-positives on the companion-invoke factory pattern. */
     fun typeHasCompanionObject(fqn: String): Boolean =
-        sourceClass(fqn)?.companionObjectName != null || (typeShape(fqn)
-            ?: builtinShape(fqn))?.companionObjectName != null
+        sourceClass(fqn)?.companionObjectName != null ||
+            // The built-in's own shape as well as the classpath one: `kotlin.Int` routes to `java.lang.Integer`,
+            // which has no companion, while `Int.Companion` (MIN_VALUE, MAX_VALUE) is real and `val i = Int` is it.
+            builtinShape(fqn)?.companionObjectName != null || typeShape(fqn)?.companionObjectName != null
 
     /** Whether [fqn] is a plain JAVA type (classpath binary, not a Kotlin `@Metadata` class, not a project
      *  Kotlin source class, not a mapped built-in). Java types expose synthetic bean properties + drive the

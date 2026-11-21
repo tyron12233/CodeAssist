@@ -2,6 +2,10 @@ package dev.ide.lang.kotlin.resolve
 
 import dev.ide.kotlin.syntax.psi.KtAnnotationEntry
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
+import dev.ide.kotlin.syntax.psi.KtBinaryExpressionWithTypeRHS
+import dev.ide.kotlin.syntax.psi.KtIsExpression
+import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
+import dev.ide.kotlin.syntax.psi.KtThrowExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
 import dev.ide.kotlin.syntax.psi.KtDoWhileExpression
 import dev.ide.kotlin.syntax.psi.KtElement
@@ -72,6 +76,16 @@ fun KotlinResolver.expectedTypeAt(offset: Int): KotlinType? {
             is KtPrefixExpression ->
                 if (node.operationToken == KtTokens.EXCL) return service.typeByFqn("kotlin.Boolean")
 
+            // Positions the outer expected type does NOT reach. A call's RECEIVER (`val s: String = a.b().c()`
+            // expects nothing of `a.b()`), a `throw`'s operand (it expects a Throwable whatever the declaration
+            // around it says: `val b: Unit = throw a()` must not bind `a`'s `T` to Unit), and the operand of
+            // `as`/`is`. Walking on past them handed every such operand the declaration's type.
+            is KtQualifiedExpression -> if (child != null && child === node.receiverExpression) return null
+            is KtThrowExpression ->
+                if (child != null && child === node.thrownExpression) return service.typeByFqn("kotlin.Throwable")
+            is KtBinaryExpressionWithTypeRHS -> if (child != null && child === node.left) return null
+            is KtIsExpression -> return null
+
             is KtBinaryExpression -> when {
                 node.operationToken == KtTokens.ANDAND || node.operationToken == KtTokens.OROR ->
                     return service.typeByFqn("kotlin.Boolean")
@@ -82,6 +96,10 @@ fun KotlinResolver.expectedTypeAt(offset: Int): KotlinType? {
                 // findViewById(...)` was fine. Augmented assignments (`+=`) are operator calls, not this.
                 node.operationToken == KtTokens.EQ && child != null && child === node.right ->
                     return node.left?.let { assignmentTargetDeclaredType(it) }
+                // An elvis passes the expectation on to both sides; any other operator (`+`, `==`, `in`, an
+                // infix call) is a call whose operands are its arguments, not the result.
+                node.operationToken == KtTokens.ELVIS -> {}
+                else -> return null
             }
         }
         child = node

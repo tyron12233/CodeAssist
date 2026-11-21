@@ -190,19 +190,38 @@ internal object KotlinKeywords {
                 if (inLoop) { kw("break"); kw("continue") }
             }
             Place.MEMBER -> {
+                // An `object` (a companion too) has no constructor, no companion and no inner class, and
+                // nothing in it is `protected`; it is where a `const val` may be declared.
+                val inObject = leaf?.getParentOfType<KtClassOrObject>(strict = true) is KtObjectDeclaration
                 kw("val", trailingSpace = true); kw("var", trailingSpace = true); kw("fun", trailingSpace = true)
-                kw("init"); kw("constructor"); kw("object"); kw("class"); kw("interface")
+                kw("init"); kw("object"); kw("class"); kw("interface")
                 kw("typealias", trailingSpace = true); kw("context")
                 kw("override", trailingSpace = true)
+                if (!inObject) { kw("constructor"); kw("companion object") }
                 for (c in MEMBER_COMPOUNDS) kw(c)
-                for (m in MEMBER_MODIFIERS) kw(m, trailingSpace = true)
+                if (inObject) kw("const val", trailingSpace = true)
+                for (m in MEMBER_MODIFIERS) {
+                    if (inObject && (m == "protected" || m == "inner")) continue
+                    kw(m, trailingSpace = true)
+                }
             }
             Place.TOP_LEVEL -> {
-                kw("val", trailingSpace = true); kw("var", trailingSpace = true); kw("fun", trailingSpace = true)
-                kw("class"); kw("interface"); kw("object"); kw("context")
-                kw("typealias", trailingSpace = true); kw("import", trailingSpace = true); kw("package", trailingSpace = true)
-                for (c in TOP_LEVEL_COMPOUNDS) kw(c)
-                for (m in TOP_LEVEL_MODIFIERS) kw(m, trailingSpace = true)
+                // A file is `package`, then `import`s, then declarations, in that order: before an import only
+                // `package`/`import` fit, and once a declaration is written neither does.
+                val file = leaf?.getParentOfType<KtFile>(strict = false)
+                val importAfter = file?.importDirectives?.any { it.textRange.startOffset >= tokenStart } == true
+                val importBefore = file?.importDirectives?.any { it.textRange.endOffset <= tokenStart } == true
+                val declarationBefore = file?.declarations?.any { it.textRange.endOffset <= tokenStart } == true
+                val packageWritten = file?.packageDirective?.let { it.textLength > 0 && it.textRange.endOffset <= tokenStart } == true
+                if (!declarationBefore) kw("import", trailingSpace = true)
+                if (!declarationBefore && !importBefore && !packageWritten) kw("package", trailingSpace = true)
+                if (!importAfter) {
+                    kw("val", trailingSpace = true); kw("var", trailingSpace = true); kw("fun", trailingSpace = true)
+                    kw("class"); kw("interface"); kw("object"); kw("context")
+                    kw("typealias", trailingSpace = true)
+                    for (c in TOP_LEVEL_COMPOUNDS) kw(c)
+                    for (m in TOP_LEVEL_MODIFIERS) kw(m, trailingSpace = true)
+                }
             }
             // A primary-constructor parameter may be promoted to a property (`val`/`var`), restricted by a
             // visibility modifier, made `vararg`, or `override` an inherited open property — the property stubs
@@ -360,27 +379,31 @@ internal object KotlinKeywords {
     // not a local declaration) may carry. Class-kind modifiers (`enum`/`data`/`sealed`/`value`/`annotation`)
     // and `companion` come through the compound items so the popup offers the whole `enum class`/`data class`
     // form; `override` is offered separately (it also drives the override-stub completion in KotlinCompletion).
+    // The vocabulary IntelliJ's Kotlin plugin offers at a declaration start: a modifier that only ever heads
+    // one kind of declaration is offered WITH it (`lateinit var`, `const val`, `suspend fun`, below), not alone.
     private val MEMBER_MODIFIERS = listOf(
         "private", "protected", "internal", "public", "abstract", "open", "final",
-        "lateinit", "const", "suspend", "inline", "inner", "operator", "infix", "tailrec",
+        "inline", "value", "inner", "operator", "infix", "tailrec",
         "external", "expect", "actual",
     )
     private val TOP_LEVEL_MODIFIERS = listOf(
-        "private", "internal", "public", "abstract", "open", "final", "sealed", "lateinit", "const",
-        "suspend", "inline", "operator", "infix", "tailrec", "external", "expect", "actual",
+        "private", "internal", "public", "abstract", "open", "final",
+        "inline", "value", "operator", "infix", "tailrec", "external", "expect", "actual",
     )
     private val PARAM_VISIBILITY = listOf("private", "protected", "internal", "public")
 
     // Compound declaration heads offered as single popup items (the class-kind modifier + its declaration
     // keyword). `data class Foo(...)`, `enum class`, `companion object`, etc. — the common shapes, so the user
     // doesn't complete the modifier and the keyword in two steps.
+    // `value class` and `fun interface` go beyond IntelliJ's list (it offers `value` alone, and `interface`
+    // after `fun`), kept because each is the one declaration its first word starts.
     private val MEMBER_COMPOUNDS = listOf(
-        "companion object", "data class", "enum class", "sealed class", "abstract class", "annotation class",
-        "value class", "inner class", "sealed interface", "fun interface", "data object",
+        "data class", "enum class", "sealed class", "annotation class", "sealed interface", "data object",
+        "lateinit var", "suspend fun", "value class", "fun interface",
     )
     private val TOP_LEVEL_COMPOUNDS = listOf(
-        "data class", "enum class", "sealed class", "abstract class", "open class", "annotation class",
-        "value class", "sealed interface", "fun interface", "data object",
+        "data class", "enum class", "sealed class", "annotation class", "sealed interface", "data object",
+        "lateinit var", "const val", "suspend fun", "value class", "fun interface",
     )
 
     // --- `by` delegation (offered independent of [Place]) ---

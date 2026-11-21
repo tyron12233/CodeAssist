@@ -262,6 +262,17 @@ internal fun KotlinResolver.importedSingletonMembers(
             if (member == null && c.name in IMPORTED_OBJECT_NOISE) continue // a star import shouldn't shadow these
             (out ?: ArrayList<KotlinSymbol>().also { out = it }) += c
         }
+        // An ENUM's entries are neither object nor companion members, but `import pkg.Color.*` (or
+        // `import kotlin.annotation.AnnotationTarget.*` for `@Target(CLASS)`) puts them in scope by name all the
+        // same, and `import pkg.Color.RED` names one.
+        if (candidates.isEmpty() || member != null) {
+            val wanted = member ?: namePrefix
+            for (c in service.enumConstantsOf(container)) {
+                val hit = if (member != null || exactName) wanted.isEmpty() || c.name == wanted
+                else c.name.startsWith(wanted, ignoreCase = true)
+                if (hit) (out ?: ArrayList<KotlinSymbol>().also { out = it }) += c
+            }
+        }
     }
     return out ?: emptyList()
 }

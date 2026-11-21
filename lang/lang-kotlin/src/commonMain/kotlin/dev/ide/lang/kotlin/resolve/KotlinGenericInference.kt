@@ -2,6 +2,7 @@ package dev.ide.lang.kotlin.resolve
 
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
+import dev.ide.kotlin.syntax.psi.KtCallableReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtFunctionLiteral
 import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtConstantExpression
@@ -146,10 +147,13 @@ internal fun KotlinResolver.inferTypeArguments(
         val pt =
             (sym.paramTypes.getOrNull(paramIndex) ?: sym.paramTypes.lastOrNull()) as? KotlinType
                 ?: return@forEachIndexed
-        if (expr is KtLambdaExpression) bindLambdaReturn(pt, expr, bindings)
-        // A spread `*arr` fills the vararg with the array's ELEMENTS: `listOf(*arr)` binds T to the element.
-        else inferType(expr)?.let { if (arg.getSpreadElement() != null) spreadElementType(it) else it }
-            ?.let { unify(pt, it, bindings) }
+        when {
+            expr is KtLambdaExpression -> bindLambdaReturn(pt, expr, bindings)
+            expr is KtCallableReferenceExpression && bindCallableReferenceReturn(pt, expr, bindings) -> {}
+            // A spread `*arr` fills the vararg with the array's ELEMENTS: `listOf(*arr)` binds T to the element.
+            else -> inferType(expr)?.let { if (arg.getSpreadElement() != null) spreadElementType(it) else it }
+                ?.let { unify(pt, it, bindings) }
+        }
     }
     return bindings
 }

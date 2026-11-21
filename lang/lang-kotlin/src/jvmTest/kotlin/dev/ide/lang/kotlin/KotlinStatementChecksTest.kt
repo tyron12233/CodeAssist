@@ -85,7 +85,7 @@ class KotlinStatementChecksTest {
 
     @Test
     fun constMisuseIsFlagged() {
-        assertTrue(diagnose("C1.kt", b("fun f() { const val x = 5 }")).any { it.code == "kt.constMisuse" }, "const on a local")
+        assertTrue(diagnose("C1.kt", b("fun f() { const val x = 5 }")).any { it.code == "kt.wrongModifierTarget" }, "const on a local")
         assertTrue(diagnose("C2.kt", b("const var x = 5")).any { it.code == "kt.constMisuse" }, "const on a var")
         assertTrue(diagnose("C3.kt", b("fun foo() = 5\nconst val x = foo()")).any { it.code == "kt.constMisuse" }, "const with a call initializer")
         assertTrue(diagnose("C4.kt", b("const val x: Int get() = 5")).any { it.code == "kt.constMisuse" }, "const with a getter")

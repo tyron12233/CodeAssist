@@ -70,6 +70,10 @@ internal fun KotlinResolver.resolvedSupertypeMembers(cls: KtClassOrObject): List
     val fqns =
         entries.map { it.typeReference?.text?.let { t -> service.resolveTypeName(t, fileContext) } }
     if (fqns.any { it == null }) return null // an unresolved supertype → we can't see the whole picture
+    // A supertype whose own shape is not readable (`java.util.ArrayList` before the JDK or android.jar is
+    // indexed) still brings its mapped Kotlin interfaces' abstract members into the closure, but none of its
+    // implementations: every `List` member then read as unimplemented.
+    if (fqns.any { !service.isKnownType(it!!) }) return null
     // Own + inherited members only: a supertype's MEMBER extensions (`RowScope`'s `fun Modifier.weight()`) are
     // members to override like any other, while the receiver's top-level extensions are not members at all.
     return fqns.filterNotNull().distinct().flatMap { service.ownAndInheritedMembers(it) }
@@ -89,10 +93,14 @@ class InheritanceReport(
     /** Each `override` with a declared type, paired with every same-shape supertype member it could be
      *  overriding. The diagnostics layer reports the ones whose type no candidate accepts. */
     val overrideCandidates: List<Pair<KtCallableDeclaration, List<KotlinSymbol>>> = emptyList(),
+    /** Each `override` whose written visibility is narrower than (or not comparable with) a project member it
+     *  overrides, with that member and the member's visibility (`public`, `protected`, `internal`). */
+    val weakenedAccess: List<Triple<KtCallableDeclaration, KotlinSymbol, String>> = emptyList(),
 ) {
     val isEmpty: Boolean
         get() = missing.isEmpty() && overridesNothing.isEmpty() && needsOverride.isEmpty() &&
-                suspendMismatch.isEmpty() && overridesFinal.isEmpty() && overrideCandidates.isEmpty()
+                suspendMismatch.isEmpty() && overridesFinal.isEmpty() && overrideCandidates.isEmpty() &&
+                weakenedAccess.isEmpty()
 
     companion object {
         val EMPTY = InheritanceReport(emptyList(), emptyList(), emptyList())
@@ -123,6 +131,7 @@ fun KotlinResolver.inheritanceProblems(cls: KtClassOrObject, concrete: Boolean):
     val suspendMismatch = ArrayList<Pair<KtCallableDeclaration, KotlinSymbol>>()
     val overridesFinal = ArrayList<Pair<KtCallableDeclaration, KotlinSymbol>>()
     val overrideCandidates = ArrayList<Pair<KtCallableDeclaration, List<KotlinSymbol>>>()
+    val weakenedAccess = ArrayList<Triple<KtCallableDeclaration, KotlinSymbol, String>>()
     for (d in cls.declarations) {
         val member = d as? KtCallableDeclaration ?: continue
         if (member !is KtNamedFunction && member !is KtProperty) continue
@@ -135,11 +144,71 @@ fun KotlinResolver.inheritanceProblems(cls: KtClassOrObject, concrete: Boolean):
             // Final in EVERY supertype that carries it: one open declaration is enough to make it overridable.
             if (shaped.isNotEmpty() && shaped.all { isFinalMember(it) }) overridesFinal += member to shaped.first()
             else if (shaped.isNotEmpty() && member.typeReference != null) overrideCandidates += member to shaped
+            narrowedVisibility(member, shaped)?.let { weakenedAccess += Triple(member, it.first, it.second) }
+            narrowedSetter(member, shaped)?.let { weakenedAccess += Triple(member, it, "public setter") }
         } else if (!member.hasModifier(KtTokens.PRIVATE_KEYWORD)) {
             hiddenSupertypeMember(member, sameName)?.let { needsOverride += member to it }
         }
     }
-    return InheritanceReport(missing, overridesNothing, needsOverride, suspendMismatch, overridesFinal, overrideCandidates)
+    return InheritanceReport(missing, overridesNothing, needsOverride, suspendMismatch, overridesFinal, overrideCandidates, weakenedAccess)
+}
+
+/**
+ * The overridden project property whose public setter the `override var` [member] narrows with a `private`,
+ * `protected` or `internal` setter of its own. Only a source property declared `var` with no visibility on it
+ * or its setter counts, and only one that is not itself an `override`.
+ */
+private fun narrowedSetter(member: KtCallableDeclaration, shaped: List<KotlinSymbol>): KotlinSymbol? {
+    if (member !is dev.ide.kotlin.syntax.psi.KtProperty || !member.isVar) return null
+    val setter = member.setter ?: return null
+    if (!setter.hasModifier(KtTokens.PRIVATE_KEYWORD) && !setter.hasModifier(KtTokens.PROTECTED_KEYWORD) &&
+        !setter.hasModifier(KtTokens.INTERNAL_KEYWORD)) return null
+    for (m in shaped) {
+        if (!m.origin.fromSource) continue
+        val psi = (m.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi
+        val isVar = when (psi) {
+            is dev.ide.kotlin.syntax.psi.KtProperty -> psi.isVar
+            is dev.ide.kotlin.syntax.psi.KtParameter -> psi.isMutable
+            else -> continue
+        }
+        if (!isVar) continue
+        psi as dev.ide.kotlin.syntax.psi.KtModifierListOwner
+        if (psi.hasModifier(KtTokens.OVERRIDE_KEYWORD) || psi.hasModifier(KtTokens.PRIVATE_KEYWORD) ||
+            psi.hasModifier(KtTokens.PROTECTED_KEYWORD) || psi.hasModifier(KtTokens.INTERNAL_KEYWORD)) continue
+        val theirSetter = (psi as? dev.ide.kotlin.syntax.psi.KtProperty)?.setter
+        if (theirSetter != null && (theirSetter.hasModifier(KtTokens.PRIVATE_KEYWORD) || theirSetter.hasModifier(KtTokens.PROTECTED_KEYWORD) ||
+                theirSetter.hasModifier(KtTokens.INTERNAL_KEYWORD))) continue
+        return m
+    }
+    return null
+}
+
+/**
+ * The overridden project member whose visibility the `override` [member] narrows or changes, with that
+ * visibility: `protected override` of a public member, `internal override` of a public or protected one. Only
+ * a visibility written on the override counts (without one it inherits the overridden member's), and only a
+ * source member's visibility is trusted: one that is itself an `override` with none written inherits one this
+ * does not chase.
+ */
+private fun narrowedVisibility(member: KtCallableDeclaration, shaped: List<KotlinSymbol>): Pair<KotlinSymbol, String>? {
+    val own = when {
+        member.hasModifier(KtTokens.PROTECTED_KEYWORD) -> "protected"
+        member.hasModifier(KtTokens.INTERNAL_KEYWORD) -> "internal"
+        else -> return null
+    }
+    for (m in shaped) {
+        if (!m.origin.fromSource) continue
+        val psi = (m.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? dev.ide.kotlin.syntax.psi.KtModifierListOwner ?: continue
+        val theirs = when {
+            psi.hasModifier(KtTokens.PUBLIC_KEYWORD) -> "public"
+            psi.hasModifier(KtTokens.PROTECTED_KEYWORD) -> "protected"
+            psi.hasModifier(KtTokens.INTERNAL_KEYWORD) -> "internal"
+            psi.hasModifier(KtTokens.PRIVATE_KEYWORD) || psi.hasModifier(KtTokens.OVERRIDE_KEYWORD) -> continue
+            else -> "public"
+        }
+        if (theirs != own) return m to theirs
+    }
+    return null
 }
 
 /**
@@ -174,9 +243,10 @@ internal fun KotlinResolver.unimplementedFrom(
 ): List<KotlinSymbol> {
     val provided = HashSet(ownMemberKeys(cls))
     closure.forEach {
-        if (it.isImplementableMember() && Modifier.ABSTRACT !in it.modifiers) provided += memberKey(
-            it
-        )
+        if (it.isImplementableMember() && Modifier.ABSTRACT !in it.modifiers) {
+            provided += memberKey(it)
+            jvmMappedKey(it)?.let { k -> provided += k }
+        }
     }
     val required = LinkedHashMap<String, KotlinSymbol>()
     closure.forEach { m ->
@@ -282,6 +352,33 @@ fun KotlinResolver.suspendMismatchFor(member: KtCallableDeclaration): KotlinSymb
  *  implementing an abstract one. Functions key on name+arity (generics don't change arity); properties on name. */
 internal fun KotlinResolver.memberKey(m: KotlinSymbol): String =
     if (m.kind == SymbolKind.METHOD) "M:${m.name}/${m.paramTypes.size}" else "P:${m.name}"
+
+/**
+ * The Kotlin member a concrete JAVA method implements under the built-in mapping: `java.util.ArrayList`'s
+ * `size()` IS `kotlin.collections.List.size`, its `remove(int)` IS `MutableList.removeAt`, `charAt` is
+ * `CharSequence.get`, `intValue()` is `Number.toInt()`. Without it `class L : java.util.ArrayList<Int>()` was
+ * told to implement `size` and `removeAt`. Null for a method the mapping does not rename.
+ */
+private fun jvmMappedKey(m: KotlinSymbol): String? {
+    if (m.kind != SymbolKind.METHOD) return null
+    val arity = m.paramTypes.size
+    if (arity == 0) JVM_MAPPED_PROPERTIES[m.name]?.let { return "P:$it" }
+    if (arity == 0) JVM_MAPPED_NUMBER_METHODS[m.name]?.let { return "M:$it/0" }
+    if (arity == 1 && m.name == "charAt") return "M:get/1"
+    if (arity == 1 && m.name == "remove") {
+        val p = m.paramTypes[0]?.qualifiedName
+        if (p == "int" || p == "kotlin.Int") return "M:removeAt/1"
+    }
+    return null
+}
+
+private val JVM_MAPPED_PROPERTIES = mapOf(
+    "size" to "size", "length" to "length", "entrySet" to "entries", "keySet" to "keys", "values" to "values",
+)
+private val JVM_MAPPED_NUMBER_METHODS = mapOf(
+    "intValue" to "toInt", "longValue" to "toLong", "doubleValue" to "toDouble", "floatValue" to "toFloat",
+    "shortValue" to "toShort", "byteValue" to "toByte", "charValue" to "toChar",
+)
 
 /** The keys [cls] itself supplies: declared functions/properties + primary-constructor `val`/`var`
  *  properties. The `override` keyword is irrelevant here (a missing one is the override-required check's

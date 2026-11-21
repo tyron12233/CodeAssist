@@ -4,7 +4,9 @@ import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtBreakExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
 import dev.ide.kotlin.syntax.psi.KtClass
+import dev.ide.kotlin.syntax.psi.KtClassBody
 import dev.ide.kotlin.syntax.psi.KtClassOrObject
+import dev.ide.kotlin.syntax.psi.KtConstructorDelegationCall
 import dev.ide.kotlin.syntax.psi.KtElement
 import dev.ide.kotlin.syntax.psi.KtExpressionWithLabel
 import dev.ide.kotlin.syntax.psi.KtFile
@@ -16,10 +18,12 @@ import dev.ide.kotlin.syntax.psi.KtLambdaExpression
 import dev.ide.kotlin.syntax.psi.KtLoopExpression
 import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
+import dev.ide.kotlin.syntax.psi.KtParameter
 import dev.ide.kotlin.syntax.psi.KtParenthesizedExpression
 import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.kotlin.syntax.psi.KtPropertyAccessor
 import dev.ide.kotlin.syntax.psi.KtReturnExpression
+import dev.ide.kotlin.syntax.psi.KtSecondaryConstructor
 import dev.ide.kotlin.syntax.psi.KtThisExpression
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.KtValueArgument
@@ -102,6 +106,68 @@ internal object KotlinStructuralChecks {
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,
             "Unresolved label: $label", KotlinDiagnosticCodes.UNRESOLVED_LABEL,
         )
+    }
+
+    /**
+     * A `return` that may not leave the place it stands in (RETURN_NOT_ALLOWED): on its way out to the function
+     * it returns from it crosses a class (a member of a local class or an object literal, an initializer), a
+     * member or top-level property's initializer, a parameter's default value, a constructor's delegation
+     * call, another function, or a lambda that is not inlined into its caller. [notInlined] answers that last
+     * question; it is asked only for a lambda the return passes through, and answering false is always safe.
+     */
+    fun returnNotAllowed(ret: KtReturnExpression, notInlined: (KtLambdaExpression) -> Boolean): Diagnostic? {
+        if (ret.containingFile.name.endsWith(".kts")) return null
+        val target = returnTarget(ret) ?: return null
+        var node = ret.parent
+        while (node != null && node !== target) {
+            when (node) {
+                is KtFunctionLiteral -> {
+                    val lambda = node.parent as? KtLambdaExpression ?: return null
+                    if (notInlined(lambda)) return returnNotAllowedAt(ret)
+                }
+                is KtNamedFunction, is KtPropertyAccessor, is KtSecondaryConstructor, is KtClassOrObject,
+                is KtParameter, is KtConstructorDelegationCall -> return returnNotAllowedAt(ret)
+                is KtProperty -> if (node.parent is KtClassBody || node.parent is KtFile) return returnNotAllowedAt(ret)
+                is KtFile -> return null
+                else -> {}
+            }
+            node = node.parent
+        }
+        return null
+    }
+
+    /** The declaration a `return` leaves: its label's function or lambda, or for a bare `return` the nearest
+     *  enclosing function, accessor or constructor (the file when there is none). Null when the label names
+     *  nothing this can read. */
+    private fun returnTarget(ret: KtReturnExpression): KtElement? {
+        val label = ret.getLabelName()
+        var node = ret.parent
+        while (node != null) {
+            if (label == null) {
+                if (node is KtNamedFunction || node is KtPropertyAccessor || node is KtSecondaryConstructor || node is KtFile) return node
+            } else when (node) {
+                is KtFunctionLiteral -> when (val name = implicitLambdaLabel(node)) {
+                    null -> return null
+                    label -> return node
+                    else -> {}
+                }
+                is KtLabeledExpression -> if (node.getLabelName() == label) {
+                    // A labeled loop is not something to return from; that is a different error.
+                    return ((node.baseExpression as? KtLambdaExpression)?.functionLiteral)
+                }
+                is KtNamedFunction -> if (node.name == label) return node
+                is KtFile -> return null
+                else -> {}
+            }
+            node = node.parent
+        }
+        return null
+    }
+
+    private fun returnNotAllowedAt(ret: KtReturnExpression): Diagnostic {
+        val start = ret.textRange.startOffset
+        val end = ret.getTargetLabel()?.textRange?.endOffset ?: (start + "return".length)
+        return Diagnostic(TextRange(start, end), Severity.ERROR, "'return' is prohibited here", KotlinDiagnosticCodes.RETURN_NOT_ALLOWED)
     }
 
     /** The label a lambda gets from the call it is passed to; "" when it is not passed to a call at all (it

@@ -2,6 +2,15 @@ package dev.ide.lang.kotlin
 
 import dev.ide.kotlin.syntax.psi.KtAnnotationEntry
 import dev.ide.kotlin.syntax.psi.KtArrayAccessExpression
+import dev.ide.kotlin.syntax.psi.KtValueArgumentList
+import dev.ide.kotlin.syntax.psi.KtValueArgument
+import dev.ide.kotlin.syntax.psi.KtPropertyDelegate
+import dev.ide.kotlin.syntax.psi.KtPrimaryConstructor
+import dev.ide.kotlin.syntax.psi.KtParenthesizedExpression
+import dev.ide.kotlin.syntax.psi.KtNullableType
+import dev.ide.kotlin.syntax.psi.KtLabeledExpression
+import dev.ide.kotlin.syntax.psi.KtConstructorDelegationCall
+import dev.ide.kotlin.syntax.psi.KtAnnotatedExpression
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtBinaryExpressionWithTypeRHS
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
@@ -51,6 +60,9 @@ import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.kotlin.parse.unwrapParen
 import dev.ide.lang.kotlin.resolve.KotlinResolver
 import dev.ide.lang.kotlin.resolve.callTargets
+import dev.ide.lang.kotlin.resolve.resolveCalleeFunction
+import dev.ide.lang.kotlin.resolve.lambdaParamIndex
+import dev.ide.lang.kotlin.resolve.enclosingCallAndParamIndex
 import dev.ide.lang.kotlin.resolve.canonicalTypeForCheck
 import dev.ide.lang.kotlin.resolve.constructorTypeFqn
 import dev.ide.lang.kotlin.resolve.enclosingClassFqnOf
@@ -65,6 +77,8 @@ import dev.ide.lang.kotlin.resolve.pathGuardedNonNullAt
 import dev.ide.lang.kotlin.resolve.receiverForMembers
 import dev.ide.lang.kotlin.resolve.scopeMemberExtensions
 import dev.ide.lang.kotlin.resolve.smartCastNonNull
+import dev.ide.lang.kotlin.resolve.flowProvenNull
+import dev.ide.lang.kotlin.resolve.flowProvenTypes
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.kotlin.symbols.TypeRendering
@@ -150,6 +164,15 @@ internal fun KotlinSemanticChecks.valueMismatch(
     if (declared == null) return null
     val e = unwrapParen(value)
     if (!platformTarget) nullForNonNull(declared, e)?.let { return it }
+    if (flowFits(declared, e, resolver)) return null
+    // A choice one of whose branches is a smart-cast name inference cannot type in full is judged branch by branch.
+    if (depth == 0 && choiceBranches(e).any { b -> branchValue(b)?.let { unwrapParen(it) }?.let { flowFits(declared, it, resolver) } == true }) {
+        for (alt in choiceBranches(e)) {
+            val leaf = branchValue(alt) ?: continue
+            valueMismatch(declared, leaf, resolver, platformTarget, strictNumeric, depth + 1)?.let { return it }
+        }
+        return null
+    }
     val actual = resolver.inferType(e)
     // A branch of a choice is judged on its own only when its type is one to rely on: a literal, or a local
     // whose type was just read off its declaration. The whole expression (depth 0) keeps the rule it had.
@@ -175,6 +198,26 @@ internal fun KotlinSemanticChecks.valueMismatch(
         return mismatchDiagnostic(e.textRange.startOffset, e.textRange.endOffset, actual!!.withNullable(true), declared)
     }
     return null
+}
+
+/**
+ * Whether the flow shows the value [e] fits [declared] where its inferred type does not: a value proven null
+ * (`if (i == null) foo(i)`) is a `Nothing?`, which fits any nullable type, and a value smart-cast to several types
+ * at once (`b is A && b is C`) has all of them while inference names one.
+ */
+internal fun flowFits(declared: KotlinType, e: KtExpression, resolver: KotlinResolver): Boolean {
+    if (e !is KtNameReferenceExpression || declared.isTypeParameter) return false
+    if (declared.nullable && resolver.flowProvenNull(e)) return true
+    return resolver.flowProvenTypes(e, deep = true).any { declared.withNullable(false).isAssignableFrom(it) }
+}
+
+/** The alternatives of an `if`/`when`/`try`/`?:` whose value is one of them. */
+private fun choiceBranches(e: KtExpression): List<KtExpression?> = when (e) {
+    is KtIfExpression -> if (e.`else` != null) listOf(e.then, e.`else`) else emptyList()
+    is KtWhenExpression -> e.entries.map { it.expression }
+    is KtTryExpression -> listOf<KtExpression?>(e.tryBlock) + e.catchClauses.map { it.catchBody }
+    is KtBinaryExpression -> if (e.operationToken == KtTokens.ELVIS) listOf(e.right) else emptyList()
+    else -> emptyList()
 }
 
 /** The value a branch produces: itself, or the last statement of its block when that is an expression. */
@@ -881,6 +924,62 @@ internal fun KotlinSemanticChecks.arrayForVarargElement(elementType: KotlinType,
     if (canonicalName(elementType) !in FINAL_VALUE_TYPES) return false
     val a = canonicalName(actual)
     return a == "kotlin.Array" || (a.startsWith("kotlin.") && a.endsWith("Array") && a != "kotlin.Array")
+}
+
+// --- non-local returns ----------------------------------------------------------------------------------------
+
+/**
+ * Whether [lambda] is certainly NOT inlined into its caller, so a `return` cannot pass through it: a lambda
+ * that is stored, returned or invoked as a value rather than passed to a call, one passed to a constructor,
+ * or one passed to a project function that is not `inline` (or is, but takes it `noinline`, `crossinline`, as
+ * a nullable function type, or as a type parameter). False whenever that is not certain, a library callee
+ * included: a library function's metadata may not say.
+ */
+internal fun KotlinSemanticChecks.lambdaNotInlined(lambda: KtLambdaExpression, resolver: KotlinResolver?): Boolean {
+    var holder: KtElement = lambda
+    while (true) {
+        val p = holder.parent ?: return false
+        if (p is KtParenthesizedExpression || p is KtLabeledExpression || p is KtAnnotatedExpression) holder = p else break
+    }
+    when (val p = holder.parent) {
+        // Stored or handed back as a value: nothing inlines it.
+        is KtProperty -> return p.initializer === holder
+        is KtPropertyDelegate, is KtReturnExpression, is KtBlockExpression -> return true
+        is KtNamedFunction -> return p.bodyExpression === holder
+        is KtBinaryExpression -> return p.operationToken == KtTokens.EQ && p.right === holder
+        // `{ ... }()` invokes a function value, and `{ ... }.let { }` passes one along as a receiver.
+        is KtCallExpression -> return p.calleeExpression === holder
+        is KtQualifiedExpression -> return p.receiverExpression === holder
+        // A trailing lambda is a value argument too, so it is matched first.
+        is KtLambdaArgument -> {}
+        is KtValueArgument -> when ((p.parent as? KtValueArgumentList)?.parent) {
+            is KtSuperTypeCallEntry, is KtConstructorDelegationCall -> return true
+            is KtCallExpression -> {}
+            else -> return false
+        }
+        else -> return false
+    }
+    if (resolver == null || holder !== lambda) return false
+    val (call, argIndex) = resolver.enclosingCallAndParamIndex(lambda) ?: return false
+    val callee = resolver.resolveCalleeFunction(call) ?: return false
+    if (!callee.origin.fromSource) return false
+    val psi = (callee.declaration() as? KotlinDomNode)?.psi
+    if (callee.kind == SymbolKind.CONSTRUCTOR) return psi is KtClass || psi is KtPrimaryConstructor || psi is KtSecondaryConstructor
+    val fn = psi as? KtNamedFunction ?: return false
+    if (!fn.hasModifier(KtTokens.INLINE_KEYWORD)) {
+        // A bare call could also reach an `inline` overload declared elsewhere; let any such overload win.
+        val name = fn.name ?: return false
+        if (call.parent !is KtQualifiedExpression &&
+            service.topLevelByName(name).any { it.kind == SymbolKind.METHOD && it.isInline }) return false
+        return true
+    }
+    val param = fn.valueParameters.getOrNull(resolver.lambdaParamIndex(call, argIndex, callee)) ?: return false
+    if (param.hasModifier(KtTokens.NOINLINE_KEYWORD) || param.hasModifier(KtTokens.CROSSINLINE_KEYWORD)) return true
+    return when (val type = param.typeReference?.typeElement) {
+        is KtNullableType -> true
+        is KtUserType -> type.referenceExpression?.getReferencedName()?.let { n -> fn.typeParameters.any { it.name == n } } == true
+        else -> false
+    }
 }
 
 // --- overrides ----------------------------------------------------------------------------------------------

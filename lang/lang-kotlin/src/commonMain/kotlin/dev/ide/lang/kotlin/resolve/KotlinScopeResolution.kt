@@ -8,6 +8,7 @@ import dev.ide.kotlin.syntax.psi.KtClass
 import dev.ide.kotlin.syntax.psi.KtClassBody
 import dev.ide.kotlin.syntax.psi.KtClassOrObject
 import dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration
+import dev.ide.kotlin.syntax.psi.KtDoWhileExpression
 import dev.ide.kotlin.syntax.psi.KtElement
 import dev.ide.kotlin.syntax.psi.KtEnumEntry
 import dev.ide.kotlin.syntax.psi.KtExpression
@@ -27,6 +28,7 @@ import dev.ide.kotlin.syntax.psi.KtPropertyAccessor
 import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtSecondaryConstructor
 import dev.ide.kotlin.syntax.psi.KtSuperTypeCallEntry
+import dev.ide.kotlin.syntax.psi.KtSuperTypeList
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.KtTypeParameterListOwner
 import dev.ide.kotlin.syntax.psi.KtUserType
@@ -65,6 +67,9 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
     var thisNarrowing: KotlinType? = null
     var child: KtElement? = null
     var node: KtElement? = elementAt(offset)
+    // Set once the walk leaves a nested (non-`inner`) class, an object or a companion: past that point the
+    // outer declarations' receivers have no `this` to be reached through (see [closesOuterInstanceScope]).
+    var outerInstanceClosed = false
     while (node != null) {
         if (out.isEmpty() && thisNarrowing == null) {
             thisNarrowing = narrowingAtNode(node, child, offset, THIS_SUBJECT)
@@ -74,30 +79,38 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
             // A receiver lambda's implicit `this` — both spellings of it: an extension function type
             // (`ColumnScope.() -> Unit`) and a `fun interface` whose abstract method is a member extension
             // (`MeasurePolicy` is `MeasureScope.measure(…)`, so `Layout { }`'s body has a `MeasureScope`).
-            is KtLambdaExpression -> lambdaReceiverType(node)?.let(out::add)
+            is KtLambdaExpression -> if (!outerInstanceClosed) lambdaReceiverType(node)?.let(out::add)
 
-            is KtNamedFunction -> node.receiverTypeReference?.text
+            is KtNamedFunction -> if (!outerInstanceClosed) node.receiverTypeReference?.text
                 ?.let { boundedTypeParameterReceiver(node, it) ?: service.typeFromText(it, fileContext) }?.let(out::add)
             // An extension PROPERTY's receiver is the implicit `this` of its accessors
             // (`val ColorScheme.codeBlockBackground get() = onSurface.copy(alpha = .15f)`): the same rule as an
             // extension function. A local/plain property has no receiver type and adds nothing.
-            is KtProperty -> node.receiverTypeReference?.text
+            is KtProperty -> if (!outerInstanceClosed) node.receiverTypeReference?.text
                 ?.let { service.typeFromText(it, fileContext) }?.let(out::add)
             // An enclosing class/object receiver. An ANONYMOUS object (`object : Foo { }`) or a LOCAL
             // class/object has no reachable `fqName`, so use the synthetic classifier the source model
             // registered it under — its own + supertype members then become the implicit `this` in the body.
             // An enum entry with a body isn't a local type (it's excluded from that model bucket), so it keeps
             // to its own `fqName` and never borrows a synthetic key (which could collide with a real local type).
+            // Past a nested class only a singleton (an `object`, a companion) is still reachable: its members are
+            // read through the one instance, never through an outer `this`.
+            // A class's own `this` exists only in its BODY: its header (primary-constructor defaults, the
+            // supertype list and its constructor arguments) is evaluated before the instance exists.
             is KtClassOrObject -> {
-                val fqn = node.fqName?.asString()
-                    ?: (node as? KtObjectDeclaration)?.let {
-                        dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(
-                            it
-                        )
-                    }
-                    ?: (node as? KtClass)?.takeIf { it !is KtEnumEntry }
-                        ?.let { dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(it) }
-                if (fqn != null) out += service.typeByFqn(fqn)
+                val inHeader = child != null && child !is KtClassBody
+                if (!inHeader && (!outerInstanceClosed || isSingletonScope(node))) {
+                    val fqn = node.fqName?.asString()
+                        ?: (node as? KtObjectDeclaration)?.let {
+                            dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(
+                                it
+                            )
+                        }
+                        ?: (node as? KtClass)?.takeIf { it !is KtEnumEntry }
+                            ?.let { dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(it) }
+                    if (fqn != null) out += service.typeByFqn(fqn)
+                }
+                if (closesOuterInstanceScope(node)) outerInstanceClosed = true
             }
 
             else -> {}
@@ -111,6 +124,23 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
     }
     return out
 }
+
+/**
+ * Whether [c] cuts code inside it off from the INSTANCE scope of everything around it: a nested class that is
+ * not `inner`, an `object`, a companion object. Inside one there is no outer `this`, so an enclosing class's
+ * instance members (and the receivers of enclosing extension functions and lambdas) are not in scope there,
+ * which is what the compiler says and what IntelliJ offers. An `inner` class, an anonymous object, a local
+ * class and an enum entry keep the outer instance scope.
+ */
+internal fun closesOuterInstanceScope(c: KtClassOrObject): Boolean {
+    if (c is KtEnumEntry) return false
+    if (c is KtObjectDeclaration && c.isObjectLiteral()) return false
+    if (c.fqName == null) return false // a local class: it captures what surrounds it
+    return !(c is KtClass && c.isInner())
+}
+
+/** A named `object` or companion: its members stay reachable from code nested inside it, through the instance. */
+internal fun isSingletonScope(c: KtClassOrObject): Boolean = c is KtObjectDeclaration && !c.isObjectLiteral()
 
 /** The implicit `this` of `fun <T : CharSequence> T.len() = length`: a receiver that is the function's own
  *  type parameter with an explicit upper bound has that bound's members, so `length` resolves. Null for a
@@ -247,7 +277,16 @@ fun KotlinResolver.localsAt(offset: Int, name: String? = null): List<KotlinSymbo
             // here — it IS a KtFunction, and adding its params via param() (type-from-text only) would
             // shadow the typed copy with an untyped one (`{ inner -> }`'s `inner` becomes null-typed first).
             is KtFunctionLiteral -> {}
-            is KtFunction -> node.valueParameters.forEach { if (wanted(it.name)) out += param(it) }
+            // Inside a parameter's DEFAULT value only the parameters declared before it exist yet
+            // (`fun f(a: Int, b: Int = a)`, never `= c` for a later `c`).
+            is KtFunction -> {
+                val params = node.valueParameters
+                val inDefault = params.indexOfFirst { p ->
+                    p.defaultValue?.textRange?.let { offset >= it.startOffset && offset <= it.endOffset } == true
+                }
+                (if (inDefault >= 0) params.subList(0, inDefault) else params)
+                    .forEach { if (wanted(it.name)) out += param(it) }
+            }
             is KtForExpression -> node.loopParameter?.let { lp ->
                 // The loop variable is in scope only in the BODY (not the `in` clause). Gating on that both
                 // matches Kotlin scoping AND breaks a recursion: inferring the loop range's type queries
@@ -266,6 +305,21 @@ fun KotlinResolver.localsAt(offset: Int, name: String? = null): List<KotlinSymbo
             }
 
             is KtCatchClause -> node.catchParameter?.let { if (wanted(it.name)) out += param(it) }
+            // `do { val more = next() } while (more)`: the body's locals are in scope in the condition, the one
+            // place a block's declarations are visible outside its braces.
+            is KtDoWhileExpression -> {
+                val body = node.body as? KtBlockExpression
+                val condition = node.condition
+                if (body != null && condition != null && offset >= condition.textRange.startOffset) {
+                    for (st in body.statements) when (st) {
+                        is KtProperty -> if (wanted(st.name)) out += localVar(st)
+                        is KtDestructuringDeclaration -> if (wantedAny(st.entries.map { it.name })) {
+                            out += destructuringLocals(st, inferType(st.initializer))
+                        }
+                        else -> {}
+                    }
+                }
+            }
             is KtWhenExpression -> node.subjectVariable?.let { if (wanted(it.name)) out += localVar(it) }
             is KtLambdaExpression -> run lambda@{
                 // Type the lambda's `it` / named params from the functional parameter it fills, so
@@ -950,7 +1004,15 @@ fun KotlinResolver.enclosingClassFqn(offset: Int): String? = elementAt(offset)?.
 internal fun enclosingClassFqnOf(element: KtElement): String? {
     var node: KtElement? = element
     while (node != null) {
+        // A local class or an anonymous `object` has no FQN of its own, but the source model registers it under
+        // a synthetic one ([dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn]) nested under the named
+        // owner. Returning that keeps the scope walk going: its own nested types, its supertypes' nested types
+        // (`object : Outer() { fun f(n: Nested) }`), and the named classes around it (a `private class Private`
+        // of the class whose member declares the object). Returning null here cut the walk off at the first
+        // unnamed class, and all of those read as unresolved.
         if (node is KtClassOrObject) return node.fqName?.asString()
+            ?: if (node is dev.ide.kotlin.syntax.psi.KtEnumEntry) null
+            else dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(node)
         node = node.parent
     }
     return null
@@ -1027,21 +1089,39 @@ internal fun KotlinResolver.sameFileScopeSymbols(offset: Int, name: String? = nu
         else -> {}
     }
     var node: KtElement? = elementAt(offset)
+    // See [computeImplicitReceiversAt]: once the walk leaves a nested class, an object or a companion, the
+    // instance members of the classes further out are not in scope. Their nested CLASSIFIERS still are.
+    var outerInstanceClosed = false
+    var child: KtElement? = null
     while (node != null) {
         if (node is KtClassOrObject) {
             val ownerFqn = node.fqName?.asString()
+            // In the class HEADER (a primary-constructor default, the supertype list) there is no instance yet.
+            val inHeader = child != null && child !is KtClassBody
+            val outerClosedBefore = outerInstanceClosed && !isSingletonScope(node)
+            val instanceVisible = !inHeader && !outerClosedBefore
             for (d in node.declarations) when (d) {
-                is KtNamedFunction -> if (d.receiverTypeReference == null && wanted(d.name)) {
+                is KtNamedFunction -> if (instanceVisible && d.receiverTypeReference == null && wanted(d.name)) {
                     out += cachedSameFileSymbol(d, ownerFqn) { sameFileFunction(d, ownerFqn) }
                 }
 
-                is KtProperty -> if (d.receiverTypeReference == null && wanted(d.name)) {
+                is KtProperty -> if (instanceVisible && d.receiverTypeReference == null && wanted(d.name)) {
                     out += cachedSameFileSymbol(d, ownerFqn) { sameFileProperty(d, ownerFqn) }
                 }
 
+                // A nested class, object or interface of an enclosing class is in scope by its simple name
+                // anywhere inside that class (`class C { class Nested; fun f() = Nested() }`).
+                is KtClassOrObject -> if (d !is KtEnumEntry && !(d is KtObjectDeclaration && d.isCompanion()) &&
+                    d.name != null && wanted(d.name)
+                ) out += cachedSameFileSymbol(d, ownerFqn) { sameFileType(d) }
+
                 else -> {}
             }
-            node.primaryConstructorParameters.filter { it.hasValOrVar() && wanted(it.name) }.forEach { p ->
+            if (closesOuterInstanceScope(node)) outerInstanceClosed = true
+            // The primary constructor's properties are still readable in the supertype list, as the constructor's
+            // parameters they are there (`class L(val d: Named) : Named by d`, `: Base(d)`).
+            val ctorPropertiesVisible = instanceVisible || (inHeader && child is KtSuperTypeList && !outerClosedBefore)
+            if (ctorPropertiesVisible) node.primaryConstructorParameters.filter { it.hasValOrVar() && wanted(it.name) }.forEach { p ->
                 out += KotlinSymbol(
                     p.name ?: "_", SymbolKind.FIELD,
                     type = paramType(p), origin = SOURCE,
@@ -1056,6 +1136,7 @@ internal fun KotlinResolver.sameFileScopeSymbols(offset: Int, name: String? = nu
                 )
             }
         }
+        child = node
         node = node.parent
     }
     return out

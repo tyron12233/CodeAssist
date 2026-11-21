@@ -233,6 +233,15 @@ internal object KotlinCompletionItems {
         sortPriority = -1,
     )
 
+    /** A named argument with its value already written (`flag = true`, `p = null`, `size = size`). */
+    fun namedArgValueItem(p: ParamInfo, value: String): CompletionItem = CompletionItem(
+        label = "${p.name} = $value",
+        insertText = "${p.name} = $value",
+        kind = CompletionItemKind.PARAMETER,
+        detail = p.type?.let { typeLabel(it) },
+        sortPriority = -1,
+    )
+
     /** Ranking/sort weight by symbol kind: locals and parameters first, then members, then library types. */
     fun proximity(kind: SymbolKind): Int = when (kind) {
         SymbolKind.LOCAL_VARIABLE, SymbolKind.PARAMETER -> 0

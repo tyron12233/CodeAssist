@@ -53,6 +53,31 @@ class KotlinIdiomResolutionTest {
         clean("fun g(a: String?, b: String?): Boolean = a.equals(b, ignoreCase = true) && a.equals(b)")
     }
 
+    /** A callable reference fills a functional parameter as a lambda does: its target's result binds the
+     *  callee's result type, so `let(regex::find)` is a `MatchResult?` whose members resolve. */
+    @Test
+    fun aCallableReferenceArgumentBindsTheResultType() {
+        cleanWithJdk(
+            "import java.nio.file.Files\nimport java.nio.file.Path\n" +
+                "private val REGEX = Regex(\"\"\"version=\"([^\"]+)\"\"\"\")\n" +
+                "private fun readOrNull(path: Path): String? = runCatching { Files.readString(path) }.getOrNull()\n" +
+                "fun detect(path: Path): String? = readOrNull(path)?.let(REGEX::find)?.groupValues?.get(1)",
+        )
+        clean("private val R = Regex(\"x\")\nfun d(s: String): Int = s.let(R::find)?.groupValues?.size ?: 0")
+        clean("fun d(s: String): Int = s.let(String::length).inc()")
+        clean("fun h(x: String): Int = 1\nfun d(s: String): Int = s.let(::h).inc()")
+        clean("data class P(val age: Int)\nfun d(ps: List<P>): Int = ps.map(P::age).first().inc()")
+    }
+
+    @Test
+    fun aCallableReferenceResultIsStillChecked() {
+        assertCodes(
+            "private val R = Regex(\"x\")\nfun d(s: String): Int = s.let(R::find).groupValues.size",
+            KotlinDiagnosticCodes.UNSAFE_NULLABLE,
+        )
+        assertCodes("fun d(s: String): Int = s.let(String::length).nope", KotlinDiagnosticCodes.UNRESOLVED)
+    }
+
     @Test
     fun aNonNullReceiverOnANullableValueIsStillReported() {
         assertCodes("fun g(s: String?): Int = s.length", KotlinDiagnosticCodes.UNSAFE_NULLABLE)

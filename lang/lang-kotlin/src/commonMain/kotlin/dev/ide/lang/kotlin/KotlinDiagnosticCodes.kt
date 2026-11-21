@@ -164,6 +164,29 @@ object KotlinDiagnosticCodes {
     /** A bare `return` in a function that must return a value. */
     const val RETURN_VALUE_EXPECTED = "kt.returnValueExpected"
 
+    // --- modifier and declaration-shape checks ported from the compiler's tables (see KotlinModifierChecks) ---
+    /** A modifier written on a kind of declaration it does not apply to (`abstract` on a top-level function). */
+    const val WRONG_MODIFIER_TARGET = "kt.wrongModifierTarget"
+    /** A modifier that fits the declaration but not where it sits (`protected` inside an object). */
+    const val WRONG_MODIFIER_CONTAINER = "kt.wrongModifierContainer"
+    /** An annotation whose class's `@Target` does not allow where it is written. */
+    const val WRONG_ANNOTATION_TARGET = "kt.wrongAnnotationTarget"
+    /** An `operator` function no operator convention accepts (wrong name, arity, receiver or return type). */
+    const val INAPPLICABLE_OPERATOR = "kt.inapplicableOperator"
+    /** An `infix` function that is not a member or extension with exactly one non-vararg parameter. */
+    const val INAPPLICABLE_INFIX = "kt.inapplicableInfix"
+    /** A `return` that crosses a class, a property initializer, a default value or a non-inlined lambda on
+     *  its way out to the function it returns from. */
+    const val RETURN_NOT_ALLOWED = "kt.returnNotAllowed"
+    /** An annotation argument, or a `const val` initializer, that reads a non-`const` property or calls a
+     *  function (ANNOTATION_ARGUMENT_MUST_BE_CONST / NON_CONST_VAL_USED_IN_CONSTANT_EXPRESSION). */
+    const val NOT_CONSTANT = "kt.notConstant"
+    /** A declaration of a shape the compiler rejects outright: two `vararg` parameters, type parameters on an
+     *  object, a local object or interface, a nested class where only an inner one may stand, a named
+     *  function used as an expression, variance on a function's type parameter, a nullable annotation
+     *  parameter, two labels on one expression, a non-repeatable annotation written twice. */
+    const val DECLARATION_SHAPE = "kt.declarationShape"
+
     // --- typed checks added with the error-recall corpus (see KotlinTypedChecks) ---
     /** A `for` loop over a value with no `iterator()`. */
     const val NOT_ITERABLE = "kt.notIterable"
@@ -175,6 +198,9 @@ object KotlinDiagnosticCodes {
     const val OVERRIDING_FINAL = "kt.overridingFinal"
     /** An `override` whose return type is not a subtype of the overridden member's. */
     const val OVERRIDE_RETURN_TYPE = "kt.overrideReturnType"
+    /** An `override` whose written visibility is narrower than the member it overrides (`protected` over a
+     *  public member), or not comparable with it (`internal` over `protected`). */
+    const val CANNOT_WEAKEN_ACCESS = "kt.cannotWeakenAccess"
     /** A constructor call on something that has none: `: Iface()` in a supertype list. */
     const val NO_CONSTRUCTOR = "kt.noConstructor"
     /** A lambda whose parameter count does not fit the function type it is written for. */

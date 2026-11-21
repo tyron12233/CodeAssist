@@ -135,7 +135,8 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         val javaStatics = q?.let { mappedJavaStatics(it.receiverExpression, receiverType, name) }.orEmpty()
             .filter { it.kind == SymbolKind.METHOD }
         if (javaStatics.isNotEmpty()) javaStatics + companionMethods
-        else (kotlinCandidateOrder(members, scopeExts) + companionMethods).ifEmpty { receiverValueInvokeTargets(call, name, receiverType) }
+        else memberPropertyInvokeTargets(members, receiverType, name)
+            ?: (kotlinCandidateOrder(members, scopeExts) + companionMethods).ifEmpty { receiverValueInvokeTargets(call, name, receiverType) }
     } else if (q != null && q.selectorExpression === call) {
         // An EXPLICIT receiver whose type is unknown (`unresolved?.let { }`). Only a package-qualified call
         // (`kotlinx.coroutines.delay(…)`) can still resolve, to a plain top-level function. The scope walk below
@@ -315,7 +316,10 @@ internal fun KotlinResolver.bestOverload(
             (key.first == bestKey.first && key.second > bestKey.second) ||
             (key.first == bestKey.first && key.second == bestKey.second && key.third > bestKey.third) ||
             (key == bestKey && paramMoreSpecific(c, best)) ||
-            (key == bestKey && overridesWithNarrowerReturn(c, best))
+            (key == bestKey && overridesWithNarrowerReturn(c, best)) ||
+            // A candidate that needs no vararg expansion is more specific than one that does: `foo(b)` picks
+            // `foo(t: A<T>)` over `foo(vararg t: T)`, and from there the narrower `foo(t: B<T>)`.
+            (key == bestKey && best.varargParamIndex >= 0 && c.varargParamIndex < 0 && !paramMoreSpecific(best, c))
         ) {
             best = c; bestKey = key
         }
@@ -469,6 +473,14 @@ private fun KotlinResolver.addArgumentConstraints(
                 ?: return@forEachIndexed
             val shape = service.functionalShape(pt) ?: return@forEachIndexed
             val lambda = expr as? KtLambdaExpression ?: return@forEachIndexed
+            // A lambda that declares its parameters fills only a function type of that arity, and one that
+            // declares none takes zero or one (`it`): `foo { x, y -> }` rules out `foo((Int) -> Unit)`.
+            val declared = lambda.functionLiteral.valueParameterList?.parameters?.size ?: 0
+            val wanted = shape.parameterTypes.size
+            if (if (declared == 0) wanted > 1 && lambda.functionLiteral.arrow == null else declared != wanted) {
+                cs.contradict()
+                return
+            }
             // A `Unit`-returning block coerces its result away ([coercesResultToUnit]), so its body constrains
             // nothing: `forEach { list.add(x) }` must not be inapplicable because `add` returns `Boolean`.
             // Skipping it also spares typing every Unit content lambda's body during scoring.
@@ -638,6 +650,7 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
                     service.sourceClass(nested)?.constructors.orEmpty().map { sourceCtorSymbol(it, nested) }
             }
         }
+        memberPropertyInvokeTargets(members, receiverType, name)?.let { return it }
         return (kotlinCandidateOrder(members, scopeExts) + companionMethods).ifEmpty { receiverValueInvokeTargets(call, name, receiverType) }
     }
     // A nearer function-typed value: the call's targets are its `invoke`, not the top-level functions it
@@ -750,7 +763,8 @@ fun KotlinResolver.callParameters(call: KtCallExpression): List<ParamInfo> {
     for (s in callTargets(call)) {
         if (isJavaCallable(s)) continue
         s.paramNames.forEachIndexed { i, n ->
-            if (n.isNotEmpty() && !isSyntheticParamName(n)) {
+            // `p0`-style names are stripped Java/ASM ones; a Kotlin SOURCE parameter may genuinely be `p1`.
+            if (n.isNotEmpty() && (s.origin.fromSource || !isSyntheticParamName(n))) {
                 out.getOrPut(n) { ParamInfo(n, s.paramTypes.getOrNull(i) as? KotlinType) }
             }
         }
@@ -794,7 +808,8 @@ private fun KotlinResolver.constructorParams(fqn: String): List<ParamInfo> {
     val out = LinkedHashMap<String, ParamInfo>()
     fun add(symbols: List<KotlinSymbol>) {
         for (s in symbols) if (!isJavaCallable(s)) s.paramNames.forEachIndexed { i, n ->
-            if (n.isNotEmpty() && !isSyntheticParamName(n)) {
+            // `p0`-style names are stripped Java/ASM ones; a Kotlin SOURCE parameter may genuinely be `p1`.
+            if (n.isNotEmpty() && (s.origin.fromSource || !isSyntheticParamName(n))) {
                 out.getOrPut(n) { ParamInfo(n, s.paramTypes.getOrNull(i) as? KotlinType) }
             }
         }
@@ -805,7 +820,7 @@ private fun KotlinResolver.constructorParams(fqn: String): List<ParamInfo> {
 }
 
 /** A function or constructor declared in a Java class, which Kotlin calls with positional arguments only. */
-private fun KotlinResolver.isJavaCallable(s: KotlinSymbol): Boolean =
+internal fun KotlinResolver.isJavaCallable(s: KotlinSymbol): Boolean =
     s.declaringClassFqn?.let(service::isJavaType) == true
 
 /** ASM surfaces stripped Java parameters as `p0`, `p1`, … — useless as named arguments, so they're hidden. */
@@ -825,7 +840,8 @@ fun KotlinResolver.annotationParameters(entry: KtAnnotationEntry): List<ParamInf
     val out = LinkedHashMap<String, ParamInfo>()
     fun addParams(symbols: List<KotlinSymbol>) {
         for (s in symbols) s.paramNames.forEachIndexed { i, n ->
-            if (n.isNotEmpty() && !isSyntheticParamName(n)) {
+            // `p0`-style names are stripped Java/ASM ones; a Kotlin SOURCE parameter may genuinely be `p1`.
+            if (n.isNotEmpty() && (s.origin.fromSource || !isSyntheticParamName(n))) {
                 out.getOrPut(n) { ParamInfo(n, s.paramTypes.getOrNull(i) as? KotlinType) }
             }
         }
@@ -911,6 +927,30 @@ private fun kotlinCandidateOrder(members: List<KotlinSymbol>, scopeExts: List<Ko
 }
 
 /**
+ * `x.f()` where the receiver's type has no member FUNCTION `f` but a member PROPERTY `f` of function type
+ * (`class Rule(val apply: () -> Unit)`; `rule.apply()`): Kotlin invokes the property, and a member property's
+ * `invoke` outranks every extension, so the stdlib `T.apply(block)` never gets a look in. [members] is the
+ * receiver's METHOD lookup, which also carries the extensions; null when the property route does not apply.
+ */
+internal fun KotlinResolver.memberPropertyInvokeTargets(
+    members: List<KotlinSymbol>,
+    receiverType: KotlinType,
+    name: String,
+): List<KotlinSymbol>? {
+    if (members.any { !it.isExtension }) return null
+    val prop = service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
+        .firstOrNull { it.kind == SymbolKind.FIELD && !it.isExtension } ?: return null
+    val shape = service.functionalShape(prop.type as? KotlinType ?: return null)?.takeIf { !it.isExtension } ?: return null
+    return listOf(
+        KotlinSymbol(
+            "invoke", SymbolKind.METHOD, type = shape.returnType,
+            paramTypes = shape.parameterTypes,
+            paramHasDefault = List(shape.parameterTypes.size) { false },
+        )
+    )
+}
+
+/**
  * `s.f()` where `f` is a parameter, local or enclosing-class property of EXTENSION function type
  * (`f: String.() -> Int`, a builder's `block: S.() -> S`): the value is invoked with `s` as its receiver, so the
  * call's target is its `invoke` with the remaining parameters. Consulted only once the receiver has no member or
@@ -923,7 +963,10 @@ internal fun KotlinResolver.receiverValueInvokeTargets(
 ): List<KotlinSymbol> {
     val offset = call.textRange.startOffset
     val local = localsAt(offset, name).firstOrNull()
-    val isValue = if (local != null) local.kind != SymbolKind.METHOD else innermostClassDeclaresValue(offset, name) == true
+    // Nearest first: a local, then the innermost class that declares the name, then a top-level property
+    // (`val foo: O.() -> Unit` called as `O.foo()`) when no top-level function shares its name.
+    val isValue = if (local != null) local.kind != SymbolKind.METHOD else innermostClassDeclaresValue(offset, name)
+        ?: service.topLevelByName(name).let { top -> top.any { it.kind == SymbolKind.FIELD } && top.none { it.kind == SymbolKind.METHOD } }
     if (!isValue) return emptyList()
     val type = typeOfName(name, offset) ?: return emptyList()
     val shape = service.functionalShape(type)?.takeIf { it.isExtension } ?: return emptyList()

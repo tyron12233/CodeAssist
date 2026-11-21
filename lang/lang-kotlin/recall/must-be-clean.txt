@@ -625,3 +625,126 @@ class Foo { companion object }
 fun Foo.Companion.create(): Foo = Foo()
 val Foo.Companion.label: String get() = "foo"
 fun g(): Int = String.CASE_INSENSITIVE_ORDER.compare("a", "b") + Foo.create().hashCode() + Foo.label.length
+//// modifier-targets
+abstract class A(protected val p: Int, private vararg val v: Int) {
+    protected abstract fun f(): Int
+    open val o: Int get() = 1
+    internal lateinit var l: String
+    var s: Int = 0
+        protected set
+    protected inner class Inner
+    protected companion object { const val K = 1; private fun h() = 2 }
+    protected constructor() : this(1)
+    private inline fun <reified T> r(noinline a: () -> Unit, crossinline b: () -> Unit) = T::class
+    infix fun plus(x: Int) = x
+    operator fun get(i: Int) = i
+    tailrec fun t(n: Int): Int = if (n == 0) 0 else t(n - 1)
+    suspend fun s() {}
+    sealed class S
+    enum class E { X; open fun e() {} }
+    data class D(val x: Int)
+    annotation class Ann
+    final override fun toString() = ""
+}
+sealed interface SI
+fun interface FI { fun run() }
+@JvmInline value class V(val x: Int)
+private typealias PA = Int
+internal object IO { private val z = 1; internal fun i() = z }
+interface I { private fun p() = 1; val q: Int get() = p(); fun s() = q }
+open class Box<in T, out R> { open fun f() {} }
+fun g(): Int {
+    abstract class LA { abstract fun f(): Int }
+    open class LB : LA() { override fun f() = 1; protected fun pf() = 2 }
+    data class LD(val x: Int)
+    lateinit var lv: String
+    lv = "x"
+    val anon = object : Runnable { override fun run() {}; private val q = 1; internal fun r() = q }
+    val sf = fun() {}
+    try { } catch (e: Exception) { }
+    for (i in 0..1) { }
+    return LB().f() + lv.length + LD(1).x + anon.hashCode() + sf.hashCode()
+}
+enum class E2(val x: Int) { A(1) { override fun f() = 2; private fun g() = 3 }, B(2); open fun f() = x }
+inline val ip: Int get() = 1
+external fun ext()
+//// operators-and-infix
+import kotlin.reflect.KProperty
+class V(val x: Int) : Comparable<V> {
+    operator fun plus(o: V) = V(x + o.x)
+    operator fun unaryMinus() = V(-x)
+    operator fun inc(): V = V(x + 1)
+    operator fun get(i: Int, j: Int = 0) = x + i + j
+    operator fun set(i: Int, v: Int) {}
+    operator fun contains(i: Int): Boolean = i == x
+    operator fun invoke(vararg a: Int) = a.size
+    operator fun component1() = x
+    operator fun rangeTo(o: V) = x..o.x
+    operator fun plusAssign(o: Int) {}
+    override operator fun compareTo(other: V): Int = x - other.x
+    override operator fun equals(other: Any?): Boolean = other is V && other.x == x
+    override fun hashCode() = x
+    operator fun iterator() = listOf(x).iterator()
+    operator fun getValue(thisRef: Any?, property: KProperty<*>): Int = x
+    operator fun setValue(thisRef: Any?, property: KProperty<*>, value: Int) {}
+    infix fun and(o: V) = V(x and o.x)
+}
+operator fun V.minus(o: V) = V(x - o.x)
+infix fun Int.shl2(n: Int) = this shl n
+//// non-local-returns
+inline fun inl(f: () -> Unit) = f()
+fun plain(f: () -> Unit) = f()
+fun g(l: List<Int>): Int {
+    l.forEach { if (it == 0) return 1 }
+    inl { return 2 }
+    run { if (l.isEmpty()) return 3 }
+    plain { return@plain }
+    val local = fun(): Int { return 4 }
+    fun inner(): Int { return 5 }
+    return local() + inner()
+}
+class R { val x: Int get() { return 1 }; constructor(); init { listOf(1).forEach { if (it > 0) return@forEach } } }
+//// constant-arguments
+annotation class Ann(vararg val s: String)
+const val TOP = "top"
+val notConst = "x"
+object Holder { const val IN = "in" }
+@Ann(TOP, "$TOP!", TOP + "x", Holder.IN) fun f(notConst: String) = notConst
+class K(val notConst: Int) { companion object { const val notConst2 = "c" }; @Ann(notConst2) fun g() {} }
+@Ann(TOP) fun h(x: String) { @Ann(TOP) val y = x }
+const val DERIVED = TOP + "/" + Holder.IN
+//// annotation-targets
+@Target(AnnotationTarget.FUNCTION, AnnotationTarget.CLASS) annotation class FC
+@Target(AnnotationTarget.TYPE) annotation class Ty
+@Target(AnnotationTarget.FIELD) annotation class Fld
+@Target(AnnotationTarget.PROPERTY_GETTER) annotation class Gt
+annotation class Plain
+@FC class C1(@Plain val a: Int, @Fld val b: Int) {
+    @Plain val p = 1
+    @Fld val q = 2
+    @get:Gt val r = 3
+    @field:Plain val s = 4
+    @FC fun m(x: @Ty Int, @Plain y: Int): @Ty Int = x + y
+}
+@Plain fun top(@param:Plain z: Int) { @Plain val loc = z }
+//// declaration-shapes
+fun f(vararg a: Int, b: Int = 0) = a.size + b
+object O { class Nested; object Inner }
+class Outer { class Nested; inner class In { inner class Deeper }; companion object }
+fun g() { class Local { inner class In }; val o = object { fun x() = 1 }; o.x() }
+val h = fun() {}
+fun <T> id(x: T) = x
+class Box<out T>(val t: T)
+annotation class A(val x: Int, val s: String = "")
+fun lab() { l1@ while (true) { break@l1 } }
+open class P { open val x: Int = 0; var y: Int = 0
+    private set }
+class F : P() { override var x: Int = 1
+    private set }
+class LI { lateinit var s: String; lateinit var l: List<Int> }
+//// const-placement
+const val TOP = 1
+object O { const val IN_OBJECT = TOP + 1 }
+class C { companion object { const val IN_COMPANION = O.IN_OBJECT == 2 } }
+@Target(AnnotationTarget.EXPRESSION) @Retention(AnnotationRetention.SOURCE) annotation class OnExpr
+fun f(x: Int) = @OnExpr x + TOP

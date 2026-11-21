@@ -212,7 +212,17 @@ tasks.named<Test>("jvmTest") {
     // (the root is handed over the way :kotlin-syntax hands its parser sweep the same one);
     // `-Dkt.externalCorpus=<kotlin checkout>` runs the one over the standard library. Opt-in because a sweep
     // is ~3,000 files of analysis, which does not belong in the fast correctness gate.
-    val sweeping = System.getProperty("kt.sweep") != null || System.getProperty("kt.externalCorpus") != null
+    // `-Dkt.testData=<kotlin checkout>` runs the compiler-test-data parity sweep (KotlinCompilerTestDataSweepTest);
+    // `-Dkt.testDataOnly=<path substring>` and `-Dkt.testDataLimit=<n>` narrow it.
+    listOf("kt.testData", "kt.testDataOnly", "kt.testDataLimit").forEach { k -> System.getProperty(k)?.let { systemProperty(k, it) } }
+    // `-Dkt.completionTestData=<intellij>/plugins/kotlin/completion/testData` runs the completion-parity sweep
+    // over the IntelliJ Kotlin plugin's own completion test data (KotlinCompletionTestDataSweepTest);
+    // `kt.completionOnly` narrows it to matching cases and `kt.completionDirs` picks the directories.
+    val sweeping = System.getProperty("kt.sweep") != null || System.getProperty("kt.externalCorpus") != null ||
+        System.getProperty("kt.testData") != null || System.getProperty("kt.completionTestData") != null
+    for (key in listOf("kt.completionTestData", "kt.completionOnly", "kt.completionDirs", "kt.completionDebug")) {
+        System.getProperty(key)?.let { systemProperty(key, it) }
+    }
     if (System.getProperty("kt.sweep") != null) systemProperty("kt.repoRoot", rootDir.absolutePath)
     System.getProperty("kt.externalCorpus")?.let { systemProperty("kt.externalCorpus", it) }
     // `-Dkt.sweepOnly=<path substring>` narrows the module sweep to matching files and dumps every error in

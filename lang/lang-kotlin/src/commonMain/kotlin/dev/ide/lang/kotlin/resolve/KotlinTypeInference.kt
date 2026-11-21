@@ -404,9 +404,20 @@ internal fun KotlinResolver.superType(expr: KtSuperExpression): KotlinType? {
         service.typeFromText(it, fileContext)?.let { t -> return t }
     }
     val cls = enclosingClassOrObject(expr.textRange.startOffset) ?: return null
-    val superText = cls.superTypeListEntries.firstNotNullOfOrNull { it.typeReference?.text }
-    return superText?.let { service.typeFromText(it, fileContext) }
-        ?: service.typeByFqn("kotlin.Any")
+    val owner = enclosingClassFqnOf(cls)
+    val supers = cls.superTypeListEntries.mapNotNull { e -> e.typeReference?.text?.let { service.typeFromText(it, fileContext, owner) } }
+    // An unqualified `super.m()` reaches `m` in WHICHEVER supertype declares it, the interfaces included:
+    // `class D : Base(), Iface { override fun bar() = super.bar() }` calls `Iface.bar`. Typing `super` as the
+    // first supertype alone made every interface default reached that way an unresolved reference.
+    // Only for a bare `super`: a label (`super@Outer`) names another class's supertypes, and an empty `super<>`
+    // names none.
+    if (supers.size > 1 && '<' !in expr.text && '@' !in expr.text) {
+        val selector = (expr.parent as? KtQualifiedExpression)?.takeIf { it.receiverExpression === expr }?.selectorExpression
+        val name = ((selector as? KtCallExpression)?.calleeExpression ?: selector)
+            ?.let { (it as? KtNameReferenceExpression)?.getReferencedName() }
+        if (name != null) supers.firstOrNull { memberNamed(it, name) != null }?.let { return it }
+    }
+    return supers.firstOrNull() ?: service.typeByFqn("kotlin.Any")
 }
 
 internal fun KotlinResolver.constType(e: KtConstantExpression): KotlinType? {
@@ -573,7 +584,9 @@ internal fun KotlinResolver.propertyReferenceType(e: KtCallableReferenceExpressi
     if (target.kind != SymbolKind.FIELD && target.kind != SymbolKind.PARAMETER && target.kind != SymbolKind.LOCAL_VARIABLE) return null
     val valueType = target.type as? KotlinType ?: return null
     val psi = (target.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi
-    val mutable = (psi as? dev.ide.kotlin.syntax.psi.KtProperty)?.isVar == true
+    // A `var` declared either way: a property, or a constructor parameter (`class A(var g: A)`, `A::g`).
+    val mutable = (psi as? dev.ide.kotlin.syntax.psi.KtProperty)?.isVar == true ||
+        (psi as? dev.ide.kotlin.syntax.psi.KtParameter)?.isMutable == true
     val receiver = e.receiverExpression
     val owner = receiver?.let { typeDenotationFqn(it) }
     val prefix = if (mutable) "kotlin.reflect.KMutableProperty" else "kotlin.reflect.KProperty"

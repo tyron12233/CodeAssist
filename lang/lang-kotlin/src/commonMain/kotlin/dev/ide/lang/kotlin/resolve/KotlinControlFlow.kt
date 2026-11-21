@@ -71,6 +71,13 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
         is KtCallExpression -> callLiveness(e)
         is KtDotQualifiedExpression -> callLiveness(e) // a trailing `foo.bar()` may be `Nothing`-returning
         is KtBinaryExpression -> binaryLiveness(e)
+        // `val a = try { … } finally { return x }`: a local's initializer runs as part of the statement, so a
+        // jump inside it ends the statement too.
+        is dev.ide.kotlin.syntax.psi.KtProperty -> if (e.isLocal) liveness(e.initializer) else Liveness.LIVE
+        // `null!!` always throws.
+        is dev.ide.kotlin.syntax.psi.KtPostfixExpression ->
+            if (e.operationToken == KtTokens.EXCLEXCL && unwrap(e.baseExpression)?.text == "null") Liveness.DEAD
+            else liveness(e.baseExpression)
         else -> Liveness.LIVE // literals, refs, ordinary expressions complete normally
     }
 
@@ -231,7 +238,29 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
     /** `x ?: <jump>` never falls through the elvis when the left is null (the RHS jumps); but the left may be
      *  non-null, so overall it still completes → LIVE. Only a top-level jump construct deadens (handled above).
      *  Other binaries (assignment, arithmetic, `&&`) complete normally. */
-    private fun binaryLiveness(e: KtBinaryExpression): Liveness = Liveness.LIVE
+    /** The LEFT operand always runs, so a jump there ends the whole expression (`(return true) && x`,
+     *  `(if (c) return 1 else null) ?: return 0`). An elvis whose left side can only be `null` (a `null` literal,
+     *  or an `if` whose live branches are all `null`) always runs its right side too. Anything else completes
+     *  normally as far as this pass can tell. */
+    private fun binaryLiveness(e: KtBinaryExpression): Liveness {
+        val left = liveness(e.left)
+        if (left == Liveness.DEAD) return Liveness.DEAD
+        if (e.operationToken == KtTokens.ELVIS && left == Liveness.LIVE && alwaysNull(e.left)) return liveness(e.right)
+        return Liveness.LIVE
+    }
+
+    /** Whether [e] can only produce `null`: the literal, or an `if` whose branches are each `null` or a jump. */
+    private fun alwaysNull(e: KtExpression?): Boolean = when (val u = unwrap(e)) {
+        null -> false
+        is KtIfExpression -> u.`else` != null && listOf(u.then, u.`else`).all { b ->
+            liveness(b) == Liveness.DEAD || alwaysNull(lastValue(b))
+        }
+        is KtBlockExpression -> alwaysNull(lastValue(u))
+        else -> u.text == "null"
+    }
+
+    private fun lastValue(e: KtExpression?): KtExpression? =
+        (unwrap(e) as? KtBlockExpression)?.statements?.lastOrNull() as? KtExpression ?: unwrap(e)
 
     private fun isNothingReturning(e: KtExpression): Boolean {
         val call = when (e) {

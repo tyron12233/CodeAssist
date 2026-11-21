@@ -22,6 +22,7 @@ import dev.ide.kotlin.syntax.psi.KtParenthesizedExpression
 import dev.ide.kotlin.syntax.psi.KtPostfixExpression
 import dev.ide.kotlin.syntax.psi.KtPrefixExpression
 import dev.ide.kotlin.syntax.psi.KtProperty
+import dev.ide.kotlin.syntax.psi.KtSafeQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtStringTemplateExpression
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.KtWhenExpression
@@ -255,7 +256,7 @@ internal class KotlinVarNullFlow(private val resolver: KotlinResolver) {
                         it,
                         if (whenTrue) VarNul.NOT_NULL else VarNul.NULL
                     )
-                } ?: state
+                } ?: (if (whenTrue) safeChainNullCmpVar(c)?.let { set(state, it, VarNul.NOT_NULL) } else null) ?: state
 
             c is KtBinaryExpression && c.operationToken == KtTokens.EQEQ ->
                 nullCmpVar(c)?.let {
@@ -264,7 +265,7 @@ internal class KotlinVarNullFlow(private val resolver: KotlinResolver) {
                         it,
                         if (whenTrue) VarNul.NULL else VarNul.NOT_NULL
                     )
-                } ?: state
+                } ?: (if (!whenTrue) safeChainNullCmpVar(c)?.let { set(state, it, VarNul.NOT_NULL) } else null) ?: state
 
             c is KtBinaryExpression && c.operationToken == KtTokens.ANDAND ->
                 if (whenTrue) refine(refine(state, c.left, true), c.right, true) else state
@@ -309,6 +310,22 @@ internal class KotlinVarNullFlow(private val resolver: KotlinResolver) {
         if (isNullLit(r)) return boundVar(l)
         if (isNullLit(l)) return boundVar(r)
         return null
+    }
+
+    /** The tracked var at the root of a safe chain compared with null (`v?.a != null`): the chain being non-null
+     *  proves the var non-null (its being null proves nothing). */
+    private fun safeChainNullCmpVar(e: KtBinaryExpression): KtProperty? {
+        val l = e.left?.let { unwrap(it) }
+        val r = e.right?.let { unwrap(it) }
+        var chain = when {
+            isNullLit(r) -> l
+            isNullLit(l) -> r
+            else -> return null
+        } as? KtSafeQualifiedExpression ?: return null
+        while (true) {
+            val recv = unwrap(chain.receiverExpression)
+            if (recv is KtSafeQualifiedExpression) chain = recv else return boundVar(recv)
+        }
     }
 
     private fun set(

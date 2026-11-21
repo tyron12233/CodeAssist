@@ -2,7 +2,9 @@ package dev.ide.lang.kotlin.resolve
 
 import dev.ide.kotlin.syntax.psi.KtAnnotatedExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
+import dev.ide.kotlin.syntax.psi.KtCallableReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression
+import dev.ide.kotlin.syntax.psi.KtElement
 import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtLabeledExpression
 import dev.ide.kotlin.syntax.psi.KtLambdaArgument
@@ -17,6 +19,7 @@ import dev.ide.kotlin.syntax.psi.KtReturnExpression
 import dev.ide.kotlin.syntax.psi.KtValueArgument
 import dev.ide.kotlin.syntax.psi.KtValueArgumentList
 import dev.ide.kotlin.syntax.psi.ValueArgument
+import dev.ide.kotlin.syntax.psi.collectDescendantsOfType
 import dev.ide.kotlin.syntax.psi.getStrictParentOfType
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
@@ -34,14 +37,29 @@ internal fun KotlinResolver.bindLambdaReturn(
     bindings: MutableMap<String, TypeRef>
 ) {
     val r = service.functionalShape(pt)?.returnType as? KotlinType ?: return
-    if (r.isTypeParameter) inferLambdaResult(lambda)?.let { result ->
-        // A NULLABLE functional return `R?` (the `mapNotNull` `transform: (T) -> R?` shape, `R : Any`) absorbs
-        // one level of the lambda result's nullability: `{ … : Note? }` binds R = Note, so the call's `List<R>`
-        // is `List<Note>`, not `List<Note?>` (which would make the elements spuriously nullable). A bare `R`
-        // (`map { … }`, `let { … }`) keeps the result's nullability unchanged.
-        val bound = if (r.nullable && result is KotlinType) result.withNullable(false) else result
-        bindings.getOrPut(r.qualifiedName) { bound }
-    }
+    if (r.isTypeParameter) inferLambdaResult(lambda)?.let { bindFunctionalResult(r, it, bindings) }
+}
+
+/** A callable reference fills a functional parameter as a lambda does: its target's result binds the
+ *  parameter's result type parameter (`let(regex::find)` ⇒ `R = MatchResult?`, `map(P::age)` ⇒ `R = Int`).
+ *  False when [pt] is not functional, so the caller types the reference as an ordinary value instead. */
+internal fun KotlinResolver.bindCallableReferenceReturn(
+    pt: KotlinType,
+    ref: KtCallableReferenceExpression,
+    bindings: MutableMap<String, TypeRef>
+): Boolean {
+    val r = service.functionalShape(pt)?.returnType as? KotlinType ?: return false
+    if (r.isTypeParameter) callableReferenceResultType(ref)?.let { bindFunctionalResult(r, it, bindings) }
+    return true
+}
+
+private fun bindFunctionalResult(r: KotlinType, result: TypeRef, bindings: MutableMap<String, TypeRef>) {
+    // A NULLABLE functional return `R?` (the `mapNotNull` `transform: (T) -> R?` shape, `R : Any`) absorbs
+    // one level of the result's nullability: `{ … : Note? }` binds R = Note, so the call's `List<R>` is
+    // `List<Note>`, not `List<Note?>` (which would make the elements spuriously nullable). A bare `R`
+    // (`map { … }`, `let { … }`) keeps the result's nullability unchanged.
+    val bound = if (r.nullable && result is KotlinType) result.withNullable(false) else result
+    bindings.getOrPut(r.qualifiedName) { bound }
 }
 
 /**
@@ -63,7 +81,27 @@ internal fun KotlinResolver.inferLambdaResult(lambda: KtLambdaExpression): TypeR
     // in turn makes a `by`-delegate on it invalid (Unit has no getValue/setValue). A non-empty body's result is
     // its last statement's type.
     if (statements.isEmpty()) return service.typeByFqn("kotlin.Unit")
+    // A bare `return@label` aimed at this lambda returns Unit from it, which makes the whole lambda's result
+    // Unit and coerces the last statement away: `run { if (p) return@run; completed() }` is a `Unit`, not the
+    // `String` its last line computes.
+    if (hasBareReturnToItself(lambda)) return service.typeByFqn("kotlin.Unit")
     return inferType(statements.last())
+}
+
+private fun hasBareReturnToItself(lambda: KtLambdaExpression): Boolean {
+    val body = lambda.bodyExpression ?: return false
+    if (!body.text.contains("return@")) return false
+    val labels = HashSet<String>()
+    (lambda.parent as? KtLabeledExpression)?.getLabelName()?.let { labels += it }
+    // The implicit label is the name of the call the lambda is passed to (`run`, `forEach`).
+    val arg = lambda.parent as? KtValueArgument ?: lambda.parent?.parent as? KtValueArgument
+    val call = (arg?.parent as? KtValueArgumentList)?.parent as? KtCallExpression ?: arg?.parent as? KtCallExpression
+    (call?.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()?.let { labels += it }
+    if (labels.isEmpty()) return false
+    return body.collectDescendantsOfType<KtReturnExpression>().any { r ->
+        r.returnedExpression == null && r.getLabelName() in labels &&
+            r.getStrictParentOfType<KtLambdaExpression>() === lambda
+    }
 }
 
 /** The `(P…) -> R` type a lambda is expected to be (from the parameter it fills), receiver-bound — used
@@ -232,8 +270,12 @@ internal fun KotlinResolver.samConstructorShape(call: KtCallExpression): KotlinS
 /** The call a lambda argument belongs to + its parameter index. `KtCallExpression.valueArguments`
  *  ALREADY includes the trailing lambda, so the index is its position in that list. */
 internal fun KotlinResolver.enclosingCallAndParamIndex(lambda: KtLambdaExpression): Pair<KtCallExpression, Int>? {
-    val valueArg = lambda.parent as? ValueArgument ?: return null
-    val call = when (val p = lambda.parent) {
+    // A labeled or annotated lambda (`build l1@{ emit(1) }`, `run @Ann { }`) sits one node down from its argument:
+    // it fills the same parameter and gets the same receiver.
+    var arg: KtElement = lambda
+    while (arg.parent is KtLabeledExpression || arg.parent is KtAnnotatedExpression) arg = arg.parent as KtElement
+    val valueArg = arg.parent as? ValueArgument ?: return null
+    val call = when (val p = arg.parent) {
         is KtLambdaArgument -> p.parent as? KtCallExpression
         is KtValueArgument -> (p.parent as? KtValueArgumentList)?.parent as? KtCallExpression
         else -> null
