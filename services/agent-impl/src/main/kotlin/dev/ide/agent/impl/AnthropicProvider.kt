@@ -28,7 +28,11 @@ import kotlinx.serialization.json.put
  * thinking and tools, and decodes the content-block SSE stream into [LlmStreamEvent]s. Thinking blocks are
  * echoed back with their signatures on later turns, as the API requires when a turn also calls a tool.
  */
-class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
+class AnthropicProvider(
+    private val transport: LlmTransport,
+    /** Sent with every request on top of the API's own headers (a proxy's capability flags). */
+    private val extraHeaders: Map<String, String> = emptyMap(),
+) : LlmProvider {
     override val id: String = "anthropic"
     override val displayName: String = "Anthropic (Claude)"
     override val models: List<LlmModelInfo> = listOf(
@@ -76,6 +80,7 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
                 put("anthropic-version", ANTHROPIC_VERSION)
                 put("content-type", "application/json")
                 betaHeader(request)?.let { put("anthropic-beta", it) }
+                putAll(extraHeaders)
             },
             jsonBody = buildBody(request, strict),
             caCertificatePem = config.caCertificatePem,

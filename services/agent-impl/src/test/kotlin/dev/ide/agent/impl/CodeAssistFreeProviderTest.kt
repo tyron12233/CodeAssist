@@ -48,6 +48,55 @@ class CodeAssistFreeProviderTest {
     }
 
     @Test
+    fun tellsTheProxyItShowsServerModelNames() {
+        runBlocking {
+            val t = Recording()
+            CodeAssistFreeProvider(t, base) { "jwt" }.client(ProviderConfig("placeholder")).chat(request).toList()
+            assertEquals("1", t.requests.single().headers[CodeAssistFreeProvider.MODEL_NAMES_HEADER])
+        }
+    }
+
+    /** Answers `GET` with [bodies] per base URL; a base with no body fails like an unreachable proxy. */
+    private class Listing(private val bodies: Map<String, String>) : LlmTransport {
+        val gets = mutableListOf<Pair<String, Map<String, String>>>()
+        override fun sse(request: SseRequest): Flow<String> = flowOf()
+        override suspend fun get(url: String, headers: Map<String, String>, caCertificatePem: String?): String {
+            gets += url to headers
+            return bodies.entries.firstOrNull { url.startsWith(it.key) }?.value ?: throw java.io.IOException("unreachable")
+        }
+    }
+
+    @Test
+    fun listsTheTiersAndNamesTheProxyServes() {
+        runBlocking {
+            val t = Listing(mapOf(base to """{"data":[{"type":"model","id":"claude-haiku-5-5","display_name":"MiniMax M2.5"},{"type":"model","id":"new-tier"}],"has_more":false}"""))
+            val listed = CodeAssistFreeProvider(t, base) { "jwt" }.listModels(ProviderConfig("placeholder"))
+            assertEquals(listOf("claude-haiku-5-5" to "MiniMax M2.5", "new-tier" to "new-tier"), listed.map { it.id to it.displayName })
+            val (url, headers) = t.gets.single()
+            assertEquals("$base/v1/models", url)
+            assertEquals("jwt", headers["x-api-key"])
+            assertEquals("1", headers[CodeAssistFreeProvider.MODEL_NAMES_HEADER])
+        }
+    }
+
+    @Test
+    fun listingFallsBackToTheNextProxyThenToTheBuiltInTiers() {
+        runBlocking {
+            val fallback = "https://ai-proxy.example.workers.dev"
+            val t = Listing(mapOf(fallback to """{"data":[{"id":"claude-haiku-5-5","display_name":"MiniMax M2.5"}]}"""))
+            val provider = CodeAssistFreeProvider(t, listOf(base, fallback)) { "jwt" }
+            assertEquals("MiniMax M2.5", provider.listModels(ProviderConfig("placeholder")).single().displayName)
+
+            val down = CodeAssistFreeProvider(Listing(emptyMap()), base) { "jwt" }
+            assertEquals(down.models, down.listModels(ProviderConfig("placeholder")))
+            val signedOut = Listing(emptyMap())
+            val out = CodeAssistFreeProvider(signedOut, base) { null }
+            assertEquals(out.models, out.listModels(ProviderConfig("placeholder")))
+            assertEquals(0, signedOut.gets.size, "signed out, the proxy is not asked")
+        }
+    }
+
+    @Test
     fun signedOutFailsWithoutCallingTheProxy() {
         runBlocking {
             val t = Recording()
