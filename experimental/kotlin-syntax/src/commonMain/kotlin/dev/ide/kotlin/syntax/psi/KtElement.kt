@@ -369,16 +369,21 @@ abstract class KtCallableDeclaration internal constructor(session: KtTreeSession
      */
     val receiverTypeReference: KtTypeReference?
         get() {
-            val nameOffset = nameIdentifier?.textOffset ?: return null
-            return typeReferenceAround(nameOffset, before = true)
+            val anchor = receiverReturnSplit() ?: return null
+            return typeReferenceAround(anchor, before = true)
         }
 
     /** The declared return type, or null when it is inferred. */
     open val typeReference: KtTypeReference?
         get() {
-            val nameOffset = nameIdentifier?.textOffset ?: return typeReferenceAround(-1, before = false)
-            return typeReferenceAround(nameOffset, before = false)
+            val anchor = receiverReturnSplit() ?: return typeReferenceAround(-1, before = false)
+            return typeReferenceAround(anchor, before = false)
         }
+
+    /** The offset that separates the receiver from the return type: the name, or for an anonymous function
+     *  (`fun Foo.(): Int { }`, which has none) its parameter list. Without the second, an anonymous function's
+     *  receiver read as its return type and its body had no implicit `this`. */
+    private fun receiverReturnSplit(): Int? = nameIdentifier?.textOffset ?: valueParameterList?.textOffset
 
     // Read on every declaration of a file per scope query, so it walks the cached children without a list.
     private fun typeReferenceAround(nameOffset: Int, before: Boolean): KtTypeReference? {

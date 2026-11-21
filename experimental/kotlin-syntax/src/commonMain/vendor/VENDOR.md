@@ -2,8 +2,9 @@
 
 These files are copied from the Kotlin compiler, and their package names are left alone
 (`org.jetbrains.kotlin.kmp.*`) so that a re-sync is an overwrite, not a merge. Every file is upstream's
-byte for byte except one, `org/jetbrains/kotlin/kmp/tree/LightSyntaxTree.kt`, which carries local additions
-that a re-sync must re-apply; see [Local modifications](#local-modifications).
+byte for byte at the commit below except three: `org/jetbrains/kotlin/kmp/tree/LightSyntaxTree.kt`, which
+carries local additions that a re-sync must re-apply, and the two parser files that carry later upstream
+fixes backported ahead of a re-sync; see [Local modifications](#local-modifications).
 
     upstream:  https://github.com/JetBrains/kotlin
     path:      compiler/multiplatform-parsing/common/src
@@ -23,9 +24,28 @@ instead. If a dependency ever stops publishing them, that is what breaks, and it
 
 ## Local modifications
 
-The grammar is untouched: no parser, lexer or element-type file differs from upstream, so this is still the
-compiler's own parse. The value of the parser is that it IS the compiler's grammar, and a local fix to it
+The grammar is upstream's: no parser, lexer or element-type file carries a change of ours, so this is still
+the compiler's own parse. The value of the parser is that it IS the compiler's grammar, and a local fix to it
 would quietly forfeit exactly that; anything that changes what parses, or how, belongs upstream.
+
+### Backported upstream grammar fixes
+
+Two parser files are ahead of the commit above, by fixes copied from a LATER upstream revision (master at
+`04f3c969a5c61163f576fa39072982c05fb55f7c`, 2026-11-20) and nothing else. Each made the editor report a
+syntax error on code the compiler accepts. The rest of that revision's parser changes are not taken; a full
+re-sync brings them all.
+
+- **KT-90707**, enum entries named like a soft modifier (`error("error")`, `value {}`, `inline("inline")`):
+  `KotlinParsing.parseEnumEntry` reads its modifier list with `NO_MODIFIERS_BEFORE_FOR_ENUM_ENTRY`, which adds
+  `LPAR` and `LBRACE` to the old `COMMA_SEMICOLON_RBRACE_SET`, so the name is not taken for a modifier.
+- **KT-90782**, a call named like a modifier on the line after a local or script top-level class
+  (`class C` then `error("boom")`): `parseClassOrObject` takes the `DeclarationParsingMode`, threaded through
+  `parseClass`, `parseObject` and `parseCommonDeclaration`, and outside `MEMBER_OR_TOPLEVEL` ends the class at
+  modifiers that start a new line and are not followed by `constructor`. `parseObjectLiteral` in
+  `KotlinExpressionParsing.kt` passes `MEMBER_OR_TOPLEVEL` to keep its old behaviour.
+
+`ModifierNamedCallParseTest` pins both. A re-sync to any revision at or after the one named above supersedes
+them, and the overwrite takes them out with nothing to re-apply.
 
 One file is modified, `org/jetbrains/kotlin/kmp/tree/LightSyntaxTree.kt`, and only by additions to the tree
 class (no upstream line changes behaviour). They live here rather than in the `dev.ide.kotlin.syntax`
