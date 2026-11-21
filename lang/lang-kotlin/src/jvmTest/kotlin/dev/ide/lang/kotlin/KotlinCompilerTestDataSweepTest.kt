@@ -37,7 +37,7 @@ import kotlin.test.Test
 class KotlinCompilerTestDataSweepTest {
 
     private class Marker(val start: Int, val end: Int, val names: List<String>)
-    private class Case(val path: String, val stage: String, val files: List<Pair<String, String>>, val checkType: Boolean)
+    private class Case(val path: String, val stage: String, val files: List<Pair<String, String>>, val checkType: Boolean, val inferenceHelpers: Boolean = false)
 
     @Test
     fun theCheckersAgreeWithTheCompilersDiagnosticTestData() {
@@ -76,6 +76,7 @@ class KotlinCompilerTestDataSweepTest {
             // The compiler's test runner adds these declarations to a `// CHECK_TYPE` file's module; they are on
             // disk for resolution and never analyzed themselves.
             if (case.checkType) src.resolve("_CheckTypeHelpers.kt").toFile().writeText(CHECK_TYPE_HELPERS)
+            if (case.inferenceHelpers) src.resolve("_InferenceHelpers.kt").toFile().writeText(INFERENCE_HELPERS)
             val future = exec.submit<List<Pair<String, List<dev.ide.lang.dom.Diagnostic>>>> {
                 val a = KotlinSourceAnalyzer(fakeContext(src, jars))
                 try {
@@ -188,7 +189,8 @@ class KotlinCompilerTestDataSweepTest {
         if (files.any { !it.first.endsWith(".kt") }) return null to "nonKotlinFile"
         if (files.map { it.first }.toSet().size != files.size) return null to "dupFile"
         val checkType = Regex("""^// ?CHECK_TYPE""", RegexOption.MULTILINE).containsMatchIn(text)
-        return Case(rel, stage, files.map { (n, t) -> sanitize(n) to t }, checkType) to null
+        val inferenceHelpers = Regex("""^// ?INFERENCE_HELPERS""", RegexOption.MULTILINE).containsMatchIn(text)
+        return Case(rel, stage, files.map { (n, t) -> sanitize(n) to t }, checkType, inferenceHelpers) to null
     }
 
     private fun sanitize(name: String) = name.trimStart('/').replace("..", "_")
@@ -258,6 +260,13 @@ class KotlinCompilerTestDataSweepTest {
     }
 
     private companion object {
+        /** `compiler/testData/diagnostics/helpers/inference/inferenceUtils.kt`, injected for `// INFERENCE_HELPERS`. */
+        val INFERENCE_HELPERS = """
+            fun <K> id(x: K): K = x
+            fun <K> materialize(): K = null!!
+            fun <K> select(vararg values: K): K = values[0]
+        """.trimIndent()
+
         /** `compiler/testData/diagnostics/helpers/types/checkType.kt` + `checkTypeWithExact.kt`. */
         val CHECK_TYPE_HELPERS = """
             fun <T> checkSubtype(t: T) = t

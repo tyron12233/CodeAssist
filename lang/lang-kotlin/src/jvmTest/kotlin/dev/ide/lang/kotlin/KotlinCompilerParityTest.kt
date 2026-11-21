@@ -110,6 +110,16 @@ class KotlinCompilerParityTest {
         clean("class C { fun t(x: UInt) {} }\nfun C.t(x: ULong) {}\nfun g(c: C) { c.t(9U) }")
     }
 
+    /** Explicit type arguments are checked against the bounds as written, across every overload, and a
+     *  generic owner on the left of `::` makes an unbound property reference. */
+    @Test
+    fun boundsAcrossOverloadsAndGenericOwnerReferences() {
+        clean("open class Foo\nclass Bar : Foo()\ninline fun <reified T : Bar> nameOf(): String = \"\"\nfun <T : Foo> nameOf(x: Int = 0): String = \"\"\nfun t() { nameOf<Bar>(); nameOf<Foo>() }")
+        clean("fun <T, R : Number?> multipleTypeArguments(vararg xs: R) {}\nfun t() { multipleTypeArguments<Nothing?, Nothing?>() }")
+        assertCodes("fun <T : Number> g() {}\nfun t() { g<String>() }", KotlinDiagnosticCodes.UPPER_BOUND_VIOLATED)
+        clean("class Generic<T>\nclass Klass<T> { var mutableProperty: Generic<T> = Generic() }\nfun t() { val mp = Klass<Int>::mutableProperty; mp.set(Klass<Int>(), Generic<Int>()) }")
+    }
+
     /** A classifier is looked up through every enclosing class, including a local or anonymous one, and through
      *  its own companion and (transitive, typealiased) superCLASSES. */
     @Test

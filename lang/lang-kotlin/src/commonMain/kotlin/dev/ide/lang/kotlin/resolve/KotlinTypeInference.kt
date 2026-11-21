@@ -588,8 +588,14 @@ internal fun KotlinResolver.propertyReferenceType(e: KtCallableReferenceExpressi
     val mutable = (psi as? dev.ide.kotlin.syntax.psi.KtProperty)?.isVar == true ||
         (psi as? dev.ide.kotlin.syntax.psi.KtParameter)?.isMutable == true
     val receiver = e.receiverExpression
-    val owner = receiver?.let { typeDenotationFqn(it) }
+    // `Klass<T>::prop`: a type written WITH arguments parses as a call that has no argument list. It names the
+    // owner type like a bare `Klass` does, so the reference is unbound (`KMutableProperty1`, `set(receiver, v)`).
+    val genericOwner = (receiver as? dev.ide.kotlin.syntax.psi.KtCallExpression)
+        ?.takeIf { it.valueArgumentList == null && it.lambdaArguments.isEmpty() && it.typeArgumentList != null }
+        ?.let { service.typeFromText(it.text, fileContext, enclosingClassFqnOf(it)) }
+    val owner = genericOwner?.qualifiedName ?: receiver?.let { typeDenotationFqn(it) }
     val prefix = if (mutable) "kotlin.reflect.KMutableProperty" else "kotlin.reflect.KProperty"
+    if (genericOwner != null) return service.typeByFqn(prefix + "1", listOf(genericOwner, valueType))
     return if (owner != null) service.typeByFqn(prefix + "1", listOf(service.typeByFqn(owner), valueType))
     else service.typeByFqn(prefix + "0", listOf(valueType))
 }

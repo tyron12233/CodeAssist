@@ -4117,12 +4117,33 @@ internal class KotlinSemanticChecks(
         val args = call.typeArgumentList?.arguments ?: return emptyList()
         if (args.isEmpty()) return emptyList()
         val callee = resolver.calleeFunctionOf(call)
+        // Overloads that differ only in their bounds (`fun <T : Bar> nameOf()` and `fun <T : Foo> nameOf()`):
+        // the explicit arguments pick the one whose bounds they satisfy, so a violation needs every candidate
+        // of that arity to reject them.
+        val rivals = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+            .filter { it.kind == SymbolKind.METHOD && it.typeParameters.size == args.size }
+        if (rivals.size > 1 && rivals.any { checkArgsAgainstBounds(args, sourceBounds(it, resolver) ?: it.typeParameterBounds.map { b -> b as? KotlinType }, resolver).isEmpty() }) {
+            return emptyList()
+        }
         // A constructor call (`B<Int>()`) takes its class's type parameters, bounds and all.
-        val bounds = callee?.typeParameterBounds?.map { it as? KotlinType }
+        val bounds = callee?.let { sourceBounds(it, resolver) ?: it.typeParameterBounds.map { b -> b as? KotlinType } }
             ?: constructedSourceClass(call, resolver)?.let { service.classTypeParameterBounds(it) }
             ?: return emptyList()
         if (bounds.isEmpty() || bounds.all { it == null }) return emptyList()
         return checkArgsAgainstBounds(args, bounds, resolver)
+    }
+
+    /** A source function's type-parameter bounds as WRITTEN: an unbounded parameter has none (its implicit bound
+     *  is `Any?`, which takes `Nothing?`), where the symbol model reports `Any`. Null for a non-source callee. */
+    private fun sourceBounds(callee: KotlinSymbol, resolver: KotlinResolver): List<KotlinType?>? {
+        val fn = (callee.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? KtNamedFunction ?: return null
+        // Its bound texts resolve in its own file's scope; only this file's is at hand.
+        if (fn.containingKtFile !== resolver.ktFile) return null
+        val ctx = resolver.fileContext
+        return fn.typeParameters.map { tp ->
+            (tp.extendsBound?.text ?: fn.typeConstraints.firstOrNull { it.subjectTypeParameterName?.getReferencedName() == tp.name }?.boundTypeReference?.text)
+                ?.let { service.typeFromText(it, ctx, enclosingClassFqnOf(fn)) }
+        }
     }
 
     private fun checkArgsAgainstBounds(args: List<KtTypeProjection>, bounds: List<KotlinType?>, resolver: KotlinResolver): List<Diagnostic> {
