@@ -395,6 +395,11 @@ object KotlinDiagnosticCodes {
     const val ASSIGN_OPERATOR_AMBIGUITY = "kt.assignOperatorAmbiguity"
     /** `A()` calling a protected constructor from a subclass body (PROTECTED_CONSTRUCTOR_NOT_IN_SUPER_CALL). */
     const val PROTECTED_CONSTRUCTOR_NOT_IN_SUPER_CALL = "kt.protectedConstructorNotInSuperCall"
+    /** A member inherited from several supertypes whose types no one of them can stand for
+     *  (RETURN_TYPE_MISMATCH_ON_INHERITANCE, PROPERTY_TYPE_MISMATCH_ON_INHERITANCE, VAR_TYPE_MISMATCH_ON_INHERITANCE). */
+    const val INHERITANCE_TYPE_MISMATCH = "kt.inheritanceTypeMismatch"
+    /** One generic class reached through the supertypes with two arguments for a parameter (INCONSISTENT_TYPE_PARAMETER_VALUES). */
+    const val INCONSISTENT_TYPE_PARAMETER_VALUES = "kt.inconsistentTypeParameterValues"
 
     const val PREVIEW_NOT_COMPOSABLE = "kt.previewNotComposable"
     const val PREVIEW_PARAMETERS = "kt.previewParameters"

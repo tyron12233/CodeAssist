@@ -695,6 +695,160 @@ class KotlinCompilerParityTest {
         assertCodes("class X<T>(val t: T) { constructor(t: String) : this(t) }", code)
         clean("class Y(val t: Int) { constructor(t: String) : this(t.length) }")
     }
+    /** A nullable local or parameter handed to a non-null parameter is a mismatch wherever the null flow finds no
+     *  guard, not only on its first use; an explicit non-null type argument (`check<Int>(x)`) takes no null either. */
+    @Test
+    fun aNullableValueWithNoGuardIsAnArgumentMismatch() {
+        val m = KotlinDiagnosticCodes.TYPE_MISMATCH
+        assertCodes("fun bar(x: Int): Int = x\nfun foo(x: Int?) { if (x != null) bar(x)\n bar(x) }", m)
+        assertCodes("fun bar(x: Int): Int = x\nfun foo(y: Int?) { while (y != null) { bar(y) }\n bar(y) }", m)
+        clean("fun bar(x: Int): Int = x\nfun foo(x: Int?) { if (x == null) return\n bar(x) }")
+        assertCodes("fun <T> chk(t: T) = t\nfun f(x: Int?) { chk(x); chk<Int>(x) }", m)
+    }
+
+    /** `id(unresolved)` cannot infer `K` from an error type, also through `!!` or `if` branches whose every value
+     *  says nothing; a sibling branch with a real value, or an expected type, does constrain it. */
+    @Test
+    fun anUnresolvedArgumentLeavesTheVariableUninferred() {
+        val infer = KotlinDiagnosticCodes.CANNOT_INFER_TYPE
+        assertEquals(2, codes("fun <K> id(arg: K): K = arg\nfun t(b: Boolean) { if (b) id(nope) else id(nope) }").count { it == infer })
+        assertEquals(1, codes("fun <K> id(arg: K): K = arg\nfun t() { id(nope)!! }").count { it == infer })
+        assertEquals(0, codes("fun <K> id(arg: K): K = arg\nfun t(b: Boolean) { if (b) id(nope) else 5 }").count { it == infer })
+        assertEquals(0, codes("fun <K> id(arg: K): K = arg\nfun t(): String = id(nope)").count { it == infer })
+    }
+
+    /** RETURN/PROPERTY/VAR_TYPE_MISMATCH_ON_INHERITANCE: a member reaching a class from two supertypes with types
+     *  no one of them can stand for, or whose single implementation does not fit the other's type. */
+    @Test
+    fun inheritedMembersWithClashingTypes() {
+        val clash = KotlinDiagnosticCodes.INHERITANCE_TYPE_MISMATCH
+        assertCodes("open class A { open fun foo(): Boolean = true }\ninterface IA { fun foo(): String }\nclass B1 : A(), IA", clash)
+        clean("open class A { open fun foo(): Boolean = true }\ninterface IG<T> { fun foo(): T }\nclass B : A(), IG<Any>")
+        assertCodes("open class A { open var foo: Boolean = true }\ninterface IG<T> { var foo: T }\nclass B : A(), IG<Any>", clash)
+        assertCodes(
+            "interface IFooAny { val foo: Any }\ninterface IFooStr : IFooAny { override val foo: String }\n" +
+                "abstract class BaseAny(override val foo: Any) : IFooAny\nabstract class BaseStr : BaseAny(42), IFooStr",
+            clash,
+        )
+        clean(
+            "interface IBase { fun copy(): IBase }\ninterface ILeft : IBase { override fun copy(): ILeft }\n" +
+                "interface IRight : IBase { override fun copy(): IRight }\ninterface IDerived : ILeft, IRight { override fun copy(): IDerived }\n" +
+                "abstract class C : ILeft, IRight, IDerived",
+        )
+    }
+
+    /** INCONSISTENT_TYPE_PARAMETER_VALUES: one generic supertype reached with two different arguments. */
+    @Test
+    fun aSupertypeReachedWithTwoArgumentsIsInconsistent() {
+        val code = KotlinDiagnosticCodes.INCONSISTENT_TYPE_PARAMETER_VALUES
+        assertCodes("interface X<T>\ninterface A : X<String>\ninterface B : A, X<Int>", code)
+        clean("interface X<T>\ninterface A : X<String>\ninterface B : A, X<String>")
+    }
+
+    /** A constructor delegation call's arguments against the constructors it can reach: `this(...)` keeps the class's
+     *  own type parameters, `super(...)` takes the supertype entry's arguments. */
+    @Test
+    fun constructorDelegationArgumentsAreTyped() {
+        val m = KotlinDiagnosticCodes.TYPE_MISMATCH
+        assertCodes("open class B<R1, R2>(x: R1, y: R2)\nclass A1<T1, T2> : B<T1, T2> {\n constructor(x: T1, y: Int) : super(x, y)\n}", m)
+        clean("open class B<R1, R2>(x: R1, y: R2)\nclass A1<T1, T2> : B<T1, T2> {\n constructor(x: T1, y: T2) : super(x, y)\n}")
+        assertCodes("open class A(x: Int)\nclass B : A(\"\")", m)
+        clean("open class A(x: Long)\nclass B : A(1)")
+    }
+
+    /** A type argument or an argument whose type parameter's bound rules it out, the bounds of the type parameters
+     *  in scope taken into account. */
+    @Test
+    fun typeParameterArgumentsOutsideTheirBound() {
+        assertCodes("interface A<T : CharSequence>\nfun <S : CharSequence?> foo1(a: A<S>) {}", KotlinDiagnosticCodes.UPPER_BOUND_VIOLATED)
+        clean("interface A<T : CharSequence>\nfun <S : CharSequence> foo1(a: A<S>) {}")
+        val c = codes("fun <E : CharSequence> foo1(x: E) {}\nfun <F : String?> bar(x: F) { foo1(x) }")
+        assertTrue(KotlinDiagnosticCodes.CANNOT_INFER_TYPE in c && KotlinDiagnosticCodes.TYPE_MISMATCH in c, "got $c")
+        clean("fun <E : CharSequence> foo1(x: E) {}\nfun <F : String> bar(x: F) { foo1(x) }")
+    }
+
+    /** A value whose written type differs from the expected one in a type argument the variance does not admit. */
+    @Test
+    fun typeArgumentsFollowVariance() {
+        val m = KotlinDiagnosticCodes.TYPE_MISMATCH
+        assertCodes("abstract class Consumer<in T>\nfun foo(c: Consumer<Int>) { val c1: Consumer<Any> = c }", m)
+        clean("abstract class Consumer<in T>\nfun foo(c: Consumer<Any>) { val c1: Consumer<Int> = c }")
+        assertCodes("abstract class Usual<T>\nfun foo(u: Usual<Int>) { val u1: Usual<Any> = u }", m)
+        clean("abstract class Producer<out T>\nfun foo(p: Producer<Int>) { val p1: Producer<Any> = p }")
+    }
+
+    /** A lambda or anonymous function given a written function type: what it returns (no `Unit` coercion for an
+     *  anonymous function's expression body), `return@label` with no value, an assignment as its last statement. */
+    @Test
+    fun functionLiteralsAgainstTheirFunctionType() {
+        val m = KotlinDiagnosticCodes.TYPE_MISMATCH
+        assertCodes("var f1: () -> Int = { 1 }\nfun t() { f1 = { \"\" } }", m)
+        assertCodes("val a: () -> Unit = (fun() = \"1\")", m)
+        clean("val a: () -> Unit = fun() {}")
+        assertCodes("val a: () -> Int = fun() {}", m)
+        assertCodes("val bag: (Int) -> Unit = fun (param: String) {}", m)
+        clean("val bas: (String) -> Unit = fun (param: String) {}")
+        assertCodes("val e: () -> Any = l@ {\n if (\"0\".hashCode() == 42) return@l\n \"\"\n}", m)
+        clean("val e: () -> Any = l@ {\n if (\"0\".hashCode() == 42) return@l Unit\n \"\"\n}")
+        assertCodes("fun t() { var bar = 4\n val b: () -> Int = { bar = 4 } }", m)
+        clean("fun t() { var bar = 4\n val a: () -> Unit = { bar += 4 } }")
+    }
+
+    /** A lambda argument against the plain function type its parameter declares: no implicit `it` for two or more
+     *  parameters, no empty body where a value is due, and the value its last statement gives. */
+    @Test
+    fun lambdaArgumentsAgainstDeclaredFunctionTypes() {
+        val m = KotlinDiagnosticCodes.TYPE_MISMATCH
+        assertCodes("fun bar(f: (Int, Int) -> Int) {}\nfun t() { bar { 1 } }", m)
+        clean("fun bar(f: (Int, Int) -> Int) {}\nfun t() { bar { a, b -> a + b } }")
+        assertCodes("fun bar2(f: () -> Int) {}\nfun t() { bar2 {} }", m)
+        assertCodes("fun bar2(f: () -> Int) {}\nfun t() { bar2 { \"\" } }", m)
+        clean("fun bar2(f: () -> Int) {}\nfun t() { bar2 { 1 } }")
+        clean("fun run2(f: () -> Unit) {}\nfun t() { run2 { \"\" } }")
+    }
+
+    /** In named form a vararg takes an array: a single element is a mismatch. */
+    @Test
+    fun aSingleElementForANamedVarargIsAMismatch() {
+        assertCodes("fun foo(vararg ints: Int) {}\nfun t() { foo(ints = 1) }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        clean("fun foo(vararg ints: Int) {}\nfun t() { foo(ints = intArrayOf(1)); foo(1, 2) }")
+        assertCodes("fun join(x: Int, vararg a: String) {}\nfun t(b: Array<Int>) { join(x = 1, a = b) }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        clean("fun foo2(p1: Int, vararg p2: String, p3: Double) {}\nfun t() { foo2(1, p3 = 3.0); foo2(1, p2 = arrayOf(\"2\"), p3 = 4.0) }")
+        assertCodes("val f = fun(a: Int): String {\n if (a == 2) return 2\n return \"\"\n}", KotlinDiagnosticCodes.TYPE_MISMATCH)
+    }
+
+    /** Both operands of `==` are resolved with no expected type, and a variable the result type does not mention
+     *  is never inferred from one. */
+    @Test
+    fun equalityOperandsAndResultSilentVariablesAreNotInferred() {
+        val infer = KotlinDiagnosticCodes.CANNOT_INFER_TYPE
+        assertEquals(1, codes("interface A<T>\nfun <T> newA(): A<T> = TODO()\nfun t(x: Any) { x == newA() }").count { it == infer })
+        assertEquals(2, codes("fun <T> toBeOrNot(): Boolean = TODO()\nfun t() { if (toBeOrNot() && toBeOrNot()) {} }").count { it == infer })
+        clean("fun <T> toBeOrNot(): Boolean = TODO()\nfun t() { if (toBeOrNot<Int>()) {} }")
+    }
+
+    /** `::ext` names an extension, which a callable reference can only reach through its receiver type. */
+    @Test
+    fun aReferenceToAnExtensionNeedsItsReceiver() {
+        assertCodes("fun <K> K.bar3(): K = this\nfun t() { val inv = ::bar3 }", KotlinDiagnosticCodes.UNRESOLVED)
+        clean("fun String.bar3(): String = this\nfun t() { val inv = String::bar3 }")
+        clean("fun bar2(): Int = 1\nfun t() { val inv = ::bar2 }")
+    }
+
+    /** A `return` is judged against what it leaves: a secondary constructor or setter returns `Unit`, a getter its
+     *  property's type, and a non-local return through a lambda the enclosing function's written type. */
+    @Test
+    fun returnsAreJudgedAgainstWhatTheyLeave() {
+        val m = KotlinDiagnosticCodes.TYPE_MISMATCH
+        assertCodes("class A {\n constructor() { if (1 == 1) return 1 }\n}", m)
+        assertCodes("class A { val z: Int\n get() { return \"s\" } }", m)
+        assertCodes("class A { val x: Int get() = \"s\" }", m)
+        clean("class A { val x: Int get() = 1\n val y: Int\n get() { return 2 } }")
+        assertCodes("fun test(): Int = run { return \"\" }", m)
+        clean("fun test(): Int = run { return 1 }")
+    }
+
+    private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {
         val errors = errors(code)

@@ -217,15 +217,28 @@ fun KotlinResolver.uninferableTypeParameters(call: KtCallExpression): List<Strin
     val sym = resolveCalleeFunction(call) ?: return emptyList()
     if (sym.typeParameters.isEmpty()) return emptyList()
     val ret = sym.type as? KotlinType
-    // A concrete expected type at this position can drive the inference, so it isn't uninferable.
+    // A concrete expected type at this position can drive the inference, so it isn't uninferable -- except for
+    // a variable the written result type does not mention, which no expected type reaches.
+    var expectedDrives = false
     expectedTypeAt(call.textRange.startOffset)?.let { exp ->
-        if (!exp.isTypeParameter && service.isKnownType(exp.qualifiedName)) return emptyList()
+        if (!exp.isTypeParameter && service.isKnownType(exp.qualifiedName)) expectedDrives = true
     }
     // Likewise the RESULT of a lambda whose expected return type is concrete: `transitionSpec = { spring() }`
     // fills `Segment<S>.() -> FiniteAnimationSpec<Dp>`, which pins `spring`'s T to Dp.
     lambdaResultSlotType(call)?.let { exp ->
-        if (!exp.isTypeParameter && service.isKnownType(exp.qualifiedName)) return emptyList()
+        if (!exp.isTypeParameter && service.isKnownType(exp.qualifiedName)) expectedDrives = true
     }
+    if (expectedDrives) {
+        val fn = (sym.declaration() as? KotlinDomNode)?.psi as? KtNamedFunction
+        if (!sym.origin.fromSource || fn?.typeReference == null) return emptyList()
+        val silent = sym.typeParameters.filter { !mentionsAnyName(fn.typeReference, setOf(it)) }
+        if (silent.isEmpty()) return emptyList()
+        return uninferableTypeParameters(call, sym, ret).filter { it in silent }
+    }
+    return uninferableTypeParameters(call, sym, ret)
+}
+
+private fun KotlinResolver.uninferableTypeParameters(call: KtCallExpression, sym: KotlinSymbol, ret: KotlinType?): List<String> {
     val bound = inferTypeArguments(sym, call).keys
     val supplied = suppliedValueParameterIndices(sym, call)
     // Variables nothing constrains across nested calls and in the positions the compiler completes on their own
@@ -306,7 +319,11 @@ internal fun discardedOrUntypedPosition(e: KtExpression): Boolean {
 private fun KotlinResolver.noOuterConstraintAt(call: KtCallExpression, sym: KotlinSymbol, tp: String): Boolean {
     val q = (call.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === call }
     val e: KtExpression = q ?: call
-    if (!discardedOrUntypedPosition(e)) return false
+    // A variable the written result type does not mention is beyond any expected type (`fun <T> f(): Boolean`).
+    val resultSilent = ((sym.declaration() as? KotlinDomNode)?.psi as? KtNamedFunction)?.let { fn ->
+        sym.origin.fromSource && fn.typeReference != null && !mentionsAnyName(fn.typeReference, setOf(tp))
+    } == true
+    if (!resultSilent && !discardedOrUntypedPosition(e)) return false
     // The same declaration can be listed twice (from the file and from the project index).
     val targets = runCatching { callTargets(call) }.getOrDefault(emptyList())
         .filter { it.kind == SymbolKind.METHOD || it.kind == SymbolKind.CONSTRUCTOR }

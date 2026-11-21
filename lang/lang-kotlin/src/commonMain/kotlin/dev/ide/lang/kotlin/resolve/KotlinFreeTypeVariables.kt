@@ -1,6 +1,16 @@
 package dev.ide.lang.kotlin.resolve
 
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
+import dev.ide.kotlin.syntax.psi.KtPostfixExpression
+import dev.ide.kotlin.syntax.psi.KtIfExpression
+import dev.ide.kotlin.syntax.psi.KtWhenEntry
+import dev.ide.kotlin.syntax.psi.KtWhenExpression
+import dev.ide.kotlin.syntax.psi.KtTryExpression
+import dev.ide.kotlin.syntax.psi.KtCatchClause
+import dev.ide.kotlin.syntax.psi.KtReturnExpression
+import dev.ide.kotlin.syntax.psi.KtThrowExpression
+import dev.ide.kotlin.syntax.psi.KtBreakExpression
+import dev.ide.kotlin.syntax.psi.KtContinueExpression
 import dev.ide.kotlin.syntax.psi.KtBinaryExpressionWithTypeRHS
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
@@ -110,10 +120,20 @@ internal fun KotlinResolver.unconstrainedOwnVariables(
         when {
             expr is KtLambdaExpression -> out.removeAll(lambdaConstrains(expr, p, mentioned.toSet(), depth).toSet())
             expr is KtCallExpression && uninformativeCall(expr, p, depth + 1) -> {}
+            // An unresolved name is an error type, which constrains nothing (`id(unresolved)`).
+            expr is KtNameReferenceExpression && p.isTypeParameter && p.typeArguments.isEmpty() && unresolvedBareName(expr) -> {}
             else -> out.removeAll(mentioned.toSet())
         }
     }
     return out
+}
+
+/** Whether [e] is a plain name nothing in scope declares: K2 types it as an error type, no constraint at all. */
+private fun KotlinResolver.unresolvedBareName(e: KtNameReferenceExpression): Boolean {
+    val name = e.getReferencedName()
+    if (name.isEmpty() || name == "it" || name == "field" || !name.first().isLetter()) return false
+    val off = e.textRange.startOffset
+    return localsAt(off, name).isEmpty() && !bareNameResolves(name, off) && !companionMemberInScope(name, off)
 }
 
 /** Whether the call [e] contributes nothing proper to a parameter typed [p]: it returns the same SHAPE as [p]
@@ -209,10 +229,18 @@ internal fun KotlinResolver.freeOutside(
     val q = (call.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === call }
     var e: KtExpression = q ?: call
     while (e.parent is KtParenthesizedExpression) e = e.parent as KtExpression
+    // A branch, a `!!` operand or an elvis operand whose construct is a discarded statement has no expected type
+    // either, provided every other branch says nothing about the result (`if (b) id(x) else id(y)`).
+    liftedStatement(e)?.let { return true }
     return when (val parent = e.parent) {
         is KtQualifiedExpression -> parent.receiverExpression === e
         is KtIsExpression -> parent.leftHandSide === e
-        is KtBinaryExpression -> parent.left === e && parent.operationToken in EQUALITY_TOKENS
+        // Both operands of an equality are resolved independently (K2 resolves them ContextIndependent).
+        // On the right the operand is expected to be `Any?`: that fixes a variable that IS the result (`"" ==
+        // materialize()`) or has a declared bound (`child == child.transform()` for `<T : Base>`), but not one
+        // nested in it (`z == newA()` for `A<T>`).
+        is KtBinaryExpression -> parent.operationToken in EQUALITY_TOKENS && (parent.left === e ||
+            (parent.right === e && unboundedSourceTypeParameter(sym, tp) && !(ret.isTypeParameter && ret.qualifiedName == tp)))
         is KtBinaryExpressionWithTypeRHS -> parent.left === e && !castGivesExpectedType(sym, sig)
         is KtValueArgument -> argumentSlotFree(parent, e, depth)
         is KtBlockExpression -> lambdaResultFree(parent, e, depth) || discardedOrUntypedPosition(e)
@@ -220,7 +248,83 @@ internal fun KotlinResolver.freeOutside(
     }
 }
 
+/** Whether [tp] of the source function [sym] is declared with no bound at all. */
+private fun unboundedSourceTypeParameter(sym: KotlinSymbol, tp: String): Boolean {
+    val fn = (sym.declaration() as? KotlinDomNode)?.psi as? KtNamedFunction ?: return false
+    val p = fn.typeParameters.firstOrNull { it.name == tp } ?: return false
+    return p.extendsBound == null && fn.typeConstraints.none { it.subjectTypeParameterName?.getReferencedName() == tp }
+}
+
 private val EQUALITY_TOKENS = setOf(KtTokens.EQEQ, KtTokens.EXCLEQ, KtTokens.EQEQEQ, KtTokens.EXCLEQEQEQ)
+
+/**
+ * The statement [e] is the value of, through `!!`, an elvis operand, an `if`/`when` branch and a `try`/`catch`
+ * block's last statement, when that statement's value is discarded; null when [e] is not lifted at all or the
+ * construct is used as a value. K2 resolves such a construct as a synthetic call (`if<T>(a, b)`) whose sibling
+ * branches feed the same variable, so each sibling must be silent: absent, a jump, or [silentBranch].
+ */
+private fun KotlinResolver.liftedStatement(e: KtExpression): KtExpression? {
+    var cur = e
+    var lifted = false
+    while (true) {
+        val p = cur.parent
+        val pp = p?.parent
+        val next: KtExpression? = when {
+            p is KtParenthesizedExpression -> p
+            p is KtPostfixExpression && p.operationToken == KtTokens.EXCLEXCL && p.baseExpression === cur -> p
+            p is KtBinaryExpression && p.operationToken == KtTokens.ELVIS ->
+                p.takeIf { listOf(p.left, p.right).all { it === cur || silentBranch(it) } }
+            pp is KtIfExpression && (pp.then === cur || pp.`else` === cur) ->
+                pp.takeIf { listOf(pp.then, pp.`else`).all { it === cur || silentBranch(it) } }
+            p is KtWhenEntry && p.expression === cur -> (pp as? KtWhenExpression)
+                ?.takeIf { w -> w.entries.all { it.expression === cur || silentBranch(it.expression) } }
+            p is KtBlockExpression && p.statements.lastOrNull() === cur -> {
+                val owner = p.parent
+                val ownerParent = owner?.parent
+                when {
+                    owner is KtTryExpression && owner.tryBlock === p -> owner.takeIf { triesSilent(it, p) }
+                    owner is KtCatchClause && ownerParent is KtTryExpression -> ownerParent.takeIf { triesSilent(it, p) }
+                    ownerParent is KtIfExpression && (ownerParent.then === p || ownerParent.`else` === p) ->
+                        ownerParent.takeIf { i -> listOf(i.then, i.`else`).all { it === p || silentBranch(it) } }
+                    owner is KtWhenEntry && owner.expression === p -> (ownerParent as? KtWhenExpression)
+                        ?.takeIf { w -> w.entries.all { it.expression === p || silentBranch(it.expression) } }
+                    else -> null
+                }
+            }
+            else -> null
+        }
+        if (next == null) break
+        cur = next
+        lifted = true
+    }
+    if (!lifted) return null
+    val block = cur.parent as? KtBlockExpression ?: return null
+    if (block.statements.lastOrNull() === cur && block.parent !is KtNamedFunction) return null
+    return cur.takeIf { discardedOrUntypedPosition(it) }
+}
+
+private fun KotlinResolver.triesSilent(t: KtTryExpression, from: KtBlockExpression): Boolean =
+    (listOf(t.tryBlock) + t.catchClauses.mapNotNull { it.catchBody }).all { b ->
+        b === from || silentBranch(b)
+    }
+
+/** A branch value that gives the construct's type nothing: missing, a jump, or a call to a plain generic callee
+ *  whose result is one of its own variables nothing in the call constrains (`id(unresolved)`, `materialize()`). */
+private fun KotlinResolver.silentBranch(branch: KtExpression?): Boolean {
+    val v = when (branch) {
+        null -> return true
+        is KtBlockExpression -> branch.statements.lastOrNull() ?: return true
+        else -> branch
+    }.let(::unparenthesized)
+    if (v is KtReturnExpression || v is KtThrowExpression || v is KtBreakExpression || v is KtContinueExpression) return true
+    val inner = (v as? KtPostfixExpression)?.takeIf { it.operationToken == KtTokens.EXCLEXCL }?.baseExpression?.let(::unparenthesized) ?: v
+    val call = inner as? KtCallExpression ?: return false
+    val sym = resolveCalleeFunction(call) ?: return false
+    if (!plainGenericCallee(call, sym)) return false
+    val ret = declaredSignature(sym)?.ret ?: return false
+    if (!ret.isTypeParameter || ret.typeArguments.isNotEmpty()) return false
+    return ret.qualifiedName in unconstrainedOwnVariables(sym, call)
+}
 
 /** The compiler takes a cast's type as the expected type of a call to a function with ONE type parameter
  *  that is exactly its return type and that nothing else in its signature names (`foo() as String`). */

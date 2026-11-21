@@ -190,6 +190,9 @@ internal fun KotlinSemanticChecks.valueMismatch(
     if (trusted && actual != null && isMismatch(declared, actual)) {
         return mismatchDiagnostic(e.textRange.startOffset, e.textRange.endOffset, actual, declared)
     }
+    if (trusted && !platformTarget) typeArgumentMismatch(declared, e, resolver)?.let {
+        return mismatchDiagnostic(e.textRange.startOffset, e.textRange.endOffset, it, declared)
+    }
     if (trusted && strictNumeric && numericMismatch(declared, actual, e, resolver)) {
         val shown = actual ?: numericConst(e, resolver)?.let { service.typeByFqn(it.default) } ?: return null
         return mismatchDiagnostic(e.textRange.startOffset, e.textRange.endOffset, shown, declared)
@@ -304,7 +307,7 @@ internal fun KotlinSemanticChecks.isMapRead(e: KtArrayAccessExpression, resolver
 /** Whether [value]'s nullable type can be trusted: no guard this model cannot follow stands in front of it. */
 internal fun KotlinSemanticChecks.reliablyNullable(value: KtExpression, resolver: KotlinResolver): Boolean {
     return when (val e = unwrapParen(value)) {
-        is KtNameReferenceExpression -> firstUseOfNullableLocal(e, resolver)
+        is KtNameReferenceExpression -> firstUseOfNullableLocal(e, resolver) || flowNullableLocal(e, resolver)
         is KtSafeQualifiedExpression -> {
             val receiver = e.receiverExpression
             resolver.inferType(receiver)?.nullable == true && reliablyNullable(receiver, resolver)
@@ -557,17 +560,109 @@ private fun KotlinSemanticChecks.lambdaParameterDiagnostic(lambda: KtLambdaExpre
  *  with: its parameter count, then the value its body ends on. */
 internal fun KotlinSemanticChecks.declaredLambdaMismatch(declaredText: String?, init: KtExpression?, resolver: KotlinResolver): Diagnostic? {
     if (declaredText == null || init == null) return null
-    val lambda = unwrapParen(init) as? KtLambdaExpression ?: return null
     val declared = service.typeFromText(declaredText, resolver.fileContext, enclosingClassFqnOf(init)) ?: return null
+    return lambdaAgainstFunctionType(declared, init, resolver)
+}
+
+/**
+ * A lambda (labeled or not) given where the function type [declared] is expected: its parameter count, then what it
+ * returns, by its last statement and by each `return@label` aimed at it (RETURN_TYPE_MISMATCH). An assignment as the
+ * last statement, and a `return@label` with no value, give `Unit`, which no other result type takes. `Function<R>`
+ * has no parameter count to check but a result all the same.
+ */
+internal fun KotlinSemanticChecks.lambdaAgainstFunctionType(declared: KotlinType, init: KtExpression, resolver: KotlinResolver): Diagnostic? {
+    var e = unwrapParen(init)
+    var label: String? = null
+    if (e is KtLabeledExpression) {
+        label = e.getLabelName()
+        e = e.baseExpression?.let { unwrapParen(it) } ?: return null
+    }
+    if (e is KtNamedFunction && e.nameIdentifier == null && label == null) return anonymousAgainstFunctionType(declared, e, resolver)
+    val lambda = e as? KtLambdaExpression ?: return null
     if (declared.nullable) return null
-    val arity = lambdaArity(declared) ?: return null
+    val arity = lambdaArity(declared)
+    val plainFunction = canonicalName(declared) == "kotlin.Function" && declared.typeArguments.size == 1
+    if (arity == null && !plainFunction) return null
     val n = lambda.valueParameters.size
-    if (n > 0 && n != arity) return lambdaParameterDiagnostic(lambda, arity)
+    if (arity != null && n > 0 && n != arity) return lambdaParameterDiagnostic(lambda, arity)
     val result = declared.typeArguments.lastOrNull() as? KotlinType ?: return null
-    if (result.isTypeParameter || canonicalName(result) == UNIT) return null // Unit coerces any last statement
+    if (result.isTypeParameter || result.projection == "*") return null
+    val rn = canonicalName(result)
+    if (rn == UNIT) return null // Unit coerces any last statement
+    val concreteResult = !result.nullable && service.isKnownType(rn) && rn != NOTHING
+    if (label != null) {
+        for (ret in returnsTo(lambda, label)) {
+            val v = ret.returnedExpression
+            if (v == null) {
+                if (concreteResult) return error(ret, "Type mismatch: inferred type is Unit but ${renderType(result)} was expected", KotlinDiagnosticCodes.TYPE_MISMATCH)
+            } else valueMismatch(result.withProjection(""), v, resolver)?.let { return it }
+        }
+    }
     val last = lambda.bodyExpression?.statements?.lastOrNull()?.takeIf { it !is KtDeclaration } ?: return null
     if (last is KtReturnExpression) return null
-    return valueMismatch(result, last, resolver)
+    if (last is KtBinaryExpression && last.operationToken in ASSIGNMENT_TOKENS) {
+        if (concreteResult && rn != "kotlin.Any") {
+            return error(last, "Type mismatch: inferred type is Unit but ${renderType(result)} was expected", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        }
+        return null
+    }
+    return valueMismatch(result.withProjection(""), last, resolver)
+}
+
+/**
+ * An anonymous function given where the function type [declared] is expected. Its parameters (receiver included)
+ * must match in number and take what the type passes (INITIALIZER_TYPE_MISMATCH); an expression body is checked
+ * against the expected result as it stands, with no coercion to `Unit` (RETURN_TYPE_MISMATCH), and a block body
+ * without a written result type returns `Unit`.
+ */
+private fun KotlinSemanticChecks.anonymousAgainstFunctionType(declared: KotlinType, fn: KtNamedFunction, resolver: KotlinResolver): Diagnostic? {
+    if (declared.nullable || lambdaArity(declared) == null) return null
+    val expectedAll = declared.typeArguments.dropLast(1).map { it as? KotlinType ?: return null }
+    val result = (declared.typeArguments.lastOrNull() as? KotlinType)?.withProjection("") ?: return null
+    val ownReceiver = fn.receiverTypeReference
+    val ownParams = listOfNotNull(ownReceiver) + fn.valueParameters.map { it.typeReference }
+    fun mismatch(): Diagnostic = error(fn, "Type mismatch: this function is not a ${renderType(declared)}", KotlinDiagnosticCodes.TYPE_MISMATCH)
+    if (ownParams.size != expectedAll.size) return mismatch()
+    if ((ownReceiver != null) != declared.isExtensionFunctionType) return null
+    val typing = KotlinStrictSubtyping(service)
+    for ((i, ref) in ownParams.withIndex()) {
+        val written = ref?.text ?: continue
+        if ('(' in written || '@' in written) return null
+        val p = service.typeFromText(written, resolver.fileContext, enclosingClassFqnOf(fn)) ?: return null
+        val expected = expectedAll[i].withProjection("")
+        if (typing.subtype(expected, p) == false) return mismatch()
+    }
+    if (result.isTypeParameter || !service.isKnownType(canonicalName(result))) return null
+    val body = fn.bodyExpression ?: return null
+    if (fn.hasBlockBody()) {
+        val writtenResult = fn.typeReference?.text
+        if (writtenResult == null) {
+            // `Unit` is a subtype of `Unit`, `Any` and the nullable types only.
+            val rn = canonicalName(result)
+            return if (!result.nullable && rn != UNIT && rn != "kotlin.Any") mismatch() else null
+        }
+        val produced = service.typeFromText(writtenResult, resolver.fileContext, enclosingClassFqnOf(fn)) ?: return null
+        return if (typing.subtype(produced, result) == false) mismatch() else null
+    }
+    if (isFunctionLiteral(body)) return lambdaAgainstFunctionType(result, body, resolver)
+    return valueMismatch(result, body, resolver)
+}
+
+private val ASSIGNMENT_TOKENS = setOf(KtTokens.EQ, KtTokens.PLUSEQ, KtTokens.MINUSEQ, KtTokens.MULTEQ, KtTokens.DIVEQ, KtTokens.PERCEQ)
+
+/** The `return@label` expressions in [lambda] that return from it: its own body and the lambdas nested in it, not
+ *  a nested function or class, nor a nested lambda that reuses the label. */
+private fun returnsTo(lambda: KtLambdaExpression, label: String): List<KtReturnExpression> {
+    val out = ArrayList<KtReturnExpression>()
+    fun visit(el: KtElement) {
+        if (el is KtNamedFunction || el is KtClassOrObject) return
+        if (el is KtLabeledExpression && el.getLabelName() == label) return
+        if (el is KtReturnExpression && el.getLabelName() == label) out += el
+        var c = el.firstChild
+        while (c != null) { (c as? KtElement)?.let(::visit); c = c.nextSibling }
+    }
+    lambda.bodyExpression?.let(::visit)
+    return out
 }
 
 /** `xs.forEach { a, b -> }`: a lambda argument whose parameter count fits NO overload of the call. Silent as
@@ -1095,6 +1190,36 @@ internal fun KotlinSemanticChecks.arrayForVarargElement(elementType: KotlinType,
     return a == "kotlin.Array" || (a.startsWith("kotlin.") && a.endsWith("Array") && a != "kotlin.Array")
 }
 
+/** An array given BY NAME to a vararg of [elementType] whose elements cannot be that type (`a = ints` for
+ *  `vararg a: String`). */
+internal fun KotlinSemanticChecks.namedVarargArrayMismatch(elementType: KotlinType, actual: KotlinType): Boolean {
+    if (elementType.isTypeParameter || actual.isTypeParameter) return false
+    val a = canonicalName(actual)
+    val e = canonicalName(elementType)
+    val primitive = PRIMITIVE_ARRAYS[a]
+    if (primitive != null) return e in PRIMITIVE_ARRAYS.values && e != primitive
+    if (a != "kotlin.Array") return false
+    val arg = (actual.typeArguments.singleOrNull() as? KotlinType)?.withProjection("") ?: return false
+    if (arg.isTypeParameter || canonicalName(arg) == "*") return false
+    return isMismatch(elementType, arg)
+}
+
+private val PRIMITIVE_ARRAYS = mapOf(
+    "kotlin.IntArray" to "kotlin.Int", "kotlin.LongArray" to "kotlin.Long", "kotlin.ShortArray" to "kotlin.Short",
+    "kotlin.ByteArray" to "kotlin.Byte", "kotlin.DoubleArray" to "kotlin.Double", "kotlin.FloatArray" to "kotlin.Float",
+    "kotlin.CharArray" to "kotlin.Char", "kotlin.BooleanArray" to "kotlin.Boolean",
+)
+
+/** A known, non-array value given BY NAME to a vararg of [elementType]: the named form takes the whole array. */
+internal fun KotlinSemanticChecks.singleElementForNamedVararg(elementType: KotlinType, actual: KotlinType): Boolean {
+    if (elementType.isTypeParameter || actual.isTypeParameter) return false
+    fun isArray(n: String) = n == "kotlin.Array" || (n.startsWith("kotlin.") && n.endsWith("Array"))
+    if (isArray(canonicalName(elementType))) return false
+    val a = canonicalName(actual)
+    if (a == NOTHING || isArray(a) || !service.isKnownType(a)) return false
+    return true
+}
+
 // --- non-local returns ----------------------------------------------------------------------------------------
 
 /**
@@ -1264,15 +1389,44 @@ internal fun KotlinSemanticChecks.firstUseOfNullableLocal(ref: KtNameReferenceEx
 }
 
 /**
+ * A local or parameter WRITTEN with a nullable type, read where the null-flow pass finds no guard that makes it
+ * non-null: the same authority the unsafe-call check takes for a receiver (`smartCastNonNull` follows if/else,
+ * early exits, `&&`/`||`, `!!`, `is`, loops and, for a `var`, reassignment). A scope-function guard it does not
+ * follow (`x?.let { }`) still backs off.
+ */
+internal fun KotlinSemanticChecks.flowNullableLocal(ref: KtNameReferenceExpression, resolver: KotlinResolver): Boolean {
+    val name = ref.getReferencedName()
+    val decl = nearestLocalDecl(name, ref.textRange.startOffset, ref)
+    when (decl) {
+        is KtProperty -> {
+            // A `var` is smart-cast by whatever it was last assigned, and a `val` initialized later by its
+            // assignments; only a `val` born nullable keeps its written type.
+            if (decl.isVar || decl.hasDelegate() || decl.typeReference?.text?.trim()?.endsWith("?") != true) return false
+            val init = decl.initializer ?: return false
+            if (!isNullLiteral(init) && resolver.inferType(init)?.nullable != true) return false
+        }
+        is KtParameter -> if (decl.isVarArg || decl.typeReference?.text?.trim()?.endsWith("?") != true) return false
+        else -> return false
+    }
+    if (resolver.smartCastNonNull(ref)) return false
+    if (resolver.flowProvenTypes(ref, deep = true).any { !it.nullable }) return false
+    // A `x!!` the flow pass does not follow (inside an object's initializer, a condition chain) still smart-casts.
+    val from = (decl as dev.ide.kotlin.syntax.psi.KtNamedDeclaration).nameIdentifier?.textRange?.endOffset ?: return false
+    val before = ref.containingFile.sourceText.subSequence(from, ref.textRange.startOffset.coerceAtLeast(from))
+    if (Regex("(?<![A-Za-z0-9_`])" + Regex.escape(name) + "\\s*!!").containsMatchIn(before)) return false
+    return !hasUnmodeledNullGuard(ref, name)
+}
+
+/**
  * Whether parameter [index] of [callee] is declared, in this project's source, with a non-null type that
  * names no type parameter. Only then is "this parameter does not take null" a fact about the declaration: a
  * library signature reaches the model with its type arguments already substituted, and `Array<T?>.fill(T?)`
  * has by then become `fill(KtFile)`.
  */
-internal fun KotlinSemanticChecks.plainNonNullSourceParameter(callee: KotlinSymbol, index: Int): Boolean {
+internal fun KotlinSemanticChecks.plainNonNullSourceParameter(callee: KotlinSymbol, index: Int, nullableToo: Boolean = false): Boolean {
     val fn = callee.sourcePsi() as? KtNamedFunction ?: return false
     val text = fn.valueParameters.getOrNull(index)?.typeReference?.text?.trim() ?: return false
-    if (text.endsWith("?") || '(' in text) return false
+    if ((text.endsWith("?") && !nullableToo) || '(' in text) return false
     val typeParams = HashSet<String>()
     fn.typeParameters.forEach { tp -> tp.name?.let { typeParams += it } }
     var node: KtElement? = fn.parent
@@ -1281,6 +1435,21 @@ internal fun KotlinSemanticChecks.plainNonNullSourceParameter(callee: KotlinSymb
         node = node.parent
     }
     return Regex("[A-Za-z_][A-Za-z0-9_]*").findAll(text).none { it.value in typeParams }
+}
+
+/**
+ * Whether parameter [index] of the source function [callee] is a bare type parameter `T` (not `T?`) that [call]
+ * fixes with a written non-null type argument: `checkSubtype<Int>(x)` takes no `null`, whatever `x` is.
+ */
+internal fun KotlinSemanticChecks.explicitNonNullTypeArgumentParameter(callee: KotlinSymbol, index: Int, call: KtCallExpression): Boolean {
+    val fn = callee.sourcePsi() as? KtNamedFunction ?: return false
+    val text = fn.valueParameters.getOrNull(index)?.typeReference?.text?.trim() ?: return false
+    val written = call.typeArgumentList?.arguments ?: return false
+    if (written.size != fn.typeParameters.size) return false
+    val at = fn.typeParameters.indexOfFirst { it.name == text }
+    if (at < 0) return false
+    val arg = written[at].typeReference?.text?.trim() ?: return false
+    return !arg.endsWith("?") && '(' !in arg && arg != "Nothing"
 }
 
 /**

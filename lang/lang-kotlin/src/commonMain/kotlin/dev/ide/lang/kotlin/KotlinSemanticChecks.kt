@@ -521,7 +521,7 @@ internal class KotlinSemanticChecks(
             KotlinPerf.span("sem.finalSuper") { reportAll(finalSupertype(psi, resolver)) }
             KotlinPerf.span("sem.superCtor") { if (resolveReady) reportAll(supertypeConstructorCall(psi, resolver)) }
         },
-    ) + declarationPortedCheckers() + expressionPortedCheckers() + round6PortedCheckers()
+    ) + declarationPortedCheckers() + expressionPortedCheckers() + round6PortedCheckers() + inheritanceClashCheckers() + delegationCallCheckers() + boundCheckers() + lambdaArgumentCheckers() + callableReferenceCheckers()
 
     /**
      * A class-type supertype written WITHOUT its constructor call — Kotlin's SUPERTYPE_NOT_INITIALIZED
@@ -2860,6 +2860,11 @@ internal class KotlinSemanticChecks(
                         bound != null -> !pt.nullable && !at.nullable && boundViolated(at, bound)
                         else -> (isMismatch(pt, at) ||
                             (plainNonNullSourceParameter(c, idx) && nullableForNonNull(pt, at, expr, resolver)) ||
+                            (explicitNonNullTypeArgumentParameter(c, idx, call) && nullableForNonNull(
+                                (c.paramTypes.getOrNull(idx) as? KotlinType)?.let { explicit[it.qualifiedName] as? KotlinType } ?: pt,
+                                at, expr, resolver,
+                            )) ||
+                            (plainNonNullSourceParameter(c, idx, nullableToo = true) && typeArgumentMismatch(pt, expr, resolver) != null) ||
                             ((plainNumericSourceParameter(c, idx) != null || pt !== c.paramTypes.getOrNull(idx)) &&
                                 numericMismatch(pt, at, expr, resolver))) &&
                             !flowFits(pt, expr, resolver)
@@ -2867,15 +2872,20 @@ internal class KotlinSemanticChecks(
                     if (bad) Applicability.TypeBad(expr, bound ?: pt, at, prefix).let { tb -> typeBad?.more?.add(tb) ?: run { typeBad = tb } }
                     else if (typeBad == null) prefix++ // a matched leading argument (only before the first mismatch)
                 }
-            } else if (arg !is KtLambdaArgument && vararg >= 0 && idx >= vararg && arg.getSpreadElement() == null) {
+            } else if (arg !is KtLambdaArgument && vararg >= 0 && idx >= vararg && arg.getSpreadElement() == null && (named == null || idx == vararg)) {
                 // An array handed to a vararg slot without `*` is ONE argument of the element type.
                 val expr = arg.getArgumentExpression()
                 val pt = c.paramTypes.getOrNull(vararg) as? KotlinType
                 val at = expr?.let { resolver.inferType(it) }
                 val numericBad = expr != null && pt != null && plainNumericSourceParameter(c, vararg) != null &&
                     numericMismatch(pt, at, expr, resolver)
-                if (expr != null && pt != null && at != null && (arrayForVarargElement(pt, at) || numericBad)) {
+                if (expr != null && pt != null && at != null && ((named == null && arrayForVarargElement(pt, at)) || (named != null && namedVarargArrayMismatch(pt, at)) || numericBad)) {
                     Applicability.TypeBad(expr, pt, at, prefix).let { tb -> typeBad?.more?.add(tb) ?: run { typeBad = tb } }
+                } else if (named != null && idx == vararg && expr != null && pt != null && at != null && singleElementForNamedVararg(pt, at)) {
+                    // In named form a vararg takes an array, never a single element (K2's
+                    // ASSIGNING_SINGLE_ELEMENT_TO_VARARG_IN_NAMED_FORM_FUNCTION_ERROR, reported with ARGUMENT_TYPE_MISMATCH).
+                    val arrayType = KotlinType("kotlin.Array", listOf(pt.withProjection("out")))
+                    Applicability.TypeBad(expr, arrayType, at, prefix).let { tb -> typeBad?.more?.add(tb) ?: run { typeBad = tb } }
                 }
             }
         }
@@ -2926,7 +2936,7 @@ internal class KotlinSemanticChecks(
                 ?.typeReference?.text?.trim()?.removePrefix("kotlin.") in setOf("Int", "Long", "Short", "Byte", "Double", "Float")
         return valueMismatch(
             declared, right, resolver, platformTarget = isJavaDeclaredProperty(left, resolver), strictNumeric = localNumber,
-        )
+        ) ?: lambdaAgainstFunctionType(declared, right, resolver)
     }
 
     /**
@@ -3567,14 +3577,35 @@ internal class KotlinSemanticChecks(
     private fun returnTypeMismatch(ret: KtReturnExpression, resolver: KotlinResolver): Diagnostic? {
         if (ret.getTargetLabel() != null) return null
         val value = ret.returnedExpression ?: return returnWithoutValue(ret, resolver)
-        val fn = ret.getStrictParentOfType<KtNamedFunction>() ?: return null
-        // A `return` inside a lambda or an accessor returns from THAT, not from the function around it.
-        var between = ret.parent
-        while (between != null && between !== fn) {
-            if (between is KtFunctionLiteral || between is KtPropertyAccessor || between is KtClassOrObject) return null
-            between = between.parent
+        // An unlabeled `return` leaves the nearest named function, accessor, constructor or initializer, lambdas
+        // in between included (a non-local return): its value is judged against what that one returns.
+        var target: KtElement? = ret.parent
+        var throughLambda = false
+        while (target != null) {
+            when (target) {
+                is KtFunctionLiteral -> throughLambda = true
+                is KtNamedFunction -> break
+                is KtPropertyAccessor, is KtSecondaryConstructor, is dev.ide.kotlin.syntax.psi.KtClassInitializer -> break
+                is KtClassOrObject -> return null
+            }
+            target = target.parent
         }
-        if (!fn.hasBlockBody()) return null
+        when (target) {
+            // `return` is not allowed in an initializer at all, which is the diagnostic that matters there.
+            is dev.ide.kotlin.syntax.psi.KtClassInitializer -> return null
+            is KtSecondaryConstructor -> return if (throughLambda) null else unitReturnMismatch(value, resolver.inferType(value))
+            is KtPropertyAccessor -> {
+                if (throughLambda) return null
+                if (!target.isGetter) return unitReturnMismatch(value, resolver.inferType(value))
+                if (target.returnTypeReference != null) return null
+                val prop = target.parent as? KtProperty ?: return null
+                val text = prop.typeReference?.text ?: return null
+                return valueMismatch(service.typeFromText(text, resolver.fileContext, enclosingClassFqnOf(prop)), value, resolver)
+            }
+        }
+        val fn = target as? KtNamedFunction ?: return null
+        // A lambda's own value never leaves it through a non-local return; an expression body only through one.
+        if (!fn.hasBlockBody() && (!throughLambda || fn.typeReference == null)) return null
         val actual = resolver.inferType(value)
         val declaredText = fn.typeReference?.text
         // A block body with no declared return type has the type Unit; returning a value from it is an error.
