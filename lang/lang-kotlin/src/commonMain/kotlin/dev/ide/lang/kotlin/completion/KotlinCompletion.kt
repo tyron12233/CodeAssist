@@ -336,7 +336,7 @@ class KotlinCompletion(
             val properties = pos.properties
             val out = ArrayList<Candidate>(raw.size)
             val seen = HashSet<String>()
-            val lambdaTwins = if (pos.memberAccess) lambdaOnlyOverloads(raw) else emptyMap()
+            val lambdaTwins = if (pos.memberAccess) lambdaOnlyOverloads(raw) else null
             // The names a candidate is compared with for IntelliJ's argument-name similarity: the parameter an
             // argument fills, or the declaration whose type is being written. It rides the popularity slot, which
             // only a receiver's members otherwise fill.
@@ -368,7 +368,7 @@ class KotlinCompletion(
                 if (name == "_" || MARKER in name) continue
                 // `sumOf` has seven overloads that differ only in what the selector returns; each is typed
                 // the same way, so one row stands for all of them (see [lambdaOnlyOverloads]).
-                lambdaTwins[lambdaShapeKey(s)]?.let { kept -> if (kept !== s) continue }
+                if (lambdaTwins != null && lambdaTwins[index]) continue
                 // A middle match the local scope let through (see [KotlinNameMatcher]) ranks after every other.
                 val grade = matcher.grade(name) ?: if (wordMatcher.matches(name)) PrefixMatcher.Grade.SUBSTRING else continue
                 if (!firstLetterCaseAgrees(prefix, name)) continue
@@ -2650,17 +2650,20 @@ class KotlinCompletion(
      * an `Int`, a `Long` or a `BigDecimal`, and seven rows of it bury `sum`. The `Int` flavour is kept when
      * there is one, since that is what the lambda most often returns; otherwise the first.
      */
-    private fun lambdaOnlyOverloads(raw: List<KotlinSymbol>): Map<String, KotlinSymbol> {
-        val groups = HashMap<String, MutableList<KotlinSymbol>>()
-        for (s in raw) lambdaShapeKey(s)?.let { groups.getOrPut(it) { ArrayList(2) }.add(s) }
-        val out = HashMap<String, KotlinSymbol>()
-        for ((key, group) in groups) {
+    private fun lambdaOnlyOverloads(raw: List<KotlinSymbol>): BooleanArray {
+        // By position in [raw], so the caller's loop reads one flag per candidate instead of building each
+        // candidate's shape key a second time.
+        val groups = HashMap<String, MutableList<Int>>()
+        for ((i, s) in raw.withIndex()) lambdaShapeKey(s)?.let { groups.getOrPut(it) { ArrayList(2) }.add(i) }
+        val dropped = BooleanArray(raw.size)
+        for (group in groups.values) {
             if (group.size < 2) continue
-            out[key] = group.firstOrNull { c ->
-                ((c.paramTypes.last() as? KotlinType)?.typeArguments?.lastOrNull())?.qualifiedName == "kotlin.Int"
+            val kept = group.firstOrNull { i ->
+                ((raw[i].paramTypes.last() as? KotlinType)?.typeArguments?.lastOrNull())?.qualifiedName == "kotlin.Int"
             } ?: group.first()
+            for (i in group) if (i != kept) dropped[i] = true
         }
-        return out
+        return dropped
     }
 
     /**
@@ -2951,7 +2954,10 @@ class KotlinCompletion(
     ): List<CompletionItem> {
         val receiver = recvType.withNullable(false)
         val receivers = listOfNotNull(receiver, declared?.withNullable(false))
-        val values = runCatching { resolver.scopeSymbolsAt(offset, matcher.prefix) }.getOrDefault(emptyList()) +
+        // Values a user declares (locals, parameters, properties, the project's top-level ones): a library's
+        // top-level property of an extension function type is not worth listing every library function for,
+        // which an empty prefix after the dot otherwise did on every `x.`.
+        val values = runCatching { resolver.scopeSymbolsAt(offset, matcher.prefix, classpathTopLevel = false) }.getOrDefault(emptyList()) +
             contextParametersInScope(resolver.elementAt(offset), matcher, resolver)
         val out = ArrayList<CompletionItem>()
         val seen = HashSet<String>()

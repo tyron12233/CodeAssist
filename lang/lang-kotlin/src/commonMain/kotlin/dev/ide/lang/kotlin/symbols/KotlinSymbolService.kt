@@ -3371,6 +3371,14 @@ class KotlinSymbolService(
      * whole classpath's top-level universe (thousands of decls with Compose/AndroidX) only to drop all but a
      * few downstream — it walks the by-name map and keeps the matching buckets.
      */
+    /** The PROJECT's top-level callables [prefix] fits, without the classpath's: for a caller that wants only
+     *  declarations a user could have written (see [dev.ide.lang.kotlin.resolve.scopeSymbolsAt]'s
+     *  `classpathTopLevel`), skipping the classpath query that an empty prefix leaves uncapped. */
+    fun sourceTopLevelCallables(prefix: String = ""): List<KotlinSymbol> {
+        val m = PrefixMatcher(prefix)
+        return model().topLevel.filter { prefix.isEmpty() || m.matches(it.name) }.map { toSymbol(it, null) }
+    }
+
     fun topLevelCallables(prefix: String = ""): List<KotlinSymbol> {
         val m = PrefixMatcher(prefix)
         // Private top-levels are NOT filtered here — this feeds RESOLUTION too, where a same-file reference to a

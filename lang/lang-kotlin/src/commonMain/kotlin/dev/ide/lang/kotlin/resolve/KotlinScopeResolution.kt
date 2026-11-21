@@ -1097,6 +1097,10 @@ fun KotlinResolver.scopeSymbolsAt(
      *  in place of the prefix one: IntelliJ matches those at any word of a name. The top-level part is still
      *  looked up by prefix. */
     localNameFilter: ((String) -> Boolean)? = null,
+    /** False leaves the classpath's top-level callables out (the project's own stay): for a caller that keeps
+     *  only values a user declares. With an empty prefix that query is uncapped, every top-level function of
+     *  every library materialized. */
+    classpathTopLevel: Boolean = true,
 ): List<KotlinSymbol> {
     val out = ArrayList<KotlinSymbol>()
     // The resolution probe wants one name, and only completion needs every local typed.
@@ -1144,7 +1148,9 @@ fun KotlinResolver.scopeSymbolsAt(
     // privates are already in `out`/`scoped` (added by [sameFileScopeSymbols] from the live buffer), so dropping
     // private from the project-wide top-level results here removes exactly the cross-file ones without losing the
     // current file's. (The symbol service stays unfiltered so RESOLUTION of a same-file private still works.)
-    val topLevel = (if (exactName) service.topLevelByName(namePrefix) else service.topLevelCallables(namePrefix))
+    val topLevel = (if (exactName) service.topLevelByName(namePrefix)
+        else if (!classpathTopLevel) service.sourceTopLevelCallables(namePrefix)
+        else service.topLevelCallables(namePrefix))
         .filterNot { Modifier.PRIVATE in it.modifiers }
     return scoped + topLevel
 }

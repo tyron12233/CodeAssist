@@ -239,7 +239,6 @@ tasks.named<Test>("jvmTest") {
         testLogging { showStandardStreams = true }
         outputs.upToDateWhen { false }
     }
-    System.getProperty("kt.jfr")?.let { jvmArgs("-XX:StartFlightRecording=filename=$it,settings=profile,dumponexit=true") }
     if (sweeping) {
         // A sweep needs more heap than the fast gate's 1536m: it holds a whole corpus's source model, and the
         // module sweep stands a second one up over a 68-jar classpath in the same JVM. Measured: the full
@@ -266,3 +265,9 @@ val compilerTest = tasks.register<Test>("compilerTest") {
     setForkEvery(1)
 }
 tasks.named("check") { dependsOn(compilerTest) }
+
+// `-Dkt.jfr=<file.jfr>` records a Flight Recorder profile of any test run of this module, the regression
+// benchmarks included.
+tasks.withType<Test>().configureEach {
+    System.getProperty("kt.jfr")?.let { jvmArgs("-XX:StartFlightRecording=filename=$it,settings=profile,jdk.ExecutionSample#period=1ms,dumponexit=true") }
+}
