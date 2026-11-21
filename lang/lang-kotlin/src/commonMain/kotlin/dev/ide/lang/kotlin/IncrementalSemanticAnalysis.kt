@@ -215,7 +215,7 @@ class IncrementalSemanticAnalysis(
 
         val result = ArrayList<Diagnostic>(fileLevel)
         perDecl.forEach { result += it }
-        return result
+        return KotlinSuppression.filter(ktFile, result)
     }
 
     /**

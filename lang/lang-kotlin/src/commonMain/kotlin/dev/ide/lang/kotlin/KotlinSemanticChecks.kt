@@ -4391,6 +4391,9 @@ internal class KotlinSemanticChecks(
      */
     private fun optInCallUsage(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
         val callee = resolver.calleeFunctionOf(call) ?: return null
+        // A top-level callee the file cannot see is not what the call binds to: `contract("x")` on a builder
+        // with its own `contract` member must not be charged with `kotlin.contracts.contract`'s opt-in.
+        if (callee.owner == null && !callee.isExtension && !resolver.topLevelInScope(callee, resolver.fileContext)) return null
         return reportOptInUsage(service.optInMarkersOf(callee), call.calleeExpression ?: call)
     }
 
@@ -4447,8 +4450,9 @@ internal class KotlinSemanticChecks(
             if (name == "OptIn" || name == "UseExperimental") {
                 val hit = entry.valueArguments.any { va ->
                     val text = va.getArgumentExpression()?.text ?: return@any false
-                    // `Marker::class`, `pkg.Marker::class`, `Marker::class as …` → the class simple name.
-                    text.substringBefore("::").substringAfterLast('.').substringBefore('<').trim() == markerSimple
+                    // Every `Marker::class` / `pkg.Marker::class` in the argument, so the named array form
+                    // `@OptIn(markerClass = [A::class, B::class])` counts as well as a vararg list.
+                    CLASS_LITERAL.findAll(text).any { it.groupValues[1].substringAfterLast('.') == markerSimple }
                 }
                 if (hit) return true
             }
@@ -4567,3 +4571,6 @@ private val NON_EXHAUSTIVE_SUBJECT_TYPES = setOf(
     "kotlin.String", "kotlin.Int", "kotlin.Long", "kotlin.Short", "kotlin.Byte", "kotlin.Char", "kotlin.Double",
     "kotlin.Float", "kotlin.UInt", "kotlin.ULong",
 )
+
+/** A class literal's class name in source text: `Marker` of `Marker::class`, `pkg.Marker` of `pkg.Marker::class`. */
+private val CLASS_LITERAL = Regex("""([A-Za-z_][A-Za-z0-9_.]*)\s*::\s*class""")

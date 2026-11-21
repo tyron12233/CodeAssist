@@ -83,6 +83,21 @@ class KotlinCompilerParityTest {
         clean("class X { fun x() {} }\nclass Y { fun y() {} }\nfun xs(b: X.() -> Unit) {}\nfun ys(b: Y.() -> Unit) {}\nfun t() { xs { ys { x(); y() } } }")
     }
 
+    /** `@Suppress("K2_NAME")` drops the diagnostic it names, errors included, and nothing else. */
+    @Test
+    fun suppressHonoursK2Names() {
+        clean("fun foo(x: String) {}\n@Suppress(\"ARGUMENT_TYPE_MISMATCH\") fun bar() { foo(10) }")
+        assertCodes("fun foo(x: String) {}\n@Suppress(\"UNUSED_VARIABLE\") fun bar() { foo(10) }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+    }
+
+    /** Opt-in: the named array form opts in, and an out-of-scope top-level function is not the callee. */
+    @Test
+    fun optInRecognisesArraysAndOnlyCalleesInScope() {
+        clean("@RequiresOptIn annotation class MyOptIn\n@MyOptIn fun foo() {}\n@OptIn(markerClass = [MyOptIn::class]) class MyClass { fun test() { foo() } }")
+        clean("class MyBuilder { fun contract(contract: String) { contract.length } }\nfun t() { MyBuilder().apply { contract(\"test\"); this@apply.contract(\"\") } }")
+        assertCodes("@RequiresOptIn annotation class MyOptIn\n@MyOptIn fun foo() {}\nfun t() { foo() }", KotlinDiagnosticCodes.OPT_IN_USAGE_ERROR)
+    }
+
     /** A classifier is looked up through every enclosing class, including a local or anonymous one, and through
      *  its own companion and (transitive, typealiased) superCLASSES. */
     @Test
