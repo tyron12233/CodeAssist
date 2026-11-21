@@ -49,6 +49,7 @@ import dev.ide.kotlin.syntax.psi.KtThrowExpression
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.KtTryExpression
 import dev.ide.kotlin.syntax.psi.KtTypeAlias
+import dev.ide.kotlin.syntax.psi.KtTypeProjection
 import dev.ide.kotlin.syntax.psi.KtTypeReference
 import dev.ide.kotlin.syntax.psi.KtUserType
 import dev.ide.kotlin.syntax.psi.KtWhenConditionWithExpression
@@ -75,6 +76,7 @@ import dev.ide.lang.kotlin.resolve.inferType
 import dev.ide.lang.kotlin.resolve.isTypeParameterInScope
 import dev.ide.lang.kotlin.resolve.isTypeReceiver
 import dev.ide.lang.kotlin.resolve.iterationElementType
+import dev.ide.lang.kotlin.resolve.localTypesInScope
 import dev.ide.lang.kotlin.resolve.localsAt
 import dev.ide.lang.kotlin.resolve.pathGuardedNonNullAt
 import dev.ide.lang.kotlin.resolve.receiverForMembers
@@ -607,47 +609,6 @@ internal fun KotlinSemanticChecks.lambdaArgumentParameterCount(call: KtCallExpre
 
 // --- visibility ---------------------------------------------------------------------------------------------
 
-/** The FQN of the outermost class enclosing [e], or null at the top level. */
-private fun outermostClassFqn(e: KtElement): String? {
-    var out: KtClassOrObject? = null
-    var node: KtElement? = e
-    while (node != null) {
-        if (node is KtClassOrObject) out = node
-        node = node.parent
-    }
-    return out?.fqName?.asString()
-}
-
-/** `a.p()` where `p` is private in a class this code is not written inside of. Members of one top-level
- *  class and everything nested in it see each other's privates closely enough that this leaves them alone. */
-internal fun KotlinSemanticChecks.privateMemberAccess(ref: KtNameReferenceExpression, resolver: KotlinResolver): Diagnostic? {
-    val parent = ref.parent
-    val receiver = when {
-        parent is KtQualifiedExpression && parent.selectorExpression === ref -> parent.receiverExpression
-        parent is KtCallExpression && parent.calleeExpression === ref ->
-            (parent.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === parent }?.receiverExpression
-        else -> null
-    } ?: return null
-    val name = ref.getReferencedName()
-    if (name.isEmpty()) return null
-    val inferred = resolver.inferType(receiver) ?: return null
-    val recvType = resolver.receiverForMembers(inferred, receiver.textRange.startOffset) ?: return null
-    if (recvType.isTypeParameter || !service.isSourceClass(recvType.qualifiedName)) return null
-    val members = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name).filter { it.name == name }
-    if (members.isEmpty() || members.any { it.isExtension || Modifier.PRIVATE !in it.modifiers || !it.origin.fromSource }) return null
-    if (resolver.scopeMemberExtensions(ref.textRange.startOffset, recvType, name).any { it.name == name }) return null
-    fun ownerOf(m: KotlinSymbol): String? =
-        m.declaringClassFqn ?: m.sourcePsi()?.getStrictParentOfType<KtClassOrObject>()?.fqName?.asString()
-    val owner = ownerOf(members.first()) ?: return null
-    if (members.any { ownerOf(it) != owner }) return null
-    val here = outermostClassFqn(ref)
-    if (here != null && (owner == here || owner.startsWith("$here."))) return null
-    return error(
-        ref, "Cannot access '$name': it is private in '${owner.substringAfterLast('.')}'",
-        KotlinDiagnosticCodes.INVISIBLE_REFERENCE,
-    )
-}
-
 /** `import a.foo` of a top-level declaration that is `private` in another file of the project: a private
  *  top-level declaration is visible only inside its own file, so the import names nothing usable here. */
 internal fun KotlinSemanticChecks.privateTopLevelImports(file: KtFile): List<Diagnostic> {
@@ -1077,10 +1038,10 @@ internal fun KotlinSemanticChecks.objectInvoked(call: KtCallExpression, resolver
 // --- type arguments -----------------------------------------------------------------------------------------
 
 /**
- * `val a: Box = …` where `class Box<T>`: a generic source class named with no type arguments in a
- * declaration's type. An `is`/`as` target, a supertype, a callable reference and an annotation are all
- * places where the arguments may legitimately be absent or inferred, so only a property, parameter or
- * return type (and the arguments nested in one) is judged.
+ * `val a: Box = …` where `class Box<T>`: a generic class named with no type arguments in a declaration's type
+ * (a property, parameter or return type, or an extension receiver), or anywhere as another type's ARGUMENT
+ * (`x is List<Map>`, `f<Box>()`). A top-level `is`/`as` target, a supertype, a callable reference and an
+ * annotation are places where the arguments may legitimately be absent or inferred, so those are left alone.
  */
 internal fun KotlinSemanticChecks.missingTypeArguments(userType: KtUserType, resolver: KotlinResolver): Diagnostic? {
     if (userType.typeArgumentList != null || userType.qualifier != null || userType.parent is KtUserType) return null
@@ -1088,9 +1049,11 @@ internal fun KotlinSemanticChecks.missingTypeArguments(userType: KtUserType, res
     // Climb out of the type; what holds it decides whether arguments are required.
     var node: KtElement = userType
     var topRef: KtTypeReference? = null
+    var asArgument = false
     while (true) {
         val p = node.parent ?: return null
         if (p is KtTypeReference) topRef = p
+        if (p is KtTypeProjection) asArgument = true
         if (p is KtDeclaration || p is KtExpression || p is KtSuperTypeEntry || p is KtSuperTypeCallEntry ||
             p is KtAnnotationEntry || p is KtFile
         ) { node = p; break }
@@ -1099,16 +1062,23 @@ internal fun KotlinSemanticChecks.missingTypeArguments(userType: KtUserType, res
     val holder = node
     val inDeclarationType = when (holder) {
         is KtTypeAlias -> false
-        is KtProperty -> holder.typeReference === topRef
+        is KtProperty -> holder.typeReference === topRef || holder.receiverTypeReference === topRef
         is KtParameter -> holder.typeReference === topRef && holder.parent?.parent !is KtCatchClause
-        is KtNamedFunction -> holder.typeReference === topRef
-        else -> false
+        is KtNamedFunction -> holder.typeReference === topRef || holder.receiverTypeReference === topRef
+        is KtAnnotationEntry -> false
+        else -> asArgument
     }
     if (!inDeclarationType) return null
     if (service.isProjectTypeAlias(name) || resolver.isTypeParameterInScope(name, userType.textRange.startOffset)) return null
+    if (resolver.localTypesInScope(userType.textRange.startOffset).containsKey(name)) return null
     val fqn = service.resolveTypeName(name, resolver.fileContext, enclosingClassFqnOf(userType)) ?: return null
-    if (!service.isSourceClass(fqn)) return null
-    val expected = service.classTypeParameters(fqn).size
+    // A library class counts when its parameters are decoded (or are the builtins' fixed ones) and the name is
+    // its own: a library typealias resolves to its expansion, whose parameters are not the alias's.
+    val expected = when {
+        service.isSourceClass(fqn) -> service.classTypeParameters(fqn).size
+        fqn.substringAfterLast('.') != name || !service.isKnownType(fqn) -> return null
+        else -> service.classTypeParameters(fqn).size.takeIf { it > 0 } ?: builtinTypeArity(fqn) ?: return null
+    }
     if (expected == 0) return null
     return error(
         userType, "$expected type argument${if (expected == 1) "" else "s"} expected for '$name'",

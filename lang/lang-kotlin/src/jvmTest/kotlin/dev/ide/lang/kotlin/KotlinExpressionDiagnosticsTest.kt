@@ -401,7 +401,8 @@ class KotlinExpressionDiagnosticsTest {
 
     @Test
     fun alwaysFalseIsCheckIsFlagged() {
-        assertTrue(diagnose("Is3.kt", "package demo\nfun f(s: String) { val b = s is Int }").any { it.code == "kt.uselessIsCheck" }, "`s is Int` for a String is always false")
+        // The compiler's IMPOSSIBLE_IS_CHECK_ERROR: two unrelated final types can never meet.
+        assertTrue(diagnose("Is3.kt", "package demo\nfun f(s: String) { val b = s is Int }").any { it.code == "kt.impossibleIsCheck" }, "`s is Int` for a String is always false")
     }
 
     @Test

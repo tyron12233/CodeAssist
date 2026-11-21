@@ -795,7 +795,11 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
     // callable that was never imported stays unresolved, as Kotlin reports (mirrors the extension rule).
     // A `private` top-level from ANOTHER file is out of scope (this file's own privates already resolved above
     // via `ktFile.declarations`), so a cross-file private reference stays unresolved — as the compiler reports.
-    if (service.topLevelByName(name).any { Modifier.PRIVATE !in it.modifiers && topLevelInScope(it, fileContext) }) return true
+    if (service.topLevelByName(name).any {
+            Modifier.PRIVATE !in it.modifiers && topLevelInScope(it, fileContext) &&
+                !(it.packageName != null && aliasedAway("${it.packageName}.$name"))
+        }
+    ) return true
     // An explicit import brings [name] into scope, but ONLY as what it NAMES. A TYPE/object import, an
     // object/enum-entry MEMBER import (its owner is a type), or a non-extension top-level callable (line 501
     // usually resolved that) is usable bare. But an import of a pure EXTENSION
@@ -803,7 +807,9 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
     // implicit receiver of the right type is in scope here (checked above) — so it stays unresolved, exactly
     // as Kotlin reports. Only a POSITIVELY-confirmed pure extension falls through; anything unrecognized
     // (a typealias, an unresolved category) resolves, so this never false-positives.
-    val matchingImports = fileContext.imports.filter { !it.isStar && it.simpleName == name }
+    // An import of another file's `private` top-level declaration names nothing visible here (the import line
+    // itself is flagged by [KotlinSemanticChecks.privateTopLevelImports]), so it brings nothing into scope.
+    val matchingImports = fileContext.imports.filter { !it.isStar && it.simpleName == name && !privateInAnotherFile(it.fqn) }
     if (matchingImports.isNotEmpty()) {
         val extPackages = service.extensionPackages(name)
         val hasNonExtensionTopLevel = service.topLevelByName(name).any { it.receiverTypeFqn == null }
@@ -820,13 +826,50 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
     // bare only same-package), so an unimported same-module type is flagged by the bare-reference diagnostic. The
     // ENCLOSING class is passed so a NESTED-class constructor (`Plan(1)` inside `class Game { private class Plan }`)
     // resolves by simple name.
-    if (service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))?.let { service.isKnownType(it) } == true) return true
+    if (service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))?.let { service.isKnownType(it) && !privateInAnotherFile(it) && !aliasedAway(it) } == true) return true
     // A STAR import of a class puts its bare-callable members in scope: `import org.junit.Assert.*` makes
     // `assertEquals(…)` a call to a Java static. The by-name spelling (`import org.junit.Assert.assertEquals`)
     // was settled by the explicit-import rule above, which never looks the member up; a star import names
     // nothing, so only the container's own members can answer. Last, because it is the one probe here that
     // reads a container's members, and everything commoner has already had its say.
     return importedSingletonMembers(name, exactName = true).any { it.name == name }
+}
+
+/**
+ * Whether [fqn] names project-source top-level declarations that are ALL `private` to files other than this
+ * one: a `private` top-level declaration is visible only inside its own file, so here it names nothing usable.
+ * Files are compared by name, as [KotlinSemanticChecks.privateTopLevelImports] does.
+ */
+internal fun KotlinResolver.privateInAnotherFile(fqn: String): Boolean {
+    val files = service.privateTopLevelSourceFiles(fqn) ?: return false
+    val here = fileContext.path.substringAfterLast('/')
+    if (files.any { it.substringAfterLast('/') == here }) return false
+    // The same simple name may also reach a visible type through another import or this package
+    // (`import pack1.*` holding a private `SomeClass` beside `import pack2.*` holding a public one).
+    val name = fqn.substringAfterLast('.')
+    val others = ArrayList<String>()
+    fileContext.imports.forEach { imp ->
+        if (imp.isStar) others += "${imp.packageName}.$name" else if (imp.simpleName == name) others += imp.fqn
+    }
+    others += if (fileContext.packageName.isEmpty()) name else "${fileContext.packageName}.$name"
+    return others.none { it != fqn && service.isKnownType(it) && service.privateTopLevelSourceFiles(it) == null }
+}
+
+/**
+ * Whether [fqn] is imported only under ANOTHER name (`import a.y as AY`): the alias then replaces the original
+ * name in this file, which a star import or the file's own package no longer supplies.
+ */
+internal fun KotlinResolver.aliasedAway(fqn: String): Boolean {
+    val name = fqn.substringAfterLast('.')
+    // A NESTED declaration is still reached by its own name inside its outer class, whatever an import calls it.
+    if (service.isKnownType(fqn.substringBeforeLast('.', ""))) return false
+    var renamed = false
+    for (imp in fileContext.imports) {
+        if (imp.isStar || imp.fqn != fqn) continue
+        if (imp.alias == null || imp.alias == name) return false
+        renamed = true
+    }
+    return renamed
 }
 
 /**

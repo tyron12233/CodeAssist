@@ -96,6 +96,12 @@ object KotlinDiagnosticCodes {
      *  `internal` member/type (invisible across the module boundary). The compiler's INVISIBLE_REFERENCE/
      *  INVISIBLE_MEMBER, reported instead of a bare "unresolved reference" when the only match is internal. */
     const val INVISIBLE_REFERENCE = "kt.invisibleReference"
+    /** `a === b` where an operand has no identity (a value class, or a primitive against another final type):
+     *  the compiler's FORBIDDEN_IDENTITY_EQUALS. */
+    const val FORBIDDEN_IDENTITY_EQUALS = "kt.forbiddenIdentityEquals"
+    /** `a is B` that can never hold: the declared types are unrelated and one is final, or both are classes.
+     *  The compiler's IMPOSSIBLE_IS_CHECK_ERROR. */
+    const val IMPOSSIBLE_IS_CHECK = "kt.impossibleIsCheck"
     /** A read of a local `val`/`var` that is (on some path) not yet initialized (control-flow definite-assignment). */
     const val UNINITIALIZED_VARIABLE = "kt.uninitializedVariable"
     /** An assignment whose left side is not something that can be assigned to (`foo() = 1`, `5 = x`). */
