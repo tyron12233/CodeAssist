@@ -3097,7 +3097,28 @@ class KotlinSymbolService(
      * `T` is a type parameter — `resolveTypeName` returns it verbatim — so without this, generic inference
      * (`unify`/`substitute`) can't bind it and `it` in `key = { it.id }` types as a bogus concrete `T`.
      */
-    private fun markTypeParameters(type: KotlinType?, names: Set<String>): KotlinType? {
+    /**
+     * [markTypeParameters] for a type parsed from a declaration's written text, where a projected argument can
+     * come back with its projection still in the name (`Array<out X?>` gives an argument named `out X`): the
+     * projection is moved to where it belongs, so the variable under it is recognised.
+     */
+    internal fun markDeclaredTypeParameters(type: KotlinType?, names: Set<String>): KotlinType? {
+        if (type == null) return null
+        val args = type.typeArguments.map { (it as? KotlinType)?.let { a -> markDeclaredTypeParameters(a, names) } ?: it }
+        val q = type.qualifiedName
+        val projection = when {
+            q.startsWith("out ") -> "out"
+            q.startsWith("in ") -> "in"
+            else -> type.projection
+        }
+        val name = if (projection != type.projection) q.substringAfter(' ').trim() else q
+        return KotlinType(
+            name, args, type.nullable, this, type.isTypeParameter || name in names,
+            type.isExtensionFunctionType, type.isComposable, projection,
+        )
+    }
+
+    internal fun markTypeParameters(type: KotlinType?, names: Set<String>): KotlinType? {
         if (type == null || names.isEmpty()) return type
         val args = type.typeArguments.map {
             (it as? KotlinType)?.let { a -> markTypeParameters(a, names) } ?: it

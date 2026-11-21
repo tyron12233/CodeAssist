@@ -6,14 +6,17 @@ import dev.ide.kotlin.syntax.psi.KtBinaryExpressionWithTypeRHS
 import dev.ide.kotlin.syntax.psi.KtIsExpression
 import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtThrowExpression
+import dev.ide.kotlin.syntax.psi.KtBlockExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
 import dev.ide.kotlin.syntax.psi.KtDoWhileExpression
 import dev.ide.kotlin.syntax.psi.KtElement
 import dev.ide.kotlin.syntax.psi.KtExpression
+import dev.ide.kotlin.syntax.psi.KtFunctionLiteral
 import dev.ide.kotlin.syntax.psi.KtIfExpression
 import dev.ide.kotlin.syntax.psi.KtLambdaExpression
 import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
+import dev.ide.kotlin.syntax.psi.KtPostfixExpression
 import dev.ide.kotlin.syntax.psi.KtPrefixExpression
 import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.kotlin.syntax.psi.KtReturnExpression
@@ -33,10 +36,19 @@ import dev.ide.lang.kotlin.symbols.KotlinType
  * property initializer (`val x: T = ‹here›`), a `return ‹here›` / expression body of a typed function, a
  * call-argument slot (positional or named), and a boolean condition (`if`/`while`/`do-while`, `&&`/`||`,
  * `!`). Powers expected-type-aware completion (rank matches first, offer enum constants + booleans).
+ * A lambda's result, the operand of `!!` and an argument for a parameter typed by the callee's own variable
+ * take what the context expects of the lambda or the call around them; a statement whose value nobody reads
+ * expects nothing.
  */
-fun KotlinResolver.expectedTypeAt(offset: Int): KotlinType? {
-    var child: KtElement? = null
-    var node: KtElement? = elementAt(offset)
+fun KotlinResolver.expectedTypeAt(offset: Int): KotlinType? = expectedTypeWalk(null, elementAt(offset))
+
+/** The type the context expects of the expression [e] itself (the walk starts at its parent). */
+internal fun KotlinResolver.expectedTypeOf(e: KtElement): KotlinType? = expectedTypeWalk(e, e.parent)
+
+private fun KotlinResolver.expectedTypeWalk(from: KtElement?, start: KtElement?): KotlinType? {
+    val offset = (from ?: start)?.textRange?.startOffset ?: return null
+    var child: KtElement? = from
+    var node: KtElement? = start
     while (node != null) {
         when (node) {
             is KtProperty ->
@@ -46,6 +58,26 @@ fun KotlinResolver.expectedTypeAt(offset: Int): KotlinType? {
             is KtNamedFunction ->
                 if (child != null && child === node.bodyExpression && !node.hasBlockBody())
                     return node.typeReference?.text?.let { service.typeFromText(it, fileContext) }
+                // A block body, a parameter, a default value: what surrounds the declaration expects nothing of
+                // them. Walking on handed a local function's statements the type of whatever encloses it.
+                else if (child != null) return null
+
+            // A statement that is not the block's last is a value nobody reads, whatever the block's own
+            // expected type: `val x: Int = if (c) { log(); 1 } else 2` expects nothing of `log()`.
+            is KtBlockExpression ->
+                if (child != null && node.statements.lastOrNull() !== child) return null
+
+            // The last statement of a lambda is its result, so it is expected to have the lambda's return type.
+            // Walking on instead reached the argument the lambda fills, and handed the result the whole
+            // FUNCTION type (`run { make() }` read `make()` as expected to be a `() -> R`).
+            is KtFunctionLiteral -> if (child == null || child !== node.bodyExpression) return null
+            is KtLambdaExpression -> return if (child is KtFunctionLiteral) expectedLambdaResultType(node) else null
+
+            // `e!!` is the compiler's `checkNotNull<K>(e: K?): K`, so `e` is expected to be the nullable form of
+            // what `e!!` is: `doList(emptyNullableListOfA()!!)` asks a `List<Int>?` of the inner call.
+            is KtPostfixExpression ->
+                if (child != null && node.operationToken == KtTokens.EXCLEXCL && child === node.baseExpression)
+                    return expectedTypeWalk(node, node.parent)?.withNullable(true)
 
             is KtReturnExpression ->
                 if (child === node.returnedExpression) return enclosingFunctionReturnType(node)
@@ -176,9 +208,72 @@ internal fun KotlinResolver.expectedArgType(arg: KtValueArgument): KotlinType? {
     targets.forEach { s ->
         // A positional argument past a vararg still fills the vararg, not the parameter after it.
         val paramIndex = if (s.varargParamIndex in 0..<index) s.varargParamIndex else index
-        (s.paramTypes.getOrNull(paramIndex) as? KotlinType)?.let { return it }
+        (s.paramTypes.getOrNull(paramIndex) as? KotlinType)?.let {
+            return instantiatedFromCallExpectation(s, call, it, vararg = paramIndex == s.varargParamIndex && arg.getSpreadElement() == null)
+        }
     }
     return null
+}
+
+/**
+ * A parameter type [p] of [s] that names the callee's own type variables, instantiated from what the context
+ * expects of the whole [call]: `val l: List<Int> = id(make())` gives `id`'s `T` the value `List<Int>`, so its
+ * argument is expected to be a `List<Int>` too. This is the part of the compiler's joint constraint system an
+ * expected type can carry downward into a nested generic call; without it the inner call fixed its variables
+ * from their declared bounds alone and the outer one then mismatched. Applied only when the expectation pins
+ * every variable [p] mentions, so a partly free parameter keeps the raw type it always had. A vararg slot
+ * expects one element, not the array.
+ */
+private fun KotlinResolver.instantiatedFromCallExpectation(
+    s: dev.ide.lang.kotlin.symbols.KotlinSymbol,
+    call: KtCallExpression,
+    p: KotlinType,
+    vararg: Boolean,
+): KotlinType {
+    if (s.typeParameters.isEmpty()) return p
+    // A symbol read back from the index may name its own type parameters without marking them as such.
+    val names = s.typeParameters.toSet()
+    val param = service.markTypeParameters(p, names) ?: return p
+    val ret = service.markTypeParameters(s.type as? KotlinType, names) ?: return p
+    if (names.none { mentionsTypeParam(param, it) } || names.none { mentionsTypeParam(ret, it) }) return p
+    val outer = expectedTypeOf(call) ?: return p
+    if (outer.isTypeParameter || !service.isKnownType(outer.qualifiedName)) return p
+    val bindings = HashMap<String, dev.ide.lang.resolve.TypeRef>()
+    unify(ret, outer, bindings)
+    if (bindings.values.any { (it as? KotlinType)?.isTypeParameter != false }) return p
+    val element = if (vararg && param.qualifiedName == "kotlin.Array") param.typeArguments.singleOrNull() as? KotlinType ?: return p else param
+    val sub = service.substitute(element, bindings) as? KotlinType ?: return p
+    return if (names.any { mentionsTypeParam(sub, it) }) p else sub.withProjection("")
+}
+
+/**
+ * The type a lambda's RESULT is expected to have: its expected functional return type when that is a real
+ * type, and nothing under coercion to Unit. A return typed by a variable the callee also returns (`run`,
+ * `let`, `with`, any `fun <R> f(block: () -> R): R`) passes on what the context expects of the call itself, as
+ * the compiler's shared constraint system does: `val b: Base = myRun { decode() ?: d }` expects a `Base` of
+ * the elvis, which is what lets `decode`'s `T` be fixed to it.
+ */
+private fun KotlinResolver.expectedLambdaResultType(lambda: KtLambdaExpression): KotlinType? {
+    val ret = expectedLambdaShape(lambda)?.returnType as? KotlinType ?: return null
+    val call = enclosingCallAndParamIndex(lambda)?.first
+    val sym = call?.let { resolveCalleeFunction(it) ?: constructorCallee(it) }
+    // A symbol read back from the index may name its own type parameters without marking them as such.
+    fun isOwnVariable(t: KotlinType) =
+        t.isTypeParameter || (sym != null && t.typeArguments.isEmpty() && t.qualifiedName in sym.typeParameters)
+    if (!isOwnVariable(ret)) {
+        if (ret.isTypeParameter || mentionsAnyVariable(ret, sym?.typeParameters.orEmpty())) return null
+        return ret.takeUnless { coercesResultToUnit(it) || ret.projection == "*" }
+    }
+    if (ret.nullable || call == null || sym == null) return null
+    val callRet = sym.type as? KotlinType ?: return null
+    if (!isOwnVariable(callRet) || callRet.nullable || callRet.qualifiedName != ret.qualifiedName) return null
+    return expectedTypeOf(call)?.takeUnless { it.isTypeParameter }
+}
+
+/** Whether [t] is, or nests, a type parameter: one marked as such, or one named in [names]. */
+private fun mentionsAnyVariable(t: KotlinType, names: List<String>): Boolean {
+    if (t.isTypeParameter || (t.typeArguments.isEmpty() && t.qualifiedName in names)) return true
+    return t.typeArguments.any { it is KotlinType && mentionsAnyVariable(it, names) }
 }
 
 /** Whether [sym] can be called with [count] arguments: every parameter filled, or the missing ones have

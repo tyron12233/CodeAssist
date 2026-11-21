@@ -38,6 +38,9 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
         val upper = ArrayList<KotlinType>()
         var exact: KotlinType? = null
 
+        /** The variable's DECLARED upper bound, as registered; the other upper bounds come from the call. */
+        var declared: KotlinType? = null
+
         /** True while [check] is walking this variable's bounds. A decomposition under that walk can add
          *  ANOTHER bound to the same variable; the walk picks it up by index, so the nested call returns
          *  instead of starting a second (recursive) walk. */
@@ -63,6 +66,7 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
     fun registerVariable(name: String, upperBound: KotlinType? = null) {
         val v = vars.getOrPut(name) { Var(name) }
         if (upperBound != null && !upperBound.isTypeParameter && upperBound.qualifiedName != "kotlin.Any") {
+            v.declared = upperBound
             if (addBound(v.upper, upperBound)) check(v)
         }
     }
@@ -277,7 +281,7 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
             val fixed: TypeRef? = when {
                 v.exact != null -> v.exact
                 v.lower.isNotEmpty() -> commonSupertype(v.lower)
-                v.upper.isNotEmpty() -> mostSpecificUpperBound(v.upper)
+                v.upper.isNotEmpty() -> mostSpecificUpperBound(v.upper, v.declared)
                 else -> fallback[name]
             }
             if (fixed != null) out[name] = fixed
@@ -292,11 +296,27 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
      * `T <: View` and `T <: Button`); the compiler fixes `T` to the expected `Button` (`Button <: View`), not
      * the declared bound — so the initializer types as `Button`, not `View`. Picking the FIRST upper bound
      * (the declared bound, registered before the constraint) mis-fixed it to the bound and false-flagged the
-     * assignment. Falls back to the first when the bounds are incomparable (unrelated types — no single
-     * greatest lower bound is modeled), matching the prior behavior in that case.
+     * assignment.
+     *
+     * When the bounds are incomparable the compiler fixes the variable to their INTERSECTION, which the model
+     * cannot spell: `fun <T : Foo> foo(): T?` assigned to a `Bar?` is `Foo & Bar`, and `val l: List<Int> =
+     * emptyNullableListOfA()!!` (`T : A`) is a `List<A & Int>`. The contextual bound stands in for it then,
+     * not the [declared] one: the intersection is a subtype of what the context asked for, so reading it as
+     * that type never reports a mismatch the compiler does not. Only where that intersection can have a value,
+     * though: an interface on either side, or a nullable contextual bound (`null` is in both). Two unrelated
+     * classes (`<T : View> findViewById(): T` assigned to a `String`) intersect in nothing, which the compiler
+     * rejects, so the declared bound stays and the mismatch is reported. Otherwise the first bound.
      */
-    private fun mostSpecificUpperBound(uppers: List<KotlinType>): KotlinType =
-        uppers.firstOrNull { cand -> uppers.all { it === cand || it.isAssignableFrom(cand) } } ?: uppers.first()
+    private fun mostSpecificUpperBound(uppers: List<KotlinType>, declared: KotlinType?): KotlinType {
+        uppers.firstOrNull { cand -> uppers.all { it === cand || it.isAssignableFrom(cand) } }?.let { return it }
+        val contextual = uppers.filter { it !== declared }
+        val pick = contextual.firstOrNull { cand -> contextual.all { it === cand || it.isAssignableFrom(cand) } }
+            ?: contextual.firstOrNull() ?: return uppers.first()
+        if (declared == null) return pick
+        val inhabited = pick.nullable || service.isInterfaceType(declared.qualifiedName) == true ||
+            service.isInterfaceType(pick.qualifiedName) == true
+        return if (inhabited) pick else uppers.first()
+    }
 
     /** The nearest common supertype of [types] — the fixation of a variable's lower bounds. Agreement is the
      *  common case; otherwise walk the first type's supertype chain for one every other is assignable to

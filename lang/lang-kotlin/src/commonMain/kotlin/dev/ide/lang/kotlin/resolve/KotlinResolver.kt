@@ -68,6 +68,10 @@ class KotlinResolverCaches {
     val composeCtx = HashMap<KtElement, ComposableContext>()
     val suspendCtx = HashMap<KtElement, SuspendContext>()
 
+    /** Per builder lambda and type variable: where in its body the variable is fixed on demand, and to what
+     *  (see [dev.ide.lang.kotlin.resolve.postponedVariableFixedAt]). A null value records "never fixed". */
+    internal val pclaFixation = HashMap<Pair<KtLambdaExpression, String>, PclaFixation?>()
+
     /** Per-flow-root result of the data-flow nullability pass: the variable reads it proves non-null (see
      *  [KotlinVarNullFlow]). Keyed by the analysed function. */
     internal val varNonNull = HashMap<KtElement, Map<KtElement, VarNul>>()

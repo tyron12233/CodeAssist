@@ -2818,6 +2818,13 @@ internal class KotlinSemanticChecks(
                 val expr = arg.getArgumentExpression()
                 val pt = (c.paramTypes.getOrNull(idx) as? KotlinType)?.let { p ->
                     when {
+                        // A parameter typed by a builder lambda's still-open type variable, which an earlier
+                        // statement of the lambda has already fixed on demand (`otvOwner.constrain(x)` after
+                        // `otvOwner.provide().foo()`): the argument must fit what it was fixed to.
+                        p.typeArguments.isEmpty() && p.qualifiedName !in c.typeParameters &&
+                            (p.isTypeParameter || !service.isKnownType(p.qualifiedName)) ->
+                            resolver.postponedVariableFixedAt(call, p.qualifiedName)
+                                ?.let { t -> if (p.nullable) t.withNullable(true) else t } ?: p
                         explicit.isEmpty() -> p
                         // Checked against a written type argument only where the argument's own type is read, not
                         // inferred: these calls (`checkSubtype<Int>(x)`) are mostly asking what a smart cast or an
