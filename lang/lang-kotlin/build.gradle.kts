@@ -230,6 +230,16 @@ tasks.named<Test>("jvmTest") {
     // `-Dkt.sweepOnly=<path substring>` narrows the module sweep to matching files and dumps every error in
     // them with its source line, for working one bucket. Forwarded for the same reason as the flags above.
     System.getProperty("kt.sweepOnly")?.let { systemProperty("kt.sweepOnly", it) }
+    // `-Dkt.perf=<report file>` runs the whole-corpus analysis cost harness (KotlinAnalysisPerfHarnessTest);
+    // `kt.perfOnly` / `kt.perfLimit` narrow it. `-Dkt.jfr=<file.jfr>` records a Flight Recorder profile of the run.
+    if (System.getProperty("kt.perf") != null) {
+        for (k in listOf("kt.perf", "kt.perfOnly", "kt.perfLimit", "kt.perfCorpus", "kt.perfIndex", "kt.perfHisto")) System.getProperty(k)?.let { systemProperty(k, it) }
+        systemProperty("kt.repoRoot", rootDir.absolutePath)
+        maxHeapSize = "4g"
+        testLogging { showStandardStreams = true }
+        outputs.upToDateWhen { false }
+    }
+    System.getProperty("kt.jfr")?.let { jvmArgs("-XX:StartFlightRecording=filename=$it,settings=profile,dumponexit=true") }
     if (sweeping) {
         // A sweep needs more heap than the fast gate's 1536m: it holds a whole corpus's source model, and the
         // module sweep stands a second one up over a 68-jar classpath in the same JVM. Measured: the full
