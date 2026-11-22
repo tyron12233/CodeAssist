@@ -189,7 +189,7 @@ private fun KotlinResolver.bindFromExpectedType(sym: KotlinSymbol, call: KtCallE
         ?.takeIf { !it.isTypeParameter && it.qualifiedName != "kotlin.Any" && service.isKnownType(it.qualifiedName) } ?: return
     val fromExpected = HashMap<String, TypeRef>()
     unify(ret, if (ret.nullable) expected else expected.withNullable(false), fromExpected)
-    for ((k, v) in fromExpected) if (k in sym.typeParameters && (v as? KotlinType)?.isTypeParameter == false) bindings.putIfAbsent(k, v)
+    for ((k, v) in fromExpected) if (k in sym.typeParameters && (v as? KotlinType)?.isTypeParameter == false) bindings.getOrPut(k) { v }
 }
 
 /** The value-parameter types a lambda receives (in order), from the functional parameter it fills — for

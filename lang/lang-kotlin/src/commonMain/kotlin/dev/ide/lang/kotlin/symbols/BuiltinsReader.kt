@@ -59,7 +59,7 @@ class BuiltinsReader(private val jars: List<String>) {
     private fun load(): Map<String, TypeShape> {
         val out = HashMap<String, TypeShape>()
         forEachFragment { _, bytes -> out.putAll(shapesFrom(bytes)) }
-        forEachModuleFile { bytes -> for ((k, v) in shapesFromModule(bytes)) out.putIfAbsent(k, v) }
+        forEachModuleFile { bytes -> for ((k, v) in shapesFromModule(bytes)) out.getOrPut(k) { v } }
         return out
     }
 
