@@ -78,43 +78,73 @@ class KotlinCompilerTestDataSweepTest {
         val hitByName = HashMap<String, Int>()
         var cleanCompiling = 0; var compiling = 0; var crashed = 0; var timedOut = 0
         fun newExec() = Executors.newSingleThreadExecutor { r -> Thread(null, r, "sweep", 64L shl 20).apply { isDaemon = true } }
-        var exec = newExec()
+        // Cases are independent (each gets its own temp dir and analyzer), so they are analyzed on several
+        // workers at once and then scored in their sorted order: the report is the same as a one-thread run.
+        // `-Dkt.sweepThreads=1` gives the old serial run, for comparing.
+        val threads = System.getProperty("kt.sweepThreads")?.toIntOrNull() ?: maxOf(1, Runtime.getRuntime().availableProcessors() - 2)
+        class Outcome(
+            val stripped: List<Pair<String, Pair<String, List<Marker>>>>,
+            val results: List<Pair<String, List<dev.ide.lang.dom.Diagnostic>>>? = null,
+            val timedOut: Boolean = false,
+            val crash: Throwable? = null,
+        )
+        val outcomes = arrayOfNulls<Outcome>(cases.size)
+        val nextCase = java.util.concurrent.atomic.AtomicInteger()
+        val finished = java.util.concurrent.atomic.AtomicInteger()
+        val workers = (0 until threads).map { w ->
+            Thread {
+                var exec = newExec()
+                while (true) {
+                    val idx = nextCase.getAndIncrement()
+                    if (idx >= cases.size) break
+                    val case = cases[idx]
+                    val stripped = case.files.map { (name, text) -> Pair(name, strip(text)) }
+                    val src = Files.createTempDirectory("kt-td")
+                    stripped.forEach { (name, s) -> src.resolve(name).also { Files.createDirectories(it.parent) }.toFile().writeText(s.first) }
+                    // The compiler's test runner adds these declarations to a `// CHECK_TYPE` file's module; they are on
+                    // disk for resolution and never analyzed themselves.
+                    if (case.checkType) src.resolve("_CheckTypeHelpers.kt").toFile().writeText(CHECK_TYPE_HELPERS)
+                    if (case.inferenceHelpers) src.resolve("_InferenceHelpers.kt").toFile().writeText(INFERENCE_HELPERS)
+                    val future = exec.submit<List<Pair<String, List<dev.ide.lang.dom.Diagnostic>>>> {
+                        val a = KotlinSourceAnalyzer(fakeContext(src, jars))
+                        try {
+                            stripped.map { (name, s) ->
+                                val doc = SnippetDoc(s.first, DiskFile(src.resolve(name)))
+                                runBlocking {
+                                    a.incrementalParser.parseFull(doc)
+                                    name to a.analyze(doc.file).diagnostics.filter {
+                                        it.severity == Severity.ERROR && !disabledByDirective(it.code, case.disabled)
+                                    }
+                                }
+                            }
+                        } finally { runCatching { a.dispose() } }
+                    }
+                    outcomes[idx] = try {
+                        Outcome(stripped, results = future.get(30L * threads.coerceAtMost(4), TimeUnit.SECONDS))
+                    } catch (e: TimeoutException) {
+                        future.cancel(true); exec.shutdownNow(); exec = newExec()
+                        Outcome(stripped, timedOut = true)
+                    } catch (e: Exception) {
+                        Outcome(stripped, crash = e.cause ?: e)
+                    } finally { src.toFile().deleteRecursively() }
+                    val n = finished.incrementAndGet()
+                    if (n % 250 == 0) println("… $n/${cases.size}")
+                }
+                exec.shutdownNow()
+            }.apply { name = "sweep-worker-$w"; isDaemon = true; start() }
+        }
+        workers.forEach { it.join() }
 
         for ((idx, case) in cases.withIndex()) {
-            if (idx % 250 == 0) println("… $idx/${cases.size}")
-            val stripped = case.files.map { (name, text) -> Pair(name, strip(text)) }
-            val src = Files.createTempDirectory("kt-td")
-            stripped.forEach { (name, s) -> src.resolve(name).also { Files.createDirectories(it.parent) }.toFile().writeText(s.first) }
-            // The compiler's test runner adds these declarations to a `// CHECK_TYPE` file's module; they are on
-            // disk for resolution and never analyzed themselves.
-            if (case.checkType) src.resolve("_CheckTypeHelpers.kt").toFile().writeText(CHECK_TYPE_HELPERS)
-            if (case.inferenceHelpers) src.resolve("_InferenceHelpers.kt").toFile().writeText(INFERENCE_HELPERS)
-            val future = exec.submit<List<Pair<String, List<dev.ide.lang.dom.Diagnostic>>>> {
-                val a = KotlinSourceAnalyzer(fakeContext(src, jars))
-                try {
-                    stripped.map { (name, s) ->
-                        val doc = SnippetDoc(s.first, DiskFile(src.resolve(name)))
-                        runBlocking {
-                            a.incrementalParser.parseFull(doc)
-                            name to a.analyze(doc.file).diagnostics.filter {
-                                it.severity == Severity.ERROR && !disabledByDirective(it.code, case.disabled)
-                            }
-                        }
-                    }
-                } finally { runCatching { a.dispose() } }
-            }
-            val results = try {
-                future.get(30, TimeUnit.SECONDS)
-            } catch (e: TimeoutException) {
-                timedOut++; out.append("TIMEOUT ${case.path}\n")
-                future.cancel(true); exec.shutdownNow(); exec = newExec()
-                continue
-            } catch (e: Exception) {
+            val outcome = outcomes[idx]!!
+            val stripped = outcome.stripped
+            if (outcome.timedOut) { timedOut++; out.append("TIMEOUT ${case.path}\n"); continue }
+            outcome.crash?.let { c ->
                 crashed++
-                val c = e.cause ?: e
                 out.append("CRASH ${case.path}: $c\n    ${c.stackTrace.take(6).joinToString("\n    ")}\n")
                 continue
-            } finally { src.toFile().deleteRecursively() }
+            }
+            val results = outcome.results!!
 
             val compilingCase = case.stage != "FRONTEND"
             if (compilingCase) compiling++
@@ -164,7 +194,6 @@ class KotlinCompilerTestDataSweepTest {
             }
             if (compilingCase && !dirty) cleanCompiling++
         }
-        exec.shutdownNow()
 
         fun table(m: Map<String, Int>) = m.entries.sortedByDescending { it.value }.joinToString("\n") { "  %6d  %s".format(it.value, it.key) }
         val recall = (hitByName.keys + missByName.keys).associateWith { (hitByName[it] ?: 0) to (missByName[it] ?: 0) }

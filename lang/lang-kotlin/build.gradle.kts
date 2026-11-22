@@ -216,7 +216,7 @@ tasks.named<Test>("jvmTest") {
     // is ~3,000 files of analysis, which does not belong in the fast correctness gate.
     // `-Dkt.testData=<kotlin checkout>` runs the compiler-test-data parity sweep (KotlinCompilerTestDataSweepTest);
     // `-Dkt.testDataOnly=<path substring>` and `-Dkt.testDataLimit=<n>` narrow it.
-    listOf("kt.testData", "kt.testDataOnly", "kt.testDataLimit", "kt.testDataOut").forEach { k -> System.getProperty(k)?.let { systemProperty(k, it) } }
+    listOf("kt.testData", "kt.testDataOnly", "kt.testDataLimit", "kt.testDataOut", "kt.sweepThreads").forEach { k -> System.getProperty(k)?.let { systemProperty(k, it) } }
     // `-Dkt.completionTestData=<intellij>/plugins/kotlin/completion/testData` runs the completion-parity sweep
     // over the IntelliJ Kotlin plugin's own completion test data (KotlinCompletionTestDataSweepTest);
     // `kt.completionOnly` narrows it to matching cases and `kt.completionDirs` picks the directories.
