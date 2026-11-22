@@ -3291,9 +3291,22 @@ class KotlinSymbolService(
             if (extRecvFqn != null && extRecvFqn != receiverFqn && ext.receiverTypeArgs.isNotEmpty())
                 receiverSupertypeArgs(receiverFqn, receiverArgs, extRecvFqn) ?: receiverArgs
             else receiverArgs
+        // A type parameter the receiver fills at a COVARIANT position (`List<out E>`) is only bounded below by it:
+        // `List<Sub>` is a `List<Super>` too, so `subs.indexOf(sup)` is `List<Super>.indexOf(Super)`, the
+        // stdlib extension K2 falls through to when the member `indexOf(Sub)` does not apply. Left free (with
+        // that lower bound) only where the result does not depend on it (`contains`, `indexOf`), so no return
+        // type changes; everywhere else the receiver's argument binds it as before.
+        val variance = if (extRecvFqn != null && ext.typeParameters.isNotEmpty()) classTypeParameterVariance(extRecvFqn) else emptyList()
+        val lowerOnly = HashMap<String, TypeRef>()
         ext.receiverTypeArgs.forEachIndexed { i, ra ->
             val k = ra as? KotlinType ?: return@forEachIndexed
             val actual = recvArgs.getOrNull(i) ?: return@forEachIndexed
+            if (k.isTypeParameter && !k.nullable && variance.getOrNull(i) == "out" &&
+                covariantInputOnly(ext, k.qualifiedName)
+            ) {
+                lowerOnly[k.qualifiedName] = actual
+                return@forEachIndexed
+            }
             // Iterable<T> on List<String> -> T = String; `Iterable<T?>` on `List<String?>` -> T = String (the `?` is
             // the declaration's, so `filterNotNull()` gives a `List<String>`).
             if (k.isTypeParameter) bindings[k.qualifiedName] =
@@ -3304,7 +3317,7 @@ class KotlinSymbolService(
                 bindings
             )                      // Iterable<Iterable<T>> on List<List<Int>> -> T = Int
         }
-        if (bindings.isEmpty()) return ext
+        if (bindings.isEmpty()) return if (lowerOnly.isEmpty()) ext else ext.withTypeParamLowerBounds(lowerOnly)
         // `T : R` propagation: a receiver-bound param `T` whose declared upper bound is a sibling param `R`
         // makes R a lower bound = T's binding (`Result<String>.getOrElse`, T : R, T = String ⇒ R ≥ String). The
         // call site (typeOfCall) widens R with the lambda result, so `getOrElse { null }` resolves to String?.
@@ -3314,8 +3327,24 @@ class KotlinSymbolService(
                 ?.let { ext.typeParamBoundNames.getOrNull(it) }
             if (sibling != null) lowerBounds[sibling] = bound
         }
+        lowerBounds.putAll(lowerOnly)
         val sub = substituteSymbol(ext, bindings)
         return if (lowerBounds.isEmpty()) sub else sub.withTypeParamLowerBounds(lowerBounds)
+    }
+
+    /** Whether [tp], a type parameter of [ext], appears as a whole value-parameter type and nowhere in the result,
+     *  the receiver's own type parameter, or another parameter's bound: the `contains(element: T): Boolean` shape. */
+    private fun covariantInputOnly(ext: KotlinSymbol, tp: String): Boolean {
+        fun mentions(t: TypeRef?): Boolean {
+            val k = t as? KotlinType ?: return false
+            return (k.isTypeParameter && k.qualifiedName == tp) || k.typeArguments.any(::mentions)
+        }
+        if (ext.receiverTypeParam == tp || mentions(ext.type)) return false
+        if (ext.typeParameterBounds.any(::mentions)) return false
+        if (ext.typeParamBoundNames.any { it == tp }) return false
+        if (ext.receiverTypeArgs.count(::mentions) != 1) return false
+        return ext.paramTypes.any { (it as? KotlinType)?.let { p -> p.isTypeParameter && p.qualifiedName == tp } == true } &&
+            ext.paramTypes.none { p -> mentions(p) && !((p as KotlinType).isTypeParameter) }
     }
 
     /** Structurally unify a declared extension-receiver argument [declared] (which may nest type parameters,

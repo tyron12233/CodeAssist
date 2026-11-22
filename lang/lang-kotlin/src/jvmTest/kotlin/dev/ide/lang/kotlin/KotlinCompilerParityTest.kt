@@ -1933,6 +1933,17 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(jdk).map { it.code }, "for `$jdk`")
     }
 
+    /** `subs.indexOf(sup)`/`contains`/`lastIndexOf`: the member takes only the element type, so K2 binds the stdlib
+     *  extension with `T` widened to the argument (a `List<Sub>` is a `List<Super>`). Results that depend on `T`
+     *  keep the receiver's argument (`l + 1` is a `List<Int>`). */
+    @Test
+    fun covariantReceiverWidensForInputOnlyExtensions() {
+        val clean = "interface VA\nclass KVA : VA\nfun f(l: List<KVA>, v: VA) { val x: Int = l.indexOf(v); val y: Boolean = l.contains(v); val z: Int = l.lastIndexOf(v) }"
+        assertEquals(emptyList(), errors(clean).map { it.code }, "for `$clean`")
+        assertEquals(listOf(KotlinDiagnosticCodes.TYPE_MISMATCH), errors("fun f(l: List<Int>) { val y: String = l.first() }").map { it.code })
+        assertEquals(emptyList(), errors("fun f(l: List<Int>) { val x: List<Int> = l + 1 }").map { it.code })
+    }
+
     /** A builder lambda's receiver takes the call's explicit type arguments: inside `buildMap<String, MutableList<C>> { }`
      *  `this` is a `MutableMap<String, MutableList<C>>`, so `getOrPut(k) { ArrayList() }` is a `MutableList<C>`. */
     @Test
