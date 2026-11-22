@@ -3047,7 +3047,10 @@ class KotlinSymbolService(
         val synthetic = if (synthesizeBeanProps) syntheticAccessorProperties(own) else emptyList()
         val inherited = shape.supertypes.flatMap { st ->
             val sub = substitute(st, bindings) as? KotlinType ?: return@flatMap emptyList()
-            ownAndInherited(sub.qualifiedName, sub.typeArguments, visited)
+            // A function-type supertype (`KProperty0<V> : () -> V`) contributes its `invoke`, as it does for a
+            // source class.
+            functionTypeSupertypeMembers(sub.qualifiedName, sub.typeArguments, visited)
+                ?: ownAndInherited(sub.qualifiedName, sub.typeArguments, visited)
         }
         return own + synthetic + inherited
     }
@@ -3520,6 +3523,11 @@ class KotlinSymbolService(
         if (!visited.add(fqn)) return emptyList()
         val direct = LinkedHashSet<String>()
         Builtins.builtinSupertypes(fqn).forEach { direct += it }
+        // A function reference's `KFunctionN` is a `FunctionN` (and a `KFunction`); `KSuspendFunctionN` likewise.
+        TypeRendering.reflectFunctionArity(fqn)?.let { n ->
+            direct += if (fqn.startsWith("kotlin.reflect.KSuspend")) "kotlin.SuspendFunction$n" else "kotlin.Function$n"
+            direct += "kotlin.reflect.KFunction"; direct += "kotlin.Function"; direct += "kotlin.Any"
+        }
         builtinShape(fqn)?.supertypes?.forEach { (it as? KotlinType)?.let { k -> direct += k.qualifiedName } }
         model().classByFqn[fqn]?.let { rc ->
             // The enclosing class is the SCOPE the supertype was written in: `sealed interface Plan { object

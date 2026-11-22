@@ -25,6 +25,7 @@ import dev.ide.kotlin.syntax.psi.KtParameter
 import dev.ide.kotlin.syntax.psi.KtParenthesizedExpression
 import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.kotlin.syntax.psi.KtPropertyAccessor
+import dev.ide.kotlin.syntax.psi.KtCallExpression
 import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtSecondaryConstructor
 import dev.ide.kotlin.syntax.psi.KtSuperTypeCallEntry
@@ -108,7 +109,7 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
             // extension function. A local/plain property has no receiver type and adds nothing. Only the accessors
             // have it: an initializer (`val C.foo: C.D = D()`, EXTENSION_PROPERTY_WITH_BACKING_FIELD) runs with none.
             is KtProperty -> if (!outerInstanceClosed && child is dev.ide.kotlin.syntax.psi.KtPropertyAccessor) node.receiverTypeReference?.text
-                ?.let { receiverTypeFromText(it, node) }?.let(out::add)
+                ?.let { boundedTypeParameterReceiver(node, it) ?: receiverTypeFromText(it, node) }?.let(out::add)
             // An enclosing class/object receiver. An ANONYMOUS object (`object : Foo { }`) or a LOCAL
             // class/object has no reachable `fqName`, so use the synthetic classifier the source model
             // registered it under — its own + supertype members then become the implicit `this` in the body.
@@ -133,7 +134,10 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
                         }
                         ?: (node as? KtClass)?.takeIf { it !is KtEnumEntry }
                             ?.let { dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(it) }
-                    if (fqn != null) out += service.typeByFqn(fqn)
+                    // A generic class's `this` is the class over its own type parameters (`Outer<E>`), not raw.
+                    if (fqn != null) out += service.typeByFqn(fqn, (node as? KtClass)?.typeParameters.orEmpty().mapNotNull { tp ->
+                        tp.name?.let { KotlinType(it, emptyList(), false, service, isTypeParameter = true) }
+                    })
                     if (enumOfEntry != null && enumOfEntry != fqn) out += service.typeByFqn(enumOfEntry)
                 }
                 // The class's companion object, then each superclass's, are implicit receivers after the instance:
@@ -181,10 +185,13 @@ internal fun isSingletonScope(c: KtClassOrObject): Boolean = c is KtObjectDeclar
 /** The implicit `this` of `fun <T : CharSequence> T.len() = length`: a receiver that is the function's own
  *  type parameter with an explicit upper bound has that bound's members, so `length` resolves. Null for a
  *  concrete receiver or an unbounded parameter (the caller keeps its plain text lookup). */
-private fun KotlinResolver.boundedTypeParameterReceiver(fn: KtNamedFunction, receiverText: String): KotlinType? {
+private fun KotlinResolver.boundedTypeParameterReceiver(fn: dev.ide.kotlin.syntax.psi.KtCallableDeclaration, receiverText: String): KotlinType? {
     val bare = receiverText.substringBefore('<').removeSuffix("?").trim()
     val tp = fn.typeParameters.firstOrNull { it.name == bare } ?: return null
-    val bound = tp.extendsBound?.text ?: return null
+    // An unbounded one (`val <T> T.u get() = id(this)`) is the type parameter itself, so `this` types as `T` and
+    // what is built from it (`id(this)`) stays in terms of `T` for a use site to bind.
+    val bound = tp.extendsBound?.text
+        ?: return KotlinType(bare, emptyList(), receiverText.trim().endsWith("?"), service, isTypeParameter = true)
     return service.typeFromText(bound, fileContext)
 }
 
@@ -510,6 +517,8 @@ internal fun KotlinResolver.accessorScopeLocals(offset: Int): List<KotlinSymbol>
     val propType =
         service.typeFromText(prop.typeReference?.text, fileContext, enclosingClassFqnOf(prop))
             ?: inferType(prop.initializer)
+            // `var x get() = 1; set(q) { … }`: the getter says what the property is, so what the setter takes.
+            ?: prop.getter?.takeIf { it !== accessor && !it.hasBlockBody() }?.bodyExpression?.let { inferType(it) }
     val out = ArrayList<KotlinSymbol>(2)
     // An extension property has no backing field: `field` in its accessor is an ordinary name
     // (`val String.x get() = field.foo()` reads the member extension `String.field`).
@@ -1057,7 +1066,8 @@ private fun KotlinResolver.receiverTypeFromText(text: String, decl: KtElement): 
             service.typeFromText(local + text.trim().removePrefix(head), fileContext)?.let { return it }
         }
     }
-    return service.typeFromText(text, fileContext)
+    // A member extension's receiver may name a type nested in its class (`fun Base.hoo()` beside `inner class Base`).
+    return service.typeFromText(text, fileContext, enclosingClassFqnOf(decl))
 }
 
 /** The FQN of the `inner` class [name] an implicit receiver at [offset] can construct: declared by the receiver's
@@ -1132,13 +1142,36 @@ internal fun KotlinResolver.enclosingCompanionMembers(offset: Int): List<KotlinS
     return out
 }
 
+/** Whether a constructor of the LOCAL class [fqn] can take [call]'s arguments: one whose arity fits and whose
+ *  parameters accept the argument types that are known. */
+internal fun KotlinResolver.localConstructorTakes(fqn: String, call: KtCallExpression): Boolean {
+    val cls = service.sourceClass(fqn) ?: return true
+    if (cls.constructors.isEmpty()) return call.valueArguments.isEmpty()
+    val n = call.valueArguments.size
+    if (call.valueArguments.any { it.isNamed() || it.getSpreadElement() != null }) return true
+    return cls.constructors.any { c ->
+        c.varargParamIndex >= 0 || n in c.paramHasDefault.count { !it }..c.paramTexts.size && call.valueArguments.withIndex().all { (i, arg) ->
+            val pt = service.typeFromText(c.paramTexts.getOrNull(i)?.second, c.ctx, fqn) ?: return@all true
+            val at = arg.getArgumentExpression()?.let { inferType(it) } ?: return@all true
+            pt.isTypeParameter || at.isTypeParameter || pt.isAssignableFrom(at) || !service.isKnownType(pt.qualifiedName) || !service.isKnownType(at.qualifiedName)
+        }
+    }
+}
+
 /** A [name] used as a constructor call (a simple `Foo` or a qualified `pkg.Foo`/`Outer.Inner`, its last
  *  segment capitalized) → the resolved type FQN (a known type not shadowed by a local), else null. Drives
  *  constructor-argument validation. */
 fun KotlinResolver.constructorTypeFqn(name: String, offset: Int): String? {
     if (name.substringAfterLast('.').firstOrNull()?.isUpperCase() != true) return null
     if ('.' !in name && localsAt(offset, name).isNotEmpty()) return null
-    if ('.' !in name) localTypesInScope(offset)[name]?.let { return it } // a local `class Foo` in scope
+    if ('.' !in name) localTypesInScope(offset)[name]?.let { local ->
+        // A local class that cannot take the call leaves it to a same-named class further out that can (K2's tower
+        // moves on: `class X(y: Int)` in a function, `X("")` constructs the top-level `X(x: String)`).
+        val call = elementAt(offset)?.getParentOfType<KtCallExpression>(strict = false)?.takeIf { it.calleeExpression?.textRange?.startOffset == offset }
+        if (call == null || localConstructorTakes(local, call)) return local
+        val outer = service.resolveTypeName(name, fileContext, null)?.takeIf { it != local && service.isKnownType(it) }
+        return outer ?: local
+    }
     // A different-package project type isn't a resolvable bare constructor call until imported, so `Foo()` for
     // such a type is flagged unresolved (and arg-validation backs off) rather than silently resolving.
     // The ENCLOSING class is passed so a NESTED type constructed by its simple name from inside the enclosing
@@ -1438,7 +1471,16 @@ private fun KotlinResolver.inferredSameFilePropertyType(p: KtProperty): KotlinTy
         return null
     }
     return try {
-        (inferType(p.initializer) ?: p.delegateExpression?.let(::delegatedValueType))
+        // With neither, a getter's expression body is the value (`val x get() = 1`), or its declared return type.
+        (inferType(p.initializer) ?: p.delegateExpression?.let(::delegatedValueType)
+            ?: p.getter?.takeIf { p.initializer == null && p.delegateExpression == null }?.let { g ->
+                g.typeReference?.text?.let { service.typeFromText(it, fileContext, enclosingClassFqnOf(p)) }
+                    ?: g.takeIf { !it.hasBlockBody() }?.bodyExpression?.let { body ->
+                        // A getter that returns `null` makes the property a `Nothing?`.
+                        if (unwrapParens(body).let { it is dev.ide.kotlin.syntax.psi.KtConstantExpression && it.text == "null" }) service.typeByFqn("kotlin.Nothing").withNullable(true)
+                        else inferType(body)
+                    }
+            })
             // The anonymous-object escape rule, as for a member read through the symbol service.
             ?.let { approximateEscapingLocalType(it, p) }
     } finally {

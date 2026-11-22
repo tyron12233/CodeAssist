@@ -190,6 +190,11 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
                             .firstOrNull { level -> level.any { !needsMoreArguments(it, argCount) } } ?: inScope
                     }
                     .ifEmpty {
+                    // None in scope, but a STAR import of a class brings its statics in (`import java.util.Collections.*`
+                    // makes `max(list, cmp)` `Collections.max`): those are the candidates, not an unimported top-level.
+                    importedSingletonMembers(name, exactName = true)
+                        .filter { it.name == name && it.kind == SymbolKind.METHOD }
+                        .takeIf { it.isNotEmpty() }?.let { return@ifEmpty it }
                     // None in scope, but the name IS a type in scope (`import android.widget.Button` and then
                     // `Button(ctx)`): that class's constructor is the call. An unimported function of the same name
                     // (Material3's `Button`) is invisible to Kotlin, and keeping it made a View constructor read as
@@ -249,6 +254,15 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
                     .let { found ->
                         if (!typeInScope) found
                         else found.filter { f -> f.packageName == null || f.isExtension || topLevelInScope(f, fileContext) }
+                    }
+                    // A member of an enclosing class or implicit receiver is nearer than every top-level function the
+                    // walk also lists: those are not candidates then (`fun foo(): E` in the class over a top-level `foo()`).
+                    .let { found ->
+                        val members = found.filter { it.owner != null && !it.isExtension }
+                        if (members.isEmpty() || found.size == members.size) found
+                        else if (enclosingClassMembersContain(call.textRange.startOffset, name) || implicitReceiverHasMethod(call.textRange.startOffset, name, argCount))
+                            found.filter { it.owner != null || it.isExtension }
+                        else found
                     }
             }
     }
@@ -631,6 +645,8 @@ fun KotlinResolver.resolveInfixFunction(e: KtBinaryExpression): KotlinSymbol? {
         ?: return null
     return service.membersNamed(leftType.qualifiedName, leftType.typeArguments, name)
         .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
+        // A LOCAL infix extension is nearer than any top-level or imported one.
+        ?: localExtensionFunction(e.textRange.startOffset, leftType, name, KtTokens.INFIX_KEYWORD)?.let { sameFileFunction(it, null) }
         ?: service.extensionsFor(
             leftType.qualifiedName,
             leftType.typeArguments,
@@ -643,6 +659,17 @@ fun KotlinResolver.resolveInfixFunction(e: KtBinaryExpression): KotlinSymbol? {
             .let { exts -> exts.filter { extensionInScope(it) }.ifEmpty { exts } }
             .let { exts -> exts.firstOrNull { it.origin.fromSource } ?: exts.firstOrNull() }
 }
+
+/** The nearest LOCAL extension function [name] on a supertype of [leftType] taking one argument and carrying
+ *  [modifier] (`operator` for `a + b`, `infix` for `a plus b`): a local declaration outranks every top-level one. */
+internal fun KotlinResolver.localExtensionFunction(
+    offset: Int, leftType: KotlinType, name: String, modifier: com.intellij.platform.syntax.SyntaxElementType,
+): dev.ide.kotlin.syntax.psi.KtNamedFunction? =
+    localFunctionsInScope(offset, name).firstOrNull { fn ->
+        val recv = fn.receiverTypeReference?.text ?: return@firstOrNull false
+        fn.hasModifier(modifier) && fn.valueParameters.size == 1 &&
+            service.typeFromText(recv, fileContext, enclosingClassFqnOf(fn))?.isAssignableFrom(leftType) == true
+    }
 
 /** Every function/constructor a [call] could resolve to: a `recv.foo(…)` member, else top-level + in-scope
  *  functions + the constructors of a capitalized callee (source and classpath). Used to surface a call's

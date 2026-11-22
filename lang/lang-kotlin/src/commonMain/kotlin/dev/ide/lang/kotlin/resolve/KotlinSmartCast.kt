@@ -55,6 +55,95 @@ internal fun KotlinResolver.narrowedType(name: String): KotlinType? {
  * "unresolved"), and a spurious one only fails to flag an error Kotlin would, never the reverse.
  */
 internal fun KotlinResolver.smartCastTypeAt(name: String, offset: Int): KotlinType? {
+    val own = smartCastTypeAtOwn(name, offset)
+    // K2's bound smart casts: a `val` every path assigned from one stable name is that value, so a check on either
+    // narrows both (`if (b) x = a else x = a; a as A; x.s`). The narrower of the two wins.
+    val viaAlias = aliasPartner(name, offset)?.let { smartCastTypeAtOwn(it, offset) } ?: return own
+    if (own == null) return viaAlias
+    return if (viaAlias.qualifiedName != own.qualifiedName && own.isAssignableFrom(viaAlias)) viaAlias else own
+}
+
+/**
+ * The name [name] is an alias of at [offset], or that is an alias of it: a local `val` declared without an
+ * initializer (or initialized with a plain name), every write of which before [offset] is `x = a` with the same
+ * stable local `a`. Null when there is none.
+ */
+private fun KotlinResolver.aliasPartner(name: String, offset: Int): String? {
+    if (name == THIS_SUBJECT || name.contains('.') || name.contains('@')) return null
+    // Cheap gate: the names any candidate `val` declares or is initialized from, plus every name assigned to one.
+    val candidates = caches.aliasCandidateNames ?: HashSet<String>().also { set ->
+        fun visit(e: KtElement) {
+            if (e is dev.ide.kotlin.syntax.psi.KtProperty && !e.isVar && e.isLocal) {
+                val init = e.initializer?.let { unwrapParens(it) }
+                if (init == null || init is KtNameReferenceExpression) {
+                    e.name?.let(set::add)
+                    (init as? KtNameReferenceExpression)?.getReferencedName()?.let(set::add)
+                }
+            }
+            if (e is KtBinaryExpression && e.operationToken == KtTokens.EQ) (unwrapParens(e.right) as? KtNameReferenceExpression)?.getReferencedName()?.let(set::add)
+            var c = e.firstChild
+            while (c != null) { (c as? KtElement)?.let(::visit); c = c.nextSibling }
+        }
+        visit(ktFile)
+        caches.aliasCandidateNames = set
+    }
+    if (name !in candidates) return null
+    val block = elementAt(offset)?.let { var n: KtElement? = it; while (n != null && n !is KtBlockExpression) n = n.parent as? KtElement; n } as? KtBlockExpression
+        ?: return null
+    // Walk out through the enclosing blocks for `val` declarations before [offset].
+    var b: KtElement? = block
+    while (b != null) {
+        if (b is KtBlockExpression) {
+            for (st in b.statements) {
+                if (st.textRange.startOffset >= offset) break
+                val p = st as? dev.ide.kotlin.syntax.psi.KtProperty ?: continue
+                if (p.isVar || p.hasDelegate()) continue
+                val v = p.name ?: continue
+                val source = aliasSource(b, p, offset) ?: continue
+                if (v == name && source != name) return source
+                if (source == name && v != name) return v
+            }
+        }
+        if (b is dev.ide.kotlin.syntax.psi.KtDeclaration && b !is dev.ide.kotlin.syntax.psi.KtProperty) break
+        b = b.parent as? KtElement
+    }
+    return null
+}
+
+/** The one stable name every write of `val` [p] in [block] before [offset] assigns it (its initializer, or the
+ *  deferred `p = a` in each branch), or null. */
+private fun KotlinResolver.aliasSource(block: KtBlockExpression, p: dev.ide.kotlin.syntax.psi.KtProperty, offset: Int): String? {
+    val v = p.name ?: return null
+    // `val a2: Any = a1` is a value of its declared type, not an alias (K2 binds only an untyped or deferred `val`).
+    if (p.initializer != null && p.typeReference != null) return null
+    var source: String? = (p.initializer?.let { unwrapParens(it) } as? KtNameReferenceExpression)?.getReferencedName()
+    if (p.initializer != null && source == null) return null
+    var writes = 0
+    fun visit(e: KtElement) {
+        if (e.textRange.startOffset >= offset) return
+        if (e is KtBinaryExpression && e.operationToken == KtTokens.EQ &&
+            (unwrapParens(e.left) as? KtNameReferenceExpression)?.getReferencedName() == v
+        ) {
+            writes++
+            val rhs = (e.right?.let { unwrapParens(it) } as? KtNameReferenceExpression)?.getReferencedName()
+            source = if (rhs == null || (source != null && source != rhs)) "\u0000" else rhs
+        }
+        var c = e.firstChild
+        while (c != null) { (c as? KtElement)?.let(::visit); c = c.nextSibling }
+    }
+    block.statements.dropWhile { it !== p }.drop(1).forEach(::visit)
+    val s = source ?: return null
+    if (s == "\u0000" || (p.initializer == null && writes == 0)) return null
+    // The source must itself be a stable value: a `val` or a parameter, never written.
+    val decl = localsAt(offset, s).firstOrNull() ?: return null
+    if (decl.kind != dev.ide.lang.resolve.SymbolKind.PARAMETER && decl.kind != dev.ide.lang.resolve.SymbolKind.LOCAL_VARIABLE) return null
+    val ownDecl = block.statements.firstOrNull { it is dev.ide.kotlin.syntax.psi.KtProperty && it.name == s } as? dev.ide.kotlin.syntax.psi.KtProperty
+    if (ownDecl?.isVar == true) return null
+    if (writtenNames(block).written.contains(s)) return null
+    return s
+}
+
+private fun KotlinResolver.smartCastTypeAtOwn(name: String, offset: Int): KotlinType? {
     var child: KtElement? = null
     val start = elementAt(offset)
     var node: KtElement? = start
@@ -688,11 +777,12 @@ internal fun KotlinResolver.whenSubjectNarrowing(
 
 /** The nearest common supertypes of [types] as one type, the first heading an intersection of the rest
  *  (`X`, `Y` both `: A, B` → `A & B`); null when they share nothing but `Any`. */
-private fun KotlinResolver.commonSupertypesType(types: List<KotlinType>): KotlinType? {
+internal fun KotlinResolver.commonSupertypesType(types: List<KotlinType>): KotlinType? {
     val distinct = types.distinctBy { it.qualifiedName }
     if (distinct.size == 1) return distinct[0]
     val first = distinct[0]
-    val candidates = (listOf(first) + service.supertypesOf(first.qualifiedName).filterIsInstance<KotlinType>())
+    // An intersection's components (and their supertypes) are candidates as much as its head's.
+    val candidates = (listOf(first) + first.intersection).flatMap { h -> listOf(h.withIntersection(emptyList())) + service.supertypesOf(h.qualifiedName).filterIsInstance<KotlinType>() }
         .distinctBy { it.qualifiedName }
         .filter { c -> c.qualifiedName != "kotlin.Any" && c.qualifiedName != "java.lang.Object" && distinct.all { c.isAssignableFrom(it) } }
     // Keep only the nearest: drop one that another candidate is already a subtype of.
@@ -734,7 +824,12 @@ private fun KotlinResolver.branchesAssignSameType(block: KtBlockExpression, st: 
         val i = statements.indexOfLast { isWrite(it) }
         if (i < 0 || statements.drop(i + 1).any { name in writtenNames(it).written }) return null
         val a = statements[i] as KtBinaryExpression
-        return a.right?.let { inferType(it) }?.takeIf { !it.isTypeParameter && !it.nullable && service.isKnownType(it.qualifiedName) }
+        // `x = a` with `a` a stable name: `x` is the same value as `a`, so what the branch later proves about `a`
+        // (`x = a; a as A`) holds for `x` at the branch's end.
+        val rhsName = (a.right?.let { unwrapParens(it) } as? KtNameReferenceExpression)?.getReferencedName()
+        val atEnd = if (rhsName != null && statements.last() !== a && branch is KtBlockExpression)
+            smartCastTypeAt(rhsName, branch.textRange.endOffset - 1) else null
+        return (atEnd ?: a.right?.let { inferType(it) })?.takeIf { !it.isTypeParameter && !it.nullable && service.isKnownType(it.qualifiedName) }
     }
     val declared = block.statements.takeWhile { it !== st }
         .lastOrNull { it is dev.ide.kotlin.syntax.psi.KtProperty && it.name == name } as? dev.ide.kotlin.syntax.psi.KtProperty
@@ -1033,7 +1128,23 @@ internal fun KotlinResolver.branchAlwaysJumps(branch: KtExpression?): Boolean =
  *  absent or doesn't resolve. Takes the type REFERENCE, not its text, so the enclosing class is available and
  *  a nested `is T` target resolves by simple name. */
 internal fun KotlinResolver.typeFromIsTarget(ref: KtTypeReference?): KotlinType? {
-    val text = ref?.text?.substringBefore('<')?.removeSuffix("?")?.trim()?.takeIf { it.isNotEmpty() }
+    // Every segment's arguments go, not just the text after the first `<` (`Outer<*>.Inner<*>` is `Outer.Inner`).
+    val text = ref?.text?.let(::eraseTypeArguments)?.removeSuffix("?")?.trim()?.takeIf { it.isNotEmpty() }
         ?: return null
     return runCatching { service.typeFromText(text, fileContext, enclosingClassFqnOf(ref)) }.getOrNull()
+}
+
+/** [text] with every `<…>` group removed (`Outer<*>.Inner<Int>` → `Outer.Inner`); a `->` inside is not a close. */
+internal fun eraseTypeArguments(text: String): String {
+    if ('<' !in text) return text
+    val out = StringBuilder(text.length)
+    var depth = 0
+    for ((i, ch) in text.withIndex()) {
+        when {
+            ch == '<' -> depth++
+            ch == '>' && text.getOrNull(i - 1) != '-' && depth > 0 -> depth--
+            depth == 0 -> out.append(ch)
+        }
+    }
+    return out.toString()
 }

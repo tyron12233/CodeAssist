@@ -2106,6 +2106,52 @@ class KotlinCompilerParityTest {
         clean("import kotlin.js.*\n@JsName(\"\")\npublic fun test() {}")
     }
 
+    /** A property typed only by its getter, and a setter parameter, take the getter's type; `get() = null` is `Nothing?`. */
+    @Test
+    fun aGetterOnlyPropertyIsTypedByItsGetter() {
+        assertCodes("val x get() = 1\nfun f() { val s: String = x }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        assertCodes("var y\n get() = 1\n set(q) { val s: String = q }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        clean("val n get() = null\nfun f() { val a: Nothing? = n }")
+    }
+
+    /** A lambda used as a value is a function type; references are `KFunctionN`; calling a call's result types. */
+    @Test
+    fun lambdaValuesAndFunctionReferencesAreTyped() {
+        assertCodes("fun f() = { 1 }\nfun t() { val a: String = f()() }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        assertCodes("fun foo(): Int = 1\nfun t() { val a: String = ::foo }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        clean("import kotlin.reflect.*\nfun foo(): Int = 1\nfun t() { val e: KFunction0<Int> = ::foo; val g: () -> Int = ::foo; val l = { s: String -> s.length }; val n: Int = l(\"x\") }")
+        clean("class A { companion object { val p: Int = 1 } }\nfun t() { val x = A::p; val n: Int = x.invoke() }")
+    }
+
+    /** `if`/`when` branches of different classes join into their common supertype (intersected when several). */
+    @Test
+    fun branchesOfDifferentClassesJoin() {
+        clean("interface A\ninterface B\ninterface C: A, B\ninterface D: A, B\nfun f(c: C?, d: D?) { val x: B? = if (true) c else d; val y: A? = if (true) c else d }")
+        assertCodes("interface O<T>\nclass S<T> : O<T>\nclass N<T> : O<T>\nfun <T> f(s: S<T>) { val a: Int = if (true) N<T>() else s }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+    }
+
+    /** A `val` assigned from one stable value on every path is an alias of it: a check on either narrows both. */
+    @Test
+    fun boundSmartCastsThroughAliases() {
+        clean("class A { val s = \"\" }\nfun f(a: Any, b: Boolean) { val x: Any\n if (b) x = a else x = a\n a as A\n x.s }")
+        assertCodes("fun f(a1: Any) { val a2: Any = a1\n if (a2 is String) { a1.length } }", KotlinDiagnosticCodes.UNRESOLVED)
+    }
+
+    /** Nearer scopes win: a class member over a same-named top-level function, a local operator over a top-level
+     *  one, and a local class that cannot take a call leaves it to the file's class. */
+    @Test
+    fun nearerDeclarationsWin() {
+        assertCodes("class O { fun foo(): String = \"\"\n fun act() { val a: Int = foo() } }\nfun foo() {}", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        clean("class E\nfun E.plus(o: E) = 0\nfun a() { operator fun E.plus(o: E) = \"\"\n val s: String = E() + E() }")
+        clean("class X(x: String)\nfun t() { class X(y: Int)\n X(\"\"); X(1) }")
+    }
+
+    /** `is Outer<*>.Inner<*>` narrows to the inner class, not the outer one. */
+    @Test
+    fun aQualifiedGenericIsTargetNarrowsToTheLastSegment() {
+        clean("class Outer<E> { inner class Inner<H> { val prop: E = null!! }\n fun f(y: Any?) { if (y is Outer<*>.Inner<*>) { y.prop } } }")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

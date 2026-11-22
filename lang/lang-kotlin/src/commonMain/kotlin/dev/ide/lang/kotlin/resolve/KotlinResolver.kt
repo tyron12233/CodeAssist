@@ -139,6 +139,10 @@ class KotlinResolverCaches {
      *  path too (K2 aliases a stable value and the `val` initialized with it). */
     var pathAliases: Map<String, List<String>>? = null
 
+    /** The local `val`s that may alias another name (no initializer, or a bare name as initializer), keyed by
+     *  their own name and by that initializer name; built once per snapshot for [aliasPartner]. */
+    var aliasCandidateNames: Set<String>? = null
+
     /** The names of this file's `@Deprecated(level = HIDDEN)` functions and properties (any depth), the cheap gate
      *  of the hidden-only resolution test. */
     var hiddenNames: Set<String>? = null

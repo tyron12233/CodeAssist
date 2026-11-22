@@ -276,8 +276,8 @@ class KotlinType(
             isComposable,
             projection,
             definitelyNonNull && !n,
-            // A nullable intersection is not what any smart cast leaves; nullability ends it.
-            if (n) emptyList() else intersection,
+            // `(A & B)?` stays an intersection (the join of a `C?` and a `D?` that are both `A` and `B`).
+            intersection,
         )
 
     /** A copy with the classifier [fqn] (same arguments, nullability, context) — for canonicalizing a JVM

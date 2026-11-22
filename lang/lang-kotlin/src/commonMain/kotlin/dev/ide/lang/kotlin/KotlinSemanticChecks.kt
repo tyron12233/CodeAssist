@@ -2445,6 +2445,8 @@ internal class KotlinSemanticChecks(
         // resolved-symbol checks instead. Only reached once a same-named top-level function exists, so the
         // scope walk stays off the common path.
         if (localFunctionsInScope(call, call.textRange.startOffset, name).isNotEmpty()) return null
+        // So does a member of an enclosing class or an implicit receiver.
+        if (resolver.enclosingClassMembersContain(call.textRange.startOffset, name)) return null
         // So does a nearer function-typed VALUE (a parameter `f: (T) -> R`, a local, a class property): the call
         // is its `invoke`, judged by the resolved-symbol checks.
         if (runCatching { resolver.nearerValueInvokeTargets(call, name) }.getOrNull() != null) return null
@@ -2539,6 +2541,10 @@ internal class KotlinSemanticChecks(
         if (call.valueArguments.any { it.isNamed() || it.getSpreadElement() != null }) return null
         val name = callee.getReferencedName()
         if (name.firstOrNull()?.isUpperCase() != true) return null
+        // A LOCAL class in scope that can take the call is what it constructs, whatever the file declares further out.
+        resolver.localTypesInScope(callee.textRange.startOffset)[name]?.let { local ->
+            if (resolver.localConstructorTakes(local, call)) return null
+        }
         val cls = sameFileClassNamed(call, name)
             ?: identityAliasTarget(call.containingKtFile, name)?.let { sameFileClassNamed(call, it) } ?: return null
         if (cls.isInterface() || cls.isAnnotation() || cls.isEnum() || cls.companionObjects.isNotEmpty()) return null
@@ -2555,6 +2561,19 @@ internal class KotlinSemanticChecks(
         if (ctors.none { n in it.count { p -> !p.hasDefaultValue() }..it.size } &&
             defaultImportedConstructorTakes(name, cls.fqName?.asString(), n)
         ) return null
+        // A LOCAL class that cannot take the call leaves it to the file's class of that name further out, when that
+        // one can (K2's tower moves on to the next level: `class X(y: Int)` in a function, `X("")` is the top-level
+        // `X(x: String)`).
+        if (cls.parent !is dev.ide.kotlin.syntax.psi.KtFile && cls.getStrictParentOfType<dev.ide.kotlin.syntax.psi.KtBlockExpression>() != null) {
+            val outer = call.containingKtFile.declarations.filterIsInstance<dev.ide.kotlin.syntax.psi.KtClass>().singleOrNull { it.name == name }
+            if (outer != null && outer !== cls && constructorParameterLists(outer).any { params ->
+                    n in params.count { p -> !p.hasDefaultValue() }..params.size && call.valueArguments.withIndex().all { (i, arg) ->
+                        val expr = arg.getArgumentExpression() ?: return@all true
+                        val pt = service.typeFromText(params.getOrNull(i)?.typeReference?.text, resolver.fileContext, null) ?: return@all true
+                        !isMismatch(pt, resolver.inferType(expr) ?: return@all true)
+                    }
+                }) return null
+        }
         if (ctors.none { n in it.count { p -> !p.hasDefaultValue() }..it.size }) {
             val arities = ctors.flatMap { it.count { p -> !p.hasDefaultValue() }..it.size }.distinct().sorted().joinToString("/")
             val r = call.valueArgumentList?.textRange ?: callee.textRange
@@ -3044,7 +3063,8 @@ internal class KotlinSemanticChecks(
     /** A Kotlin function type (`(T) -> R`), a receiver function type, or a `@Composable` function type — a
      *  functional argument/parameter slot, excluded from the positional type check (see [applicability]). */
     internal fun isFunctional(t: KotlinType): Boolean =
-        t.qualifiedName.startsWith("kotlin.Function") || t.isExtensionFunctionType || t.isComposable
+        t.qualifiedName.startsWith("kotlin.Function") || t.isExtensionFunctionType || t.isComposable ||
+            TypeRendering.reflectFunctionArity(t.qualifiedName) != null
 
     /** Whether [t] is a KNOWN, concrete, non-function type — a value that can NEVER satisfy a function-typed
      *  parameter (`Unit` from `onClick = handler()`, an `Int`, a data class). Gates the function-expected
@@ -3857,6 +3877,11 @@ internal class KotlinSemanticChecks(
         // a function (a known, non-function class that implements no function type) is a mismatch.
         if (isFunctional(d) || TypeRendering.isFunctionType(d.qualifiedName)) {
             return !isFunctional(a) && isConcreteNonFunction(a)
+        }
+        // A function value (a lambda's `() -> Int`) is never an instance of a concrete class that implements no
+        // function type: no conversion applies outside an argument position.
+        if ((isFunctional(a) || TypeRendering.isFunctionType(a.qualifiedName)) && a.typeArguments.isNotEmpty()) {
+            return isConcreteNonFunction(d) && !d.isAssignableFrom(a) && service.isInterfaceType(d.qualifiedName) != true
         }
         if (!service.isKnownType(d.qualifiedName) || !service.isKnownType(a.qualifiedName)) return false
         // Base types compatible — but a generic TYPE ARGUMENT may still definitely clash (`List<String>` vs

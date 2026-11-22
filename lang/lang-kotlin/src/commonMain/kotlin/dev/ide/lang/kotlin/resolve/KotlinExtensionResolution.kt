@@ -153,13 +153,20 @@ private fun KotlinResolver.typeParameterMemberExtensions(
     var node: KtElement? = elementAt(offset)
     while (node != null) {
         if (node is KtClassOrObject && node is KtTypeParameterListOwner && node.typeParameters.any { it.name == tp }) {
+            // A parameter bounded by another of the class's (`E1 : T`) is a `T` too, so `fun T.bar()` applies.
+            val chain = LinkedHashSet<String>()
+            var cur: String? = tp
+            while (cur != null && chain.add(cur)) {
+                val bound = node.typeParameters.firstOrNull { it.name == cur }?.extendsBound?.text?.trim()?.removeSuffix("?")?.trim()
+                cur = bound?.takeIf { b -> node.typeParameters.any { it.name == b } }
+            }
             for (d in node.declarations) {
                 if (d !is KtCallableDeclaration) continue
                 val name = d.name ?: continue
                 if (!matches(name)) continue
                 val recv = d.receiverTypeReference?.text?.trim()?.removeSuffix("?")?.trim() ?: continue
-                if (recv != tp) continue
-                sameFileMemberExtension(d, tp)?.let { out += it }
+                if (recv !in chain) continue
+                sameFileMemberExtension(d, recv)?.let { out += it }
             }
             break
         }
