@@ -2073,6 +2073,23 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** A builder variable is fixed by `in` in a `when` branch and by an `is`/`as` against a generic class written bare
+     *  (bare type inference reads the value's type): an argument for it afterwards must fit what it was fixed to. */
+    @Test
+    fun builderVariableFixedByWhenInAndBareTypeChecks() {
+        val decls = "class TypeVariableOwner<T> { fun constrain(subtypeValue: T) {}; fun provide(): T = null!! }\n" +
+            "fun <OT> pcla(lambda: (TypeVariableOwner<OT>) -> Unit): OT = null!!\ninterface BaseType\n" +
+            "class ScopeOwner : BaseType { operator fun contains(x: Any): Boolean = true }\nobject Value\nobject Interloper : BaseType\n" +
+            "open class G<A> : BaseType\nopen class GS<B> : G<B>()\ninterface Arg\n"
+        val fixed = decls + "fun t() {\n" +
+            "    pcla { o -> o.constrain(ScopeOwner()); when (Value) { in o.provide() -> Unit }; o.constrain(Interloper) }\n" +
+            "    pcla { o -> o.constrain(G<Arg>()); if (o.provide() is GS) Unit; o.constrain(Interloper) }\n}"
+        assertEquals(List(2) { KotlinDiagnosticCodes.TYPE_MISMATCH }, errors(fixed).map { it.code }, "for `$fixed`")
+        val open = decls + "fun t() {\n" +
+            "    pcla { o -> o.constrain(G<Arg>()); if (o.provide() is GS<*>) Unit; o.constrain(Interloper) }\n}"
+        assertEquals(emptyList(), errors(open).map { it.code }, "for `$open`")
+    }
+
     /** A component of a destructured lambda parameter is a `val` like any parameter: a null check smart casts it. */
     @Test
     fun destructuredLambdaComponentSmartCasts() {

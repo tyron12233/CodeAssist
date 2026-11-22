@@ -1,6 +1,13 @@
 package dev.ide.lang.kotlin.resolve
 
 import dev.ide.kotlin.syntax.psi.KtArrayAccessExpression
+import dev.ide.kotlin.syntax.psi.KtBinaryExpressionWithTypeRHS
+import dev.ide.kotlin.syntax.psi.KtIsExpression
+import dev.ide.kotlin.syntax.psi.KtTypeReference
+import dev.ide.kotlin.syntax.psi.KtUserType
+import dev.ide.kotlin.syntax.psi.KtWhenConditionInRange
+import dev.ide.kotlin.syntax.psi.KtWhenConditionIsPattern
+import dev.ide.kotlin.syntax.psi.KtWhenExpression
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
 import dev.ide.kotlin.syntax.psi.KtCallableReferenceExpression
@@ -142,11 +149,18 @@ private fun KotlinResolver.collectArgumentBounds(call: KtCallExpression, sym: Ko
 }
 
 /** Whether [e] is a use of a value typed by the bare [variable] that needs that type's members. Equality,
- *  identity, `is`, `as` and a string template do not; `++`/`--` are left alone too. */
+ *  identity, a string template and an `is`/`as` against a fully written type do not; `++`/`--` are left alone
+ *  too. An `is`/`as` against a generic class written bare (`is GenericSubtype`) does: bare type inference takes the
+ *  missing type arguments from the value's type, which must be fixed for that. */
 private fun KotlinResolver.needsMembers(e: KtElement, variable: String): Boolean {
     fun typed(x: KtExpression?): Boolean =
         x != null && inferType(x)?.let { isBareVariable(it, variable) } == true
     return when (e) {
+        is KtWhenConditionInRange -> typed(e.rangeExpression)
+        is KtIsExpression -> bareGenericType(e.typeReference) && typed(e.leftHandSide)
+        is KtBinaryExpressionWithTypeRHS -> bareGenericType(e.right) && typed(e.left)
+        is KtWhenConditionIsPattern -> bareGenericType(e.typeReference) &&
+            (e.parent?.parent as? KtWhenExpression)?.let { w -> w.subjectVariable == null && typed(w.subjectExpression) } == true
         is KtQualifiedExpression -> e.selectorExpression != null && typed(e.receiverExpression)
         is KtCallableReferenceExpression -> typed(e.receiverExpression)
         is KtArrayAccessExpression -> typed(e.arrayExpression)
@@ -159,6 +173,15 @@ private fun KotlinResolver.needsMembers(e: KtElement, variable: String): Boolean
         }
         else -> false
     }
+}
+
+/** A written type naming a generic class without its type arguments (`GenericScopeOwnerSubtype`), which bare type
+ *  inference completes from the checked value's type. */
+private fun KotlinResolver.bareGenericType(ref: KtTypeReference?): Boolean {
+    val user = ref?.typeElement as? KtUserType ?: return false
+    if (user.typeArgumentList != null) return false
+    val fqn = service.resolveTypeName(user.text, fileContext) ?: return false
+    return service.classTypeParameters(fqn).isNotEmpty()
 }
 
 private val UNARY_OPERATORS = setOf(KtTokens.PLUS, KtTokens.MINUS, KtTokens.EXCL)
