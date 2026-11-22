@@ -1986,6 +1986,27 @@ class KotlinCompilerParityTest {
         }
     }
 
+    /** The last two strays: a generic operator's own type parameters bind from its operand, a delegated property is
+     *  typed by its delegate's `provideDelegate`/`getValue` (a member extension declared in the class included),
+     *  and a builder's type variable is fixed on demand when its value is needed mid-lambda. */
+    @Test
+    fun genericOperatorsDelegateConventionAndFixationOnDemand() {
+        val parsers = "abstract class Parser<out T>\nclass TP<T, R> : Parser<R>()\nclass IP : Parser<Unit>()\n" +
+            "operator fun <T> IP.plus(other: Parser<T>): TP<Pair<Unit, T>, T> = TODO()\n"
+        val op = parsers + "fun f(a: IP, b: Parser<String>) { val x: TP<Pair<Unit, String>, String> = a + b; val y: Int = a + b }"
+        assertEquals(listOf(KotlinDiagnosticCodes.TYPE_MISMATCH), errors(op).map { it.code }, "for `$op`")
+        val delegate = "import kotlin.reflect.KProperty\n" + parsers + "class M {\n val b: Parser<String> = TODO()\n val top by IP() + b\n" +
+            " fun use() { val x: Int = top }\n" +
+            " operator fun <T, R> TP<T, R>.getValue(thisRef: M, property: KProperty<*>): TP<T, R> = TODO()\n}"
+        assertEquals(listOf(KotlinDiagnosticCodes.TYPE_MISMATCH), errors(delegate).map { it.code }, "for `$delegate`")
+        val pcla = "class Controller<T> { fun yield(t: T): Boolean = true; fun get(): T = TODO() }\n" +
+            "fun <S> generate(g: suspend Controller<S>.() -> Unit): S = TODO()\ninterface A { val a: Any }\ninterface B : A { val b: Any }\n" +
+            "fun <R> myWith(r: R, b: R.() -> Unit) {}\n" +
+            "fun main(aI: A, bI: B) {\n val x = generate { yield(bI); myWith(get()) { this.b }; yield(aI) }\n x.b\n}"
+        val pclaErrors = errors(pcla)
+        assertEquals(listOf(KotlinDiagnosticCodes.TYPE_MISMATCH), pclaErrors.map { it.code }, "for `$pcla`: $pclaErrors")
+    }
+
     /** A builder lambda's receiver takes the call's explicit type arguments: inside `buildMap<String, MutableList<C>> { }`
      *  `this` is a `MutableMap<String, MutableList<C>>`, so `getOrPut(k) { ArrayList() }` is a `MutableList<C>`. */
     @Test

@@ -10,10 +10,12 @@ import dev.ide.kotlin.syntax.psi.KtLambdaExpression
 import dev.ide.kotlin.syntax.psi.KtParameter
 import dev.ide.kotlin.syntax.psi.KtParameterList
 import dev.ide.kotlin.syntax.psi.KtProperty
+import dev.ide.lang.kotlin.symbols.Builtins
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.kotlin.symbols.varargArrayText
 import dev.ide.lang.resolve.SymbolKind
+import dev.ide.lang.resolve.TypeRef
 
 /** Declaration typing: delegated properties, destructuring components, loop variables, and parameter/local symbols. */
 
@@ -149,11 +151,45 @@ private inline fun KotlinResolver.cachedLocalSymbol(
     return build().also { caches.localSymbols[decl] = it }
 }
 
-/** A `by`-delegated property's value type: the type of the delegate's `value` member (the State/Lazy
- *  `.value` convention — `by remember { mutableStateOf("") }` types as `String`). Null for a delegate that
- *  exposes no `value`, so we never fabricate a type for an unmodeled getValue convention. */
-internal fun KotlinResolver.delegatedValueType(delegate: KtExpression): KotlinType? =
-    inferType(delegate)?.let { memberNamed(it, "value")?.type as? KotlinType }
+/**
+ * A `by`-delegated property's value type, by the delegate convention: the delegate (after its
+ * `provideDelegate(thisRef, property)`, when it has one) answers `getValue(thisRef, property)`, a member, an
+ * extension, or a member extension declared around the property (`operator fun <T, R> Parser<T, R>.getValue(…)`
+ * in the class). Where no such operator is found (an unmodeled library), the delegate's `value` member stands in
+ * for it (the State/Lazy convention: `by remember { mutableStateOf("") }` is a `String`). Null when neither
+ * answers, so no type is made up.
+ */
+internal fun KotlinResolver.delegatedValueType(delegate: KtExpression): KotlinType? {
+    var d = inferType(delegate) ?: return null
+    delegateOperatorResult(d, "provideDelegate", delegate)?.let { d = it }
+    delegateOperatorResult(d, "getValue", delegate)?.let { return it }
+    return memberNamed(d, "value")?.type as? KotlinType
+}
+
+/** The result type of the delegate operator [name] (`provideDelegate`/`getValue`, two parameters) on [receiver],
+ *  bound to it; null when it has none or its result is still a bare type variable. */
+private fun KotlinResolver.delegateOperatorResult(receiver: KotlinType, name: String, at: KtExpression): KotlinType? {
+    if (receiver.isTypeParameter) return null
+    val offset = at.textRange.startOffset
+    val candidates = service.membersNamed(receiver.qualifiedName, receiver.typeArguments, name) +
+        scopeMemberExtensions(offset, receiver, name, exactName = true)
+    val op = candidates.firstOrNull { it.name == name && it.kind == SymbolKind.METHOD && it.paramTypes.size == 2 &&
+        (!it.isExtension || it.owner != null || extensionInScope(it)) } ?: return null
+    val ret = op.type as? KotlinType ?: return null
+    // A member extension found in scope is not yet bound to this receiver (`TransformParser<T, R>.getValue`
+    // given a `TransformParser<Pair<Unit, String>, String>`): bind its own type parameters from it.
+    val receiverArgs = op.receiverTypeArgs
+    val bound = if (op.typeParameters.isEmpty() || receiverArgs.isEmpty()) ret else {
+        val recvFqn = op.receiverTypeFqn?.let { Builtins.kotlinTypeFor(it) ?: it }
+        val actual = if (recvFqn == null || recvFqn == receiver.qualifiedName) receiver.typeArguments
+            else service.receiverSupertypeArgs(receiver.qualifiedName, receiver.typeArguments, recvFqn) ?: receiver.typeArguments
+        val bindings = HashMap<String, TypeRef>()
+        receiverArgs.zip(actual).forEach { (p, a) -> if (p is KotlinType && a is KotlinType) unify(p, a, bindings) }
+        bindings.keys.retainAll(op.typeParameters.toSet())
+        service.substitute(ret, bindings) as? KotlinType ?: ret
+    }
+    return bound.takeIf { !it.isTypeParameter }
+}
 
 /**
  * Names bound by a destructuring declaration (`val (a, b) = …`, `for ((k, v) in …)`, `{ (k, v) -> }`),

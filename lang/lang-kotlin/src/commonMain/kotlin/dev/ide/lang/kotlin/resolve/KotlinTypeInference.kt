@@ -275,7 +275,16 @@ internal fun KotlinResolver.arithmeticOperatorReturn(
             )
         } == true
     }
-    return mostSpecificByReceiver(applicable, leftType)?.type as? KotlinType
+    val sym = mostSpecificByReceiver(applicable, leftType) ?: return null
+    val ret = sym.type as? KotlinType ?: return null
+    // A generic operator's own type parameters bind from the right operand (`operator fun <T> P.plus(other:
+    // Parser<T>): Transform<T>` given a `Parser<String>` is a `Transform<String>`). An unbound one stays as is.
+    if (sym.typeParameters.isEmpty() || rightType == null) return ret
+    val param = sym.paramTypes.first() as? KotlinType ?: return ret
+    val bindings = HashMap<String, TypeRef>()
+    unify(param, rightType, bindings)
+    bindings.keys.retainAll(sym.typeParameters.toSet())
+    return if (bindings.isEmpty()) ret else service.substitute(ret, bindings) as? KotlinType ?: ret
 }
 
 /**

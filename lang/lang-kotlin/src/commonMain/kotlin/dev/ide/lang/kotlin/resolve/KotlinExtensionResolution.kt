@@ -381,10 +381,13 @@ internal fun KotlinResolver.sameFileMemberExtension(
     receiverFqn: String
 ): KotlinSymbol? {
     val name = d.name ?: return null
-    val recvArgs = service.typeFromText(
-        d.receiverTypeReference?.text,
-        fileContext
-    )?.typeArguments ?: emptyList()
+    // The declaration's OWN type parameters (`fun <T, R> Parser<T, R>.getValue(…): Parser<T, R>`) are marked as
+    // such, so a receiver binds them as it does an indexed extension's.
+    val tps = d.typeParameters.mapNotNull { it.name }
+    val tpSet = tps.toSet()
+    fun typed(text: String?): KotlinType? =
+        service.typeFromText(text, fileContext)?.let { if (tpSet.isEmpty()) it else service.markTypeParameters(it, tpSet) }
+    val recvArgs = typed(d.receiverTypeReference?.text)?.typeArguments ?: emptyList()
     val declNode = runCatching { parsed.adapt(d) }.getOrNull()
     return when (d) {
         is KtNamedFunction -> {
@@ -392,11 +395,12 @@ internal fun KotlinResolver.sameFileMemberExtension(
             val retText = d.typeReference?.text
             KotlinSymbol(
                 name = name, kind = SymbolKind.METHOD,
-                type = retText?.let { service.typeFromText(it, fileContext) },
+                type = retText?.let { typed(it) },
                 origin = SOURCE, receiverTypeFqn = receiverFqn,
                 signature = "(" + params.joinToString(", ") { (n, t) -> "$n: ${t ?: "?"}" } + ")" + (retText?.let { ": $it" }
                     ?: ""),
-                paramTypes = params.map { (_, t) -> service.typeFromText(t, fileContext) },
+                typeParameters = tps,
+                paramTypes = params.map { (_, t) -> typed(t) },
                 paramNames = params.map { (n, _) -> n },
                 paramHasDefault = d.valueParameters.map { it.hasDefaultValue() },
                 varargParamIndex = d.valueParameters.indexOfFirst { it.isVarArg },
