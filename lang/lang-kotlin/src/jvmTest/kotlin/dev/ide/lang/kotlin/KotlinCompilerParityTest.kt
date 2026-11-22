@@ -2073,6 +2073,20 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** Every argument a projected receiver's member cannot take is reported, vararg elements included; a spread
+     *  array of the projection's bound is no `Array<out CapturedType(out B)>`. */
+    @Test
+    fun projectedOutEveryArgumentAndVarargs() {
+        val code = "class A<T> { fun foo(x: T, y: T) {}\n fun bar(vararg x: T) {} }\n" +
+            "fun t(a: A<out CharSequence>, y: Array<out CharSequence>) { a.foo(\"\", \"\"); a.bar(\"\", \"\"); a.bar(*y) }"
+        assertEquals(
+            List(4) { KotlinDiagnosticCodes.MEMBER_PROJECTED_OUT } + KotlinDiagnosticCodes.TYPE_MISMATCH,
+            errors(code).map { it.code }.sortedBy { it != KotlinDiagnosticCodes.MEMBER_PROJECTED_OUT }, "for `$code`",
+        )
+        val ok = "class A<T> { fun bar(vararg x: T) {} }\nfun t(a: A<in CharSequence>, y: Array<String>) { a.bar(\"\", \"x\"); a.bar(*y) }"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** A builder variable is fixed by `in` in a `when` branch and by an `is`/`as` against a generic class written bare
      *  (bare type inference reads the value's type): an argument for it afterwards must fit what it was fixed to. */
     @Test

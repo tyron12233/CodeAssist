@@ -45,13 +45,16 @@ import dev.ide.lang.resolve.SymbolKind
  * captured type the parameter wants, so anything else is left alone. Only a member that is the one candidate of
  * its name and arity is judged; overloads (`In<*>.f("1")` against `f(T)` and `f(Int)`) are the compiler's.
  */
-internal fun KotlinSemanticChecks.memberProjectedOut(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
-    val pm = projectedMember(call, resolver) ?: return null
+internal fun KotlinSemanticChecks.memberProjectedOut(call: KtCallExpression, resolver: KotlinResolver): List<Diagnostic> {
+    val pm = projectedMember(call, resolver) ?: return emptyList()
     val (name, typeRef, projections, _, tps, variances, member) = pm
-    if (projections.none { it.projectionKind == KtProjectionKind.OUT || it.projectionKind == KtProjectionKind.STAR }) return null
+    if (projections.none { it.projectionKind == KtProjectionKind.OUT || it.projectionKind == KtProjectionKind.STAR }) return emptyList()
     val args = call.valueArguments
+    val out = ArrayList<Diagnostic>()
     for ((i, arg) in args.withIndex()) {
-        val p = member.paramTypes.getOrNull(i) as? KotlinType ?: continue
+        // A spread hands an array to the vararg: no single value of the parameter's type ([projectedArgumentMismatch]).
+        if (arg.isSpread) continue
+        val p = member.paramTypes.getOrNull(parameterIndex(member, i)) as? KotlinType ?: continue
         if (!p.isTypeParameter) continue
         val k = tps.indexOf(p.qualifiedName)
         if (k < 0) continue
@@ -66,15 +69,19 @@ internal fun KotlinSemanticChecks.memberProjectedOut(call: KtCallExpression, res
         if (!plainlyTyped(value, resolver)) continue
         val r = value.textRange
         val kind = if (projections[k].projectionKind == KtProjectionKind.STAR) "a star" else "an 'out'"
-        return Diagnostic(
+        out += Diagnostic(
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,
             "'$name' cannot be called with this argument: the receiver type '${typeRef.text}' has $kind projection, " +
                 "and the parameter takes its '${p.qualifiedName}'",
             KotlinDiagnosticCodes.MEMBER_PROJECTED_OUT,
         )
     }
-    return null
+    return out
 }
+
+/** The parameter argument [i] lands on: a trailing vararg takes every argument from its position on. */
+private fun parameterIndex(member: dev.ide.lang.kotlin.symbols.KotlinSymbol, i: Int): Int =
+    if (member.varargParamIndex in 0..i) member.varargParamIndex else i
 
 /**
  * ARGUMENT_TYPE_MISMATCH where a projected receiver's type argument sits INSIDE a member's parameter type:
@@ -87,7 +94,10 @@ internal fun KotlinSemanticChecks.memberProjectedOut(call: KtCallExpression, res
  * and only for an argument whose type is read rather than inferred (a literal, a name with a written type, a call
  * whose type arguments are all written): an inferred one (`x.addAll(c())`) takes its type from the parameter.
  */
-internal fun KotlinSemanticChecks.projectedArgumentMismatch(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
+internal fun KotlinSemanticChecks.projectedArgumentMismatch(call: KtCallExpression, resolver: KotlinResolver): List<Diagnostic> =
+    projectedArgumentMismatchOrNull(call, resolver).orEmpty()
+
+private fun KotlinSemanticChecks.projectedArgumentMismatchOrNull(call: KtCallExpression, resolver: KotlinResolver): List<Diagnostic>? {
     val (_, typeRef, projections, fqn, tps, variances, member) = projectedMember(call, resolver) ?: return null
     val decl = (service.sourceClass(fqn)?.node as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? KtClassOrObject
     // A `where` clause bounds a parameter where the declared bound list does not say.
@@ -119,23 +129,25 @@ internal fun KotlinSemanticChecks.projectedArgumentMismatch(call: KtCallExpressi
     }
     if (captured.isEmpty()) return null
     val subtyping = KotlinStrictSubtyping(service, captured = captured)
+    val out = ArrayList<Diagnostic>()
     for ((i, arg) in call.valueArguments.withIndex()) {
-        val p = member.paramTypes.getOrNull(i) as? KotlinType ?: continue
+        val element = member.paramTypes.getOrNull(parameterIndex(member, i)) as? KotlinType ?: continue
+        // A spread hands the vararg an array of its elements: `Array<out T>`.
+        val p = if (arg.isSpread) KotlinType("kotlin.Array", listOf(element.withProjection("out"))) else element
         if (p.isTypeParameter) continue
-        if (i == member.varargParamIndex) continue
         val substituted = substituteKeepingNullability(p, bindings)
         if (!mentionsCaptured(substituted)) continue
         val value = arg.getArgumentExpression() ?: continue
         val actual = readArgumentType(value, resolver) ?: continue
         if (subtyping.subtype(actual, substituted) != false) continue
         val r = value.textRange
-        return Diagnostic(
+        out += Diagnostic(
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,
             "Argument type mismatch: actual type is '${renderType(actual)}', but '${renderCaptured(substituted, captured)}' was expected",
             KotlinDiagnosticCodes.TYPE_MISMATCH,
         )
     }
-    return null
+    return out
 }
 
 private fun mentionsCaptured(t: KotlinType): Boolean =
@@ -187,7 +199,7 @@ private fun KotlinSemanticChecks.projectedMember(call: KtCallExpression, resolve
     val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
     if (call.typeArgumentList != null) return null
     val args = call.valueArguments
-    if (args.isEmpty() || args.any { it.getArgumentName() != null || it.isSpread }) return null
+    if (args.isEmpty() || args.any { it.getArgumentName() != null }) return null
     val typeRef = declaredReceiverType(dot.receiverExpression, resolver) ?: return null
     val user = typeRef.typeElement as? KtUserType ?: return null
     val projections = user.typeArguments
@@ -217,7 +229,10 @@ private fun KotlinSemanticChecks.projectedMember(call: KtCallExpression, resolve
     val all = service.membersNamed(fqn, generic, name).filter { it.name == name && it.kind == SymbolKind.METHOD }
     if (all.isEmpty() || all.any { it.isExtension }) return null
     val fits = all.filter { m ->
-        m.varargParamIndex < 0 && m.paramTypes.size >= args.size &&
+        if (m.varargParamIndex >= 0) {
+            // A trailing vararg takes every argument from its position on.
+            m.varargParamIndex == m.paramTypes.size - 1 && args.size >= m.varargParamIndex
+        } else m.paramTypes.size >= args.size && args.none { it.isSpread } &&
             (args.size until m.paramTypes.size).all { i -> m.paramHasDefault.getOrNull(i) == true }
     }
     // An override and the member it overrides both list (`MutableList.add` and `MutableCollection.add`): one signature.

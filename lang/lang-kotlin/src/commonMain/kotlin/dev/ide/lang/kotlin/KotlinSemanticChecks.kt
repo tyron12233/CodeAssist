@@ -381,10 +381,14 @@ internal class KotlinSemanticChecks(
                         reportAll(notApplicable)
                         // Only for the one candidate: with several, K2 reports the call as NONE_APPLICABLE instead.
                         if (firstBad?.second != null && mismatches.size == notApplicable.size) report(missingRequiredArgument(psi, resolver))
-                    } else report(
-                        countBad ?: missingRequiredArgument(psi, resolver) ?: nullArgumentForNonNull(psi, resolver)
-                            ?: if (resolveReady) memberProjectedOut(psi, resolver) ?: projectedArgumentMismatch(psi, resolver) else null,
-                    )
+                    } else {
+                        val other = countBad ?: missingRequiredArgument(psi, resolver) ?: nullArgumentForNonNull(psi, resolver)
+                        if (other != null) report(other)
+                        else if (resolveReady) {
+                            // K2 reports every argument a projected receiver's member cannot take.
+                            reportAll(memberProjectedOut(psi, resolver) + projectedArgumentMismatch(psi, resolver))
+                        }
+                    }
                 }
                 KotlinPerf.span("call.ambiguity") { if (resolveReady) report(overloadAmbiguity(psi, resolver)) }
                 KotlinPerf.span("call.typeArgBounds") {
