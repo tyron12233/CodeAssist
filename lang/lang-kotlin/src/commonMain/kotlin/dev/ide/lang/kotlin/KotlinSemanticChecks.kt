@@ -3644,6 +3644,15 @@ internal class KotlinSemanticChecks(
      * spared too: under-reporting there is the conservative side.
      */
     private fun callAcceptsNullableReceiver(expr: KtDotQualifiedExpression, resolver: KotlinResolver): Boolean {
+        // A property read: an extension PROPERTY declared on a nullable receiver (`val <K> K?.vfoo0`) takes one too.
+        (expr.selectorExpression as? KtNameReferenceExpression)?.getReferencedName()?.let { sel ->
+            return service.topLevelByName(sel).any { it.kind == SymbolKind.FIELD && extensionAcceptsNull(it) } ||
+                resolver.ktFile.declarations.any { d ->
+                    d is KtProperty && d.name == sel && d.receiverTypeReference != null &&
+                        (resolver.sameFileProperty(d, null).let { extensionAcceptsNull(it) } ||
+                            d.receiverTypeReference!!.text.trim().let { r -> r.endsWith("?") || d.typeParameters.any { tp -> tp.name == r && (tp.extendsBound == null || tp.extendsBound!!.text.trim().endsWith("?")) } })
+                }
+        }
         val call = expr.selectorExpression as? KtCallExpression ?: return false
         val callee = runCatching { resolver.resolveCalleeFunction(call) }.getOrNull() ?: return false
         // On a nullable receiver a member is not applicable at all, so an extension declared on the nullable
@@ -4388,13 +4397,40 @@ internal class KotlinSemanticChecks(
         }
     }
 
+    /** How many upper bounds the type parameter [name] in scope at [at] declares (its `: B` plus its `where` lines). */
+    private fun typeParameterBoundCount(at: KtElement, name: String): Int {
+        var node: KtElement? = at
+        while (node != null) {
+            if (node is KtTypeParameterListOwner) {
+                val tp = node.typeParameters.firstOrNull { it.name == name }
+                if (tp != null) return (if (tp.extendsBound != null) 1 else 0) +
+                    node.typeConstraints.count { it.subjectTypeParameterName?.getReferencedName() == name }
+            }
+            node = node.parent as? KtElement
+        }
+        return 0
+    }
+
     internal fun checkArgsAgainstBounds(args: List<KtTypeProjection>, bounds: List<KotlinType?>, resolver: KotlinResolver): List<Diagnostic> {
         val out = ArrayList<Diagnostic>()
         args.forEachIndexed { i, proj ->
             if (proj.projectionKind == KtProjectionKind.STAR) return@forEachIndexed
             val bound = bounds.getOrNull(i) ?: return@forEachIndexed
             val argRef = proj.typeReference ?: return@forEachIndexed
-            val argType = service.typeFromText(argRef.text, resolver.fileContext, enclosingClassFqnOf(argRef))
+            // A type parameter in scope (which may shadow a class of the same name, `interface A<out A : …> :
+            // Base<A, K>`) is judged by the type-parameter-aware bound check, not as a classifier.
+            val bare = argRef.text.trim().removeSuffix("?")
+            // A type parameter in scope (which may shadow a class of the same name, `class H<E : String> : F<E>`
+            // beside a `class E`) stands for its own upper bound; an unbounded one, or one bounded by another
+            // parameter, cannot be judged here.
+            val asTypeParameter = bare.all { it.isLetterOrDigit() || it == '_' } && resolver.isTypeParameterInScope(bare, argRef.textRange.startOffset)
+            // A parameter with several bounds (`where E : X, E : Y`) is their intersection, which one bound cannot speak for.
+            if (asTypeParameter && typeParameterBoundCount(argRef, bare) > 1) return@forEachIndexed
+            // An unambiguous type parameter is [KotlinBoundChecks]'s; only one that shadows a class of its name (which
+            // that check leaves alone) is judged here.
+            if (asTypeParameter && service.resolveTypeName(bare, resolver.fileContext, enclosingClassFqnOf(argRef))?.let { service.isKnownType(it) } != true) return@forEachIndexed
+            val argType = (if (asTypeParameter) resolver.typeParameterUpperBound(bare, argRef.textRange.startOffset)?.takeIf { !it.isTypeParameter } ?: return@forEachIndexed
+                else service.typeFromText(argRef.text, resolver.fileContext, enclosingClassFqnOf(argRef)))
                 ?: return@forEachIndexed
             if (boundViolated(argType, bound)) {
                 val r = argRef.textRange

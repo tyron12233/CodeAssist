@@ -210,9 +210,10 @@ class KotlinResolver(
 ) {
     val fileContext: FileContext = run {
         val imports = ktFile.importDirectives.mapNotNull { imp ->
-            imp.importedFqName?.asString()?.let { ImportInfo(it, imp.aliasName, imp.isAllUnder) }
+            // A backticked segment is a name like any other (`` `a bc`.`d e` `` and `` `a bc.d e` `` both name `a bc.d e`).
+            imp.importedFqName?.asString()?.let { ImportInfo(it.replace("`", ""), imp.aliasName, imp.isAllUnder) }
         }
-        FileContext(ktFile.name, ktFile.packageFqName.asString(), imports)
+        FileContext(ktFile.name, ktFile.packageFqName.asString().replace("`", ""), imports)
     }
 
     // --- inference ---

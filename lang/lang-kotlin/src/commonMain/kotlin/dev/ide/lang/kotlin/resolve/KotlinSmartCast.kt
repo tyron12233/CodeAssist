@@ -616,15 +616,20 @@ internal fun KotlinResolver.conditionNarrowing(
 ): KotlinType? =
     when (val c = unwrapParens(cond)) {
         is KtIsExpression -> {
-            if (whenTrue != c.isNegated && subjectMatches(c.leftHandSide, name)) typeFromIsTarget(c.typeReference) else null
+            // `is T?` admits null: the value is a `T?` there, not a `T`.
+            if (whenTrue != c.isNegated && subjectMatches(c.leftHandSide, name)) typeFromIsTarget(c.typeReference)
+                ?.let { if (c.typeReference?.text?.trim()?.endsWith("?") == true) it.withNullable(true) else it } else null
         }
 
         is KtBinaryExpression -> when (c.operationToken) {
             KtTokens.ANDAND -> if (whenTrue) conditionNarrowing(c.left, name, true)
                 ?: conditionNarrowing(c.right, name, true) else null
 
+            // `x is A || x is B` taken true: `x` is one or the other, so their nearest common supertype (K2's join
+            // of the two branches' type statements).
             KtTokens.OROR -> if (!whenTrue) conditionNarrowing(c.left, name, false)
-                ?: conditionNarrowing(c.right, name, false) else null
+                ?: conditionNarrowing(c.right, name, false)
+                else joinNarrowings(conditionNarrowing(c.left, name, true), conditionNarrowing(c.right, name, true))
 
             KtTokens.EQEQ, KtTokens.EQEQEQ -> if (whenTrue) equalityNarrowing(c, name) else nonNullSafeCastNarrowing(c, name)
             KtTokens.EXCLEQ, KtTokens.EXCLEQEQEQ -> if (!whenTrue) equalityNarrowing(c, name) else nonNullSafeCastNarrowing(c, name)
@@ -632,8 +637,19 @@ internal fun KotlinResolver.conditionNarrowing(
             else -> null
         }
 
+        // `!cond` holds exactly when `cond` does not.
+        is dev.ide.kotlin.syntax.psi.KtPrefixExpression ->
+            if (c.operationToken == KtTokens.EXCL) conditionNarrowing(c.baseExpression, name, !whenTrue) else null
+
         else -> null
     }
+
+/** The join of two alternative narrowings: their nearest common supertype, null if either says nothing. */
+private fun KotlinResolver.joinNarrowings(a: KotlinType?, b: KotlinType?): KotlinType? {
+    if (a == null || b == null) return null
+    if (a.qualifiedName == b.qualifiedName) return a
+    return commonSupertypesType(listOf(a, b))
+}
 
 /**
  * A comparison with `null` known to fail, of a value rooted in a safe cast of the subject: `(x as? T) != null`,

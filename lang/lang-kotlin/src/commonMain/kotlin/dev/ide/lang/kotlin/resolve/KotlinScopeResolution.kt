@@ -696,7 +696,8 @@ fun KotlinResolver.isTypeParameterInScope(name: String, offset: Int): Boolean {
         // A `where AA : …` naming no declared parameter makes `AA` one anyway (K2 reports only the constraint,
         // NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER, and the declaration then uses `AA` as a type parameter).
         if (node is KtTypeParameterListOwner && node.typeParameterList != null &&
-            node.typeConstraints.any { it.subjectTypeParameterName?.getReferencedName() == name }) return true
+            node.typeConstraints.any { it.subjectTypeParameterName?.getReferencedName() == name } &&
+            service.resolveTypeName(name, fileContext, null)?.let { service.isKnownType(it) } != true) return true
         node = node.parent
     }
     return false

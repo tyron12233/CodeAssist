@@ -474,9 +474,9 @@ object SourceIndexBuilder {
     }
 
     fun extractFrom(kt: KtFile, parsed: KotlinParsedFile, path: String): SourceFile {
-        val pkg = kt.packageFqName.asString()
+        val pkg = kt.packageFqName.asString().replace("`", "")
         val imports = kt.importDirectives.mapNotNull { imp ->
-            val fq = imp.importedFqName?.asString() ?: return@mapNotNull null
+            val fq = imp.importedFqName?.asString()?.replace("`", "") ?: return@mapNotNull null
             ImportInfo(fq, imp.aliasName, imp.isAllUnder)
         }
         val text = kt.text
@@ -744,7 +744,7 @@ object SourceIndexBuilder {
             p = p.parent
         }
         val file = decl.containingKtFile
-        val pkg = file.packageFqName.asString()
+        val pkg = file.packageFqName.asString().replace("`", "")
         val facade = file.name.removeSuffix(".kt").replaceFirstChar { it.uppercase() } + "Kt"
         return if (pkg.isEmpty()) facade else "$pkg.$facade"
     }
@@ -805,6 +805,15 @@ object SourceIndexBuilder {
                 is KtEnumEntry -> d.name?.let { enumEntries += it } // before KtClassOrObject
                 is KtNamedFunction -> members += callable(d, ctx, parsed)
                 is KtProperty -> members += property(d, ctx, parsed)
+                // `val (a, b) = …` in a class body is an error (NON_LOCAL_DESTRUCTURING_DECLARATION), after which
+                // K2 still declares `a` and `b` as the class's properties, so `o.b` resolves.
+                is dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration -> for (e in d.entries) {
+                    members += RawCallable(
+                        name = e.name ?: continue, isFunction = false, receiverText = null,
+                        returnText = e.typeReference?.text, initializerText = null, paramTexts = emptyList(),
+                        ctx = ctx, node = node(parsed, e),
+                    )
+                }
                 is KtClassOrObject -> {} // nested handled as their own top-level entries via fqName elsewhere
                 else -> {}
             }

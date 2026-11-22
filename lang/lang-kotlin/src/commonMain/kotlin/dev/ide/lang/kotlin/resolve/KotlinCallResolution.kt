@@ -1112,6 +1112,13 @@ internal fun KotlinResolver.receiverValueInvokeTargets(
     // (`val foo: O.() -> Unit` called as `O.foo()`) when no top-level function shares its name.
     val isValue = if (local != null) local.kind != SymbolKind.METHOD else innermostClassDeclaresValue(offset, name)
         ?: service.topLevelByName(name).let { top -> top.any { it.kind == SymbolKind.FIELD } && top.none { it.kind == SymbolKind.METHOD } }
+            .takeIf { it }
+        // A property of an implicit receiver, a member extension one included (`val B.foo: C.() -> Unit` declared in
+        // `A`, read inside `with(a) { with(b) { c.foo() } }`).
+        ?: implicitReceiversAt(offset).any { recv ->
+            service.membersNamed(recv.qualifiedName, recv.typeArguments, name).any { it.name == name && it.kind == SymbolKind.FIELD } ||
+                scopeMemberExtensions(offset, recv, name, exactName = true).any { it.name == name && it.kind == SymbolKind.FIELD }
+        }
     if (!isValue) return emptyList()
     val type = typeOfName(name, offset) ?: return emptyList()
     val shape = service.functionalShape(type)?.takeIf { it.isExtension } ?: return emptyList()
