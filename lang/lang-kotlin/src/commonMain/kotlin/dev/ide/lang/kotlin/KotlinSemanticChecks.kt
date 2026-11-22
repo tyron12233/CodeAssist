@@ -3927,8 +3927,9 @@ internal class KotlinSemanticChecks(
      */
     internal fun nullForNonNull(target: KotlinType?, value: KtExpression?): Diagnostic? {
         if (target == null || value == null || !isNullLiteral(value)) return null
-        if (target.nullable || target.isTypeParameter) return null
-        if (!service.isKnownType(canonicalTypeForCheck(target).qualifiedName)) return null
+        if (target.nullable) return null
+        // `T & Any` refuses `null` whatever `T` is.
+        if (!target.definitelyNonNull && (target.isTypeParameter || !service.isKnownType(canonicalTypeForCheck(target).qualifiedName))) return null
         val r = value.textRange
         return Diagnostic(
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,

@@ -21,6 +21,9 @@ import dev.ide.lang.resolve.TypeRef
 import dev.ide.platform.DataReader
 import dev.ide.platform.DataWriter
 
+/** `ACC_PUBLIC` of a class file's access flags. */
+private const val ACC_PUBLIC = 0x0001
+
 /**
  * `kotlin.typeShape` — the owner-keyed member-shape index for classpath BINARIES, the persistent backing
  * for the Kotlin backend's `membersOf`. Per `.class` it decodes the type's [TypeShape] (own members with
@@ -70,13 +73,13 @@ object KotlinTypeShapeIndex : IndexExtension<String, TypeShape> {
         // kotlin.* binary indexes for this class ([sharedMetadata]).
         sharedMetadata(input)?.let { d ->
             val fqn = d.classFqn ?: return emptyMap()
-            return mapOf(fqn to listOf(TypeShape.of(d, null)))
+            return mapOf(fqn to listOf(TypeShape.of(d, null).withPublic(classFile.accessFlags and ACC_PUBLIC != 0)))
         }
         val js = runCatching { JavaBytecode.read(classFile, null) }.getOrNull() ?: return emptyMap()
         // The consumer queries dotted FQNs (`Outer.Inner`); the entry is `Outer$Inner.class`.
         val fqn = input.unitName?.removeSuffix(".class")?.replace('/', '.')?.replace('$', '.')
             ?: return emptyMap()
-        return mapOf(fqn to listOf(TypeShape.of(js)))
+        return mapOf(fqn to listOf(TypeShape.of(js).withPublic(classFile.accessFlags and ACC_PUBLIC != 0)))
     }
 }
 
@@ -95,7 +98,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
      * diligently, `kotlin.builtins` now corrected). Increment FORMAT (never a per-index base) for every future
      * wire-format change here, and only ever increase it.
      */
-    const val FORMAT = 4 // 1: TypeShape.typeParameterVariances; 2: KotlinType.projection (use-site variance); 3: TypeShape.isFinalClass; 4: KotlinSymbol.isSuspend
+    const val FORMAT = 5 // 1: TypeShape.typeParameterVariances; 2: KotlinType.projection (use-site variance); 3: TypeShape.isFinalClass; 4: KotlinSymbol.isSuspend; 5: TypeShape.isPublic
 
     private val BINARY = SymbolOrigin(fromSource = false, file = null)
 
@@ -113,6 +116,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         out.writeBoolean(value.isAbstract)
         writeStrings(out, value.sealedSubclasses)
         out.writeBoolean(value.isFinalClass)
+        out.writeBoolean(value.isPublic)
     }
 
     override fun read(inp: DataReader): TypeShape {
@@ -128,6 +132,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         val isAbstract = inp.readBoolean()
         val sealedSubclasses = readStrings(inp)
         val isFinalClass = inp.readBoolean()
+        val isPublic = inp.readBoolean()
         return TypeShape(
             tps,
             bounds,
@@ -140,7 +145,8 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
             isInterface,
             isAbstract,
             sealedSubclasses,
-            isFinalClass
+            isFinalClass,
+            isPublic,
         )
     }
 

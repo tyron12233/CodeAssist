@@ -24,6 +24,11 @@ import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.kotlin.resolve.KotlinResolver
 import dev.ide.lang.kotlin.resolve.callTargets
 import dev.ide.lang.kotlin.resolve.discardedOrUntypedPosition
+import dev.ide.lang.kotlin.resolve.expectedLambdaShape
+import dev.ide.lang.kotlin.resolve.enclosingCallAndParamIndex
+import dev.ide.lang.kotlin.resolve.lambdaParamIndex
+import dev.ide.lang.kotlin.resolve.constructorCallee
+import dev.ide.lang.kotlin.resolve.resolveCalleeFunction
 import dev.ide.lang.kotlin.resolve.uninferableTypeParameters
 import dev.ide.lang.resolve.SymbolKind
 
@@ -49,6 +54,11 @@ internal fun KotlinSemanticChecks.lambdaInputInferenceCheckers(): List<KotlinChe
     KotlinChecker(KtCallExpression::class) { psi ->
         KotlinPerf.span("sem.ported.lambdaInput") {
             if (resolveReady) reportAll(uninferableLambdaInputs(psi as KtCallExpression, resolver))
+        }
+    },
+    KotlinChecker(KtLambdaExpression::class) { psi ->
+        KotlinPerf.span("sem.ported.expectedParamType") {
+            if (resolveReady) reportAll(expectedParameterTypeMismatches(psi as KtLambdaExpression, resolver))
         }
     },
     KotlinChecker(KtCallExpression::class) { psi ->
@@ -323,3 +333,53 @@ private fun mentions(t: KtElement?, names: Set<String>): Boolean {
     rec(t)
     return found
 }
+
+/**
+ * EXPECTED_PARAMETER_TYPE_MISMATCH: a lambda parameter written with a type (`{ f: String -> … }`) must accept what
+ * the expected function type passes it, so its declared type must be a supertype of the expected parameter type
+ * (`((Int) -> String) -> String` hands `f` a function, which a `String` cannot hold). Judged only when the lambda's
+ * arity matches the expected shape and both types are concrete.
+ */
+private fun KotlinSemanticChecks.expectedParameterTypeMismatches(lambda: KtLambdaExpression, resolver: KotlinResolver): List<Diagnostic> {
+    val params = lambda.valueParameters
+    if (params.none { it.typeReference != null }) return emptyList()
+    // A slot whose input types are the callee's own type variables (`select(vararg x: T)`, `id(x: K)`) takes the
+    // written parameter type as a constraint on them, not as something to check against.
+    resolver.enclosingCallAndParamIndex(lambda)?.let { (call, argIndex) ->
+        val sym = resolver.resolveCalleeFunction(call) ?: resolver.constructorCallee(call)
+        if (sym != null && sym.typeParameters.isNotEmpty()) {
+            val raw = sym.paramTypes.getOrNull(resolver.lambdaParamIndex(call, argIndex, sym)) as? dev.ide.lang.kotlin.symbols.KotlinType
+            val inputs = raw?.let { service.functionalShape(it)?.parameterTypes } ?: return emptyList()
+            if (raw.isTypeParameter || inputs.any { t -> (t as? dev.ide.lang.kotlin.symbols.KotlinType)?.let { mentionsAny(it, sym.typeParameters.toSet()) } != false }) return emptyList()
+        }
+    }
+    val shape = runCatching { resolver.expectedLambdaShape(lambda) }.getOrNull() ?: return emptyList()
+    if (shape.parameterTypes.size != params.size) return emptyList()
+    val out = ArrayList<Diagnostic>(1)
+    for ((i, p) in params.withIndex()) {
+        if (p.destructuringDeclaration != null) continue
+        val ref = p.typeReference ?: continue
+        val declared = service.typeFromText(ref.text, resolver.fileContext, dev.ide.lang.kotlin.resolve.enclosingClassFqnOf(ref)) ?: continue
+        val expected = shape.parameterTypes[i] as? dev.ide.lang.kotlin.symbols.KotlinType ?: continue
+        if (declared.isTypeParameter || expected.isTypeParameter || mentionsTypeParameter(expected)) continue
+        val mismatch = if (isFunctional(expected) || dev.ide.lang.kotlin.symbols.TypeRendering.isFunctionType(expected.qualifiedName)) {
+            !isFunctional(declared) && isConcreteNonFunction(declared) && !declared.isAssignableFrom(expected)
+        } else isMismatch(declared, expected)
+        if (!mismatch) continue
+        val r = p.textRange
+        out += Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Expected parameter of type '$expected' but '$declared' was declared",
+            KotlinDiagnosticCodes.EXPECTED_PARAMETER_TYPE_MISMATCH,
+        )
+    }
+    return out
+}
+
+/** Whether [t] or one of its arguments is a type parameter, which a later binding may still change. */
+private fun mentionsTypeParameter(t: dev.ide.lang.kotlin.symbols.KotlinType): Boolean =
+    t.isTypeParameter || t.typeArguments.any { (it as? dev.ide.lang.kotlin.symbols.KotlinType)?.let(::mentionsTypeParameter) ?: false }
+
+/** Whether [t] names one of [names] anywhere in it. */
+private fun mentionsAny(t: dev.ide.lang.kotlin.symbols.KotlinType, names: Set<String>): Boolean =
+    t.qualifiedName in names || t.typeArguments.any { (it as? dev.ide.lang.kotlin.symbols.KotlinType)?.let { a -> mentionsAny(a, names) } ?: false }

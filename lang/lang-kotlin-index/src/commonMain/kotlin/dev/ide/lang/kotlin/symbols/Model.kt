@@ -212,12 +212,22 @@ class KotlinType(
      *  `"in"` (`Comparator<in T>`... a `MutableList<in E>`), `"*"` (star, `List<*>`), or `""` (no projection).
      *  Combined with the classifier's declaration-site variance to decide subtyping direction per argument. */
     val projection: String = "",
+    /** A type parameter made DEFINITELY non-null (`T & Any`, what `t!!` is on a `t: T`): substituting a nullable
+     *  argument for it drops the `?` (`T & Any` with `T = String?` is `String`). Only meaningful when
+     *  [isTypeParameter]. */
+    val definitelyNonNull: Boolean = false,
 ) : TypeRef {
+
+    /** `T & Any` for a type parameter, otherwise this type made non-null: the type of `x!!`. */
+    fun definitelyNotNull(): KotlinType =
+        if (!isTypeParameter) withNullable(false)
+        else if (definitelyNonNull && !nullable) this
+        else KotlinType(qualifiedName, typeArguments, false, context, isTypeParameter, isExtensionFunctionType, isComposable, projection, true)
 
     /** A copy carrying the use-site [p]rojection (`out`/`in`/`*`/``) for when this type sits as a type argument. */
     fun withProjection(p: String): KotlinType =
         if (p == projection) this
-        else KotlinType(qualifiedName, typeArguments, nullable, context, isTypeParameter, isExtensionFunctionType, isComposable, p)
+        else KotlinType(qualifiedName, typeArguments, nullable, context, isTypeParameter, isExtensionFunctionType, isComposable, p, definitelyNonNull)
 
     override fun isAssignableFrom(other: TypeRef): Boolean {
         if (other.qualifiedName == qualifiedName) return true
@@ -253,7 +263,8 @@ class KotlinType(
             isTypeParameter,
             isExtensionFunctionType,
             isComposable,
-            projection
+            projection,
+            definitelyNonNull && !n,
         )
 
     /** A copy with the classifier [fqn] (same arguments, nullability, context) — for canonicalizing a JVM
@@ -269,7 +280,8 @@ class KotlinType(
             isTypeParameter,
             isExtensionFunctionType,
             isComposable,
-            projection
+            projection,
+            definitelyNonNull,
         )
 
     /** Rebind the resolution [context] through the whole tree (used when reloading a context-free cache). */
@@ -282,7 +294,8 @@ class KotlinType(
             isTypeParameter,
             isExtensionFunctionType,
             isComposable,
-            projection
+            projection,
+            definitelyNonNull,
         )
 
     override fun toString(): String {
@@ -300,7 +313,8 @@ class KotlinType(
             isTypeParameter,
             isExtensionFunctionType
         )
+        val shown = if (definitelyNonNull && isTypeParameter) "$base & Any" else base
         // A use-site projection prefixes the argument: `out Number`, `in T`.
-        return if (projection.isEmpty()) base else "$projection $base"
+        return if (projection.isEmpty()) shown else "$projection $shown"
     }
 }

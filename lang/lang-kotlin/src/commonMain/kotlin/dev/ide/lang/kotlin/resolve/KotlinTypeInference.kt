@@ -338,7 +338,13 @@ internal fun KotlinResolver.inferPrefixType(e: KtPrefixExpression): KotlinType? 
  *  type. Null when the operand can't be typed. */
 internal fun KotlinResolver.inferPostfixType(e: KtPostfixExpression): KotlinType? {
     val operand = inferType(e.baseExpression) ?: return null
-    return if (e.operationToken == KtTokens.EXCLEXCL) operand.withNullable(false) else operand
+    if (e.operationToken != KtTokens.EXCLEXCL) return operand
+    // `t!!` on a `t: T` is `T & Any`, which stays non-null whatever `T` is later bound to. A value typed by its
+    // declaration's text may name the type parameter without carrying the flag.
+    val tp = if (!operand.isTypeParameter && operand.typeArguments.isEmpty() && '.' !in operand.qualifiedName &&
+        isTypeParameterInScope(operand.qualifiedName, e.textRange.startOffset)
+    ) KotlinType(operand.qualifiedName, emptyList(), operand.nullable, service, isTypeParameter = true) else operand
+    return tp.definitelyNotNull()
 }
 
 /** The return type of a zero-argument unary operator [name] on [type] (member or extension). */
@@ -373,6 +379,25 @@ internal fun KotlinResolver.numericResultType(left: KotlinType, right: KotlinTyp
 
 /** The value of an `if`/`when` branch: a bare expression as-is, or the last statement of a `{ … }` block
  *  branch (so `if (c) { x } else { y }` still types). Null when the branch is absent or not an expression. */
+/**
+ * K2 resolves a constructor call level by level and takes the first level with an APPLICABLE candidate: when the
+ * class [ownFqn] that [name] reaches first has no constructor for [call]'s argument count, the default-imported
+ * `kotlin.[name]` that does is the one called (`class Array<E>(e: E)` beside `Array(1) { … }`, kt15161). Null
+ * when the own class fits or no default-imported class of that name does.
+ */
+internal fun KotlinResolver.defaultImportedConstructorOver(name: String, ownFqn: String, call: KtCallExpression): String? {
+    val fallback = dev.ide.lang.kotlin.symbols.Builtins.DEFAULT_SIMPLE_TYPES[name]?.takeIf { it != ownFqn } ?: return null
+    val n = call.valueArguments.size
+    val own = service.sourceClass(ownFqn)?.constructors
+    val ownFits = if (own != null) own.isEmpty() && n == 0 || own.any { c -> c.varargParamIndex >= 0 || n in c.paramHasDefault.count { !it }..c.paramTexts.size }
+        else service.constructorsOf(ownFqn).let { cs -> cs.isEmpty() || cs.any { it.varargParamIndex >= 0 || it.paramTypes.size == n } }
+    if (ownFits) return null
+    val ctors = service.constructorsOf(fallback).ifEmpty {
+        service.builtinShapeFor(fallback)?.members?.filter { it.kind == SymbolKind.CONSTRUCTOR }.orEmpty()
+    }
+    return fallback.takeIf { ctors.any { it.paramTypes.size == n } }
+}
+
 internal fun KotlinResolver.branchExpr(branch: KtExpression?): KtExpression? = when (branch) {
     is KtBlockExpression -> branch.statements.lastOrNull()
     else -> branch
@@ -623,9 +648,14 @@ internal fun KotlinResolver.typeOfQualified(q: KtQualifiedExpression): KotlinTyp
             // `Icons.AutoMirrored.Filled.List` types and the property binds as an extension) — else, for a
             // `Type.member` (not an instance) access, a COMPANION-object member (`MyClass.CONST`), which the
             // instance member lookup never surfaces (the companion is a distinct classifier).
+            // A CLASS named as the receiver reads its static scope, where the companion's member is found and the
+            // class's own instance member is not (`Query.inProgress` is the companion's `Query<Nothing>`, not the
+            // instance `inProgress: Boolean`, kt32106).
+            val typeReceiver = isTypeReceiver(q.receiverExpression)
+            if (typeReceiver) companionMemberType(receiverType.qualifiedName, name)?.let { return it }
             memberNamed(receiverType, name)?.type as? KotlinType
                 ?: nestedType(receiverType.qualifiedName, name)
-                ?: if (isTypeReceiver(q.receiverExpression)) companionMemberType(
+                ?: if (typeReceiver) companionMemberType(
                     receiverType.qualifiedName,
                     name
                 ) else null
@@ -719,6 +749,8 @@ internal fun KotlinResolver.typeOfCall(
                 call
             )
         }
+        // An `inner` class of an implicit receiver (`fun A.B.f() = C()`): receiver scopes come before the file's.
+        innerClassOfReceiver(name, call.textRange.startOffset)?.let { return constructorResultType(it, call) }
         // The enclosing class is passed so a NESTED type constructed by its simple name from inside the
         // enclosing body types as its own constructor result (`Level(21, "x")` inside
         // `object Api { data class Level(…) }`), matching the bare-name path in `typeOfName`.
@@ -746,7 +778,7 @@ internal fun KotlinResolver.typeOfCall(
             val known = service.isKnownType(typeFqn)
             val factoryFunction = service.topLevelByName(name).any { it.kind == SymbolKind.METHOD } &&
                 (!known || service.isNonInstantiableType(typeFqn) == true)
-            if (!factoryFunction) return constructorResultType(typeFqn, call)
+            if (!factoryFunction) return constructorResultType(defaultImportedConstructorOver(name, typeFqn, call) ?: typeFqn, call)
         }
     }
     // No function callee → maybe the callee is a VALUE with an `invoke` operator (`val g = Greeter(); g()`).
@@ -779,7 +811,12 @@ internal fun KotlinResolver.typeOfCall(
     }
     // The callee's declared return type; when it has none (an expression-body function `fun f() = expr`, whose
     // type neither the same-file symbol nor the disk index carries), infer it from the body.
-    val raw = (sym.type as? KotlinType) ?: inferredReturnTypeForCall(call, sym)
+    // An expression-body function with no written return type returns what its body is, which carries what an
+    // indexed summary of it cannot (`fun <F> test(f: F) = f!!` returns `F & Any`); only one whose type mentions a
+    // type parameter, the case a summary loses.
+    val summarized = sym.type as? KotlinType
+    val raw = (if (summarized != null && summarized.isTypeParameter && sym.origin.fromSource) inferredReturnTypeForCall(call, sym) else null)
+        ?: summarized ?: inferredReturnTypeForCall(call, sym)
     return raw?.let { service.substitute(it, bindings) as? KotlinType }
 }
 
@@ -914,6 +951,18 @@ internal fun KotlinResolver.constructorResultType(fqn: String, call: KtCallExpre
         val expr = arg.getArgumentExpression() ?: return@forEachIndexed
         if (expr is KtLambdaExpression) return@forEachIndexed // a lambda arg can't pin a scalar type param here
         inferType(expr)?.let { unify(pt, it, bindings) }
+    }
+    // A type parameter whose only constraint is a `null` passed for its `T?` parameter (`Query(null, null, true)`)
+    // has the lower bound `Nothing`, which K2 fixes it to; an expected type of the same class supplies it instead.
+    call.valueArguments.forEachIndexed { i, arg ->
+        val pt = paramTypes.getOrNull(i) as? KotlinType ?: return@forEachIndexed
+        if (!pt.isTypeParameter || !pt.nullable || pt.qualifiedName !in tps || pt.qualifiedName in bindings) return@forEachIndexed
+        val e = arg.getArgumentExpression()?.let { unwrapParens(it) } ?: return@forEachIndexed
+        if (e !is dev.ide.kotlin.syntax.psi.KtConstantExpression || e.text != "null") return@forEachIndexed
+        val expected = expectedTypeAt(call.textRange.startOffset)
+            ?.takeIf { it.qualifiedName == fqn && it.typeArguments.size == tps.size }
+        bindings[pt.qualifiedName] = expected?.typeArguments?.get(tps.indexOf(pt.qualifiedName))
+            ?.takeIf { (it as? KotlinType)?.isTypeParameter == false } ?: service.typeByFqn("kotlin.Nothing")
     }
     if (bindings.isEmpty()) return service.typeByFqn(fqn)
     return service.typeByFqn(fqn, tps.map { bindings[it] ?: service.typeByFqn("kotlin.Any") })

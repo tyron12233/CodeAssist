@@ -52,8 +52,9 @@ class BuiltinsPortOracleTest {
             val mine = BuiltinsReader.shapesFrom(bytes)
             assertEquals(theirs.keys.sorted(), mine.keys.sorted(), "the set of builtin types in $path")
             for ((fqn, expected) in theirs) {
+                // The oracle predates constructor decoding; everything else must match it exactly.
                 val actual = mine.getValue(fqn)
-                assertEquals(render(expected), render(actual), "shape of $fqn in $path")
+                assertEquals(render(expected), render(actual, skipConstructors = true), "shape of $fqn in $path")
                 types++
                 members += expected.members.size
             }
@@ -105,14 +106,14 @@ class BuiltinsPortOracleTest {
 
     // Compared as text, because these are context-free shapes whose whole purpose is what they render to:
     // a field-by-field assert would pass on two shapes that produce different completion.
-    private fun render(shape: TypeShape): String = buildString {
+    private fun render(shape: TypeShape, skipConstructors: Boolean = false): String = buildString {
         append("<${shape.typeParameters.joinToString(",")}>")
         append(" variances=${shape.typeParameterVariances}")
         append(" supers=${shape.supertypes.map { it.toString() }.sorted()}")
         append(" object=${shape.isObject} companion=${shape.companionObjectName}")
         append(" interface=${shape.isInterface} abstract=${shape.isAbstract} final=${shape.isFinalClass}")
         append(" kotlin=${shape.isKotlin}\n")
-        for (m in shape.members.map(::render).sorted()) append("  ").append(m).append('\n')
+        for (m in shape.members.filter { !skipConstructors || it.kind != dev.ide.lang.resolve.SymbolKind.CONSTRUCTOR }.map(::render).sorted()) append("  ").append(m).append('\n')
     }
 
     private fun render(s: KotlinSymbol): String =

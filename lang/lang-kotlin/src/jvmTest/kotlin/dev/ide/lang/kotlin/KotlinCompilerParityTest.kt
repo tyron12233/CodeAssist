@@ -1976,6 +1976,87 @@ class KotlinCompilerParityTest {
         clean("fun f(i: Int?) {\n val j: Int? = null\n if (i == j) { val n: Nothing? = i }\n}")
     }
 
+    /** A failed `this !is T` branch leaves `this` a `T` in the later branches of a subjectless `when`. */
+    @Test
+    fun aFailedNegativeWhenBranchNarrowsTheLaterOnes() {
+        clean("interface R<out T : R<T>> { fun can(a: @UnsafeVariance T): Boolean }\n" +
+            "fun Any.m(o: Any): Boolean = when { this !is R<*> -> true; else -> this.can(o as R<*>) }\n" +
+            "fun Any.n(o: Any): Boolean = when { this !is R<*> -> true; else -> can(o as R<*>) }")
+    }
+
+    /** After a `when`/`if` chain whose falling-through branches each narrow `x`, `x` is their common supertype. */
+    @Test
+    fun branchNarrowingsJoinIntoTheirCommonSupertype() {
+        clean("interface C { fun baz() }\ninterface A : C\ninterface B : C\n" +
+            "fun t1(x: Any) { when (x) { is A -> 1; is B -> 2; else -> return }; x.baz() }\n" +
+            "fun Any.t2() { when (this) { is A -> 1; is B -> 2; else -> return }; baz() }\n" +
+            "fun t3(x: Any) { if (x is A) {} else if (x is B) {} else return; x.baz() }")
+        assertCodes("interface C { fun baz() }\ninterface A : C\ninterface B : C\nfun t(x: Any) { when (x) { is A -> 1; is B -> 2; else -> {} }; x.baz() }", KotlinDiagnosticCodes.UNRESOLVED)
+    }
+
+    /** An `inner` class is constructed through an implicit receiver, local classes included; the type is the inner class. */
+    @Test
+    fun anInnerClassIsConstructedThroughAnExtensionReceiver() {
+        clean("class GA { inner class GB { inner class GC } }\nfun GA.GB.blah() { val c: GA.GB.GC = GC() }\n" +
+            "fun test2() {\n class LocalA { inner class LocalB { inner class LocalC } }\n fun LocalA.LocalB.blah() { val c: LocalA.LocalB.LocalC = LocalC() }\n}")
+        assertCodes("class GA { inner class GB { inner class GC } }\nfun GA.GB.blah() { val s: String = GC() }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+    }
+
+    /** An extension property's initializer has no receiver: the inner class is not reachable there. */
+    @Test
+    fun anExtensionPropertyInitializerHasNoReceiver() {
+        assertTrue(KotlinDiagnosticCodes.UNRESOLVED in codes("class C { inner class D }\nval C.foo: C.D = D()"))
+    }
+
+    /** A file's own `Array` that cannot take `(size) { … }` leaves the call to `kotlin.Array`. */
+    @Test
+    fun anInapplicableOwnClassFallsBackToTheDefaultImportedConstructor() {
+        clean("class Array<E>(e: E) {\n val k = Array(1) { 1 as Any; e as Any? }\n}\nfun f() { val a: kotlin.Array<Int> = Array(2) { 1 } }")
+    }
+
+    /** A class named as the receiver reads its companion's member, not its own instance member. */
+    @Test
+    fun aClassReceiverReadsTheCompanionMember() {
+        clean("class Q<out T : Any> private constructor(private val r: T?, val inProgress: Boolean) {\n" +
+            " companion object { val inProgress = Q(null, true) }\n}\nclass L { var value: Q<Int> = null!! }\nfun main() { L().value = Q.inProgress }")
+    }
+
+    /** A function type nested in a type argument keeps its own `->`: the `>` closes no `<`. */
+    @Test
+    fun aFunctionTypeInsideATypeArgumentParses() {
+        clean("fun f(p: Pair<Int, () -> () -> String>?) { val q: Pair<Int, () -> () -> String>? = p; val m: Map<(Int, Int) -> Int, String> = emptyMap() }")
+    }
+
+    /** An enum class named `Enum` keeps its companion: `kotlin.Enum`'s constructor is not an inherited member. */
+    @Test
+    fun anEnumNamedEnumReachesItsCompanion() {
+        clean("enum class Enum {\n A;\n companion object { fun foo(): Int = 1 }\n}\nfun t() = Enum.foo()")
+    }
+
+    /** A lambda parameter typed narrower than what the expected function type passes is EXPECTED_PARAMETER_TYPE_MISMATCH. */
+    @Test
+    fun aLambdaParameterTypedNarrowerThanExpectedIsReported() {
+        assertTrue(KotlinDiagnosticCodes.EXPECTED_PARAMETER_TYPE_MISMATCH in codes("fun foo(p: ((Int) -> String) -> String) { foo { f: String -> f } }"))
+        assertTrue(KotlinDiagnosticCodes.EXPECTED_PARAMETER_TYPE_MISMATCH in codes("fun interface F : ((Int) -> String) -> String\nfun fuz(p: F) { fuz { f: String -> f } }"))
+        clean("fun foo(p: (Int) -> String) { foo { i: Int -> i.toString() }; foo { i: Any -> i.toString() } }")
+    }
+
+    /** `t!!` on a `t: T` is `T & Any`: a nullable `T` binding loses its `?` there. */
+    @Test
+    fun aNotNullAssertedTypeParameterStaysNonNullThroughSubstitution() {
+        clean("fun <F> test(f: F) = f!!\nfun main() { test<String?>(null).length; val n: Int? = test<Int?>(null) }")
+        clean("fun <E> materialize(): E = TODO()\nfun foo() { val x: String?; x = materialize()!!; x.length }")
+    }
+
+    /** `null` for a `T & Any` parameter is NULL_FOR_NONNULL_TYPE whatever `T` is; a lambda in a type-variable slot
+     *  constrains it instead of mismatching it. */
+    @Test
+    fun definitelyNonNullParametersRefuseNullAndTypeVariableSlotsTakeAnyLambdaType() {
+        assertEquals(3, codes("fun <T> foo(x: T, y: T & Any) = x!!\nfun main() {\n foo<String>(\"\", null)\n foo<String?>(null, null)\n foo(\"\", null)\n foo(null, \"\")\n}")
+            .count { it == KotlinDiagnosticCodes.TYPE_MISMATCH })
+        assertTrue(KotlinDiagnosticCodes.EXPECTED_PARAMETER_TYPE_MISMATCH !in codes("fun <T> select(vararg x: T) = x[0]\nfun t() { select({ x: Int -> }, { x: String -> }) }"))
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

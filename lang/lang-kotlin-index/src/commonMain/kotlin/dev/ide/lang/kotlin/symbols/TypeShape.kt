@@ -44,6 +44,9 @@ class TypeShape(
      *  modality is `final`) — it cannot be extended, driving the final-supertype check. Indexed so the consumer
      *  needn't re-decode. `open`/`abstract` classes and any non-final Java class are false (they may be extended). */
     val isFinalClass: Boolean = false,
+    /** False for a class its bytecode leaves package-private (a Java class without `public`, a Kotlin `private`
+     *  class): another package cannot name it, so a star import of its package does not bring it in. */
+    val isPublic: Boolean = true,
 ) {
     /** Rebind every contained [KotlinType] to [ctx] (used after reading a context-free index entry). */
     fun withContext(ctx: KotlinTypeContext?): TypeShape = TypeShape(
@@ -52,7 +55,13 @@ class TypeShape(
         typeParameterVariances,
         supertypes.map { it.rebind(ctx) },
         members.map { it.rebindTypes(ctx) },
-        isObject, companionObjectName, isKotlin, isInterface, isAbstract, sealedSubclasses, isFinalClass,
+        isObject, companionObjectName, isKotlin, isInterface, isAbstract, sealedSubclasses, isFinalClass, isPublic,
+    )
+
+    /** This shape with [isPublic] set from the class file's access flags. */
+    fun withPublic(public: Boolean): TypeShape = if (public == isPublic) this else TypeShape(
+        typeParameters, typeParameterBounds, typeParameterVariances, supertypes, members,
+        isObject, companionObjectName, isKotlin, isInterface, isAbstract, sealedSubclasses, isFinalClass, public,
     )
 
     companion object {
@@ -66,6 +75,7 @@ class TypeShape(
             isInterface = js.isInterface,
             isAbstract = js.isAbstract,
             isFinalClass = js.isFinal,
+            isPublic = js.isPublic,
         )
 
         /** A Kotlin `@Metadata` class: supertypes carry their type arguments (so inherited generic members

@@ -30,7 +30,8 @@ object KotlinBuiltinsIndex : IndexExtension<String, TypeShape> {
     // segments: the shared externalizer gained isDeprecated + isInfix while this index was left at 4, so an old
     // v4 segment was read with the newer format and desynced mid-value (UTFDataFormatException in readSymbol).
     // 5→6: the decode gained enum ENTRIES, so a segment built before it holds enum shapes with no constants.
-    override val version = 6 + TypeShapeExternalizer.FORMAT
+    // 6→7: the decode gained CONSTRUCTORS (`Array(size, init)`), absent from a segment built before it.
+    override val version = 7 + TypeShapeExternalizer.FORMAT
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = TypeShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried only by exact Kotlin FQN

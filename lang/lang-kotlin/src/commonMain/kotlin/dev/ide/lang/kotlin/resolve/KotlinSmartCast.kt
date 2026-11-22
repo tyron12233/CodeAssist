@@ -641,7 +641,9 @@ internal fun KotlinResolver.whenSubjectNarrowing(
     name: String
 ): KotlinType? {
     val entry = fromChild as? KtWhenEntry ?: return null
-    if (entry.isElse) return null
+    // K2 reaches a branch only when every EARLIER branch failed, so each earlier condition holds negated here
+    // (`when { x !is T -> …; else -> ‹x is T› }`), latest first.
+    val earlier = whenExpr.entries.takeWhile { it !== entry }.asReversed()
     val subjectVariable = whenExpr.subjectVariable
     if (subjectVariable != null || whenExpr.subjectExpression != null) {
         val matches = if (subjectVariable != null) subjectVariable.name == name else subjectMatches(whenExpr.subjectExpression, name)
@@ -651,13 +653,23 @@ internal fun KotlinResolver.whenSubjectNarrowing(
             subjectVariable?.initializer?.let { smartCastSubjectKey(it) } == THIS_SUBJECT
         if (!matches && !aliasOfThis) return null
         // Only a single positive `is T` narrows; a comma branch (`is A, is B`) doesn't smart-cast.
-        val pattern = entry.conditions.singleOrNull() as? KtWhenConditionIsPattern ?: return null
-        return if (pattern.isNegated) null else typeFromIsTarget(pattern.typeReference)
+        if (!entry.isElse) (entry.conditions.singleOrNull() as? KtWhenConditionIsPattern)
+            ?.takeIf { !it.isNegated }?.let { return typeFromIsTarget(it.typeReference) }
+        // A failed `!is T` branch leaves the subject a `T`.
+        for (e in earlier) {
+            val p = e.conditions.singleOrNull() as? KtWhenConditionIsPattern ?: continue
+            if (p.isNegated) typeFromIsTarget(p.typeReference)?.let { return it }
+        }
+        return null
     }
     // Subjectless `when { name is T -> … }`: the branch condition is a boolean expression on names.
-    val condExpr = (entry.conditions.singleOrNull() as? KtWhenConditionWithExpression)?.expression
-        ?: return null
-    return conditionNarrowing(condExpr, name, whenTrue = true)
+    if (!entry.isElse) (entry.conditions.singleOrNull() as? KtWhenConditionWithExpression)?.expression
+        ?.let { c -> conditionNarrowing(c, name, whenTrue = true)?.let { return it } }
+    for (e in earlier) {
+        val c = (e.conditions.singleOrNull() as? KtWhenConditionWithExpression)?.expression ?: continue
+        conditionNarrowing(c, name, whenTrue = false)?.let { return it }
+    }
+    return null
 }
 
 /** The key a `when` narrows on: its subject `val` (`when (val y = …)` → `y`), a simple-name subject
@@ -888,11 +900,12 @@ internal fun KotlinResolver.earlyExitNarrowing(
             }
             continue
         }
+        if (st is KtWhenExpression) { mergedBranchNarrowing(st, name)?.let { result = it }; continue }
         val guard = st as? KtIfExpression ?: continue
         if (guard.`else` != null) {
             // `var y: Any` given its first value in both branches (`if (c) y = "a" else y = "b"`): K2 merges the
             // two assignments' types, so after the `if` the variable has their common type.
-            branchesAssignSameType(block, guard, name)?.let { result = it }
+            (branchesAssignSameType(block, guard, name) ?: mergedBranchNarrowing(guard, name))?.let { result = it }
             continue                                       // a fall-through `else` isn't an early exit
         }
         if (!branchAlwaysJumps(guard.then)) continue       // the then must transfer control out
@@ -900,6 +913,39 @@ internal fun KotlinResolver.earlyExitNarrowing(
         conditionNarrowing(guard.condition, name, whenTrue = false)?.let { result = it }
     }
     return result
+}
+
+/**
+ * K2's join of the flow after a branching statement [st]: every branch that falls through leaves [name] narrowed,
+ * and after the statement it is the nearest common supertype of those narrowings (`when (x) { is A -> …; is B -> …;
+ * else -> throw … }` leaves `x` the supertype `A` and `B` share). Null when some branch falls through without
+ * narrowing, when no branch falls through, when a branch writes [name], or when the join is only `Any`.
+ */
+private fun KotlinResolver.mergedBranchNarrowing(st: KtExpression, name: String): KotlinType? {
+    if (name in writtenNames(st).written) return null
+    val types = ArrayList<KotlinType>()
+    fun branch(body: KtExpression?, narrowing: () -> KotlinType?): Boolean {
+        if (branchAlwaysJumps(body)) return true
+        types += narrowing() ?: return false
+        return true
+    }
+    fun collect(e: KtExpression): Boolean = when (e) {
+        is KtIfExpression -> {
+            val els = e.`else`
+            val elseIf = (els as? KtBlockExpression)?.statements?.singleOrNull() as? KtIfExpression ?: els as? KtIfExpression
+            els != null && branch(e.then) { conditionNarrowing(e.condition, name, whenTrue = true) } &&
+                (if (elseIf != null) collect(elseIf) else branch(els) { conditionNarrowing(e.condition, name, whenTrue = false) })
+        }
+        // Without an `else` a non-exhaustive `when` falls through having narrowed nothing.
+        is KtWhenExpression -> e.entries.any { it.isElse } && e.entries.all { en -> branch(en.expression) { whenSubjectNarrowing(e, en, name) } }
+        else -> false
+    }
+    if (!collect(st) || types.isEmpty()) return null
+    val distinct = types.distinctBy { it.qualifiedName }
+    if (distinct.size == 1) return distinct[0]
+    val first = distinct[0]
+    val chain = listOf(first) + service.supertypesOf(first.qualifiedName).filterIsInstance<KotlinType>()
+    return chain.firstOrNull { c -> distinct.all { c.isAssignableFrom(it) } }?.takeIf { it.qualifiedName != "kotlin.Any" }
 }
 
 /**

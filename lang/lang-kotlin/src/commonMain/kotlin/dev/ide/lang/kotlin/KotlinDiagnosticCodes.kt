@@ -314,6 +314,7 @@ object KotlinDiagnosticCodes {
     const val UPPER_BOUND_CANNOT_BE_ARRAY = "kt.upperBoundCannotBeArray"
     /** `String & Any`, `T & String` (INCORRECT_LEFT/RIGHT_COMPONENT_OF_INTERSECTION). */
     const val DEFINITELY_NOT_NULL_COMPONENT = "kt.definitelyNotNullComponent"
+    const val EXPECTED_PARAMETER_TYPE_MISMATCH = "kt.expectedParameterTypeMismatch"
     /** `interface A<T : A<*>>` (FINITE_BOUNDS_VIOLATION). */
     const val FINITE_BOUNDS_VIOLATION = "kt.finiteBoundsViolation"
     /** `super<String>` in a class that does not extend it (NOT_A_SUPERTYPE). */

@@ -119,6 +119,27 @@ class BuiltinsReader(private val jars: List<String>) {
                         declaringClassFqn = fqn,
                     )
                 }
+                // CONSTRUCTORS, as the classpath @Metadata path records them: `Array(size) { … }`, `String()`,
+                // `Any()` are callable, and K2 picks a default-imported constructor when a same-named class nearer in
+                // scope cannot take the arguments (kt15161), which needs this list to be real.
+                for (d in cls.declarations) {
+                    if (d.kind != KotlinDeclaration.Kind.CONSTRUCTOR) continue
+                    members += KotlinSymbol(
+                        name = owner.name,
+                        kind = SymbolKind.CONSTRUCTOR,
+                        type = KotlinType(fqn, cls.typeParameters.map { KotlinType(it.name, context = null, isTypeParameter = true) }, context = null),
+                        owner = owner,
+                        modifiers = visibilityMods(d.visibility),
+                        origin = BINARY,
+                        signature = "(" + d.parameters.joinToString(", ") { "${it.name}: ${typeText(it.effectiveType)}" } + ")",
+                        paramTypes = d.parameters.map { typeRef(it.effectiveType) },
+                        paramNames = d.parameters.map { it.name },
+                        declaringClassFqn = fqn,
+                        isInternal = d.visibility == KotlinVisibility.INTERNAL,
+                        varargParamIndex = d.parameters.indexOfFirst { it.isVararg },
+                        paramHasDefault = d.parameters.map { it.declaresDefaultValue },
+                    )
+                }
                 // Companion object: its members behave like statics (`Int.MAX_VALUE`).
                 val companionName = cls.companionObjectName
                 companionName?.let { name ->
@@ -147,7 +168,7 @@ class BuiltinsReader(private val jars: List<String>) {
             return out
         }
 
-        /** A class MEMBER: a function or a property. A constructor or a nested type alias is not one. */
+        /** A class MEMBER: a function or a property. A constructor (decoded separately) or a nested type alias is not one. */
         private fun member(d: KotlinDeclaration, owner: KotlinSymbol, static: Boolean): KotlinSymbol? = when (d.kind) {
             KotlinDeclaration.Kind.FUNCTION -> func(d, owner, static)
             KotlinDeclaration.Kind.PROPERTY -> prop(d, owner, static)

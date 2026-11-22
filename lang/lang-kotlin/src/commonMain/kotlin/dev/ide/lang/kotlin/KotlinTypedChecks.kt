@@ -1092,9 +1092,12 @@ internal fun KotlinSemanticChecks.nullArgumentForNonNull(call: KtCallExpression,
             val named = arg.getArgumentName()?.asName?.identifier
             val idx = if (named != null) c.paramNames.indexOf(named) else i
             if (idx < 0 || (c.varargParamIndex in 0..idx)) return null
-            if (!plainNonNullSourceParameter(c, idx)) return null
-            val pt = c.paramTypes.getOrNull(idx) as? KotlinType ?: return null
-            if (pt.nullable || pt.isTypeParameter || !service.isKnownType(canonicalName(pt))) return null
+            // Each `null` argument is judged on its own: one passed for a parameter that may take it (`x: T`) says
+            // nothing about the next (`y: T & Any`).
+            if (!plainNonNullSourceParameter(c, idx)) return@forEachIndexed
+            val pt = c.paramTypes.getOrNull(idx) as? KotlinType ?: return@forEachIndexed
+            // `T & Any` refuses `null` whatever `T` is bound to; a plain `T` may be nullable.
+            if (pt.nullable || !pt.definitelyNonNull && (pt.isTypeParameter || !service.isKnownType(canonicalName(pt)))) return@forEachIndexed
             expected = expected ?: pt
         }
         expected?.let { return nullForNonNull(it, expr) }
@@ -1487,8 +1490,12 @@ internal fun KotlinSemanticChecks.plainNonNullSourceParameter(callee: KotlinSymb
         if (node is KtClassOrObject) node.typeParameters.forEach { tp -> tp.name?.let { typeParams += it } }
         node = node.parent
     }
+    // `T & Any` is non-null whatever `T` is.
+    if (DNN_TYPE_PARAM.matchEntire(text)?.groupValues?.get(1)?.let { it in typeParams } == true) return true
     return Regex("[A-Za-z_][A-Za-z0-9_]*").findAll(text).none { it.value in typeParams }
 }
+
+private val DNN_TYPE_PARAM = Regex("""([A-Za-z_][A-Za-z0-9_]*)\s*&\s*Any""")
 
 /**
  * Whether parameter [index] of the source function [callee] is a bare type parameter `T` (not `T?`) that [call]

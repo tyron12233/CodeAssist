@@ -38,6 +38,8 @@ class JavaShape(
     /** True when this type is a `final` class (`ACC_FINAL`, and not an interface/enum) — it cannot be extended,
      *  driving the final-supertype check. A non-final Java class is `open` from Kotlin's view, so it is false. */
     val isFinal: Boolean = false,
+    /** False when the class is not `public` (`ACC_PUBLIC` unset): package-private, so other packages can't name it. */
+    val isPublic: Boolean = true,
 )
 
 /**
@@ -132,6 +134,7 @@ object JavaBytecode {
             isFinal = classFile.accessFlags and ACC_FINAL != 0 &&
                 classFile.accessFlags and ACC_INTERFACE == 0 &&
                 classFile.accessFlags and ACC_ENUM == 0,
+            isPublic = classFile.accessFlags and ACC_PUBLIC != 0,
         )
     }
 

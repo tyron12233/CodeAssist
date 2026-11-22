@@ -1095,6 +1095,14 @@ class KotlinSymbolService(
 
     private fun typeFromTextUncached(text: String, ctx: FileContext?, enclosingClassFqn: String?): KotlinType? {
         val trimmed = stripTypeDecorations(text.trim())
+        // `T & Any`, the definitely-non-null type: its left side with the nullability removed for good, so a
+        // nullable `T` binding substitutes non-null ([KotlinType.definitelyNonNull]).
+        topLevelAmpersand(trimmed)?.let { amp ->
+            if (trimmed.substring(amp + 1).trim() != "Any") return null
+            val left = typeFromText(trimmed.take(amp).trim(), ctx, enclosingClassFqn) ?: return null
+            return KotlinType(left.qualifiedName, left.typeArguments, false, this, left.isTypeParameter,
+                left.isExtensionFunctionType, left.isComposable, left.projection, definitelyNonNull = true)
+        }
         // A function type (`(A) -> B`, `T.() -> R`, `suspend (…) -> …`, `@Composable (…) -> …`) maps to a
         // `kotlin.FunctionN` carrying the extension-receiver / composable flags — so a content-lambda parameter
         // (`Row(content: RowScope.() -> Unit)`) establishes its implicit `this` receiver during resolution.
@@ -1160,7 +1168,7 @@ class KotlinSymbolService(
         for (i in core.indices) {
             when (core[i]) {
                 '<' -> depth++
-                '>' -> depth--
+                '>' -> if (core.getOrNull(i - 1) != '-') depth--
                 '(' , ')' -> if (depth == 0) return null // a function type or an annotation, not a path
                 '.' -> if (depth == 0) { segs += core.substring(from, i); from = i + 1 }
             }
@@ -1294,6 +1302,19 @@ class KotlinSymbolService(
         )
     }
 
+    /** Index of the top-level `&` of an intersection type (`T & Any`), or null. */
+    private fun topLevelAmpersand(s: String): Int? {
+        if ('&' !in s) return null
+        var depth = 0
+        for ((i, ch) in s.withIndex()) when (ch) {
+            '(', '<' -> depth++
+            ')' -> depth--
+            '>' -> if (s.getOrNull(i - 1) != '-') depth--
+            '&' -> if (depth == 0) return i
+        }
+        return null
+    }
+
     /** Index of the top-level `->` (depth 0 across `()`/`<>`), or null if there is none. */
     private fun topLevelArrowIndex(s: String): Int? {
         var depth = 0
@@ -1302,7 +1323,9 @@ class KotlinSymbolService(
             when (s[i]) {
                 '(', '<' -> depth++
                 ')', '>' -> depth--
-                '-' -> if (depth == 0 && s[i + 1] == '>') return i
+                // An arrow nested in a type argument (`Pair<Int, () -> String>`) is stepped over whole: its `>`
+                // closes no `<`.
+                '-' -> if (s[i + 1] == '>') { if (depth == 0) return i; i++ }
             }
             i++
         }
@@ -1342,14 +1365,15 @@ class KotlinSymbolService(
         val out = ArrayList<String>()
         var depth = 0
         val sb = StringBuilder()
-        for (ch in args) {
+        for ((i, ch) in args.withIndex()) {
             when (ch) {
                 '<', '(' -> {
                     depth++; sb.append(ch)
                 }
 
+                // The `>` of a function type's `->` closes nothing.
                 '>', ')' -> {
-                    depth--; sb.append(ch)
+                    if (!(ch == '>' && args.getOrNull(i - 1) == '-')) depth--; sb.append(ch)
                 }
 
                 ',' -> if (depth == 0) {
@@ -1422,13 +1446,15 @@ class KotlinSymbolService(
         val out = StringBuilder(text.length)
         var depth = 0
         var lastDot = -1
-        for ((i, ch) in text.withIndex()) if (ch == '<') depth++ else if (ch == '>') depth-- else if (ch == '.' && depth == 0) lastDot = i
+        // The `>` of a function type's `->` closes no `<`.
+        fun closes(i: Int) = text[i] == '>' && text.getOrNull(i - 1) != '-'
+        for ((i, ch) in text.withIndex()) if (ch == '<') depth++ else if (closes(i)) depth-- else if (ch == '.' && depth == 0) lastDot = i
         depth = 0
         for ((i, ch) in text.withIndex()) {
             if (i > lastDot) { out.append(ch); continue }
-            when (ch) {
-                '<' -> depth++
-                '>' -> depth--
+            when {
+                ch == '<' -> depth++
+                closes(i) -> depth--
                 else -> if (depth == 0) out.append(ch)
             }
         }
@@ -1590,7 +1616,10 @@ class KotlinSymbolService(
                 if (src.isPrivate) continue
                 return cand
             }
-            if (typeShape(cand) != null) return cand
+            // A package-private library class (`java.net.InetAddressImpl`) is invisible from another package.
+            val shape = typeShape(cand) ?: continue
+            if (!shape.isPublic && pkg != samePkg) continue
+            return cand
         }
         // 9. A nested type in the enclosing chain that has a compiled type SHAPE but no source class (step 1
         //    covers the source model). Last-resort, as it always was, so the index probe stays off the hot path.
@@ -2026,7 +2055,10 @@ class KotlinSymbolService(
         // gets the JDK methods Kotlin grafts on from its `java.util.*` type but leaves out of `.kotlin_builtins`
         // (`MutableList.replaceAll`/`sort`, `Map.getOrDefault`, …); see [additionalJvmMembers].
         builtinShape(fqn)?.let { shape ->
+            // A built-in's constructors are not members: `kotlin.Enum`'s, named `Enum`, would otherwise be inherited
+            // by every enum and shadow a user class of that name. [constructorsOf] reads them off the shape directly.
             val members = membersFromShape(shape, typeArgs, visited, synthesizeBeanProps = false)
+                .filter { it.kind != SymbolKind.CONSTRUCTOR }
             val extraNames = Builtins.ADDITIONAL_JVM_MEMBERS[fqn] ?: return members
             return members + additionalJvmMembers(fqn, extraNames, typeArgs, members)
         }
@@ -3175,7 +3207,11 @@ class KotlinSymbolService(
                     it.kind == SymbolKind.METHOD && Modifier.ABSTRACT in it.modifiers &&
                             Modifier.STATIC !in it.modifiers && it.name !in OBJECT_METHODS
                 }
-        val sam = abstracts.singleOrNull() ?: return null
+        val sam = abstracts.singleOrNull() ?: return if (abstracts.isEmpty()) functionSupertypeShape(type) else null
+        // The `invoke` a function-type supertype contributes still speaks `Function1`'s own `P1`/`R`; the supertype
+        // as written carries the arguments.
+        if (sam.name == "invoke" && sam.declaringClassFqn?.let { TypeRendering.isFunctionType(it) } != false)
+            functionSupertypeShape(type)?.let { return it }
         // A Kotlin `fun interface` may declare its abstract method as a member EXTENSION — Compose's
         // `MeasurePolicy` is `MeasureScope.measure(measurables, constraints)` — and then the lambda converted to
         // it has that receiver as its implicit `this`. Dropping it is what left `layout(…)` unresolved and
@@ -3194,6 +3230,18 @@ class KotlinSymbolService(
      * and returns a `V` (K2 converts the projected functional type to its plain shape), so a projection kept here
      * would read as a captured type, approximated to its bound.
      */
+    /** A project `fun interface` whose single abstract method is the `invoke` of a FUNCTION-TYPE supertype
+     *  (`fun interface F : ((Int) -> String) -> String`): a lambda converted to it has that function type's shape. */
+    private fun functionSupertypeShape(type: KotlinType): FunctionalShape? {
+        val rc = model().classByFqn[type.qualifiedName] ?: return null
+        val cls = (rc.node as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? dev.ide.kotlin.syntax.psi.KtClass ?: return null
+        if (!cls.isInterface() || !cls.hasModifier(dev.ide.kotlin.syntax.psi.KtTokens.FUN_KEYWORD)) return null
+        val fn = rc.superTypeTexts.firstNotNullOfOrNull { text ->
+            typeFromText(text, rc.ctx, rc.fqn)?.takeIf { TypeRendering.isFunctionType(it.qualifiedName) }
+        } ?: return null
+        return functionalShape(fn)
+    }
+
     private fun unprojected(t: TypeRef): TypeRef =
         (t as? KotlinType)?.takeIf { it.projection == "in" || it.projection == "out" }?.withProjection("") ?: t
 
@@ -3427,6 +3475,7 @@ class KotlinSymbolService(
             type.isExtensionFunctionType,
             type.isComposable,
             type.projection,
+            type.definitelyNonNull,
         )
     }
 
@@ -3437,7 +3486,9 @@ class KotlinSymbolService(
         // Substituting a type parameter keeps the USE-SITE projection of its position: `List<out T>` with
         // `T = Int` is `List<out Int>` — the argument stays `out`, not bare.
         if (kt.isTypeParameter) {
-            val bound = bindings[kt.qualifiedName] ?: return kt
+            var bound = bindings[kt.qualifiedName] ?: return kt
+            // `T & Any` keeps its non-null half through the substitution: `String?` for `T` is `String` there.
+            if (kt.definitelyNonNull) (bound as? KotlinType)?.let { bound = it.definitelyNotNull() }
             return if (kt.projection.isEmpty()) bound else (bound as? KotlinType)?.withProjection(kt.projection)
                 ?: bound
         }
@@ -4475,7 +4526,11 @@ class KotlinSymbolService(
                 )
             }
         }
-        val ctors = constructorsOf(fqn)
+        // A library's `private` or `internal` constructor is not callable from here, so it cannot be the one a call
+        // binds to (`AtomicArray(array)` beside its internal same-arity one).
+        val ctors = constructorsOf(fqn).let { all ->
+            all.filter { Modifier.PRIVATE !in it.modifiers && !it.isInternal }.ifEmpty { all }
+        }
         val ctor = ctors.firstOrNull { it.paramTypes.size == argCount } ?: ctors.firstOrNull()
         ?: return null
         return ctor.paramTypes
@@ -5294,14 +5349,16 @@ class KotlinSymbolService(
         val out = ArrayList<String>()
         var depth = 0
         val sb = StringBuilder()
-        for (ch in args) {
+        for ((i, ch) in args.withIndex()) {
             when (ch) {
-                '<' -> {
+                // Parentheses nest too: a function-type argument (`Map<(A, B) -> C, D>`) holds commas of its own.
+                '<', '(' -> {
                     depth++; sb.append(ch)
                 }
 
-                '>' -> {
-                    depth--; sb.append(ch)
+                // The `>` of a function type's `->` closes nothing.
+                '>', ')' -> {
+                    if (!(ch == '>' && args.getOrNull(i - 1) == '-')) depth--; sb.append(ch)
                 }
 
                 ',' -> if (depth == 0) {

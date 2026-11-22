@@ -102,12 +102,13 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
             }
 
             is KtNamedFunction -> if (!outerInstanceClosed) node.receiverTypeReference?.text
-                ?.let { boundedTypeParameterReceiver(node, it) ?: service.typeFromText(it, fileContext) }?.let(out::add)
+                ?.let { boundedTypeParameterReceiver(node, it) ?: receiverTypeFromText(it, node) }?.let(out::add)
             // An extension PROPERTY's receiver is the implicit `this` of its accessors
             // (`val ColorScheme.codeBlockBackground get() = onSurface.copy(alpha = .15f)`): the same rule as an
-            // extension function. A local/plain property has no receiver type and adds nothing.
-            is KtProperty -> if (!outerInstanceClosed) node.receiverTypeReference?.text
-                ?.let { service.typeFromText(it, fileContext) }?.let(out::add)
+            // extension function. A local/plain property has no receiver type and adds nothing. Only the accessors
+            // have it: an initializer (`val C.foo: C.D = D()`, EXTENSION_PROPERTY_WITH_BACKING_FIELD) runs with none.
+            is KtProperty -> if (!outerInstanceClosed && child is dev.ide.kotlin.syntax.psi.KtPropertyAccessor) node.receiverTypeReference?.text
+                ?.let { receiverTypeFromText(it, node) }?.let(out::add)
             // An enclosing class/object receiver. An ANONYMOUS object (`object : Foo { }`) or a LOCAL
             // class/object has no reachable `fqName`, so use the synthetic classifier the source model
             // registered it under — its own + supertype members then become the implicit `this` in the body.
@@ -812,6 +813,9 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
                 .any { !it.isExtension || extensionInScope(it) }
         }
     ) return true
+    // An `inner` class of an implicit receiver's class (or of a supertype): K2's receiver scope holds its
+    // constructor, so `fun A.B.f() = C()` builds `A.B.C` through the extension receiver.
+    if (name.firstOrNull()?.isUpperCase() == true && innerClassOfReceiver(name, offset) != null) return true
     // An enclosing class's companion member, or an enclosing enum's `values()`/`valueOf()`/`entries`, read bare
     // from a scope that has no instance of it (the enum's own companion object).
     if (enclosingCompanionMember(name, offset) != null) return true
@@ -1044,6 +1048,31 @@ private fun KotlinResolver.supertypesResolvable(cls: KtClassOrObject): Boolean =
  *  `class`/`object` declared as a statement in this block or an enclosing one. So a `LocalClass()` / a local
  *  `object`'s member reference resolves + isn't false-flagged. Anonymous objects (nameless) aren't included —
  *  they're referenced by the `object … { }` expression, not by name. */
+/** An extension's receiver type [text] as [decl] sees it: a LOCAL class in scope there (`fun LocalA.LocalB.f()` in
+ *  the block declaring `class LocalA`) is keyed by its local classifier, which no file-level lookup can name. */
+private fun KotlinResolver.receiverTypeFromText(text: String, decl: KtElement): KotlinType? {
+    val head = text.substringBefore('<').substringBefore('.').substringBefore('?').trim()
+    if (head.firstOrNull()?.isUpperCase() == true && decl.parent is KtBlockExpression) {
+        localTypesInScope(decl.textRange.startOffset)[head]?.let { local ->
+            service.typeFromText(local + text.trim().removePrefix(head), fileContext)?.let { return it }
+        }
+    }
+    return service.typeFromText(text, fileContext)
+}
+
+/** The FQN of the `inner` class [name] an implicit receiver at [offset] can construct: declared by the receiver's
+ *  class or one of its supertypes. Null when none does. */
+internal fun KotlinResolver.innerClassOfReceiver(name: String, offset: Int): String? {
+    for (recv in implicitReceiversAt(offset)) {
+        val chain = sequenceOf(recv.qualifiedName) + service.supertypesOf(recv.qualifiedName).asSequence().map { it.qualifiedName }
+        for (fqn in chain) {
+            val cls = (service.classDeclaration(fqn) as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? KtClassOrObject ?: continue
+            if (cls.declarations.any { it is dev.ide.kotlin.syntax.psi.KtClass && it.isInner() && it.name == name }) return "$fqn.$name"
+        }
+    }
+    return null
+}
+
 fun KotlinResolver.localTypesInScope(offset: Int): Map<String, String> {
     val out = HashMap<String, String>()
     var node: KtElement? = elementAt(offset)
