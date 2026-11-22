@@ -15,6 +15,7 @@ import dev.ide.kotlin.syntax.psi.KtNamedDeclaration
 import dev.ide.kotlin.syntax.psi.KtObjectDeclaration
 import dev.ide.kotlin.syntax.psi.KtPackageDirective
 import dev.ide.kotlin.syntax.psi.KtParameter
+import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtSuperExpression
 import dev.ide.kotlin.syntax.psi.KtSuperTypeCallEntry
@@ -43,6 +44,7 @@ import dev.ide.lang.kotlin.resolve.privateInAnotherFile
 import dev.ide.lang.kotlin.resolve.receiverForMembers
 import dev.ide.lang.kotlin.resolve.scopeMemberExtensions
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
+import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.resolve.SymbolKind
 
 // --- visibility of project-source members -------------------------------------------------------------------
@@ -523,3 +525,84 @@ private fun packagePath(t: KtUserType): String? {
     }
     return segs.asReversed().joinToString(".")
 }
+
+/**
+ * INVISIBLE_SETTER: a write to a property whose getter the use site sees but whose setter it does not
+ * (`var x = 0; private set` assigned from outside the class, or from a subclass). A write is `p.x = v`, a
+ * compound assignment of a built-in value type (`p.x += 1`, which is `p.x = p.x + 1`) and `++`/`--`.
+ * The property is a member of a project-source class, through an explicit receiver or, inside a subclass, bare.
+ */
+internal fun KotlinSemanticChecks.invisibleSetter(ref: KtNameReferenceExpression, resolver: KotlinResolver): Diagnostic? {
+    val parent = ref.parent
+    val qualified = (parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === ref }
+    val target: KtExpression = qualified ?: ref
+    val write = writeKind(target) ?: return null
+    val name = ref.getReferencedName()
+    val recvType: KotlinType
+    val receiverFqn: String?
+    if (qualified != null) {
+        val receiver = qualified.receiverExpression
+        if (unwrapParen(receiver) is KtSuperExpression) return null
+        val inferred = resolver.inferType(receiver) ?: return null
+        recvType = resolver.receiverForMembers(inferred, receiver.textRange.startOffset) ?: return null
+        if (recvType.isTypeParameter || resolver.isTypeReceiver(receiver)) return null
+        val smartCast = (unwrapParen(receiver) as? KtNameReferenceExpression)
+            ?.let { resolver.flowProvenTypes(it, deep = true).isNotEmpty() } == true
+        receiverFqn = if (smartCast || inferred.qualifiedName != recvType.qualifiedName) null else recvType.qualifiedName
+    } else {
+        // Bare: a member of the innermost enclosing class, read through its `this`, when nothing nearer is named so.
+        if (nearestLocalDecl(name, ref.textRange.startOffset, ref) != null) return null
+        val cls = ref.getStrictParentOfType<KtClassOrObject>() ?: return null
+        if (cls.getStrictParentOfType<KtClassOrObject>() != null) return null
+        val fqn = cls.fqName?.asString() ?: return null
+        recvType = KotlinType(fqn)
+        receiverFqn = fqn
+    }
+    if (!service.isSourceClass(recvType.qualifiedName)) return null
+    val members = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name).filter { it.name == name }
+    // An override in the receiver's own class is the property there (`private set` narrowing an inherited one).
+    val member = members.singleOrNull() ?: members.singleOrNull { m ->
+        m.sourceDeclaration()?.getStrictParentOfType<KtClassOrObject>()?.fqName?.asString() == recvType.qualifiedName
+    } ?: return null
+    if (member.isExtension) return null
+    val prop = member.sourceDeclaration() as? KtProperty ?: return null
+    if (!prop.isVar) return null
+    // A compound assignment writes back through the setter only for a value with no `plusAssign` of its own.
+    if (write == WriteKind.COMPOUND && resolver.inferType(target)?.qualifiedName !in VALUE_TYPES_WITHOUT_ASSIGN_OPERATORS) return null
+    val owner = prop.getStrictParentOfType<KtClassOrObject>() ?: return null
+    // The property itself must be visible: an invisible one is INVISIBLE_REFERENCE's.
+    if (canSee(visibilityOf(prop), owner, ref, receiverFqn) != true) return null
+    val setter = prop.setter ?: return null
+    val vis = visibilityOf(setter)
+    if (vis == Vis.PUBLIC || canSee(vis, owner, ref, receiverFqn) != false) return null
+    if (visibilitySuppressed(ref)) return null
+    val r = ref.textRange
+    val what = if (vis == Vis.PRIVATE) "private" else "protected"
+    return Diagnostic(
+        TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+        "Cannot assign to '$name': its setter is $what in '${effectiveOwner(owner).name ?: owner.name ?: "<anonymous>"}'",
+        KotlinDiagnosticCodes.INVISIBLE_REFERENCE,
+    )
+}
+
+private enum class WriteKind { PLAIN, COMPOUND }
+
+/** How [e] is written, if it is: the left side of `=` or `++`/`--` (plain), or of a compound assignment. */
+private fun writeKind(e: KtExpression): WriteKind? {
+    val p = e.parent
+    if (p is dev.ide.kotlin.syntax.psi.KtUnaryExpression && p.baseExpression === e)
+        return WriteKind.PLAIN.takeIf { p.operationToken == KtTokens.PLUSPLUS || p.operationToken == KtTokens.MINUSMINUS }
+    val b = p as? dev.ide.kotlin.syntax.psi.KtBinaryExpression ?: return null
+    if (b.left !== e) return null
+    return when (b.operationToken) {
+        KtTokens.EQ -> WriteKind.PLAIN
+        in COMPOUND_ASSIGNMENTS -> WriteKind.COMPOUND
+        else -> null
+    }
+}
+
+private val VALUE_TYPES_WITHOUT_ASSIGN_OPERATORS = setOf(
+    "kotlin.Int", "kotlin.Long", "kotlin.Short", "kotlin.Byte", "kotlin.Double", "kotlin.Float", "kotlin.Char", "kotlin.String",
+)
+
+private val COMPOUND_ASSIGNMENTS = setOf(KtTokens.PLUSEQ, KtTokens.MINUSEQ, KtTokens.MULTEQ, KtTokens.DIVEQ, KtTokens.PERCEQ)

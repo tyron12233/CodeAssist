@@ -201,7 +201,7 @@ internal class KotlinSemanticChecks(
                         report(
                             memberAccessVisibility(psi, resolver) ?: constructorCallVisibility(psi, resolver)
                                 ?: importedNestedVisibility(psi, resolver) ?: instanceMemberViaType(psi, resolver)
-                                ?: ambiguousCallableReference(psi, resolver)
+                                ?: ambiguousCallableReference(psi, resolver) ?: invisibleSetter(psi, resolver)
                         )
                     }
                 }

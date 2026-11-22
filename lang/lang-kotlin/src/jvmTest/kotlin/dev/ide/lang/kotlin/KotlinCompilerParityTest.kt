@@ -2090,6 +2090,18 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), errors(open).map { it.code }, "for `$open`")
     }
 
+    /** A property's setter can be less visible than its getter: writing it (`=`, a compound assignment that writes back,
+     *  `++`/`--`) where the setter cannot be seen is INVISIBLE_SETTER, reading it is fine. */
+    @Test
+    fun invisibleSetter() {
+        val decls = "class P { var x: Int = 0\n private set\n val l = mutableListOf(1)\n var y = 0\n" +
+            " fun inside(other: P) { x = 1; other.x = 2; x++ } }\nopen class X { var n = \"\"\n private set }\n"
+        val bad = decls + "fun f(p: P) { p.x = 1; p.x += 1; p.x++ }\nclass Z : X() { fun g() { n = \"z\" } }"
+        assertEquals(List(4) { KotlinDiagnosticCodes.INVISIBLE_REFERENCE }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = decls + "fun f(p: P) { val r = p.x + 1; p.y = r; p.l += 2 }\nclass Z : X() { fun g(): String = n }"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** In a `when` with a subject, an unparenthesized `in`/`is`/comparison/equality/`&&` condition reads as a test of
      *  the subject but is a value compared with it; an assignment there is no value at all. */
     @Test
