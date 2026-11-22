@@ -191,7 +191,7 @@ internal class KotlinSemanticChecks(
             psi as KtNameReferenceExpression
             KotlinPerf.span("sem.nameRef") {
                 if (resolveReady) {
-                    val unresolved = unresolvedMember(psi, resolver) ?: unresolvedBareReference(psi, resolver)
+                    val unresolved = unresolvedMember(psi, resolver) ?: unresolvedBareReference(psi, resolver) ?: nestedThroughTypeAlias(psi, resolver)
                     report(unresolved)
                     // Only when the reference DOES resolve: a class used as a value must be initialized
                     // (`GridCells.Fixed` → `GridCells.Fixed(2)`), and a function name used as a value must be

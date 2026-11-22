@@ -2548,6 +2548,16 @@ class KotlinCompilerParityTest {
         clean("abstract class Base { operator fun times(x: Int) = this }\nclass Sub : Base()\nfun t(s: Sub) { s * 2 }")
     }
 
+    /** A nested classifier is not reached through an enum entry (a value) or through a typealias qualifier (which
+     *  gives the companion's scope only). */
+    @Test
+    fun nestedClassifierThroughEntryOrAlias() {
+        assertCodes("enum class C { E1; class A }\nfun t() { C.E1.A() }", KotlinDiagnosticCodes.UNRESOLVED)
+        assertCodes("class C { class Nested; companion object { val ok = 1 } }\ntypealias TA = C\nval a = TA.Nested()", KotlinDiagnosticCodes.UNRESOLVED)
+        clean("class C { class Nested; companion object { val ok = 1 } }\ntypealias TA = C\nval a = TA.ok\nval b = C.Nested()\nval c = TA()")
+        clean("enum class E(val label: String) { A(\"a\"); fun f() = 1 }\nfun t() { E.A.label; E.A.f(); E.A.name }")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

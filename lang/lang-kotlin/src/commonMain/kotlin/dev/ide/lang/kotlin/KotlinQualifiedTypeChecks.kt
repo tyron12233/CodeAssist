@@ -6,6 +6,7 @@ import dev.ide.kotlin.syntax.psi.KtCallableReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtClass
 import dev.ide.kotlin.syntax.psi.KtClassOrObject
 import dev.ide.kotlin.syntax.psi.KtElement
+import dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
@@ -21,6 +22,8 @@ import dev.ide.lang.dom.TextRange
 import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.kotlin.parse.unwrapParen
 import dev.ide.lang.kotlin.resolve.KotlinResolver
+import dev.ide.lang.kotlin.resolve.enumConstantNames
+import dev.ide.lang.kotlin.resolve.typeDenotationFqn
 import dev.ide.lang.kotlin.resolve.enclosingClassFqn
 import dev.ide.lang.kotlin.resolve.enclosingClassFqnOf
 import dev.ide.lang.kotlin.resolve.enclosingClassMembersContain
@@ -101,12 +104,63 @@ internal fun KotlinSemanticChecks.supertypeDeclaresClassifier(typeFqn: String, n
  * outer class's NAME only, so `p.Nested()` names nothing. A name that may be a type or object qualifier
  * (`Outer.Nested`, `Obj.Nested`) is never taken for a value.
  */
+/**
+ * `C.Self.Nested` / `TA.Obj()` with `typealias Self = C` / `typealias TA = C`: K2 gives a typealias qualifier the
+ * scope of the class's companion object only, so a classifier nested in the class (a nested class or object, the
+ * companion by its own name, another alias) is not reached through it: UNRESOLVED_REFERENCE. Judged for project
+ * aliases with no type parameters whose target is a known class that declares the nested classifier, when the
+ * companion has no member of that name. An import alias (`import a.C as D`) renames the class itself and is not one.
+ */
+internal fun KotlinSemanticChecks.nestedThroughTypeAlias(expr: KtNameReferenceExpression, resolver: KotlinResolver): Diagnostic? {
+    val parent = expr.parent
+    val receiver = when {
+        parent is KtDotQualifiedExpression && parent.selectorExpression === expr -> parent.receiverExpression
+        parent is KtCallExpression && parent.calleeExpression === expr ->
+            (parent.parent as? KtDotQualifiedExpression)?.takeIf { it.selectorExpression === parent }?.receiverExpression
+        else -> null
+    } ?: return null
+    val name = expr.getReferencedName()
+    if (name.firstOrNull()?.isUpperCase() != true) return null
+    val r = unwrapParen(receiver)
+    val ctx = resolver.fileContext
+    val target = when (r) {
+        is KtNameReferenceExpression -> {
+            val written = r.getReferencedName()
+            val off = r.textRange.startOffset
+            if (ctx.imports.any { it.alias == written }) return null
+            if (resolver.localsAt(off, written).isNotEmpty() || resolver.localTypesInScope(off).containsKey(written)) return null
+            // A class of that name in scope is the class, not an alias.
+            if (service.resolveTypeName(written, ctx, resolver.enclosingClassFqn(off))?.let { service.isKnownType(it) } == true) return null
+            service.typeAliasTargetFqn(written, ctx)
+        }
+        is KtDotQualifiedExpression -> {
+            val written = (r.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+            val owner = resolver.typeDenotationFqn(r.receiverExpression) ?: return null
+            if (service.isKnownType("$owner.$written")) return null
+            service.typeAliasClassifierByFqn("$owner.$written")
+        }
+        else -> null
+    } ?: return null
+    val nested = service.isKnownType("$target.$name") || service.isProjectTypeAliasFqn("$target.$name") ||
+        service.companionObjectFqn(target)?.substringAfterLast('.') == name
+    if (!nested) return null
+    if (service.companionMembersFor(target, name).any { it.name == name }) return null
+    val rr = expr.textRange
+    return Diagnostic(TextRange(rr.startOffset, rr.endOffset), Severity.ERROR, "Unresolved reference: $name", KotlinDiagnosticCodes.UNRESOLVED)
+}
+
 internal fun KotlinSemanticChecks.nestedClassThroughValue(receiver: KtExpression, nestedFqn: String, resolver: KotlinResolver): Boolean {
     val cls = (service.sourceClass(nestedFqn)?.node as? KotlinDomNode)?.psi as? KtClassOrObject ?: return false
     if (cls is KtClass && cls.isInner()) return false
     return when (val r = unwrapParen(receiver)) {
         is KtNameReferenceExpression -> resolver.localsAt(r.textRange.startOffset, r.getReferencedName()).isNotEmpty()
         is KtCallExpression, is KtThisExpression -> true
+        // An enum entry (`C.E1.Nested`) is a value of its enum class, not the class.
+        is KtDotQualifiedExpression -> {
+            val entry = (r.selectorExpression as? KtNameReferenceExpression)?.getReferencedName()
+            val owner = resolver.typeDenotationFqn(r.receiverExpression)
+            entry != null && owner != null && entry in resolver.enumConstantNames(owner)
+        }
         else -> false
     }
 }
