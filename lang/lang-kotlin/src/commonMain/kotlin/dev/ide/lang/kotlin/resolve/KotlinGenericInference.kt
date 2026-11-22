@@ -167,11 +167,22 @@ internal fun KotlinResolver.inferTypeArguments(
             expr is KtLambdaExpression -> bindLambdaReturn(pt, expr, bindings)
             expr is KtCallableReferenceExpression && bindCallableReferenceReturn(pt, expr, bindings) -> {}
             // A spread `*arr` fills the vararg with the array's ELEMENTS: `listOf(*arr)` binds T to the element.
+            // An argument still carrying ANOTHER call's unfixed type variable (`getOrDefault(emptyList())`, whose `T`
+            // nothing has fixed) does not override the lower bound the variable already has (`R ≥ T` from the
+            // receiver): binding from it leaked that variable into the result.
             else -> inferType(expr)?.let { if (arg.getSpreadElement() != null) spreadElementType(it) else it }
+                ?.takeIf { !(pt.isTypeParameter && pt.qualifiedName in sym.typeParamLowerBounds && mentionsForeignTypeParameter(it, expr)) }
                 ?.let { unify(pt, throughTypeParameterBound(pt, it, expr), bindings) }
         }
     }
     return bindings
+}
+
+/** Whether [t] names a type parameter that is not in scope at [at]: a variable of some callee left unfixed. */
+internal fun KotlinResolver.mentionsForeignTypeParameter(t: KotlinType, at: KtExpression, depth: Int = 0): Boolean {
+    if (depth > 6) return false
+    if (t.isTypeParameter && '.' !in t.qualifiedName && !isTypeParameterInScope(t.qualifiedName, at.textRange.startOffset)) return true
+    return t.typeArguments.any { (it as? KotlinType)?.let { a -> mentionsForeignTypeParameter(a, at, depth + 1) } == true }
 }
 
 /**

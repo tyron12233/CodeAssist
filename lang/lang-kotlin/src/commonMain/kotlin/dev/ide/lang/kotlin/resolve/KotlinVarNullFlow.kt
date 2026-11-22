@@ -598,6 +598,14 @@ internal class KotlinVarNullFlow(private val resolver: KotlinResolver) {
             }
             return if (e.isNegated) other to matched else matched to other
         }
+        // `v.isNullOrEmpty()` / `v.isNullOrBlank()`: their contract makes `v` non-null when they return false.
+        if (e is KtDotQualifiedExpression) {
+            val name = ((e.selectorExpression as? KtCallExpression)?.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+            if ((name == "isNullOrEmpty" || name == "isNullOrBlank") && (e.selectorExpression as KtCallExpression).valueArguments.isEmpty()) {
+                val st = flowExpr(e, s)
+                return st to refineVar(st, bound(unwrap(e.receiverExpression)), VarNul.NOT_NULL)
+            }
+        }
         val st = flowExpr(e, s)
         return st to st
     }

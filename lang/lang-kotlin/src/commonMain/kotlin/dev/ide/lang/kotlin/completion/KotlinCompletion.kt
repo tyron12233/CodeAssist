@@ -786,6 +786,11 @@ class KotlinCompletion(
         // aliases, chains of aliases included: an object's members, or a class's statics and companion. Nested
         // classes are not reached through an alias (KT-34281).
         val aliasTarget = unimported ?: aliasReceiverTarget(receiver, resolver)
+        // A jump (`break.`, `return.`, `throw x.`) produces no value to call anything on: nothing to complete.
+        val bare = generateSequence(receiver) { (it as? dev.ide.kotlin.syntax.psi.KtParenthesizedExpression)?.expression }.last()
+        if (bare is dev.ide.kotlin.syntax.psi.KtReturnExpression || bare is dev.ide.kotlin.syntax.psi.KtBreakExpression ||
+            bare is dev.ide.kotlin.syntax.psi.KtContinueExpression || bare is dev.ide.kotlin.syntax.psi.KtThrowExpression
+        ) return PositionResult(emptyList())
         val recvType = aliasTarget?.let { service.typeByFqn(it) } ?: KotlinPerf.span("infer") {
             (resolver.inferType(receiver) ?: contextParameterPathType(receiver, resolver) ?: lowercaseObjectReceiver(receiver, resolver))
                 ?.let { resolver.receiverForMembers(it, receiver.textRange.startOffset) }

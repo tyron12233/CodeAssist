@@ -156,7 +156,11 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         // (`kotlinx.coroutines.delay(…)`) can still resolve, to a plain top-level function. The scope walk below
         // must not run: it treats the call as a BARE one and binds an extension's receiver to the enclosing
         // implicit receiver, so `x?.let { it }` inside `Column { }` typed `it` as `ColumnScope`.
-        service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD && !it.isExtension }
+        // A receiver that is a VALUE of unknown type is not a package: no top-level function is reached through it
+        // (`sym.list.any { }` with `sym` untyped is not some library's top-level `any(…)`). Only a dotted name whose
+        // segments name that function's package qualifies.
+        val pkg = q.receiverExpression.text.filterNot { it.isWhitespace() }
+        service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD && !it.isExtension && it.packageName == pkg }
     } else {
         // A nearer VALUE with an `invoke` (a function-typed property or local) shadows every top-level function
         // of that name ([nearerValueInvokeTargets]), so no FUNCTION is the callee: the call is the value's
@@ -737,7 +741,9 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
     // imported (e.g. `androidx.compose.foundation.lazy.items` used bare inside `LazyColumn { }` without its
     // import) is NOT a candidate for the compiler, so it must not be one here either — otherwise the call
     // silently binds the unimported extension and the argument mismatch against the in-scope member is missed.
-    out += scopeSymbolsAt(
+    // Only for a BARE call: a qualified one whose receiver could not be typed (`sym.list.any { }`) reaches nothing in
+    // scope through it; the package-qualified case is handled below.
+    if (q == null || q.selectorExpression !== call) out += scopeSymbolsAt(
         call.textRange.startOffset,
         name,
         exactName = true

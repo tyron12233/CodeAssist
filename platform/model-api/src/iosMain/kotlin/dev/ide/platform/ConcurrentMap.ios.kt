@@ -3,9 +3,8 @@ package dev.ide.platform
 /**
  * A plain map behind the module's recursive lock.
  *
- * [getOrPut] holds the lock ACROSS [compute], which `ConcurrentHashMap.computeIfAbsent` also does, so the
- * two agree on the property callers depend on: the value is computed once. The lock is recursive, so a
- * `compute` that reaches back into the same map deadlocks on neither platform.
+ * [getOrPut] holds the lock ACROSS [compute]. The lock is recursive, so a `compute` that reaches back into the
+ * same map neither deadlocks nor throws here; the JVM actual computes outside its map for the same reason.
  */
 actual class ConcurrentMap<K : Any, V : Any> actual constructor() {
     private val map = HashMap<K, V>()

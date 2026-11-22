@@ -119,6 +119,10 @@ fun KotlinResolver.inferType(expr: KtExpression?): KotlinType? {
             // gives `::name.isInitialized` and `User::name.name` their members.
             is KtCallableReferenceExpression -> propertyReferenceType(expr) ?: functionReferenceType(expr)
             is dev.ide.kotlin.syntax.psi.KtLambdaExpression -> lambdaValueType(expr)
+            // A jump never produces a value: it is `Nothing`, which joins away in `if (c) return x else y`.
+            is dev.ide.kotlin.syntax.psi.KtReturnExpression, is dev.ide.kotlin.syntax.psi.KtThrowExpression,
+            is dev.ide.kotlin.syntax.psi.KtBreakExpression, is dev.ide.kotlin.syntax.psi.KtContinueExpression ->
+                service.typeByFqn("kotlin.Nothing")
             else -> null
         })
     } finally {
@@ -1189,6 +1193,20 @@ internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
     // A bare read of an enclosing class's COMPANION member (`fun f() = CONST` inside the class) — companion
     // members are accessible without a qualifier, but live on a distinct classifier the receiver walk misses.
     enclosingCompanionMember(name, offset)?.let { return it.type as? KotlinType }
+    // An entry of an enclosing enum read bare inside it (`IN` in `enum class VPos { …; fun flip() = … IN … }`): the
+    // enum's static scope holds its entries, each a value of the enum type.
+    if (name.firstOrNull()?.isUpperCase() == true) {
+        var node: dev.ide.kotlin.syntax.psi.KtElement? = elementAt(offset)
+        while (node != null) {
+            if (node is dev.ide.kotlin.syntax.psi.KtClass && node.isEnum() &&
+                node.declarations.any { it is dev.ide.kotlin.syntax.psi.KtEnumEntry && it.name == name }
+            ) {
+                val fqn = node.fqName?.asString() ?: dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(node)
+                return service.typeByFqn(fqn)
+            }
+            node = node.parent as? dev.ide.kotlin.syntax.psi.KtElement
+        }
+    }
     // A bare name brought into scope by an explicit member import (`import …MainActivity.Companion.TAG`,
     // `import …Config.DEBUG`) — a companion-object / object member is accessible unqualified once imported, so
     // a chain off it (`TAG.length`) can resolve. Gated on a matching non-star import simple name (the common

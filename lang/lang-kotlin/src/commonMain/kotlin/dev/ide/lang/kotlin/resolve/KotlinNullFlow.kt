@@ -149,6 +149,11 @@ internal fun KotlinResolver.stableForSmartCast(
                     it is KtProperty && it.name == name && it.textRange.endOffset <= offset
                 } as? KtProperty
                 if (local != null) return (!local.isVar || neverReassigned(local, node)) && !local.hasDelegate()
+                // An entry of a destructuring `val (a, b) = …` is a `val` too.
+                node.statements.firstOrNull {
+                    it is dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration && it.textRange.endOffset <= offset &&
+                        it.entries.any { e -> e.name == name }
+                }?.let { return !(it as dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration).isVar }
             }
 
             // A lambda's implicit `it` is its one value parameter, as stable as a named one.
@@ -160,7 +165,8 @@ internal fun KotlinResolver.stableForSmartCast(
                 if (!it.hasValOrVar()) return true
             }
 
-            is KtForExpression -> node.loopParameter?.takeIf { it.name == name }
+            // A loop variable, a destructured one included (`for ((k, v) in map)`), is a `val` for each iteration.
+            is KtForExpression -> node.loopParameter?.takeIf { it.name == name || it.destructuringDeclaration?.entries?.any { e -> e.name == name } == true }
                 ?.let { return true }
 
             is KtCatchClause -> node.catchParameter?.takeIf { it.name == name }?.let { return true }
@@ -850,7 +856,8 @@ private fun bindsName(node: KtElement, child: KtElement, offset: Int, rootName: 
         is KtFunctionLiteral -> if (node.hasParameterSpecification) node.valueParameters.any { it.name == rootName }
             else rootName == "it"
         is KtFunction -> node.valueParameters.any { it.name == rootName }
-        is KtForExpression -> node.body?.textRange?.contains(offset) == true && node.loopParameter?.name == rootName
+        is KtForExpression -> node.body?.textRange?.contains(offset) == true && (node.loopParameter?.name == rootName ||
+            node.loopParameter?.destructuringDeclaration?.entries?.any { it.name == rootName } == true)
         is KtCatchClause -> node.catchParameter?.name == rootName
         is KtWhenExpression -> node.subjectVariable?.name == rootName
         is KtClassOrObject -> node.declarations.any { it is KtProperty && it.name == rootName }

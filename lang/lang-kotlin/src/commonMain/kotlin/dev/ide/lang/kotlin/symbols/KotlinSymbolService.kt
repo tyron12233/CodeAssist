@@ -3286,8 +3286,10 @@ class KotlinSymbolService(
         ext.receiverTypeArgs.forEachIndexed { i, ra ->
             val k = ra as? KotlinType ?: return@forEachIndexed
             val actual = recvArgs.getOrNull(i) ?: return@forEachIndexed
+            // Iterable<T> on List<String> -> T = String; `Iterable<T?>` on `List<String?>` -> T = String (the `?` is
+            // the declaration's, so `filterNotNull()` gives a `List<String>`).
             if (k.isTypeParameter) bindings[k.qualifiedName] =
-                actual       // Iterable<T> on List<String> -> T = String
+                if (k.nullable) (actual as? KotlinType)?.withNullable(false) ?: actual else actual
             else unifyReceiverArg(
                 k,
                 actual,
@@ -3318,7 +3320,7 @@ class KotlinSymbolService(
         out: MutableMap<String, TypeRef>
     ) {
         if (declared.isTypeParameter) {
-            out.getOrPut(declared.qualifiedName) { actual }; return
+            out.getOrPut(declared.qualifiedName) { if (declared.nullable) (actual as? KotlinType)?.withNullable(false) ?: actual else actual }; return
         }
         val a = actual as? KotlinType ?: return
         declared.typeArguments.forEachIndexed { i, d ->

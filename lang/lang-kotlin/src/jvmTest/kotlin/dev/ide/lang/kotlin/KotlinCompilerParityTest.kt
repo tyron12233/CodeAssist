@@ -2165,6 +2165,20 @@ class KotlinCompilerParityTest {
         clean("class F<T>\nclass A9 { operator fun <T> T.invoke(h: () -> Unit) {} }\nfun A9.main(z: F<Int>?) { z.invoke({}) }")
     }
 
+    /** Flow and inference found by the real-world sweep: loop and destructured values smart cast, `isNullOrEmpty`
+     *  narrows a written `var`, `filterNotNull` drops the `?`, jumps are `Nothing`, enum entries read bare inside
+     *  their enum are the enum, and `getOrDefault(emptyList())` keeps the receiver's element type. */
+    @Test
+    fun realWorldSweepFlowAndInference() {
+        clean("fun a(start: String?) { var o: String? = start; while (!o.isNullOrEmpty()) { o = o.substringBeforeLast('.', \"\").ifEmpty { null } } }")
+        clean("class Arg(val s: Boolean)\nfun b(bound: Map<Int, Arg?>) { for ((i, arg) in bound) { if (arg != null && arg.s) println(i) } }")
+        clean("class TB(val more: List<Int>)\nfun g(p: Pair<String, TB?>?): List<String> { val (first, tb) = p ?: return emptyList(); if (tb == null) return listOf(first); return tb.more.map { it.toString() } }")
+        clean("class St(val u: Set<String>)\nfun h(a: St?, b: List<St?>) { val x = (listOf(a) + b).filterNotNull(); x.map { it.u } }")
+        clean("fun g(i: Int) {}\nfun f(names: List<String>, n: String?, i: Int): String { val idx = when { n != null -> names.indexOf(n).let { if (it < 0) return \"x\" else it }; else -> i }; g(idx); return \"\" }")
+        clean("enum class V { OUT, IN; fun flip() = when (this) { OUT -> IN; IN -> OUT }; fun t(): V = flip() }")
+        assertCodes("class Sym(val n: Int)\nfun t(): List<Sym> = emptyList()\nfun f() { val a: Int = runCatching { t() }.getOrDefault(emptyList()) }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {
