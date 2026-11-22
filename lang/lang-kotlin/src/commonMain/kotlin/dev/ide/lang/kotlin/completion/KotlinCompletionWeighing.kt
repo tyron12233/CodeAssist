@@ -37,6 +37,7 @@ import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.CompletionRelevance
 import dev.ide.lang.kotlin.resolve.KotlinResolver
 import dev.ide.lang.kotlin.resolve.callTargets
+import dev.ide.lang.kotlin.resolve.expectedLambdaShape
 import dev.ide.lang.kotlin.resolve.inferType
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinType
@@ -71,6 +72,9 @@ internal object KotlinCompletionWeighing {
         items: MutableList<CompletionItem>,
         nameRef: KtExpression?,
         expected: KotlinType?,
+        /** What an untyped keyword adds to its popularity where a type is expected (`ExpectedTypeWeigher`'s
+         *  NON_TYPABLE over NOT_MATCHES), 0 elsewhere. */
+        untypedBonus: Int,
         thisType: (String) -> KotlinType?,
     ) {
         val returnLikely = nameRef != null && returnIsLikelyAt(nameRef)
@@ -92,9 +96,9 @@ internal object KotlinCompletionWeighing {
                 item.relevance?.fitsExpectedType == true -> true
                 isNull -> expected.nullable
                 label == "true" || label == "false" -> expected.qualifiedName == "kotlin.Boolean"
+                // `ThisKeywordHandler` judges `this` by the receiver's type, a mismatch included.
                 label == "this" || label.startsWith("this@") ->
                     thisType(label)?.let { t -> t.qualifiedName == expected.qualifiedName || expected.isAssignableFrom(t) }
-                        ?.takeIf { it }
                 else -> null
             }
             items[i] = item.copy(
@@ -103,6 +107,7 @@ internal object KotlinCompletionWeighing {
                     fitsExpectedType = verdict == true,
                     contextBoost = (isReturn && returnLikely) || (isNull && nullBoost),
                     proximity = (if (verdict == false) MISMATCH_BAND else UNTYPED_BAND) * BAND + KEYWORD_PROXIMITY,
+                    popularity = if (verdict == null) untypedBonus else 0,
                 ),
             )
         }
@@ -169,11 +174,22 @@ internal object KotlinCompletionWeighing {
         subjectFqn: String?,
         isObject: (KotlinSymbol) -> Boolean,
         relativeName: (KotlinSymbol) -> String? = { null },
+        checks: IsChecks = IsChecks.ALL,
+        /** The scope a classifier is in by name (`ClassifierWeigher`: an explicit import, the package, a star or a
+         *  default import), which orders the checks on a subject of any type before their names do. */
+        scopeOf: (KotlinSymbol) -> Int = { 0 },
     ): List<CompletionItem> {
         val out = ArrayList<CompletionItem>(items.size + 8)
         for (item in items) {
             val sym = item.symbol as? KotlinSymbol
-            if (sym == null || (sym.kind != SymbolKind.CLASS && sym.kind != SymbolKind.INTERFACE) || isObject(sym)) {
+            // `K2WhenWithSubjectConditionContributor` checks an enum subject against its entries only and a sealed
+            // one against its inheritors only; the other classes stay plain classifiers there.
+            val checked = when (checks) {
+                IsChecks.ALL -> true
+                IsChecks.FITTING -> item.relevance?.fitsExpectedType == true
+                IsChecks.NONE -> false
+            }
+            if (sym == null || (sym.kind != SymbolKind.CLASS && sym.kind != SymbolKind.INTERFACE) || isObject(sym) || !checked) {
                 val nested = if (sym != null && item.relevance?.fitsExpectedType == true && sym.kind in CLASS_KINDS) relativeName(sym) else null
                 // Written through its outer class, a nested class needs no import of its own.
                 out += if (nested == null) item else item.copy(
@@ -201,8 +217,80 @@ internal object KotlinCompletionWeighing {
         // The conditions that fit (the `is` checks on subtypes, the objects) in one alphabetical run, as IntelliJ
         // lists them, ahead of the rest: the engine keeps this order among equally ranked items.
         val (fitting, rest) = out.partition { it.relevance?.let { r -> r.fitsExpectedType && r.proximity == CONDITION_PROXIMITY } == true }
-        return fitting.sortedBy { (it.symbol as? KotlinSymbol)?.name ?: it.label }.map { it.copy(sortPriority = 0) } + rest
+        val sorted = if (checks != IsChecks.ALL) fitting.sortedBy { (it.symbol as? KotlinSymbol)?.name ?: it.label }
+        else fitting.sortedWith(compareBy({ (it.symbol as? KotlinSymbol)?.let(scopeOf) ?: 0 }, { (it.symbol as? KotlinSymbol)?.name ?: it.label }))
+        return sorted.map { it.copy(sortPriority = 0) } + rest
     }
+
+    /** Which classes [whenConditionItems] offers as `is X` checks: every one (a subject of any other type), the
+     *  ones that fit (a sealed subject's inheritors), or none (an enum subject, checked against its entries). */
+    enum class IsChecks { ALL, FITTING, NONE }
+
+    /**
+     * The order of a `when (subject)` branch condition, IntelliJ's `CompletionContributorGroupWeigher` there: what
+     * the `when` contributor offers (the `is X` checks, the enum entries, the sealed objects, `null`, `else`) and
+     * the keywords come first, the classifiers next, every other name last; within each group the expected-type
+     * verdict decides (`MATCHES_PREFERRED` for an enum entry, then `MATCHES`, then the untyped, then the
+     * mismatches), then the kind (`KindWeigher`: an enum entry, a keyword, the rest).
+     *
+     * The group outranks the expected type there, while the engine compares the expected type first, so both ride
+     * the popularity key (the expected-type flag is cleared for all of them) and the kind the proximity of the
+     * `when` group. [isObject] tells a sealed `object` (offered by the `when` contributor itself) from a class.
+     */
+    fun rankWhenConditionGroups(items: List<CompletionItem>, isObject: (KotlinSymbol) -> Boolean, subjectName: String?): List<CompletionItem> =
+        items.map { item ->
+            val r = item.relevance ?: CompletionRelevance.NONE
+            val sym = item.symbol as? KotlinSymbol
+            val label = item.label
+            val fits = r.fitsExpectedType
+            val keyword = item.kind == CompletionItemKind.KEYWORD
+            val qualifiedEntry = item.kind == CompletionItemKind.ENUM_CONSTANT && '.' in label
+            val classifier = item.kind in CLASSIFIER_ITEM_KINDS
+            val group = when {
+                keyword || label.startsWith("is ") || qualifiedEntry -> 0
+                classifier -> if (fits && sym != null && isObject(sym)) 0 else 1
+                else -> 2
+            }
+            val tier = when {
+                keyword -> if (fits && label in TYPED_KEYWORDS) 1 else 2
+                fits -> if (item.kind == CompletionItemKind.ENUM_CONSTANT) 0 else 1
+                r.proximity / BAND >= MISMATCH_BAND -> 3
+                else -> 2
+            }
+            val proximity = if (group != 0) {
+                // The subject itself is `KindWeigher`'s SYMBOL_TO_SKIP: comparing it with itself is no condition.
+                if (group == 2 && subjectName != null && sym?.name == subjectName && sym.kind != SymbolKind.METHOD) SUBJECT_PROXIMITY
+                else r.proximity
+            } else when {
+                item.kind == CompletionItemKind.ENUM_CONSTANT -> 0
+                keyword -> 2
+                else -> 4
+            }
+            item.copy(
+                relevance = r.copy(
+                    fitsExpectedType = false,
+                    contextBoost = false,
+                    popularity = (2 - group) * WHEN_GROUP_SCALE + (3 - tier) * WHEN_TIER_SCALE + r.popularity,
+                    proximity = proximity,
+                ),
+            )
+        }
+
+    /** The scales [rankWhenConditionGroups] puts the group and the verdict on, above any other popularity (the
+     *  deprecation penalty is a million). */
+    private const val WHEN_GROUP_SCALE = 100_000_000
+    private const val WHEN_TIER_SCALE = 10_000_000
+
+    /** Where the `when` subject ranks among its own conditions: after every other kind. */
+    private const val SUBJECT_PROXIMITY = 1_000
+
+    /** The keywords that have a type (`KotlinExpectedTypeWeigher.keywordType`); any other is untyped. */
+    private val TYPED_KEYWORDS = setOf("null", "true", "false")
+
+    private val CLASSIFIER_ITEM_KINDS = setOf(
+        CompletionItemKind.CLASS, CompletionItemKind.INTERFACE, CompletionItemKind.ENUM,
+        CompletionItemKind.ANNOTATION_TYPE, CompletionItemKind.RECORD, CompletionItemKind.TYPE_PARAMETER,
+    )
 
     /** The `else -> ` branch for [whenExpr] while it has none, ranked right after the conditions that fit. */
     fun elseBranchItem(whenExpr: KtWhenExpression, prefix: String): CompletionItem? {
@@ -313,15 +401,51 @@ internal object KotlinCompletionWeighing {
             bin.right === e -> bin.left
             else -> null
         } ?: return null
-        val wanted = when (bin.operationToken) {
+        val equality = when (bin.operationToken) {
             KtTokens.EQEQ, KtTokens.EXCLEQ, KtTokens.EQEQEQ, KtTokens.EXCLEQEQEQ -> true
-            KtTokens.ELVIS -> bin.right === e
-            else -> false
+            KtTokens.ELVIS -> if (bin.right === e) false else return null
+            else -> return null
         }
-        if (!wanted) return null
         val type = runCatching { resolver.inferType(other) }.getOrNull() ?: return null
         if (type.isTypeParameter || type.qualifiedName == "kotlin.Nothing") return null
-        return type.withNullable(false)
+        // An equality may compare with `null` whatever the other side is (`getEqualityExpectedType` makes it
+        // nullable); an elvis wants what its left side would have been.
+        return type.withNullable(equality)
+    }
+
+    /**
+     * The type two value slots expect that the resolver's own expected type leaves open, for ranking only: the
+     * expression body of a getter (`val x: Foo get() = <caret>`) the property's declared type, and the value of a
+     * labeled return (`return@forEach <caret>`) the return type of the lambda that label names. [ref] is the name
+     * being completed; [labelOf] gives a lambda's label (its own or its call's name).
+     */
+    fun accessorOrLabeledReturnExpectedType(
+        ref: KtExpression?, resolver: KotlinResolver, labelOf: (KtLambdaExpression) -> String?,
+    ): KotlinType? {
+        val e = ref ?: return null
+        when (val p = e.parent) {
+            is KtPropertyAccessor -> {
+                if (!p.isGetter || p.bodyExpression !== e) return null
+                val property = p.parent as? KtProperty ?: return null
+                val text = property.typeReference?.text ?: return null
+                return runCatching { resolver.service.typeFromText(text, resolver.fileContext) }.getOrNull()
+            }
+            is KtReturnExpression -> {
+                if (p.returnedExpression !== e) return null
+                val label = p.getLabelName() ?: return null
+                var n: KtElement? = p.parent
+                // Out through the lambdas (a function literal is a declaration with a body too) to the function.
+                while (n != null && n !is KtNamedFunction && n !is KtPropertyAccessor && n !is KtClassOrObject) {
+                    if (n is KtLambdaExpression && labelOf(n) == label) {
+                        val shape = runCatching { resolver.expectedLambdaShape(n) }.getOrNull() ?: return null
+                        return (shape.returnType as? KotlinType)?.takeIf { !it.isTypeParameter && it.qualifiedName != "kotlin.Unit" }
+                    }
+                    n = n.parent
+                }
+                return null
+            }
+            else -> return null
+        }
     }
 
     /**

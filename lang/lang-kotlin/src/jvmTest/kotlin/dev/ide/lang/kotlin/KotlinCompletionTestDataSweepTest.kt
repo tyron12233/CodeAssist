@@ -313,10 +313,13 @@ class KotlinCompletionTestDataSweepTest {
             // Java files are compiled into a library jar: this backend reads Java from bytecode or from the
             // host's Java source index, and the index is not stood up here.
             val javaFiles = case.files.filterKeys { it.endsWith(".java") }
-            val libs = if (javaFiles.isEmpty()) jars else {
+            // The plugin's tests run on a JDK that has `java.sql` and the Swing/AWT packages too; a case naming
+            // the desktop packages gets that (large) module, every case the small `java.sql` one.
+            val jdkJars = if (case.files.values.any { "javax.swing" in it || "java.awt" in it }) jars + listOfNotNull(desktopJar) else jars
+            val libs = if (javaFiles.isEmpty()) jdkJars else {
                 val jar = compileJava(javaFiles, src.resolveSibling(src.fileName.toString() + "-java"))
                     ?: return Outcome(case, false, emptyList(), emptyList(), emptyList(), skipped = "java does not compile alone")
-                jars + listOf(jar)
+                jdkJars + listOf(jar)
             }
             for ((p, t) in case.files) {
                 if (p.endsWith(".java")) continue
@@ -419,6 +422,8 @@ class KotlinCompletionTestDataSweepTest {
 
     /** The lookup string IntelliJ would give [item]: a keyword's or a named argument's text as is, else the name. */
     private fun primaryKey(item: CompletionItem): String = when {
+        // An anonymous object of the expected type (`object : Foo{...}`) is looked up by `object`.
+        item.kind == CompletionItemKind.KEYWORD && item.label.startsWith("object : ") -> "object"
         item.kind == CompletionItemKind.KEYWORD -> item.label
         item.label.endsWith(" =") -> item.label
         else -> item.symbol?.name ?: item.label.substringBefore('(').substringBefore(" {").trim()
@@ -436,6 +441,11 @@ class KotlinCompletionTestDataSweepTest {
         add(item.insertText.trim())
         add(item.insertText.substringBefore('(').substringBefore('<').trim())
         item.symbol?.name?.let(::add)
+        // A lambda's parameter list (`(key, value) -> `, `i, i1 -> `) is looked up by its first name, as
+        // `createCompoundLookupElement` creates it.
+        if (item.kind == CompletionItemKind.PARAMETER && item.insertText.endsWith(" -> ")) {
+            add(item.label.removePrefix("(").substringBefore(',').substringBefore(')').trim())
+        }
     }
 
     private fun judge(case: Case, ranked: List<CompletionItem>): Outcome {
@@ -738,11 +748,16 @@ class KotlinCompletionTestDataSweepTest {
             }
         }
 
+        private val jdkJarDir: Path get() = Path.of(System.getProperty("java.io.tmpdir"), "codeassist-jdk-jar")
+
         private val jars: List<Path> by lazy {
             listOfNotNull(
                 stdlibJarPath(),
-                TestJars.jdkBaseJar(Path.of(System.getProperty("java.io.tmpdir"), "codeassist-jdk-jar")),
+                TestJars.jdkBaseJar(jdkJarDir),
+                TestJars.jdkModuleJar(jdkJarDir, "java.sql"),
             )
         }
+
+        private val desktopJar: Path? by lazy { TestJars.jdkModuleJar(jdkJarDir, "java.desktop") }
     }
 }

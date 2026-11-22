@@ -4182,6 +4182,29 @@ class KotlinSymbolService(
         return TypeNameCandidates(out.values.take(limit), capped)
     }
 
+    /**
+     * The classes [ctx] imports by name (`import java.util.Date`), each as the classifier it is: the explicit-import
+     * scope IntelliJ's classifier contributor lists at an empty prefix, where the index is not asked. One exact
+     * index lookup per import; an alias, a star import or a name that is no class is skipped.
+     */
+    fun explicitlyImportedTypes(ctx: FileContext): List<KotlinSymbol> {
+        var out: ArrayList<KotlinSymbol>? = null
+        val m = model()
+        for (imp in ctx.imports) {
+            if (imp.isStar || imp.alias != null) continue
+            val rc = m.classByFqn[imp.fqn]
+            val symbol = if (rc != null) {
+                if (rc.isCompanion || rc.isLocal) continue
+                KotlinSymbol(rc.simpleName, rawClassKind(rc), typeByFqn(rc.fqn), origin = SOURCE, declarationNode = rc.node)
+            } else {
+                val v = index?.exactAll<ClassNameValue>(CLASS_NAMES, imp.lastSegment)?.firstOrNull { it.fqn == imp.fqn } ?: continue
+                KotlinSymbol(imp.lastSegment, classNameKind(v.kind), typeByFqn(v.fqn), origin = BINARY)
+            }
+            (out ?: ArrayList<KotlinSymbol>(4).also { out = it }) += symbol
+        }
+        return out ?: emptyList()
+    }
+
     /** The classifiers of the default-import packages, read once per classpath state (see [defaultScopeTypes]). */
     private var defaultScopeTypesMemo: Pair<Long, List<ClassNameValue>>? = null
 

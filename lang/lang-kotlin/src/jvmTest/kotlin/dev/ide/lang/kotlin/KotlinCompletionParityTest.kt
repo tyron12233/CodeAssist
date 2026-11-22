@@ -820,6 +820,89 @@ class KotlinCompletionParityTest {
 
     // Per test instance, not in a companion: an analyzer parked in a static is heap that every later test
     // class in the fork runs without.
+    // --- where clauses, super qualifiers, when groups, callable references, destructuring, instantiation ---
+
+    @Test
+    fun aWhereClauseNamesTheTypeParametersOnly() {
+        val ls = labels("package q1\nclass X<T, K>() where |")
+        assertEquals(listOf("K", "T"), ls.sorted(), "only the declaration's type parameters; got $ls")
+        val afterDot = labels("package q2\nfun <T, K> foo() where T.|")
+        assertTrue(afterDot.isEmpty(), "nothing after a dot in a constraint; got $afterDot")
+    }
+
+    @Test
+    fun aSuperQualifierNamesTheDirectSupertypes() {
+        val ls = labels("package q3\nopen class A\ninterface I\nclass B : A(), I {\n  fun foo() {\n    super<|\n  }\n}")
+        assertEquals(listOf("A", "I"), ls.sorted(), "the direct supertypes only; got $ls")
+        val kw = keywords("package q4\nclass X : List<Int>, Comparable<Int> {\n  init {\n    sup|\n  }\n}")
+        assertTrue("super<List>" in kw && "super<Comparable>" in kw && "super" in kw, "got $kw")
+    }
+
+    @Test
+    fun aWhenConditionRanksTheWhenItemsBeforeClassesBeforeValues() {
+        val ls = ranked("package q5\nsealed class Sealed\nclass A : Sealed()\nclass B : Sealed()\nval sealedConstant: Sealed = A()\n" +
+            "fun test(s: Sealed) {\n  when (s) {\n    |\n  }\n}")
+        val want = listOf("is A", "is B", "else ->", "Sealed", "sealedConstant")
+        assertEquals(want, ls.filter { it in want }, "got ${ls.take(10)}")
+        val enumLs = ranked("package q6\nenum class E { AA, BB }\nfun foo(e: E?) {\n  when (e) {\n    |\n  }\n}")
+        val enumWant = listOf("E.AA", "E.BB", "null", "else ->", "E")
+        assertEquals(enumWant, enumLs.filter { it in enumWant }, "enum entries, then null, then else; got ${enumLs.take(10)}")
+    }
+
+    @Test
+    fun aCallableReferenceOffersClassAndOnlyReferenceableNames() {
+        val qualified = keywords("package q7\nclass A\nfun test() {\n  A::|\n}")
+        assertTrue("class" in qualified && "class.java" in qualified, "got $qualified")
+        val unbound = labels("package q8\nenum class EE { ENTRY }\nfun test(parameter: Int) {\n  val localVariable = 1\n  val r = ::|\n}")
+        assertFalse("parameter" in unbound || "localVariable" in unbound || "ENTRY" in unbound, "got $unbound")
+    }
+
+    @Test
+    fun aLambdaParameterIsDestructuredThroughOperatorComponents() {
+        val ls = labels("package q9\nclass Foo\noperator fun Foo.component1(): Int = 42\noperator fun Foo.component2(): String = \"\"\n" +
+            "fun bar() {\n  Foo().let { | }\n}")
+        assertTrue("(i, string)" in ls && "foo" in ls, "got $ls")
+        val single = labels("package q10\nclass Bar\noperator fun Bar.component1(): Int = 42\nfun bar() {\n  Bar().let { | }\n}")
+        assertTrue("i" in single, "one component is written without parentheses; got $single")
+    }
+
+    @Test
+    fun aPropertyBeingNamedIsOfferedNamesWithTheirTypes() {
+        val ls = labels("package q11\nclass Foo\nclass BarFoo\nfun foo(foo: Foo) {}\nfun test() {\n  var f|\n}")
+        assertTrue("foo" in ls, "a name another parameter of the file uses; got $ls")
+        assertEquals(1, ls.count { it == "foo" }, "one suggestion per name; got $ls")
+    }
+
+    @Test
+    fun aGetterBodyAndALabeledReturnExpectTheirTypes() {
+        val getter = ranked("package q12\nclass Foo\nval somePrefixA: Int = 5\nval somePrefixB: Foo = Foo()\nval testing: Foo\n  get() = somePrefix|")
+        assertEquals("somePrefixB", getter.first(), "got ${getter.take(5)}")
+        val lambda = ranked("package q13\nval a: Int = 1\nval b: String = \"\"\nfun test(): Int {\n  receiveLambda {\n    return@receiveLambda |\n  }\n  return 2\n}\n" +
+            "fun receiveLambda(x: () -> Int) {}")
+        assertTrue(lambda.indexOf("a") < lambda.indexOf("b"), "the lambda's Int is expected; got ${lambda.take(8)}")
+    }
+
+    @Test
+    fun anExpectedTypeOffersItsAnonymousObjectAndSamConstructor() {
+        val ls = ranked("package q14\nabstract class MatchingClass\nfun test(other: MatchingClass) {}\nfun foo() {\n  test(|)\n}")
+        assertTrue("object : MatchingClass" in ls, "an anonymous object of an abstract class (shown up to its `(`); got ${ls.take(10)}")
+        val sam = labels("package q15\nfun interface Action {\n  fun run()\n}\nval a: Action = |")
+        assertTrue("Action {...}" in sam && "object : Action{...}" in sam, "got ${sam.take(10)}")
+    }
+
+    @Test
+    fun aTypeAliasIsJudgedAsWhatItExpandsTo() {
+        val ls = ranked("package q16\ninterface Foo\nclass CandidateClass : Foo\nobject Bar : Foo\ntypealias CandidateObject = Bar\n" +
+            "fun foo(f: Foo) {\n  if (f == Candidate|) {\n  }\n}")
+        assertEquals("CandidateObject", ls.first(), "an alias of an object that fits is a value; got ${ls.take(5)}")
+    }
+
+    @Test
+    fun anUntypedClassifierRanksAboveAMismatchedValue() {
+        val ls = ranked("package q17\nclass Foo\nfun test(fooInt: Int) {\n  val s: String = foo|\n}")
+        assertTrue(ls.indexOf("Foo") < ls.indexOf("fooInt"), "NON_TYPABLE before NOT_MATCHES; got ${ls.take(6)}")
+    }
+
     private val srcDir: Path = tempProject(mapOf("Seed.kt" to "package seed\nclass Seed"))
     private val analyzer by lazy { KotlinSourceAnalyzer(fakeContext(srcDir)) }
 

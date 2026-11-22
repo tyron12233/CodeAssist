@@ -44,13 +44,16 @@ object TestJars {
      * something a test should do twice. Null if the runtime image cannot be opened, so a caller on some
      * exotic runtime self-gates rather than failing.
      */
-    fun jdkBaseJar(cacheDir: Path): Path? = runCatching {
-        val dest = cacheDir.resolve("java.base-${System.getProperty("java.version")}.jar")
+    fun jdkBaseJar(cacheDir: Path): Path? = jdkModuleJar(cacheDir, "java.base")
+
+    /** [jdkBaseJar] for any module of the running JDK (`java.sql`, `java.desktop`), cached the same way. */
+    fun jdkModuleJar(cacheDir: Path, module: String): Path? = runCatching {
+        val dest = cacheDir.resolve("$module-${System.getProperty("java.version")}.jar")
         if (Files.isRegularFile(dest)) return@runCatching dest
         Files.createDirectories(cacheDir)
         val jrt = FileSystems.getFileSystem(URI.create("jrt:/"))
-        val root = jrt.getPath("/modules/java.base")
-        val tmp = Files.createTempFile(cacheDir, "java.base", ".jar")
+        val root = jrt.getPath("/modules/$module")
+        val tmp = Files.createTempFile(cacheDir, module, ".jar")
         JarOutputStream(Files.newOutputStream(tmp)).use { jos ->
             Files.walk(root).use { paths ->
                 for (p in paths) {
