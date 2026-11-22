@@ -2483,7 +2483,8 @@ internal class KotlinSemanticChecks(
         if (call.valueArguments.any { it.isNamed() || it.getSpreadElement() != null }) return null
         val name = callee.getReferencedName()
         if (name.firstOrNull()?.isUpperCase() != true) return null
-        val cls = sameFileClassNamed(call, name) ?: return null
+        val cls = sameFileClassNamed(call, name)
+            ?: identityAliasTarget(call.containingKtFile, name)?.let { sameFileClassNamed(call, it) } ?: return null
         if (cls.isInterface() || cls.isAnnotation() || cls.isEnum() || cls.companionObjects.isNotEmpty()) return null
         // A FUNCTION of the class's name is the factory idiom (`class Foo` beside `fun Foo(x: Int)`), and the
         // call may be to it; the constructors alone cannot say the arguments are wrong.
@@ -2530,6 +2531,22 @@ internal class KotlinSemanticChecks(
      * Null when the claiming scope can't be judged: two same-named classes there, or a non-constructible
      * `object` of that name (which shadows an outer class but is not what `Level(…)` calls).
      */
+    /**
+     * The class a top-level typealias of this file stands for when it passes its own type parameters straight
+     * through, in order (`typealias C<T> = Cons<T>`, `typealias N = Num`): a constructor call through it is a call of
+     * that class's constructor, with nothing to substitute. Null for any other alias.
+     */
+    internal fun identityAliasTarget(file: KtFile, name: String): String? {
+        val alias = file.declarations.firstOrNull { it is dev.ide.kotlin.syntax.psi.KtTypeAlias && it.name == name }
+            as? dev.ide.kotlin.syntax.psi.KtTypeAlias ?: return null
+        val user = alias.typeReference?.typeElement as? KtUserType ?: return null
+        if (user.qualifier != null) return null
+        val own = alias.typeParameters.map { it.name ?: return null }
+        val passed = user.typeArguments.map { (it.typeReference?.typeElement as? KtUserType)?.takeIf { u -> u.typeArguments.isEmpty() }?.referencedName ?: return null }
+        if (own != passed) return null
+        return user.referencedName?.takeIf { it != name }
+    }
+
     internal fun sameFileClassNamed(call: KtCallExpression, name: String): KtClass? {
         val file = call.containingKtFile
         // Every class/object in the file by SIMPLE name, for following a supertype reference to its PSI.
@@ -3534,18 +3551,6 @@ internal class KotlinSemanticChecks(
         // `String?.equals(other: String?, ignoreCase)` is the one stdlib `equals` a nullable receiver may call.
         if (selectorName(expr) == "equals" && recvType.qualifiedName == "kotlin.String") return null
         if (callAcceptsNullableReceiver(expr, resolver)) return null
-        // A member the type does not have at all is an unresolved reference (K2 resolves the name before it asks
-        // whether the call is safe), which [unresolvedMember] reports on the selector.
-        selectorName(expr)?.let { sel ->
-            val nonNull = recvType.withNullable(false)
-            if (!recvType.isTypeParameter && service.isKnownType(nonNull.qualifiedName) &&
-                sel != "hashCode" && sel != "equals" && sel != "toString" &&
-                // A function-typed value with a receiver (`i.doIt()` for `doIt: Int.() -> Int`) is an invoke.
-                resolver.localsAt(expr.textRange.startOffset, sel).isEmpty() &&
-                service.membersNamedForCheck(nonNull.qualifiedName, nonNull.typeArguments, sel).none { it.name == sel } &&
-                resolver.scopeMemberExtensions(expr.textRange.startOffset, nonNull, sel, exactName = true).none { it.name == sel }
-            ) return null
-        }
         if (receiver is KtNameReferenceExpression) {
             // Flow is now the authority: `smartCastNonNull` precisely models the direct guards (if/else, early
             // exit, `&&`/`||`, elvis, `!!`, `require`, `is`, and — for a `var` — reassignment). Only forms it does
@@ -3559,6 +3564,18 @@ internal class KotlinSemanticChecks(
             val path = receiver.text
             if (resolver.pathGuardedNonNullAt(path, receiver.textRange.startOffset)) return null
             if (hasUnmodeledNullGuard(expr, path)) return null
+        }
+        // A member the type does not have at all is an unresolved reference (K2 resolves the name before it asks
+        // whether the call is safe), which [unresolvedMember] reports on the selector.
+        selectorName(expr)?.let { sel ->
+            val nonNull = recvType.withNullable(false)
+            if (!recvType.isTypeParameter && service.isKnownType(nonNull.qualifiedName) &&
+                sel != "hashCode" && sel != "equals" && sel != "toString" &&
+                // A function-typed value with a receiver (`i.doIt()` for `doIt: Int.() -> Int`) is an invoke.
+                resolver.localsAt(expr.textRange.startOffset, sel).isEmpty() &&
+                service.membersNamedForCheck(nonNull.qualifiedName, nonNull.typeArguments, sel).none { it.name == sel } &&
+                resolver.scopeMemberExtensions(expr.textRange.startOffset, nonNull, sel, exactName = true).none { it.name == sel }
+            ) return null
         }
         val r = receiver.textRange
         return Diagnostic(
@@ -4094,7 +4111,18 @@ internal class KotlinSemanticChecks(
         if (name == "it" && hasAncestor(expr) { it is KtLambdaExpression }) return null
         if (name == "field" && hasAncestor(expr) { it is KtPropertyAccessor }) return null
         val off = expr.textRange.startOffset
-        if (resolver.bareNameResolves(name, off) || resolver.companionMemberInScope(name, off)) return null
+        // `_` names no value: an underscore parameter (`{ _, b -> }`) declares nothing, and no declaration may be
+        // called `_` (UNDERSCORE_IS_RESERVED), so reading one is an unresolved reference wherever it stands.
+        if (name.all { it == '_' } && !(parent is KtCallExpression && parent.calleeExpression === expr)) {
+            val r = expr.textRange
+            return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", KotlinDiagnosticCodes.UNRESOLVED)
+        }
+        if (resolver.bareNameResolves(name, off) || resolver.companionMemberInScope(name, off)) {
+            // Unless all it reaches is HIDDEN-deprecated, which resolution does not see ([onlyHiddenCandidates]).
+            if (!onlyHiddenCandidates(name, off, expr, resolver)) return null
+            val r = expr.textRange
+            return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", KotlinDiagnosticCodes.UNRESOLVED)
+        }
         // A qualified-expression receiver (see above) is flagged only on POSITIVE evidence that it names
         // something real that isn't in scope, or nothing at all that a receiver may legitimately be:
         //  - a known, unimported LIBRARY type (`FontWeight.Bold` with no import),

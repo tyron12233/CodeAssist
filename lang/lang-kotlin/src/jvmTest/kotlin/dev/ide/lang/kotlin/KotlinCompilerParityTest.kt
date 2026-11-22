@@ -1204,6 +1204,27 @@ class KotlinCompilerParityTest {
         assertCodes("fun bar(doIt: Int.() -> Int) { val i: Int? = 1; i.doIt() }", KotlinDiagnosticCodes.UNSAFE_NULLABLE)
     }
 
+    /** `_` names no value; a HIDDEN-deprecated declaration is invisible to a bare reference; a constructor argument
+     *  outside its class's bound is a mismatch too; an identity typealias constructs its class. */
+    @Test
+    fun underscoresHiddenDeclarationsAndAliasConstructors() {
+        val u = KotlinDiagnosticCodes.UNRESOLVED
+        val m = KotlinDiagnosticCodes.TYPE_MISMATCH
+        assertTrue(u in codes("fun und(f: (Int, String) -> Unit) {}\nfun t() { und { _, b -> _.hashCode() } }"))
+        assertCodes(
+            "@Deprecated(\"h\", level = DeprecationLevel.HIDDEN)\nfun hiddenFun() {}\n" +
+                "open class HA { @Deprecated(\"h\", level = DeprecationLevel.HIDDEN) open fun memberFun() {}\n fun use() { hiddenFun(); memberFun() } }",
+            u, u,
+        )
+        clean("open class HA { @Deprecated(\"h\", level = DeprecationLevel.HIDDEN) open fun memberFun() {} }\nclass HB : HA() { override fun memberFun() {}\n fun use() { memberFun() } }")
+        assertEquals(
+            listOf(KotlinDiagnosticCodes.CANNOT_INFER_TYPE, m).sorted(),
+            codes("class Num<Tn : Number>(val x: Tn)\nval tn = Num(\"1\")").map { it.orEmpty() }.sorted(),
+        )
+        assertCodes("class Cons<T>(val head: T, val tail: Cons<T>?)\ntypealias CA<T> = Cons<T>\nval a = CA(1, 2)", m)
+        clean("class Cons<T>(val head: T, val tail: Cons<T>?)\ntypealias CA<T> = Cons<T>\nval a = CA(1, null)")
+    }
+
     /** A getter of a `val` may read its backing field but not assign it, also from a local function inside. */
     @Test
     fun aValGetterCannotAssignItsBackingField() {

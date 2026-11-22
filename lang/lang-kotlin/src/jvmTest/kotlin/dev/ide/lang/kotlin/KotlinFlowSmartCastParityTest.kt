@@ -112,9 +112,11 @@ class KotlinFlowSmartCastParityTest {
     fun anUnprovenCastIsStillReported() {
         val ab = "interface A { fun foo() }\ninterface B { fun bar() }\n"
         assertCodes(ab + "fun g(x: Any, c: Boolean) { if (c) x as A; x.foo() }", KotlinDiagnosticCodes.UNRESOLVED)
+        // K2 resolves the name before it asks whether the call is safe: `Any?` has no `length` at all, so the one
+        // diagnostic is the unresolved reference (as `smartCasts/lambdasWithContracts` marks it).
         assertCodes(
             "fun g(a: Any?): Int { a as? String; return a.length }",
-            KotlinDiagnosticCodes.UNSAFE_NULLABLE, KotlinDiagnosticCodes.UNRESOLVED,
+            KotlinDiagnosticCodes.UNRESOLVED,
         )
         assertCodes(
             "fun g(): Int { var c: Any = \"\"; (c as String).length; c = 1; return c.length }",

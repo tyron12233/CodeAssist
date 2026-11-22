@@ -78,35 +78,43 @@ private fun KotlinResolver.rewrittenBetween(from: KtElement?, to: KtElement, nam
 }
 
 /**
- * Whether [node] runs its body again (a loop, or a lambda an `AT_LEAST_ONCE` contract or an inline library function
- * calls in place) and that body assigns [name]. The written names of each such node are collected once per
- * snapshot ([KotlinResolverCaches.backEdgeWrites]).
+ * Whether [node] runs its body again (a loop, or a lambda an `AT_LEAST_ONCE` contract calls in place) and that body
+ * assigns [name]. The written names are collected once per node per snapshot ([writtenNames]); the in-place kind of
+ * a lambda is asked only once its body is known to write [name].
  */
 internal fun KotlinResolver.rewrittenOnBackEdge(node: KtElement, name: String): Boolean {
-    if (node !is dev.ide.kotlin.syntax.psi.KtLoopExpression) {
-        val lambda = node as? dev.ide.kotlin.syntax.psi.KtLambdaExpression ?: return false
-        val kind = KotlinVarNullFlow(this).inPlaceKind(lambda) ?: return false
-        if (kind != InPlace.AT_LEAST_ONCE) return false
-    }
-    val names = caches.backEdgeWrites.getOrPut(node) {
-        val out = HashSet<String>()
-        fun visit(e: KtElement) {
-            when (e) {
-                is dev.ide.kotlin.syntax.psi.KtClassOrObject, is dev.ide.kotlin.syntax.psi.KtNamedFunction -> return
-                is KtBinaryExpression -> if (e.operationToken == KtTokens.EQ || e.operationToken in WRITE_OPS)
-                    (unwrapParens(e.left) as? KtNameReferenceExpression)?.let { out += it.getReferencedName() }
-                is dev.ide.kotlin.syntax.psi.KtUnaryExpression -> if (e.operationToken == KtTokens.PLUSPLUS || e.operationToken == KtTokens.MINUSMINUS)
-                    (unwrapParens(e.baseExpression) as? KtNameReferenceExpression)?.let { out += it.getReferencedName() }
-                // A name declared inside the body is another variable: its writes say nothing about the outer one.
-                is dev.ide.kotlin.syntax.psi.KtProperty -> e.name?.let { out += "<shadow>$it" }
-            }
-            var c = e.firstChild
-            while (c != null) { (c as? KtElement)?.let(::visit); c = c.nextSibling }
+    if (node !is dev.ide.kotlin.syntax.psi.KtLoopExpression && node !is dev.ide.kotlin.syntax.psi.KtLambdaExpression) return false
+    val w = writtenNames(node)
+    if (name !in w.written || name in w.declared) return false
+    if (node is dev.ide.kotlin.syntax.psi.KtLambdaExpression) return KotlinVarNullFlow(this).inPlaceKind(node) == InPlace.AT_LEAST_ONCE
+    return true
+}
+
+/** The names assigned under an element (`=`, a compound assignment, `++`/`--`), not counting a nested lambda, local
+ *  function or class, and the names declared under it (whose writes may be to that declaration instead). */
+internal class WrittenNames(val written: Set<String>, val declared: Set<String>)
+
+private val NO_WRITES = WrittenNames(emptySet(), emptySet())
+
+/** [WrittenNames] of [root], memoized per snapshot in [KotlinResolverCaches.writtenNames]. */
+internal fun KotlinResolver.writtenNames(root: KtElement): WrittenNames = caches.writtenNames.getOrPut(root) {
+    var written: HashSet<String>? = null
+    var declared: HashSet<String>? = null
+    fun visit(e: KtElement) {
+        if (e !== root && (e is dev.ide.kotlin.syntax.psi.KtLambdaExpression || e is dev.ide.kotlin.syntax.psi.KtClassOrObject ||
+                e is dev.ide.kotlin.syntax.psi.KtNamedFunction)) return
+        when (e) {
+            is KtBinaryExpression -> if (e.operationToken == KtTokens.EQ || e.operationToken in WRITE_OPS)
+                (unwrapParens(e.left) as? KtNameReferenceExpression)?.let { (written ?: HashSet<String>().also { h -> written = h }) += it.getReferencedName() }
+            is dev.ide.kotlin.syntax.psi.KtUnaryExpression -> if (e.operationToken == KtTokens.PLUSPLUS || e.operationToken == KtTokens.MINUSMINUS)
+                (unwrapParens(e.baseExpression) as? KtNameReferenceExpression)?.let { (written ?: HashSet<String>().also { h -> written = h }) += it.getReferencedName() }
+            is dev.ide.kotlin.syntax.psi.KtProperty -> e.name?.let { (declared ?: HashSet<String>().also { h -> declared = h }) += it }
         }
-        visit(node)
-        out
+        var c = e.firstChild
+        while (c != null) { (c as? KtElement)?.let(::visit); c = c.nextSibling }
     }
-    return name in names && "<shadow>$name" !in names
+    visit(root)
+    if (written == null) NO_WRITES else WrittenNames(written!!, declared ?: emptySet())
 }
 
 private val WRITE_OPS = setOf(KtTokens.PLUSEQ, KtTokens.MINUSEQ, KtTokens.MULTEQ, KtTokens.DIVEQ, KtTokens.PERCEQ)
@@ -320,7 +328,7 @@ internal fun KotlinResolver.earlyExitNarrowing(
                 continue
             }
             val narrowed = result
-            if (!nestedWritesKeep(st, name, narrowed)) { result = null; continue }
+            if (name in writtenNames(st).written && !nestedWritesKeep(st, name, narrowed)) { result = null; continue }
         }
         if (st is KtBinaryExpressionWithTypeRHS) {
             if (st.operationReference.getReferencedNameElementType() == KtTokens.AS_KEYWORD &&

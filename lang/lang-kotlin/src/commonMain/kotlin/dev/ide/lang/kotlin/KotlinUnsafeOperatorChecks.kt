@@ -6,7 +6,7 @@ import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtParenthesizedExpression
 import dev.ide.kotlin.syntax.psi.KtPrefixExpression
-import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
+import dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.Severity
@@ -58,9 +58,8 @@ internal fun KotlinSemanticChecks.unsafeOperatorCheckers(): List<KotlinChecker> 
                 val contains = token == KtTokens.IN_KEYWORD || token == KtTokens.NOT_IN
                 val receiver = if (contains) psi.right else psi.left
                 // A nullable NUMBER on the left of an arithmetic or ordering operator is [operatorOnNullable]'s.
-                val numericLeft = token != KtTokens.IDENTIFIER && !contains &&
-                    receiver?.let { resolver.inferType(it) }?.let { canonicalTypeForCheck(it.withNullable(false)).qualifiedName in NUMERIC } == true
-                if (name != null && receiver != null && psi.right != null && !numericLeft && unsafeMemberOperator(receiver, name, resolver)) {
+                val skipNumbers = token != KtTokens.IDENTIFIER && !contains
+                if (name != null && receiver != null && psi.right != null && unsafeMemberOperator(receiver, name, resolver, skipNumbers)) {
                     val what = if (token == KtTokens.IDENTIFIER) "infix call" else "operator call"
                     report(unsafe(psi.operationReference, "Unsafe $what '$name' on a nullable receiver"))
                 }
@@ -77,14 +76,22 @@ private val BINARY = mapOf(
 )
 
 /** Whether [receiver] is nullable where it stands and [name] reaches it only as a member of its non-null type. */
-private fun KotlinSemanticChecks.unsafeMemberOperator(receiver: KtExpression, name: String, resolver: KotlinResolver): Boolean {
+private fun KotlinSemanticChecks.unsafeMemberOperator(
+    receiver: KtExpression, name: String, resolver: KotlinResolver, skipNumbers: Boolean = false,
+): Boolean {
     var r: KtExpression = receiver
     while (r is KtParenthesizedExpression) r = r.expression ?: return false
     // Only a value whose null-guards the flow analysis follows: a name, or a dotted path of names.
-    if (r !is KtNameReferenceExpression && !(r is KtQualifiedExpression && r.text.all { it.isLetterOrDigit() || it == '.' || it == '_' })) return false
+    var head: KtExpression = r
+    while (head is KtDotQualifiedExpression) {
+        if (head.selectorExpression !is KtNameReferenceExpression) return false
+        head = head.receiverExpression
+    }
+    if (head !is KtNameReferenceExpression) return false
     val type = resolver.inferType(r) ?: return false
     if (!type.nullable || type.isTypeParameter) return false
     val nonNull = type.withNullable(false)
+    if (skipNumbers && canonicalTypeForCheck(nonNull).qualifiedName in NUMERIC) return false
     if (!service.isKnownType(nonNull.qualifiedName)) return false
     val found = service.membersNamedForCheck(nonNull.qualifiedName, nonNull.typeArguments, name).filter { it.name == name }
     if (found.isEmpty() || found.any { it.isExtension }) return false

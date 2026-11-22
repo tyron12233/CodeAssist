@@ -102,7 +102,8 @@ private class BoundChecks(val checks: KotlinSemanticChecks, val resolver: Kotlin
         val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
         checks.constructedSourceClass(call, resolver)?.let { fqn ->
             val cls = sourceClass(fqn, call) ?: return null
-            if (callee.getReferencedName() != cls.name) return null
+            if (callee.getReferencedName() != cls.name &&
+                checks.identityAliasTarget(call.containingKtFile, callee.getReferencedName()) != cls.name) return null
             val ctors = listOfNotNull(cls.primaryConstructor?.valueParameters) + cls.secondaryConstructors.map { it.valueParameters }
             val params = ctors.singleOrNull() ?: if (ctors.isEmpty() && call.valueArguments.isEmpty()) emptyList() else return null
             return (genericOf(cls) ?: return null) to params
@@ -167,8 +168,10 @@ private class BoundChecks(val checks: KotlinSemanticChecks, val resolver: Kotlin
             val actual = trustedType(expr, names) ?: continue
             if (typing.subtype(actual, bound) != false) continue
             violated = true
-            // The applicability check already reports a concrete, non-null argument outside a concrete bound.
-            val reported = !actual.nullable && !actual.isTypeParameter && !bound.isTypeParameter && checks.boundViolated(actual, bound)
+            // The applicability check already reports a concrete, non-null argument outside a concrete bound, for a
+            // function; a constructor's arguments are not held against its class's bounds there.
+            val reported = generic.owner !is dev.ide.kotlin.syntax.psi.KtClass &&
+                !actual.nullable && !actual.isTypeParameter && !bound.isTypeParameter && checks.boundViolated(actual, bound)
             if (!reported) bad += checks.mismatchDiagnostic(expr.textRange.startOffset, expr.textRange.endOffset, actual, bound)
         }
         if (!violated) return emptyList()

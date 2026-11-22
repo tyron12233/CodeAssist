@@ -87,9 +87,9 @@ class KotlinResolverCaches {
      *  keeps type inference from walking the flow for a name nothing checks. Keyed by the file. */
     val flowCheckedNames = HashMap<KtElement, Set<String>>()
 
-    /** Per loop (or repeatedly in-place lambda): the names its body assigns, which a narrowing established outside
-     *  it does not survive (see `rewrittenOnBackEdge`). */
-    internal val backEdgeWrites = HashMap<KtElement, Set<String>>()
+    /** Per element (a loop, a lambda, a statement after a narrowing): the names assigned and declared under it
+     *  (see `writtenNames`), which decide whether a narrowing survives it. */
+    internal val writtenNames = HashMap<KtElement, WrittenNames>()
 
     /**
      * Symbols for local `val`/`var` and value-parameter DECLARATIONS, keyed by the declaration.
@@ -123,6 +123,10 @@ class KotlinResolverCaches {
 
     /** The names of this file's top-level declarations, for the per-reference "does a bare name resolve" test. */
     var topLevelNames: Set<String>? = null
+
+    /** The names of this file's `@Deprecated(level = HIDDEN)` functions and properties (any depth), the cheap gate
+     *  of the hidden-only resolution test. */
+    var hiddenNames: Set<String>? = null
 
     /** Key for [sameFileSymbols]: a declaration and the owner it is offered under. */
     class SameFileKey(val decl: KtElement, val ownerFqn: String?) {
