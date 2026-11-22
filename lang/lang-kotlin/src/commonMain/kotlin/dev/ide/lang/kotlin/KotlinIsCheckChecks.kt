@@ -64,6 +64,12 @@ private class Shape(val isFinal: Boolean, val isClass: Boolean)
 private fun KotlinSemanticChecks.shapeOf(t: KotlinType): Shape? {
     if (t.qualifiedName in FINAL_VALUE_TYPES) return Shape(isFinal = true, isClass = true)
     if (!service.supertypeClosureKnown(t.qualifiedName)) return null
+    // A classpath class: its class file says whether it is an interface and whether it is final.
+    if (service.sourceClass(t.qualifiedName) == null) {
+        val iface = service.isInterfaceType(t.qualifiedName) ?: return null
+        val final = service.isFinalType(t.qualifiedName) ?: return null
+        return Shape(isFinal = final && !iface, isClass = !iface)
+    }
     val decl = (service.sourceClass(t.qualifiedName)?.node as? KotlinDomNode)?.psi as? KtClassOrObject ?: return null
     if (decl is KtObjectDeclaration) return Shape(isFinal = true, isClass = true)
     val cls = decl as? KtClass ?: return null

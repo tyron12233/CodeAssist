@@ -5264,7 +5264,13 @@ class KotlinSymbolService(
         if (!visited.add(fqn)) return true // a cycle: the chain above is already being proven
         if (fqn == "kotlin.Any") return true
         if (Builtins.builtinSupertypes(fqn).isNotEmpty()) return true
-        val declared = model().classByFqn[fqn] ?: return false
+        // A classpath class, once the index is complete: its class file lists every direct supertype, so the
+        // chain is known when each of theirs is (`java.lang.Exception` -> `Throwable` -> `Any`).
+        val declared = model().classByFqn[fqn] ?: run {
+            if (!classpathReady()) return false
+            val shape = typeShape(fqn) ?: return false
+            return shape.supertypes.all { st -> (st as? KotlinType)?.qualifiedName?.let { closureKnown(it, visited) } == true }
+        }
         for (text in declared.superTypeTexts) {
             val resolved = resolveTypeName(text, declared.ctx, headerScopeOwner(declared.fqn))
             if (resolved == null) return false

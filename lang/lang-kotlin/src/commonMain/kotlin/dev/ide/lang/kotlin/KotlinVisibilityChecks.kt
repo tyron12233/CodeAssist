@@ -103,6 +103,8 @@ private fun effectiveOwner(owner: KtClassOrObject): KtClassOrObject =
  *  known, so "does not inherit" cannot be concluded. */
 internal fun KotlinSemanticChecks.inheritsFrom(sub: String, sup: String): Boolean? {
     if (sub == sup) return true
+    // Every class is an `Any` (a Java class's `Object` is the same type), written as a supertype or not.
+    if (sup == "kotlin.Any" || sup == "java.lang.Object") return true
     val seen = HashSet<String>()
     val queue = ArrayDeque<String>()
     queue += sub
