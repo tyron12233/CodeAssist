@@ -1865,6 +1865,73 @@ class KotlinCompilerParityTest {
         a.analyze(doc.file).diagnostics.filter { it.severity == Severity.ERROR && it.code != KotlinDiagnosticCodes.SYNTAX }
     }
 
+    /** `super` in an enum entry's body is its enum class; an abstract member reached that way is ABSTRACT_SUPER_CALL. */
+    @Test
+    fun superInAnEnumEntryIsTheEnumClass() {
+        clean("enum class E {\n E1 { override fun foo() = outerFun() + super.outerFun() };\n abstract fun foo(): Int\n fun outerFun() = 42\n}")
+        assertCodes("interface I { fun foo() }\nenum class E2 : I {\n A { override fun foo() = super.foo() };\n}", KotlinDiagnosticCodes.SUPER_MISUSE)
+    }
+
+    /** An extension on a function type is found on a lambda, also as an infix call whose receiver is a lambda. */
+    @Test
+    fun functionTypeReceiverExtensionsResolveOnLambdas() {
+        clean("class A { fun bar() {} }\ninfix fun (() -> Unit).foo(x: A.() -> Unit) {}\nfun main() {\n {} foo { bar() }\n}")
+        clean("class A { fun bar() {} }\nfun (() -> Unit).foo(x: A.() -> Unit) {}\nfun main() { val f: () -> Unit = {}; f.foo { bar() } }")
+    }
+
+    /** `5.b()` invokes the extension property `Int.b: () -> String` before a variable `b: Int.() -> Int` (KT-64891). */
+    @Test
+    fun anExtensionPropertyIsInvokedBeforeAnExtensionFunctionTypedVariable() {
+        clean("val b: Int.() -> Int = { 10 }\nval Int.b: () -> String get() = { \"B\" }\nfun main() { 5.b().length }")
+    }
+
+    /** The most specific receiver's extension property wins before its value is invoked. */
+    @Test
+    fun theMostSpecificExtensionPropertyIsInvoked() {
+        clean("open class A { operator fun invoke(f: () -> Unit): Int = 1 }\nclass B { operator fun invoke(f: () -> Unit): CharSequence = \"\" }\n" +
+            "open class C\nval C.attr: A get() = TODO()\nopen class D: C()\nval D.attr: B get() = TODO()\nfun box(d: D) { (d.attr {}).length }")
+    }
+
+    /** A member extension a class of the edited file inherits, and one with a nested generic receiver. */
+    @Test
+    fun inheritedAndNestedGenericMemberExtensionsResolve() {
+        clean("interface Context { val Variable.value: Int }\nclass Variable\nabstract class A : Context {\n abstract val intVar: Variable\n fun foo() { val x: Int = intVar.value }\n}")
+        clean("interface Context { var <V> Variable<V>.value: V }\nclass Variable<T>\nabstract class A : Context {\n abstract val intVar: Variable<Int>\n fun foo() { intVar.value++ }\n}")
+        clean("interface Loading { val <X> Property<LoadingValue<X>>.liveLoaded: X get(): X = TODO() }\ninterface LoadingValue<T>\ninterface Property<T>\n" +
+            "interface AsyncModule { fun bar() {} }\noperator fun <T : AsyncModule, R> T.invoke(handler: T.() -> R): R = TODO()\n" +
+            "fun Loading.foo(fooBar: Property<LoadingValue<AsyncModule>>) { fooBar.liveLoaded { bar() } }")
+    }
+
+    /** A member extension declared on a class's own type parameter is found on a value of that type parameter. */
+    @Test
+    fun aMemberExtensionOnATypeParameterIsFound() {
+        clean("abstract class A<T : Any> {\n abstract protected fun T.foo()\n fun bar(x: T?) { if (x != null) { x.foo() } }\n}")
+    }
+
+    /** An infix call prefers an extension of the file's own package over a default-imported one of that name. */
+    @Test
+    fun anInfixCallPrefersTheFilesOwnPackage() {
+        clean("interface A\ninterface B\nclass Pair<out A, out B>(val first: A, val second: B)\ninfix fun <A, B> A.to(that: B) = Pair(this, that)\n" +
+            "fun test(a: A?, b: B, list: MutableList<Pair<A, B>>) { if (a != null) { list.add(a to b) } }")
+    }
+
+    /** A local `var` takes the type of what is assigned to it, also through `++x` (KT-57178), but not into a
+     *  closure that may run after a later write, nor for a value an expected type would type differently. */
+    @Test
+    fun aLocalVarTakesTheTypeOfItsAssignedValue() {
+        clean("open class I { operator fun inc(): ST = ST() }\nclass ST : I()\nfun main() {\n var local = I()\n val x: ST = ++local\n val y: ST = local\n}")
+        clean("fun f() { var x: Any = 1; x = \"s\"; x.length }")
+        assertCodes("fun main() {\n var p: String?\n var block: () -> Int = { 1 }\n p = \"2\"\n run { block = { p.length } }\n p = null\n block()\n}", KotlinDiagnosticCodes.UNSAFE_NULLABLE)
+    }
+
+    /** A reference to a member extension, function or property, with or without type arguments on the receiver. */
+    @Test
+    fun memberExtensionPropertiesCannotBeReferencedThroughTheClass() {
+        val c = KotlinDiagnosticCodes.EXTENSION_IN_CLASS_REFERENCE_NOT_ALLOWED
+        assertCodes("class T {\n class A\n class B\n val B.extensionVal: A get() = A()\n fun test() { val r = B::extensionVal }\n}", c)
+        assertCodes("class T {\n class A<X>\n class B<X>\n fun <X> B<X>.extensionFun(): A<X> = A()\n fun test() { val r = B<*>::extensionFun }\n}", c)
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {
