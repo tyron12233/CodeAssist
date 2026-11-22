@@ -4230,7 +4230,8 @@ internal class KotlinSemanticChecks(
         if (inImportOrPackage(expr) || inTypeReference(expr)) return null
         val name = expr.getReferencedName()
         if (name.isEmpty()) return null
-        if (name == "it" && hasAncestor(expr) { it is KtLambdaExpression }) return null
+        // `it` inside a lambda: unresolved only when no enclosing lambda can declare it ([implicitItProvablyAbsent]).
+        if (name == "it" && hasAncestor(expr) { it is KtLambdaExpression } && !implicitItProvablyAbsent(expr, resolver)) return null
         val off = expr.textRange.startOffset
         // `_` names no value: an underscore parameter (`{ _, b -> }`) declares nothing, and no declaration may be
         // called `_` (UNDERSCORE_IS_RESERVED), so reading one is an unresolved reference wherever it stands.

@@ -2510,6 +2510,19 @@ class KotlinCompilerParityTest {
         clean("class D { val field: Any = 1; val property get() = field }")
     }
 
+    /** A lambda has an implicit `it` only for a function type with one value parameter (a receiver does not count);
+     *  an enclosing lambda's `it` is still visible; overloads that disagree leave it alone. */
+    @Test
+    fun implicitItNeedsOneParameter() {
+        assertCodes("fun bar2(f: () -> Int) {}\nfun t() { bar2 { it } }", KotlinDiagnosticCodes.UNRESOLVED)
+        assertCodes("fun t() { val x: String.() -> String = { it } }", KotlinDiagnosticCodes.UNRESOLVED)
+        assertCodes("fun takeLambda1(f: String.() -> String) {}\nfun t() { takeLambda1 { it } }", KotlinDiagnosticCodes.UNRESOLVED)
+        clean("fun t(l: List<Int>) { l.forEach { run { println(it) } } }")
+        clean("fun t(x: String) { x.let { it.length } ; x.also { it.length } }")
+        assertTrue(KotlinDiagnosticCodes.UNRESOLVED !in codes("fun o(f: () -> Unit) {}\nfun o(f: (Int) -> Unit) {}\nfun t() { o { it } }"))
+        clean("fun t() { listOf(1).map { it + 1 } }")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {
