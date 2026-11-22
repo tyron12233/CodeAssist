@@ -68,7 +68,7 @@ class KotlinAdvancedCompletionTest {
         val item = items("Use.kt", "package demo\nclass My : Base { rend| }")
             .firstOrNull { it.label.startsWith("override fun render") }
         assertNotNull(item, "override stub for render expected")
-        assertTrue(item.label == "override fun render(): String", "label renders return type; got '${item.label}'")
+        assertTrue(item.label == "override fun render(): String {...}", "label renders return type; got '${item.label}'")
         assertTrue(item.insertText.contains("TODO("), "stub body has a TODO; got '${item.insertText}'")
     }
 

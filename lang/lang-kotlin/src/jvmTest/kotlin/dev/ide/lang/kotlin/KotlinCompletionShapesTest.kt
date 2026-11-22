@@ -51,9 +51,9 @@ class KotlinCompletionShapesTest {
 
     @Test
     fun aClassWithNoSupertypeListCanOverrideAnysMembers() {
-        assertEquals(listOf("override fun toString(): String"), labels("class A {\n    override fun toS|\n}"))
+        assertEquals(listOf("override fun toString(): String {...}"), labels("class A {\n    override fun toS|\n}"))
         val all = labels("class A : Runnable {\n    override fun |\n}")
-        assertEquals("override fun run()", all.first(), "the declared supertype's member leads; got ${all.take(5)}")
+        assertEquals("override fun run() {...}", all.first(), "the declared supertype's member leads; got ${all.take(5)}")
         assertTrue(all.any { it.startsWith("override fun equals") } && all.any { it.startsWith("override fun hashCode") })
     }
 

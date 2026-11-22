@@ -658,6 +658,110 @@ class KotlinCompletionParityTest {
         assertTrue("fooI" in ls && "fooJ" in ls, "got $ls")
     }
 
+    // --- override items, several arguments at once ---
+
+    @Test
+    fun anOverrideItemAnswersToOverrideAndShowsItsBody() {
+        val ls = labels("package v1\ninterface I<T> {\n  fun foo(t: T): T\n  var bar: Int\n}\nclass A<T> : List<String>, I<T> {\n  o|\n}")
+        assertTrue("override fun foo(t: T): T {...}" in ls, "`o` reaches an override through `override`; got $ls")
+        assertTrue("override fun get(index: Int): String {...}" in ls, "a supertype's arguments are substituted; got $ls")
+        assertTrue("override var bar: Int" in ls, "a mutable property stays a `var`; got $ls")
+        assertFalse(ls.any { it.startsWith("orEmpty") || it.startsWith("onEach") }, "a member being declared is not a call; got $ls")
+    }
+
+    @Test
+    fun anAbstractMemberIsOfferedBeforeAnOpenOne() {
+        val ls = labels("package v2\ninterface I { fun bbb() }\nopen class Base { open fun aaa() {} }\nclass A : Base(), I {\n  overr|\n}")
+            .filter { it.startsWith("override fun") }
+        assertEquals(listOf("override fun bbb() {...}", "override fun aaa() {...}"), ls.take(2))
+    }
+
+    @Test
+    fun aValConstructorParameterOverridesOnlyAVal() {
+        val ls = labels("package v3\ninterface I {\n  val someVal: Int\n  var someVar: Int\n}\nclass A(override val |) : I")
+        assertTrue("override val someVal: Int" in ls, "got $ls")
+        assertFalse(ls.any { "someVar" in it }, "a `val` cannot override a `var`; got $ls")
+        assertFalse("vararg" in ls || "private" in ls, "no modifier follows `val`; got $ls")
+    }
+
+    @Test
+    fun theRemainingArgumentsAreOfferedTogether() {
+        val ls = labels("package v4\nfun foo(a: Int, b: String, c: String) {}\nfun bar(b: String, a: Int, c: String) {\n  foo(|)\n}")
+        assertTrue("a, b, c" in ls, "got $ls")
+        val mismatch = labels("package v5\nfun foo(a: Int, b: String, c: String) {}\nfun bar(b: String, a: Int, c: String?) {\n  foo(|)\n}")
+        assertFalse("a, b, c" in mismatch, "a nullable value does not fill a non-null parameter; got $mismatch")
+        val members = labels("package v6\nfun f(p1: String, p2: Int, p3: Any) {}\nclass C(val p1: String) {\n  val p3: String = \"\"\n  fun foo(p2: Int) {\n    f(|)\n  }\n}")
+        assertTrue("p1, p2, p3" in members, "an enclosing class's members fill them too; got $members")
+        val superCall = labels("package v7\nopen class B {\n  open fun foo(p1: String, p2: String) {}\n}\nclass C : B() {\n  override fun foo(p1: String, p2: String) {\n    super.foo(|)\n  }\n}")
+        assertTrue("p1, p2" in superCall, "got $superCall")
+        val header = labels("package v8\nopen class B(p1: String, p2: String)\nclass C(p1: String, p2: String, p3: String) : B(|)")
+        assertTrue("p1, p2" in header, "a supertype call takes the constructor's parameters; got $header")
+    }
+
+    // --- scope classifiers, receivers, contextual callables, accessor names ---
+
+    @Test
+    fun aTypeParameterAroundIsATypeButNotFromAnOuterClassOfANestedOne() {
+        val ls = labels("package x1\nclass C<TParam> {\n  val v: List<T|\n}")
+        assertTrue("TParam" in ls, "got $ls")
+        val header = labels("package x2\nopen class Base<T>\nclass A<U> : Base<|>")
+        assertTrue("U" in header, "got ${header.take(10)}")
+        val nested = labels("package x3\nclass X<T> {\n  class Nested {\n    val v: |\n  }\n}")
+        assertFalse("T" in nested, "a nested class sees no outer type parameter; got ${nested.take(10)}")
+    }
+
+    @Test
+    fun aLowerCaseObjectIsAReceiver() {
+        val ls = labels("package x4\nobject x {\n  val b: Boolean = true\n  fun foo(): Boolean = true\n}\nfun test() {\n  x.|\n}")
+        assertTrue("b" in ls && "foo()" in ls, "got ${ls.take(10)}")
+    }
+
+    @Test
+    fun aRecursiveCallRanksFirst() {
+        val ls = labels("package x5\nfun foo2() {\n  foo|\n}\nfun foo1() {}").filter { it.startsWith("foo") }
+        assertEquals("foo2()", ls.first(), "the function being written is contextual; got $ls")
+    }
+
+    @Test
+    fun anInstanceOffersItsInnerClasses() {
+        val ls = labels("package x6\nabstract class A {\n  inner class InnerInA\n  class Nested\n}\nabstract class B : A() {\n  inner class InnerInB\n}\nfun foo(b: B) {\n  b.|\n}")
+        assertTrue(ls.any { it.startsWith("InnerInA") } && ls.any { it.startsWith("InnerInB") }, "got ${ls.take(30)}")
+        assertFalse(ls.any { it.startsWith("Nested") }, "a nested class is not reached through an instance; got ${ls.take(30)}")
+    }
+
+    @Test
+    fun aGetOrSetPrefixReachesAPropertyThroughItsAccessorName() {
+        val get = labels("package x7\nclass C {\n  val property1: Int = 0\n  var property2: Int = 0\n  var xxx: Int = 0\n  fun getPPP() = 1\n}\nfun foo(c: C) {\n  c.getP|\n}")
+        assertTrue("property1" in get && "property2" in get && "getPPP()" in get, "got $get")
+        assertFalse("xxx" in get, "got $get")
+        val set = labels("package x8\nclass C {\n  val property1: Int = 0\n  var property2: Int = 0\n  fun setPPP() {}\n}\nfun foo(c: C) {\n  c.setP|\n}")
+        assertTrue("property2" in set && "setPPP()" in set, "got $set")
+        assertFalse("property1" in set, "a `val` has no setter; got $set")
+    }
+
+    @Test
+    fun aNamedArgumentIsPrefilledFromASmartCastValueAndACompanionInvokeNamesItsParameters() {
+        val cast = labels("package x9\nfun consume(value: String) {}\nfun test(value: Any) {\n  if (value is String) {\n    consume(|)\n  }\n}")
+        assertTrue("value = value" in cast, "got ${cast.take(10)}")
+        val invoke = labels("package x10\nclass Foo {\n  companion object {\n    operator fun invoke(longOptionName: Int) = Foo()\n  }\n}\nfun main() {\n  Foo(longOptionNam|)\n}")
+        assertTrue("longOptionName =" in invoke, "got $invoke")
+    }
+
+    @Test
+    fun anIsCheckedReceiverHasTheMembersOfEveryTypeItIsKnownToHave() {
+        val ls = labels("package x11\ninterface A { fun a() }\ninterface B { fun b() }\ninterface C { fun c() }\nfun take(a: A) {\n  if (a is B && a is C) {\n    a.|\n  }\n}")
+        assertTrue("a()" in ls && "b()" in ls && "c()" in ls, "got ${ls.take(10)}")
+    }
+
+    @Test
+    fun anImportNamesOnlyWhatCanBeImportedAndAPackageReachesNoExtension() {
+        val imp = labels("package x12\nimport x12.A.|\nclass A {\n  fun bar() {}\n  class Nested\n  companion object {\n    fun foo() {}\n  }\n}")
+        assertTrue("Companion" in imp && "Nested" in imp, "got $imp")
+        assertFalse(imp.any { it.startsWith("bar") || it.startsWith("foo") || it.startsWith("also") }, "got $imp")
+        val pkg = labels("package x13\nfun String.extFoo() {}\nfun foo() {\n  x13.|\n}")
+        assertFalse(pkg.any { it.startsWith("extFoo") }, "got $pkg")
+    }
+
     // Per test instance, not in a companion: an analyzer parked in a static is heap that every later test
     // class in the fork runs without.
     private val srcDir: Path = tempProject(mapOf("Seed.kt" to "package seed\nclass Seed"))

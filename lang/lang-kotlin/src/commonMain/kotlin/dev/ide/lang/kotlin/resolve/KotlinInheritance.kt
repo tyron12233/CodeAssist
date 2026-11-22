@@ -20,8 +20,15 @@ import dev.ide.lang.resolve.SymbolKind
  *  supertype. Drives override completion. */
 fun KotlinResolver.overridableMembersAt(offset: Int): List<KotlinSymbol> {
     val cls = enclosingClassOrObject(offset) ?: return emptyList()
+    // Each supertype with the arguments it is given (`List<String>`), so an inherited member reads as the class
+    // sees it (`get(index: Int): String`, not `E`).
+    val typeArgs = HashMap<String, List<dev.ide.lang.resolve.TypeRef>>()
     val declaredSupers = cls.superTypeListEntries.mapNotNull { e ->
-        e.typeReference?.text?.let { service.resolveTypeName(it, fileContext) }
+        val text = e.typeReference?.text ?: return@mapNotNull null
+        val fqn = service.resolveTypeName(text, fileContext) ?: return@mapNotNull null
+        if ('<' in text) runCatching { service.typeFromText(text, fileContext) }.getOrNull()
+            ?.takeIf { it.qualifiedName == fqn && it.typeArguments.isNotEmpty() }?.let { typeArgs[fqn] = it.typeArguments }
+        fqn
     }
     // Every class also extends `Any`, named or not: `toString`, `equals` and `hashCode` are the three members
     // people override most, and a class with no supertype list was offered none of them.
@@ -33,10 +40,12 @@ fun KotlinResolver.overridableMembersAt(offset: Int): List<KotlinSymbol> {
             is KtNamedFunction -> d.name; is KtProperty -> d.name; else -> null
         }
     }.toHashSet()
+    // A property declared in the primary constructor is declared too (`class A(override val bar: Int)`).
+    cls.primaryConstructorParameters.forEach { p -> if (p.hasValOrVar()) p.name?.let(declared::add) }
     val seen = HashSet<String>()
     val out = ArrayList<KotlinSymbol>()
     for (fqn in superFqns) {
-        service.membersOf(fqn, emptyList(), null).filterIsInstance<KotlinSymbol>().forEach { m ->
+        service.membersOf(fqn, typeArgs[fqn].orEmpty(), null).filterIsInstance<KotlinSymbol>().forEach { m ->
             if (isOverridable(m) && m.name !in declared && seen.add(
                     m.name + "#" + (m.signature ?: "")
                 )

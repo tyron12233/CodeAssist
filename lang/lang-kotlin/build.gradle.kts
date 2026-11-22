@@ -222,7 +222,7 @@ tasks.named<Test>("jvmTest") {
     // `kt.completionOnly` narrows it to matching cases and `kt.completionDirs` picks the directories.
     val sweeping = System.getProperty("kt.sweep") != null || System.getProperty("kt.externalCorpus") != null ||
         System.getProperty("kt.testData") != null || System.getProperty("kt.completionTestData") != null
-    for (key in listOf("kt.completionTestData", "kt.completionOnly", "kt.completionDirs", "kt.completionDebug")) {
+    for (key in listOf("kt.completionTestData", "kt.completionOnly", "kt.completionDirs", "kt.completionDebug", "kt.completionOut")) {
         System.getProperty(key)?.let { systemProperty(key, it) }
     }
     if (System.getProperty("kt.sweep") != null) systemProperty("kt.repoRoot", rootDir.absolutePath)

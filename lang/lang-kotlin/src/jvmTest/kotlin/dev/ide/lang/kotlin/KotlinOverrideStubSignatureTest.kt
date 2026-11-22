@@ -21,7 +21,8 @@ class KotlinOverrideStubSignatureTest {
         val res = runBlocking {
             analyzer.completeAtCaret(srcDir, "Use.kt", "package demo\nimport util.Repo\nclass R : Repo { |}")
         }
-        return res.items.filter { it.detail == "override" }.map { it.label }
+        // The header, without the `{...}` placeholder body the label shows.
+        return res.items.filter { it.detail == "override" }.map { it.label.removeSuffix(" {...}") }
     }
 
     @Test

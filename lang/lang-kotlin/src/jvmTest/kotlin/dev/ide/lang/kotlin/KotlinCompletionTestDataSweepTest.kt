@@ -139,7 +139,7 @@ class KotlinCompletionTestDataSweepTest {
         val skip: String? = null,
     )
 
-    private class Proposal(val key: String, val tail: String?, val raw: String)
+    private class Proposal(val key: String, val tail: String?, val raw: String, val byItemText: Boolean = false)
 
     private class Directives(
         val exist: List<Proposal>,
@@ -244,7 +244,7 @@ class KotlinCompletionTestDataSweepTest {
                         fields[m.groupValues[1]] = if (v == "null") null else unescape(v.substring(1, v.length - 1))
                     }
                     val key = fields["lookupString"] ?: fields["itemText"] ?: fields["allLookupStrings"]
-                    if (key == null) emptyList() else listOf(Proposal(key, fields["tailText"], s))
+                    if (key == null) emptyList() else listOf(Proposal(key, fields["tailText"], s, byItemText = fields["lookupString"] == null && fields["itemText"] != null))
                 }
                 s.length >= 2 && s.startsWith("\"") && s.endsWith("\"") -> listOf(Proposal(s.substring(1, s.length - 1), null, s))
                 else -> s.split(',').map { it.trim() }.filter { it.isNotEmpty() }.map { Proposal(it, null, it) }
@@ -363,7 +363,7 @@ class KotlinCompletionTestDataSweepTest {
         val paths = files.map { (p, t) ->
             srcDir.resolve(p).also { Files.createDirectories(it.parent); Files.writeString(it, t) }.toString()
         }
-        val args = listOf("-d", classes.toString(), "-cp", stdlibJarPath().toString(), "-proc:none", "-nowarn") + paths
+        val args = listOf("-d", classes.toString(), "-cp", stdlibJarPath().toString(), "-proc:none", "-nowarn", "-parameters") + paths
         val err = java.io.ByteArrayOutputStream()
         if (javac.run(null, err, err, *args.toTypedArray()) != 0) return null
         val jar = work.resolve("java-sources.jar")
@@ -422,11 +422,13 @@ class KotlinCompletionTestDataSweepTest {
     }
 
     /** Every string [item] could reasonably be looked up by, for matching an EXIST entry. */
-    private fun keys(item: CompletionItem): Set<String> = buildSet {
+    private fun keys(item: CompletionItem, aliases: Boolean = true): Set<String> = buildSet {
         add(primaryKey(item))
         add(item.label)
         // A use-site target is shown `get:` and looked up by `get`.
         if (item.kind == CompletionItemKind.KEYWORD && item.label.endsWith(":")) add(item.label.removeSuffix(":"))
+        // An override stub is also looked up by `override` (`OverridesCompletionLookupElementDecorator`).
+        if (aliases && item.detail == "override" && item.label.startsWith("override ")) add("override")
         add(item.label.substringBefore('(').substringBefore(" {").trim())
         add(item.insertText.trim())
         add(item.insertText.substringBefore('(').substringBefore('<').trim())
@@ -452,12 +454,17 @@ class KotlinCompletionTestDataSweepTest {
             return Outcome(case, problems.isEmpty(), problems, causes, offered)
         }
 
-        val keySets = items.map { keys(it) }
+        val lookupKeySets = items.map { keys(it) }
+        // An item named by its presentation (`itemText`) is not found through another lookup string it has.
+        val textKeySets = items.map { keys(it, aliases = false) }
+        fun keySetsFor(p: Proposal) = if (p.byItemText) textKeySets else lookupKeySets
+        val keySets = lookupKeySets
         val matchedItems = HashSet<Int>()
         val positions = ArrayList<Int>()
         val byKey = d.exist.groupBy { it.key }
         for ((key, props) in byKey) {
-            val hits = keySets.indices.filter { key in keySets[it] }
+            val sets = keySetsFor(props.first())
+            val hits = sets.indices.filter { key in sets[it] }
             matchedItems += hits
             val need = props.map { it.tail }.distinct().size
             when {
@@ -473,7 +480,7 @@ class KotlinCompletionTestDataSweepTest {
             if (hits.isNotEmpty()) positions += hits.first()
         }
         if (d.withOrder && byKey.keys.all { k -> keySets.any { k in it } }) {
-            val firstHits = d.exist.map { p -> keySets.indexOfFirst { p.key in it } }
+            val firstHits = d.exist.map { p -> keySetsFor(p).indexOfFirst { p.key in it } }
             if (firstHits != firstHits.sorted()) {
                 problems += "order: ${d.exist.map { it.key }} at $firstHits"
                 causes += "order: WITH_ORDER violated" to d.exist.joinToString { it.key }
@@ -588,7 +595,7 @@ class KotlinCompletionTestDataSweepTest {
         }
         details.append("\n==================== PASSED ====================\n")
         results.filter { it.passed }.forEach { details.append(it.case.id).append('\n') }
-        val file = File(System.getProperty("java.io.tmpdir"), "kt-completion-sweep.txt")
+        val file = System.getProperty("kt.completionOut")?.let(::File) ?: File(System.getProperty("java.io.tmpdir"), "kt-completion-sweep.txt")
         file.writeText(details.toString())
         println("details: ${file.absolutePath}")
     }

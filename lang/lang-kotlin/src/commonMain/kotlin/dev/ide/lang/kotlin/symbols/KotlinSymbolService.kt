@@ -4133,6 +4133,38 @@ class KotlinSymbolService(
         return TypeNameCandidates(out.values.take(limit), capped)
     }
 
+    /** The classifiers of the default-import packages, read once per classpath state (see [defaultScopeTypes]). */
+    private var defaultScopeTypesMemo: Pair<Long, List<ClassNameValue>>? = null
+
+    /**
+     * The library classifiers the default imports put in scope (`kotlin.*`, `kotlin.collections.*`, …,
+     * `java.lang.*`) whose simple name [accepts]. These are scope classifiers, which IntelliJ matches against the
+     * typed name anywhere in it (`S` finds `IllegalStateException`, K2's `scopeNameFilter`), unlike the index,
+     * which it asks for start matches only; the caller passes that matcher. The per-package lists are read once
+     * per classpath state (a few hundred names), and only the accepted names become symbols.
+     */
+    fun defaultScopeTypes(accepts: (String) -> Boolean): List<KotlinSymbol> {
+        val idx = index ?: return emptyList()
+        val usable = classpathCacheUsable(idx)
+        val all = defaultScopeTypesMemo?.takeIf { usable && it.first == classpathEpoch }?.second ?: run {
+            val values = DefaultImports.STAR_PACKAGES.flatMap { p ->
+                idx.exactAll<ClassNameValue>(PACKAGE_TYPES, p).filter { v ->
+                    val simple = v.fqn.substringAfterLast('.')
+                    v.origin != IndexOrigin.SOURCE && !isKotlinFacade(v.fqn, simple) &&
+                        excludedTypePrefixes.none { v.fqn.startsWith(it) }
+                }.toList()
+            }
+            if (usable) defaultScopeTypesMemo = classpathEpoch to values
+            values
+        }
+        val out = ArrayList<KotlinSymbol>()
+        for (v in all) {
+            val simple = v.fqn.substringAfterLast('.')
+            if (accepts(simple)) out += KotlinSymbol(simple, classNameKind(v.kind), typeByFqn(v.fqn), origin = BINARY)
+        }
+        return out
+    }
+
     /** The [SymbolKind] a project-source [rc] completes as — so type-name completion (and its annotation-only
      *  filter for `@…`) and the item icon reflect enum/interface/annotation instead of a blanket CLASS. */
     private fun rawClassKind(rc: RawClass): SymbolKind = when {

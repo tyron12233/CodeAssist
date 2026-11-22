@@ -145,10 +145,11 @@ internal object KotlinCompletionItems {
      * `operator`/`infix` are deliberately absent: those are inherited by an override, so repeating them is
      * optional noise.
      */
-    private fun overrideHeader(m: KotlinSymbol): String {
+    private fun overrideHeader(m: KotlinSymbol, isVar: Boolean = false): String {
         val ret = (m.type as? KotlinType)?.toString()?.takeIf { it.isNotBlank() && it != "Unit" }
         val tail = ret?.let { ": $it" } ?: ""
-        if (m.kind != SymbolKind.METHOD) return "override val ${m.name}$tail"
+        // A mutable property stays mutable: a `val` cannot override a `var` (VAR_OVERRIDDEN_BY_VAL).
+        if (m.kind != SymbolKind.METHOD) return (if (isVar) "override var " else "override val ") + m.name + tail
         val annotations = if (m.isComposable) "@Composable " else ""
         val suspend = if (m.isSuspend) "suspend " else ""
         return annotations + "override ${suspend}fun${typeParameterListOf(m)} ${m.name}" +
@@ -171,10 +172,14 @@ internal object KotlinCompletionItems {
 
     /** The full `override` stub for an inherited member [m] — a function body / property getter that throws
      *  `TODO(...)`. Shared by completion's [overrideItem] and the implement-members quick-fix. */
-    fun overrideStubText(m: KotlinSymbol): String {
-        val header = overrideHeader(m)
+    fun overrideStubText(m: KotlinSymbol, isVar: Boolean = false): String {
+        val header = overrideHeader(m, isVar)
         val todo = "TODO(\"Not yet implemented\")"
-        return if (m.kind == SymbolKind.METHOD) "$header {\n    $todo\n}" else "$header\n    get() = $todo"
+        return when {
+            m.kind == SymbolKind.METHOD -> "$header {\n    $todo\n}"
+            isVar -> "$header\n    get() = $todo\n    set(value) {}"
+            else -> "$header\n    get() = $todo"
+        }
     }
 
     /**
@@ -185,15 +190,19 @@ internal object KotlinCompletionItems {
      * `override`/`fun`/`val` + modifiers the user already typed before the name — supplied so accepting after
      * `override fun onCr|` REPLACES that text instead of inserting a second `override fun` beside it.
      */
-    fun overrideItem(m: KotlinSymbol, indent: String = "", leadingDelete: TextRange? = null): CompletionItem {
-        val header = overrideHeader(m)
+    fun overrideItem(
+        m: KotlinSymbol, indent: String = "", leadingDelete: TextRange? = null, isVar: Boolean = false,
+    ): CompletionItem {
+        val header = overrideHeader(m, isVar)
         val todo = "TODO(\"Not yet implemented\")"
         // Re-indent the stub's continuation lines to the member's column (the same way the implement-members
         // quick-fix does), since the editor inserts completion text verbatim without re-indenting.
-        val insert = overrideStubText(m).replace("\n", "\n$indent")
+        val insert = overrideStubText(m, isVar).replace("\n", "\n$indent")
         val sel = insert.indexOf(todo)
         return CompletionItem(
-            label = header,
+            // As IntelliJ shows it (`OverrideKeywordHandler`'s PlaceholderBodyRenderer): a function carries a
+            // `{...}` placeholder body.
+            label = if (m.kind == SymbolKind.METHOD) "$header {...}" else header,
             insertText = insert,
             kind = if (m.kind == SymbolKind.METHOD) CompletionItemKind.METHOD else CompletionItemKind.FIELD,
             detail = "override",
@@ -206,11 +215,11 @@ internal object KotlinCompletionItems {
 
     /** An `override val name: Type` stub for a primary-constructor parameter overriding an inherited open
      *  property. [overrideAlreadyTyped] drops the leading `override ` when the user has already typed it (so
-     *  accepting after `class Foo(override |)` inserts `val name: Type`, not a duplicate keyword). Always emits
-     *  `val` (matching [overrideItem]); a supertype `var` still compiles when narrowed to `val`. */
-    fun ctorOverrideParam(m: KotlinSymbol, overrideAlreadyTyped: Boolean): CompletionItem {
+     *  accepting after `class Foo(override |)` inserts `val name: Type`, not a duplicate keyword). A supertype
+     *  `var` is overridden by a `var` ([isVar]): a `val` cannot override it. */
+    fun ctorOverrideParam(m: KotlinSymbol, overrideAlreadyTyped: Boolean, isVar: Boolean = false): CompletionItem {
         val ret = (m.type as? KotlinType)?.toString()?.takeIf { it.isNotBlank() && it != "Unit" }
-        val body = "val ${m.name}" + (ret?.let { ": $it" } ?: "")
+        val body = (if (isVar) "var " else "val ") + m.name + (ret?.let { ": $it" } ?: "")
         val header = "override $body"
         return CompletionItem(
             label = header,
