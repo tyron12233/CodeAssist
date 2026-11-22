@@ -24,6 +24,10 @@ import dev.ide.lang.resolve.TypeRef
  */
 internal class KotlinStrictSubtyping(
     private val service: KotlinSymbolService,
+    /** Captured types by the type-parameter name standing for each (see [capturedTypeParameter]): the lower and the
+     *  upper bound of the unknown type a projected receiver's argument is. Only `Nothing` and the captured type
+     *  itself are below `CapturedType(out B)`; it is below whatever `B` is below. */
+    private val captured: Map<String, Pair<KotlinType, KotlinType?>> = emptyMap(),
     /** The upper bound of a rigid type parameter in scope ([UNBOUNDED_TYPE_PARAMETER] when it has none), or null when unknown. */
     private val bounds: (String) -> KotlinType? = { null },
 ) {
@@ -43,6 +47,14 @@ internal class KotlinStrictSubtyping(
         val bn = canonicalTypeForCheck(b).qualifiedName
         if (!b.isTypeParameter && bn == "kotlin.Any") return true
         if (!a.isTypeParameter && an == "kotlin.Nothing") return true
+        if (b.isTypeParameter) captured[b.qualifiedName]?.let { (lower, _) ->
+            if (a.isTypeParameter && a.qualifiedName == b.qualifiedName) return true
+            return subtype(a, lower.withNullable(lower.nullable || b.nullable), depth + 1)
+        }
+        if (a.isTypeParameter) captured[a.qualifiedName]?.let { (_, upper) ->
+            // An upper bound not known (a bound that did not resolve) leaves the verdict open.
+            return if (upper == null) null else subtype(upper.withNullable(upper.nullable || a.nullable), b, depth + 1)
+        }
         if (a.isTypeParameter) {
             if (b.isTypeParameter && a.qualifiedName == b.qualifiedName) return true
             // A type parameter is a subtype of whatever its bound is (`Any?` when it has none).
@@ -102,6 +114,10 @@ internal class KotlinStrictSubtyping(
         return if (unknown) null else true
     }
 }
+
+/** The name a captured type stands under in a type handed to [KotlinStrictSubtyping], for the receiver class's type
+ *  parameter [name]: one no written type parameter can have, so an argument's own `T` is never taken for it. */
+internal fun capturedTypeParameter(name: String): String = "<captured>$name"
 
 /** A star projection, however the type reached here spelled it. */
 internal fun isStar(t: KotlinType): Boolean = t.projection == "*" || t.qualifiedName == "*"

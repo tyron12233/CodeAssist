@@ -2062,6 +2062,37 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), errors(clean).map { it.code }, "for `$clean`")
     }
 
+    /** IMPOSSIBLE_IS_CHECK_ERROR between two LIBRARY classes neither of which extends the other (`Exception` and `Error`):
+     *  their class files give the whole hierarchy once the classpath is indexed. A subclass or an interface is fine. */
+    @Test
+    fun impossibleIsCheckBetweenLibraryClasses() {
+        val code = "fun t(e: Exception) { if (e is Error) {}; if (e is AssertionError) {}; if (e is RuntimeException) {}; if (e is Runnable) {} }"
+        assertEquals(List(2) { KotlinDiagnosticCodes.IMPOSSIBLE_IS_CHECK }, jdkErrors(code).map { it.code }, "for `$code`")
+        // Every class is an `Any`, whether or not it says so: `x is Foo` on an `Any?` is a real question.
+        val any = "class Foo\nopen class Bar\nfun t(x: Any?, y: Any) { if (x is Foo) {}; if (y is Bar) {}; if (x is Exception) {} }"
+        assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
+    }
+
+    /** A component of a destructured lambda parameter is a `val` like any parameter: a null check smart casts it. */
+    @Test
+    fun destructuredLambdaComponentSmartCasts() {
+        val code = "class K { fun w(): K = this }\nfun f(m: Map<String, Pair<K, K?>>, s: String): K? {\n" +
+            "    m[s]?.let { (_, upper) -> return if (upper == null) null else upper.w() }\n    return null\n}"
+        assertEquals(emptyList(), errors(code).map { it.code }, "for `$code`")
+    }
+
+    /** A projected receiver's type argument inside a member's parameter is a captured type: on `MC<out Open>`,
+     *  `addAll(c: C<T>)` takes a `C<CapturedType(out Open)>`, which only a `C<Nothing>` is. */
+    @Test
+    fun argumentIntoAProjectedReceiversParameter() {
+        val bad = "interface C<out T>\ninterface MC<T> : C<T> { fun addAll(x: C<T>): Boolean }\ninterface Open\n" +
+            "fun t(x: MC<out Open>) { x.addAll(x) }"
+        assertEquals(listOf(KotlinDiagnosticCodes.TYPE_MISMATCH), errors(bad).map { it.code }, "for `$bad`")
+        val ok = "interface Box<T> { fun put(x: List<T>); fun take(f: Box<in T>) }\n" +
+            "fun t(a: Box<out CharSequence>, b: Box<in String>, l: List<Nothing>, s: List<String>, bx: Box<Any?>) { a.put(l); b.put(s); b.take(bx); a.put(emptyList()) }"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** A builder lambda's receiver takes the call's explicit type arguments: inside `buildMap<String, MutableList<C>> { }`
      *  `this` is a `MutableMap<String, MutableList<C>>`, so `getOrPut(k) { ArrayList() }` is a `MutableList<C>`. */
     @Test

@@ -27,6 +27,7 @@ import dev.ide.lang.dom.TextRange
 import dev.ide.lang.kotlin.resolve.KotlinResolver
 import dev.ide.lang.kotlin.resolve.callTargets
 import dev.ide.lang.kotlin.resolve.enclosingClassFqnOf
+import dev.ide.lang.kotlin.resolve.inferType
 import dev.ide.lang.kotlin.resolve.smartCastTypeAt
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.resolve.SymbolKind
@@ -45,6 +46,142 @@ import dev.ide.lang.resolve.SymbolKind
  * its name and arity is judged; overloads (`In<*>.f("1")` against `f(T)` and `f(Int)`) are the compiler's.
  */
 internal fun KotlinSemanticChecks.memberProjectedOut(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
+    val pm = projectedMember(call, resolver) ?: return null
+    val (name, typeRef, projections, _, tps, variances, member) = pm
+    if (projections.none { it.projectionKind == KtProjectionKind.OUT || it.projectionKind == KtProjectionKind.STAR }) return null
+    val args = call.valueArguments
+    for ((i, arg) in args.withIndex()) {
+        val p = member.paramTypes.getOrNull(i) as? KotlinType ?: continue
+        if (!p.isTypeParameter) continue
+        val k = tps.indexOf(p.qualifiedName)
+        if (k < 0) continue
+        val declaredVariance = variances.getOrNull(k).orEmpty()
+        val projected = when (projections[k].projectionKind) {
+            KtProjectionKind.STAR -> declaredVariance != "out"
+            KtProjectionKind.OUT -> declaredVariance.isEmpty()
+            else -> false
+        }
+        if (!projected) continue
+        val value = arg.getArgumentExpression() ?: continue
+        if (!plainlyTyped(value, resolver)) continue
+        val r = value.textRange
+        val kind = if (projections[k].projectionKind == KtProjectionKind.STAR) "a star" else "an 'out'"
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "'$name' cannot be called with this argument: the receiver type '${typeRef.text}' has $kind projection, " +
+                "and the parameter takes its '${p.qualifiedName}'",
+            KotlinDiagnosticCodes.MEMBER_PROJECTED_OUT,
+        )
+    }
+    return null
+}
+
+/**
+ * ARGUMENT_TYPE_MISMATCH where a projected receiver's type argument sits INSIDE a member's parameter type:
+ * `x.addAll(x)` on `x: MC<out Open>` for `fun addAll(c: C<T>)`. K2 substitutes a captured type for the projected
+ * `T` (`CapturedType(out Open)`, an unknown subtype of `Open`), and only `Nothing` fits below it: the parameter is
+ * `C<CapturedType(out Open)>`, which no `C<Open>` is. An `in` projection's captured type is above its type and
+ * below the parameter's bound. A parameter that IS the projected `T` is [memberProjectedOut]'s.
+ *
+ * Judged by [KotlinStrictSubtyping] with the captured types standing in, so only a proven mismatch is reported,
+ * and only for an argument whose type is read rather than inferred (a literal, a name with a written type, a call
+ * whose type arguments are all written): an inferred one (`x.addAll(c())`) takes its type from the parameter.
+ */
+internal fun KotlinSemanticChecks.projectedArgumentMismatch(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
+    val (_, typeRef, projections, fqn, tps, variances, member) = projectedMember(call, resolver) ?: return null
+    val decl = (service.sourceClass(fqn)?.node as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? KtClassOrObject
+    // A `where` clause bounds a parameter where the declared bound list does not say.
+    val boundsKnown = decl == null || decl.typeConstraintList == null
+    val declaredBounds = service.classTypeParameterBounds(fqn).takeIf { it.size == tps.size }
+    val captured = HashMap<String, Pair<KotlinType, KotlinType?>>()
+    val bindings = HashMap<String, KotlinType>()
+    val nothing = KotlinType("kotlin.Nothing")
+    for ((k, tp) in tps.withIndex()) {
+        val proj = projections[k]
+        val written = proj.typeReference?.let { r ->
+            service.typeFromText(r.text, resolver.fileContext, enclosingClassFqnOf(typeRef)) ?: return null
+        }
+        if (proj.projectionKind == KtProjectionKind.NONE) {
+            bindings[tp] = written ?: return null
+            continue
+        }
+        // A projection that repeats or contradicts the declared variance is no capture this models.
+        if (variances[k].isNotEmpty()) return null
+        val bound = if (!boundsKnown || declaredBounds == null) null
+            else declaredBounds[k] ?: if (service.sourceClass(fqn) != null) UNBOUNDED_TYPE_PARAMETER else null
+        val name = capturedTypeParameter(tp)
+        captured[name] = when (proj.projectionKind) {
+            KtProjectionKind.OUT -> nothing to (written ?: return null)
+            KtProjectionKind.IN -> (written ?: return null) to bound
+            else -> nothing to bound
+        }
+        bindings[tp] = KotlinType(name, isTypeParameter = true)
+    }
+    if (captured.isEmpty()) return null
+    val subtyping = KotlinStrictSubtyping(service, captured = captured)
+    for ((i, arg) in call.valueArguments.withIndex()) {
+        val p = member.paramTypes.getOrNull(i) as? KotlinType ?: continue
+        if (p.isTypeParameter) continue
+        if (i == member.varargParamIndex) continue
+        val substituted = substituteKeepingNullability(p, bindings)
+        if (!mentionsCaptured(substituted)) continue
+        val value = arg.getArgumentExpression() ?: continue
+        val actual = readArgumentType(value, resolver) ?: continue
+        if (subtyping.subtype(actual, substituted) != false) continue
+        val r = value.textRange
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Argument type mismatch: actual type is '${renderType(actual)}', but '${renderCaptured(substituted, captured)}' was expected",
+            KotlinDiagnosticCodes.TYPE_MISMATCH,
+        )
+    }
+    return null
+}
+
+private fun mentionsCaptured(t: KotlinType): Boolean =
+    (t.isTypeParameter && t.qualifiedName.startsWith("<captured>")) ||
+        t.typeArguments.any { (it as? KotlinType)?.let(::mentionsCaptured) == true }
+
+private fun KotlinSemanticChecks.renderCaptured(t: KotlinType, captured: Map<String, Pair<KotlinType, KotlinType?>>): String {
+    val rendered = renderType(t)
+    return captured.keys.fold(rendered) { acc, name ->
+        val (lower, upper) = captured.getValue(name)
+        val shown = if (lower.qualifiedName == "kotlin.Nothing") "CapturedType(out ${upper?.let(::renderType) ?: "*"})" else "CapturedType(in ${renderType(lower)})"
+        acc.replace(name.substringAfterLast('.'), shown)
+    }
+}
+
+/** The type of an argument as it is written, not as inference would make it fit: a literal, a local or parameter
+ *  with a written type no smart cast narrows, or a call whose type arguments are all written. */
+private fun KotlinSemanticChecks.readArgumentType(e: KtExpression, resolver: KotlinResolver): KotlinType? {
+    val u = unwrapParenthesized(e)
+    val t = when {
+        u is KtConstantExpression -> if (u.text == "null") null else resolver.inferType(u)
+        u is KtStringTemplateExpression -> resolver.inferType(u)
+        u is KtNameReferenceExpression -> writtenTypeOf(u, resolver)
+        u is KtCallExpression && u.typeArgumentList != null -> resolver.inferType(u)
+        else -> null
+    } ?: return null
+    if (mentionsTypeParameter(t) || isFunctional(t)) return null
+    return t
+}
+
+private fun mentionsTypeParameter(t: KotlinType): Boolean =
+    t.isTypeParameter || t.typeArguments.any { (it as? KotlinType)?.let(::mentionsTypeParameter) == true }
+
+/** A member call on a receiver whose written type projects some of its class's type arguments, with the one
+ *  member it can be (see [memberProjectedOut] for which calls qualify). */
+private data class ProjectedMember(
+    val name: String,
+    val typeRef: KtTypeReference,
+    val projections: List<dev.ide.kotlin.syntax.psi.KtTypeProjection>,
+    val fqn: String,
+    val tps: List<String>,
+    val variances: List<String>,
+    val member: dev.ide.lang.kotlin.symbols.KotlinSymbol,
+)
+
+private fun KotlinSemanticChecks.projectedMember(call: KtCallExpression, resolver: KotlinResolver): ProjectedMember? {
     val dot = call.parent as? KtDotQualifiedExpression ?: return null
     if (dot.selectorExpression !== call) return null
     val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
@@ -54,7 +191,7 @@ internal fun KotlinSemanticChecks.memberProjectedOut(call: KtCallExpression, res
     val typeRef = declaredReceiverType(dot.receiverExpression, resolver) ?: return null
     val user = typeRef.typeElement as? KtUserType ?: return null
     val projections = user.typeArguments
-    if (projections.isEmpty() || projections.none { it.projectionKind == KtProjectionKind.OUT || it.projectionKind == KtProjectionKind.STAR }) return null
+    if (projections.isEmpty() || projections.all { it.projectionKind == KtProjectionKind.NONE }) return null
     val fqn = service.typeFromText(typeRef.text.substringBefore('<'), resolver.fileContext, enclosingClassFqnOf(typeRef))
         ?.qualifiedName ?: return null
     // A typealias names another class's parameters in its own order.
@@ -89,30 +226,7 @@ internal fun KotlinSemanticChecks.memberProjectedOut(call: KtCallExpression, res
     // What the call resolved to must be that member, not an extension in scope.
     val targets = resolver.callTargets(call)
     if (targets.any { it.isExtension }) return null
-    for ((i, arg) in args.withIndex()) {
-        val p = member.paramTypes.getOrNull(i) as? KotlinType ?: continue
-        if (!p.isTypeParameter) continue
-        val k = tps.indexOf(p.qualifiedName)
-        if (k < 0) continue
-        val declaredVariance = variances.getOrNull(k).orEmpty()
-        val projected = when (projections[k].projectionKind) {
-            KtProjectionKind.STAR -> declaredVariance != "out"
-            KtProjectionKind.OUT -> declaredVariance.isEmpty()
-            else -> false
-        }
-        if (!projected) continue
-        val value = arg.getArgumentExpression() ?: continue
-        if (!plainlyTyped(value, resolver)) continue
-        val r = value.textRange
-        val kind = if (projections[k].projectionKind == KtProjectionKind.STAR) "a star" else "an 'out'"
-        return Diagnostic(
-            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
-            "'$name' cannot be called with this argument: the receiver type '${typeRef.text}' has $kind projection, " +
-                "and the parameter takes its '${p.qualifiedName}'",
-            KotlinDiagnosticCodes.MEMBER_PROJECTED_OUT,
-        )
-    }
-    return null
+    return ProjectedMember(name, typeRef, projections, fqn, tps, variances, member)
 }
 
 /** An argument whose type is plain to see and cannot be a captured type: a literal (not `null`), a string, a

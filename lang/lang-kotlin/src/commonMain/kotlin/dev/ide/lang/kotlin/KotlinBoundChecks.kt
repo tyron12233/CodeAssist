@@ -132,7 +132,7 @@ private class BoundChecks(val checks: KotlinSemanticChecks, val resolver: Kotlin
         }
         val subst = HashMap<String, KotlinType>()
         generic.names.forEachIndexed { i, n -> written[i]?.let { subst[n] = it } }
-        val typing = KotlinStrictSubtyping(service, scope)
+        val typing = KotlinStrictSubtyping(service, bounds = scope)
         val out = ArrayList<Diagnostic>()
         for (i in args.indices) {
             val arg = written[i] ?: continue
@@ -155,7 +155,7 @@ private class BoundChecks(val checks: KotlinSemanticChecks, val resolver: Kotlin
         if (params.any { it.isVarArg } || args.size > params.size) return emptyList()
         val scope = scopeBounds(call)
         val names = scopeNames(call)
-        val typing = KotlinStrictSubtyping(service, scope)
+        val typing = KotlinStrictSubtyping(service, bounds = scope)
         val bad = ArrayList<Diagnostic>()
         var violated = false
         for ((i, arg) in args.withIndex()) {

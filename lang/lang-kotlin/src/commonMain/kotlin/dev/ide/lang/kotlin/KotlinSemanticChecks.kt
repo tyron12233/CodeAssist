@@ -383,7 +383,7 @@ internal class KotlinSemanticChecks(
                         if (firstBad?.second != null && mismatches.size == notApplicable.size) report(missingRequiredArgument(psi, resolver))
                     } else report(
                         countBad ?: missingRequiredArgument(psi, resolver) ?: nullArgumentForNonNull(psi, resolver)
-                            ?: if (resolveReady) memberProjectedOut(psi, resolver) else null,
+                            ?: if (resolveReady) memberProjectedOut(psi, resolver) ?: projectedArgumentMismatch(psi, resolver) else null,
                     )
                 }
                 KotlinPerf.span("call.ambiguity") { if (resolveReady) report(overloadAmbiguity(psi, resolver)) }
