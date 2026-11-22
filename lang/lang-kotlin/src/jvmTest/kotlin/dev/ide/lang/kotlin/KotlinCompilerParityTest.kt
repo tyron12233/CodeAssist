@@ -2558,6 +2558,13 @@ class KotlinCompilerParityTest {
         clean("enum class E(val label: String) { A(\"a\"); fun f() = 1 }\nfun t() { E.A.label; E.A.f(); E.A.name }")
     }
 
+    /** The type parameters written on an object expression are not in scope of its body. */
+    @Test
+    fun objectExpressionTypeParametersAreNotInScope() {
+        assertTrue(KotlinDiagnosticCodes.UNRESOLVED in codes("val x = object<T> { fun foo(t: T) {} }"))
+        clean("class Gen<T> { val anon = object { fun g(t: T): T = t } }")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

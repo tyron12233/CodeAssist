@@ -696,6 +696,12 @@ fun KotlinResolver.objectDenotationFqn(name: String, offset: Int): String? {
 fun KotlinResolver.isTypeParameterInScope(name: String, offset: Int): Boolean {
     var node: KtElement? = elementAt(offset)
     while (node != null) {
+        // An object expression may not declare type parameters (TYPE_PARAMETERS_IN_OBJECT), and K2 does not put
+        // the ones written there in scope of its body: `object<T> { fun f(t: T) }` leaves `T` unresolved. Only
+        // the list itself (`<T, K : Comparable<K>>`) sees them.
+        if (node is KtObjectDeclaration && node.isObjectLiteral() &&
+            node.typeParameterList?.textRange?.let { offset >= it.startOffset && offset < it.endOffset } != true
+        ) { node = node.parent; continue }
         if (node is KtTypeParameterListOwner && node.typeParameters.any { it.name == name }) return true
         // A `where AA : …` naming no declared parameter makes `AA` one anyway (K2 reports only the constraint,
         // NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER, and the declaration then uses `AA` as a type parameter).
