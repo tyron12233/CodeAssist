@@ -206,7 +206,7 @@ private fun KotlinSemanticChecks.redeclaredClassifiers(file: KtFile): Set<String
     redeclaredMemo?.takeIf { it.first === file }?.let { return it.second }
     val counts = HashMap<String, Int>()
     fun rec(e: KtElement) {
-        if (e is KtClassOrObject || e is dev.ide.kotlin.syntax.psi.KtTypeAlias) (e as KtNamedDeclaration).name?.let { counts.merge(it, 1, Int::plus) }
+        if (e is KtClassOrObject || e is dev.ide.kotlin.syntax.psi.KtTypeAlias) (e as KtNamedDeclaration).name?.let { counts[it] = (counts[it] ?: 0) + 1 }
         var c = e.firstChild
         while (c != null) { rec(c); c = c.nextSibling }
     }

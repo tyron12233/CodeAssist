@@ -1765,11 +1765,11 @@ class KotlinCompletion(
             val types = LinkedHashMap<String, KotlinSymbol>()
             for ((_, tail) in splits) {
                 service.typeNameCandidates(tail.replaceFirstChar { it.uppercaseChar() }, currentFilePath = resolver.fileContext.path)
-                    .symbols.forEach { s -> (s.type as? KotlinType)?.qualifiedName?.let { types.putIfAbsent(it, s) } }
+                    .symbols.forEach { s -> (s.type as? KotlinType)?.qualifiedName?.let { types.getOrPut(it) { s } } }
             }
             // A project type matches on any camel tail (`b` -> `FooBar`), which a name-index query cannot ask for.
             service.sourceTypeSymbols(resolver.fileContext.path)
-                .forEach { s -> (s.type as? KotlinType)?.qualifiedName?.let { types.putIfAbsent(it, s) } }
+                .forEach { s -> (s.type as? KotlinType)?.qualifiedName?.let { types.getOrPut(it) { s } } }
             for ((fqn, s) in types) {
                 // Every classifier but an object (IntelliJ keeps annotation classes: `override: Override`).
                 if (s.kind != SymbolKind.CLASS && s.kind != SymbolKind.INTERFACE && s.kind != SymbolKind.ENUM && s.kind != SymbolKind.ANNOTATION_TYPE) continue

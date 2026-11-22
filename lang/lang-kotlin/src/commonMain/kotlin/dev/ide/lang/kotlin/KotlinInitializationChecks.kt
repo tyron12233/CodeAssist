@@ -394,7 +394,7 @@ internal object KotlinInitializationChecks {
         val fileClasses = HashMap<String, KtClassOrObject>()
         fun index(decls: List<KtDeclaration>) {
             for (d in decls) if (d is KtClassOrObject && d !is KtEnumEntry) {
-                d.name?.let { fileClasses.putIfAbsent(it, d) }
+                d.name?.let { fileClasses.getOrPut(it) { d } }
                 index(d.declarations)
             }
         }

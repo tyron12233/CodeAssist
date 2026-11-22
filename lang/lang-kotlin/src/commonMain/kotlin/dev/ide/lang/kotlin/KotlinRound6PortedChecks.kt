@@ -643,9 +643,9 @@ internal fun funInterfaceShape(cls: KtClassOrObject): List<Diagnostic> {
             is KtNamedFunction -> {
                 val name = d.name ?: return emptyList()
                 if (name in ANY_MEMBER_NAMES) return emptyList()
-                functions.putIfAbsent("$name/${d.valueParameters.size}/${d.receiverTypeReference != null}", d)
+                functions.getOrPut("$name/${d.valueParameters.size}/${d.receiverTypeReference != null}") { d }
             }
-            is KtProperty -> properties.putIfAbsent((d.name ?: return emptyList()) + "/${d.receiverTypeReference != null}", d)
+            is KtProperty -> properties.getOrPut((d.name ?: return emptyList()) + "/${d.receiverTypeReference != null}") { d }
             else -> {}
         }
         for (entry in c.superTypeListEntries) {
