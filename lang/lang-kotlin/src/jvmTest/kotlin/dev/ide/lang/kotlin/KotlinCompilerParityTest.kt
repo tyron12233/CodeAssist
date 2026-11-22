@@ -1960,6 +1960,22 @@ class KotlinCompilerParityTest {
             " with(a) lambda1@{\n  with(b) lambda2@{\n   if (this@lambda1 is A && this@lambda2 is B) { foo() }\n  }\n }\n}")
     }
 
+    /** A checked companion or object `val` stays narrowed however its owner is spelled (`AClass.y`, `demo.Obj.y`). */
+    @Test
+    fun objectAndCompanionValsAreStableUnderAnySpelling() {
+        clean("object Obj { val y: Any? = 2 }\nclass AClass { companion object { val y: Any? = 2 } }\n" +
+            "fun t1(): Int { if (demo.Obj.y is Int) return Obj.y; return 0 }\n" +
+            "fun t2(): Int { if (AClass.y is Int) return AClass.y; return 0 }\n" +
+            "fun t3(): Int { if (demo.AClass.y is Int) return AClass.y; return 0 }\n" +
+            "fun t4(): Int { if (Obj.y is Int) return demo.Obj.y; return 0 }")
+    }
+
+    /** `i == j` where `j` is proven null makes `i` the null value. */
+    @Test
+    fun equalityWithAProvenNullNarrowsToNothing() {
+        clean("fun f(i: Int?) {\n val j: Int? = null\n if (i == j) { val n: Nothing? = i }\n}")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

@@ -350,13 +350,26 @@ private fun KotlinResolver.stablePath(q: dev.ide.kotlin.syntax.psi.KtDotQualifie
             ?: return false
         return !decl.isVar && decl.getter?.bodyExpression == null && !decl.hasDelegate()
     }
-    val receiverStable = when (r) {
+    // A receiver that NAMES a type (`Obj`, `example.Obj`, `AClass` for its companion) is a fixed singleton, stable
+    // however it is spelled.
+    val denoted = r?.let { typeDenotationFqn(it) }
+    val receiverStable = denoted != null || when (r) {
         is KtThisExpression -> true
         is KtNameReferenceExpression -> smartCastInstability(r, null) == null && !varWrittenInClosure(r)
-        is dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression -> isTypeReceiver(r) || stablePath(r, depth + 1)
+        // `example.Obj`: a package-qualified object is the same singleton as `Obj`.
+        is dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression -> isTypeReceiver(r) || service.isKnownType(r.text) || stablePath(r, depth + 1)
         else -> false
     }
     if (!receiverStable) return false
+    // A class named as the receiver reads its COMPANION's member (`AClass.y`), which is where the property lives.
+    val owner = denoted?.takeIf { d -> service.membersNamed(d, emptyList(), sel).none { it.kind == dev.ide.lang.resolve.SymbolKind.FIELD && !it.isExtension } }
+        ?.let { d -> service.companionObjectFqn(d) } ?: recvType.qualifiedName
+    if (owner != recvType.qualifiedName) {
+        if (service.sourceClass(owner) == null || sourceMemberInstability(owner, sel) != null) return false
+        val p = service.membersNamed(owner, emptyList(), sel).firstOrNull { it.kind == dev.ide.lang.resolve.SymbolKind.FIELD && !it.isExtension }
+            ?.let { (it.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi } as? dev.ide.kotlin.syntax.psi.KtProperty ?: return false
+        return !p.isVar && p.getter?.bodyExpression == null && !p.hasDelegate()
+    }
     if (service.sourceClass(recvType.qualifiedName) == null) return false
     if (sourceMemberInstability(recvType.qualifiedName, sel) != null) return false
     // [sourceMemberInstability] leaves an inherited open member of a final class undecided; the declaration the
@@ -569,7 +582,12 @@ private fun KotlinResolver.equalityNarrowing(c: KtBinaryExpression, name: String
     val subject = if (other === c.right) c.left else c.right
     val otherType = inferType(other) ?: return null
     val subjectType = inferType(subject)
-    if (otherType.nullable && subjectType?.nullable != false) return null
+    // Equal to a value the flow already proved `null` (`if (j == null) { if (i == j) foo(i) }`): the subject is
+    // `null` too, so it is `Nothing?` and fits any nullable type.
+    if (otherType.nullable && subjectType?.nullable != false) {
+        val otherRef = unwrapParens(other) as? KtNameReferenceExpression ?: return null
+        return if (flowProvenNull(otherRef)) service.typeByFqn("kotlin.Nothing").withNullable(true) else null
+    }
     // The value then has BOTH types; one type stands for that intersection only when it is the narrower of the
     // two (`current === this` on an unrelated `A` and `B` keeps `current` an `A`).
     if (subjectType != null && !subjectType.isTypeParameter && !subjectType.withNullable(false).isAssignableFrom(otherType.withNullable(false))) return null
