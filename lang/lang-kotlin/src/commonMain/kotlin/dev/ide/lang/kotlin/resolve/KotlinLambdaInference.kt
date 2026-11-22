@@ -173,7 +173,23 @@ internal fun KotlinResolver.expectedFunctionTypeFor(lambda: KtLambdaExpression):
             (call.parent as? KtDotQualifiedExpression)?.takeIf { it.selectorExpression === call }?.receiverExpression
         recv?.let { inferType(it) }?.let { bindings.getOrPut(tp) { it } }
     }
+    bindFromExpectedType(sym, call, raw, bindings)
     return service.substitute(raw, bindings) as? KotlinType
+}
+
+/**
+ * A type variable the arguments leave open and the lambda's type [raw] needs is fixed from the call's EXPECTED
+ * type when one reaches it: `val d: DIV = jsObject { tabIndex }` makes `T` a `DIV`, so the builder's receiver is
+ * one. Only a concrete, known expected type binds, and only variables still unbound.
+ */
+private fun KotlinResolver.bindFromExpectedType(sym: KotlinSymbol, call: KtCallExpression, raw: KotlinType, bindings: MutableMap<String, TypeRef>) {
+    if (sym.typeParameters.none { it !in bindings && mentionsTypeParam(raw, it) }) return
+    val ret = sym.type as? KotlinType ?: return
+    val expected = expectedTypeAt(call.textRange.startOffset)
+        ?.takeIf { !it.isTypeParameter && it.qualifiedName != "kotlin.Any" && service.isKnownType(it.qualifiedName) } ?: return
+    val fromExpected = HashMap<String, TypeRef>()
+    unify(ret, if (ret.nullable) expected else expected.withNullable(false), fromExpected)
+    for ((k, v) in fromExpected) if (k in sym.typeParameters && (v as? KotlinType)?.isTypeParameter == false) bindings.putIfAbsent(k, v)
 }
 
 /** The value-parameter types a lambda receives (in order), from the functional parameter it fills — for
@@ -201,7 +217,7 @@ internal fun KotlinResolver.expectedLambdaShape(lambda: KtLambdaExpression): Kot
     val (call, argIndex) = enclosingCallAndParamIndex(lambda) ?: return null
     // A SAM constructor (`Comparator<String> { a, b -> … }`, a project `fun interface`) has no callee FUNCTION —
     // the lambda IS the interface's single-abstract-method body. Fall back to that method's shape.
-    val sym = resolveCalleeFunction(call) ?: constructorCallee(call)
+    val sym = resolveCalleeFunction(call) ?: constructorCallee(call) ?: valueInvokeCallee(call)
         ?: return arrayInitShape(call) ?: samConstructorShape(call)
     val raw = sym.paramTypes.getOrNull(lambdaParamIndex(call, argIndex, sym)) as? KotlinType
         ?: return arrayInitShape(call) ?: samConstructorShape(call)
@@ -214,8 +230,20 @@ internal fun KotlinResolver.expectedLambdaShape(lambda: KtLambdaExpression): Kot
     // with `T : S`, so the receiver binding `T = Int` makes `S ≥ Int` — the block's `acc` is `Int`, not a bare
     // `S`. Only extensions with a sibling upper bound (`reduce`, `getOrElse`) carry these, so it's a no-op elsewhere.
     for ((p, lb) in sym.typeParamLowerBounds) bindings.getOrPut(p) { lb }
+    bindFromExpectedType(sym, call, raw, bindings)
     val bound = service.substitute(raw, bindings) as? KotlinType ?: return null
     return service.functionalShape(bound)
+}
+
+/** The `invoke` a call on a VALUE runs (`x { … }`, `(impl) { … }` with an `operator fun ABuilder<…>.invoke(block: B.() -> Unit)`):
+ *  a member or an in-scope extension of the callee's type, bound to that type, that takes the call's arguments. */
+private fun KotlinResolver.valueInvokeCallee(call: KtCallExpression): KotlinSymbol? {
+    val type = inferType(call.calleeExpression)?.takeIf { !it.isTypeParameter } ?: return null
+    if (dev.ide.lang.kotlin.symbols.TypeRendering.isFunctionType(type.qualifiedName)) return null
+    val n = call.valueArguments.size
+    return service.membersNamed(type.qualifiedName, type.typeArguments, "invoke")
+        .filter { it.kind == dev.ide.lang.resolve.SymbolKind.METHOD && (!it.isExtension || extensionInScope(it)) }
+        .let { all -> all.firstOrNull { it.paramTypes.size == n } ?: all.singleOrNull() }
 }
 
 /** Bind a callee's type parameters from the call's EXPLICIT type arguments (`Comparator<String> { … }` →

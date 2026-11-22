@@ -2071,6 +2071,25 @@ class KotlinCompilerParityTest {
         assertCodes("fun Iterable<String>.g() { val i: Int = iterator() }", KotlinDiagnosticCodes.TYPE_MISMATCH)
     }
 
+    /** A generic extension property typed by its getter binds a variable through the receiver parameter's bound, and
+     *  a value's extension `invoke` gives its lambda argument a receiver, parenthesized or not. */
+    @Test
+    fun anExtensionInvokeOnAGenericPropertyTypesTheLambdaReceiver() {
+        clean("interface Context<C: Context<C>>\ninterface InterfaceA<C: Context<C>>\nclass ABuilder<C: Context<C>, A: InterfaceA<C>, B: InterfaceA<C>>\n" +
+            "operator fun <C, A, B> ABuilder<C, A, B>.invoke(block: B.() -> Unit): Unit where C: Context<C>, A: InterfaceA<C>, B: InterfaceA<C> = null!!\n" +
+            "object ContextImpl : Context<ContextImpl>\nobject RootA : InterfaceA<ContextImpl>\nclass AImpl<P: Context<P>> : InterfaceA<P> { fun foo(): Int = null!! }\n" +
+            "val <C: Context<C>, A: InterfaceA<C>> A.impl get() = ABuilder<C, A, AImpl<C>>()\n" +
+            "fun t1() { RootA.apply { (impl) { foo() } } }\nfun t2() { RootA.apply { impl { foo() } } }\nfun t3() { val x = RootA.impl; x { foo() } }")
+    }
+
+    /** A builder's type variable is fixed from the expected type, or from the sibling arguments through `R : K`. */
+    @Test
+    fun aBuilderReceiverIsFixedFromTheExpectedTypeOrSiblingArguments() {
+        clean("interface AAA\nfun <K : AAA, R : K> assign(dest: R, vararg src: K?): R = null as R\nfun <K : AAA> assign2(dest: K, src: K?): K = null as K\n" +
+            "class DIV(val tabIndex: String): AAA\nfun <T: AAA> jsObject(builder: T.() -> Unit): T = null as T\n" +
+            "fun foo(x: DIV) {\n assign(x, jsObject { tabIndex })\n assign2(x, jsObject { tabIndex })\n val d: DIV = jsObject { tabIndex }\n}")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

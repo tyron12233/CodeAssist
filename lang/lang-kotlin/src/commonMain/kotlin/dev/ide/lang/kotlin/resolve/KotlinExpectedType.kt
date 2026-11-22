@@ -216,10 +216,60 @@ internal fun KotlinResolver.expectedArgType(arg: KtValueArgument): KotlinType? {
         // A positional argument past a vararg still fills the vararg, not the parameter after it.
         val paramIndex = if (s.varargParamIndex in 0..<index) s.varargParamIndex else index
         (s.paramTypes.getOrNull(paramIndex) as? KotlinType)?.let {
-            return instantiatedFromCallExpectation(s, call, it, vararg = paramIndex == s.varargParamIndex && arg.getSpreadElement() == null)
+            val vararg = paramIndex == s.varargParamIndex && arg.getSpreadElement() == null
+            instantiatedFromSiblingArguments(s, call, arg, it, vararg)?.let { t -> return t }
+            return instantiatedFromCallExpectation(s, call, it, vararg = vararg)
         }
     }
     return null
+}
+
+/**
+ * A parameter type [p] of [s] naming the callee's own type variables, instantiated from the OTHER arguments of
+ * [call] when they pin every variable it mentions: `assign2(x, jsObject { … })` with `fun <K> assign2(dest: K,
+ * src: K?)` expects a `DIV?` of the second argument once `x: DIV` fixed `K`. A variable bounded by another
+ * (`R : K`) passes its binding up as that one's lower bound, which fixes it when nothing else does (K2's
+ * fixation of `K` to `DIV` in `fun <K, R : K> assign(dest: R, vararg src: K?)`). Lambdas are skipped (they are
+ * typed from this slot, not the other way round). Null when some variable stays open.
+ */
+private fun KotlinResolver.instantiatedFromSiblingArguments(
+    s: dev.ide.lang.kotlin.symbols.KotlinSymbol,
+    call: KtCallExpression,
+    arg: KtValueArgument,
+    p: KotlinType,
+    vararg: Boolean,
+): KotlinType? {
+    if (s.typeParameters.isEmpty()) return null
+    val names = s.typeParameters.toSet()
+    val param = service.markTypeParameters(p, names) ?: return null
+    if (names.none { mentionsTypeParam(param, it) }) return null
+    if (call.valueArguments.any { it.getArgumentName() != null || it.getSpreadElement() != null }) return null
+    val bindings = HashMap<String, dev.ide.lang.resolve.TypeRef>()
+    for ((j, other) in call.valueArguments.withIndex()) {
+        if (other === arg) continue
+        val e = other.getArgumentExpression() ?: continue
+        if (e is dev.ide.kotlin.syntax.psi.KtLambdaExpression) continue
+        val pj = if (s.varargParamIndex in 0..<j) s.varargParamIndex else j
+        val declared = service.markTypeParameters(s.paramTypes.getOrNull(pj) as? KotlinType, names) ?: continue
+        val actual = inferType(e)?.takeIf { !it.isTypeParameter } ?: continue
+        val elem = if (pj == s.varargParamIndex && declared.qualifiedName == "kotlin.Array") declared.typeArguments.singleOrNull() as? KotlinType ?: continue else declared
+        unify(elem, actual, bindings)
+    }
+    // `R : K` with `R` bound: `K` is at least that. A same-file symbol carries no bounds, so they are read off
+    // its declaration then.
+    val fn = (s.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? dev.ide.kotlin.syntax.psi.KtNamedFunction
+    s.typeParameters.forEachIndexed { i, tp ->
+        val boundName = s.typeParamBoundNames.getOrNull(i)
+            ?: (s.typeParameterBounds.getOrNull(i) as? KotlinType)?.takeIf { it.typeArguments.isEmpty() }?.qualifiedName
+            ?: fn?.typeParameters?.firstOrNull { it.name == tp }?.extendsBound?.text?.trim()
+            ?: fn?.typeConstraints?.firstOrNull { it.subjectTypeParameterName?.getReferencedName() == tp }?.boundTypeReference?.text?.trim()
+            ?: return@forEachIndexed
+        if (boundName in names && boundName !in bindings) bindings[tp]?.let { bindings[boundName] = it }
+    }
+    if (bindings.isEmpty() || bindings.values.any { (it as? KotlinType)?.isTypeParameter != false }) return null
+    val element = if (vararg && param.qualifiedName == "kotlin.Array") param.typeArguments.singleOrNull() as? KotlinType ?: return null else param
+    val sub = service.substitute(element, bindings) as? KotlinType ?: return null
+    return if (names.any { mentionsTypeParam(sub, it) }) null else sub.withProjection("")
 }
 
 /**

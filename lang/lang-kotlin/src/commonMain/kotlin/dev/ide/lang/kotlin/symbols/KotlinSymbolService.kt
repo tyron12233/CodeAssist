@@ -3257,6 +3257,14 @@ class KotlinSymbolService(
         val bindings = HashMap<String, TypeRef>()
         ext.receiverTypeParam?.let {
             bindings[it] = typeByFqn(receiverFqn, receiverArgs)
+            // The receiver parameter's own bound may name other type parameters (`<C, A : InterfaceA<C>> A.impl`):
+            // the receiver's instantiation of that bound (`RootA : InterfaceA<ContextImpl>`) binds them.
+            val bound = ext.typeParameterBounds.getOrNull(ext.typeParameters.indexOf(it)) as? KotlinType
+            if (bound != null && !bound.isTypeParameter && bound.typeArguments.isNotEmpty()) {
+                val boundFqn = Builtins.kotlinTypeFor(bound.qualifiedName) ?: bound.qualifiedName
+                val inst = if (boundFqn == receiverFqn) receiverArgs else receiverSupertypeArgs(receiverFqn, receiverArgs, boundFqn)
+                inst?.let { args -> unifyReceiverArg(bound, typeByFqn(boundFqn, args), bindings) }
+            }
         } // T.also(): T -> receiver
         // When the extension is declared on a SUPERTYPE of the actual receiver (`Iterable<T>.forEach` on an
         // `IntRange` or a `List<String>`), bind its receiver args from the receiver's INSTANTIATION of that
@@ -5180,10 +5188,11 @@ class KotlinSymbolService(
             // explicit-type-argument bound check and unbound-parameter erasure. Only when bounds were captured.
             typeParameterBounds = if (rc.typeParameterBounds.any { it.isNotBlank() })
                 rc.typeParameterBounds.map { b ->
-                    (if (b.isBlank()) null else typeFromText(
+                    // A bound naming a sibling parameter (`A : InterfaceA<C>`) keeps it a type parameter.
+                    (if (b.isBlank()) null else markTypeParameters(typeFromText(
                         b,
                         rc.ctx
-                    )) ?: typeByFqn("kotlin.Any") ?: KotlinType("kotlin.Any")
+                    ), tps)) ?: typeByFqn("kotlin.Any") ?: KotlinType("kotlin.Any")
                 }
             else emptyList(),
             paramTypes = if (rc.isFunction) rc.paramTexts.map { (_, t) ->
@@ -5239,8 +5248,12 @@ class KotlinSymbolService(
 
             is KtProperty -> {
                 val init = psi.initializer
+                val getterBody = psi.getter?.takeIf { !it.hasBlockBody() }?.bodyExpression
                 if (init != null) {
                     body = init; delegate = null
+                } else if (psi.delegateExpression == null && getterBody != null) {
+                    // `val A.impl get() = ABuilder<…>()`: no initializer, the getter's expression body is the value.
+                    body = getterBody; delegate = null
                 } else {
                     delegate = psi.delegateExpression ?: return null; body = delegate
                 }
