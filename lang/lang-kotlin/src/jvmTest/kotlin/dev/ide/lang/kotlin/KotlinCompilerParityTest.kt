@@ -2523,6 +2523,17 @@ class KotlinCompilerParityTest {
         clean("fun t() { listOf(1).map { it + 1 } }")
     }
 
+    /** `@Deprecated(level = HIDDEN)` on a getter hides the property from a read, on a setter from an assignment,
+     *  and a hidden member or extension is invisible through a receiver too. */
+    @Test
+    fun hiddenAccessorsAndMembers() {
+        assertCodes("val v1: String\n    @Deprecated(\"\", level = DeprecationLevel.HIDDEN) get() = \"\"\nfun t() { v1 }", KotlinDiagnosticCodes.UNRESOLVED)
+        assertCodes("var v4: String\n    get() = \"\"\n    @Deprecated(\"\", level = DeprecationLevel.HIDDEN) set(value) {}\nfun t() { v4; v4 = \"\" }", KotlinDiagnosticCodes.UNRESOLVED)
+        assertCodes("@Deprecated(\"\", level = DeprecationLevel.HIDDEN) fun String.ext() {}\nfun t() { \"\".ext() }", KotlinDiagnosticCodes.UNRESOLVED)
+        assertCodes("interface H { @Deprecated(\"\", level = DeprecationLevel.HIDDEN) var p: Int }\nfun t(h: H) { h.p }", KotlinDiagnosticCodes.UNRESOLVED)
+        clean("interface H { @Deprecated(\"\", level = DeprecationLevel.HIDDEN) var p: Int }\nclass S : H { override var p: Int = 1 }\nfun t(s: S) { s.p; s.p = 2 }")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

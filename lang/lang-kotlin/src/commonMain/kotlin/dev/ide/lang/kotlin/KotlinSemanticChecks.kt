@@ -5047,7 +5047,7 @@ internal class KotlinSemanticChecks(
         // `Row { }`) resolves on a matching receiver WITHOUT an import — its dispatch receiver is an implicit
         // `this` here — so it must not be flagged unresolved (the import gate below applies only to top-level
         // extensions). Checked first since these never need an import.
-        if (resolver.scopeMemberExtensions(expr.textRange.startOffset, recvType, name).any { it.name == name }) return null
+        if (resolver.scopeMemberExtensions(expr.textRange.startOffset, recvType, name).any { it.name == name && !hiddenFromUse(it, expr) }) return null
         // `s.f()` invoking a parameter/local/property of extension function type (`f: String.() -> Int`) with `s`
         // as its receiver: `f` is a value in scope, not a member of `s`'s type.
         if (parent is KtCallExpression && resolver.receiverValueInvokeTargets(parent, name, recvType).isNotEmpty()) return null
@@ -5064,9 +5064,10 @@ internal class KotlinSemanticChecks(
         if (name.firstOrNull()?.isUpperCase() == true && innerTypeAliasOf(recvType.qualifiedName, name)) return null
         // An intersection (`B & A` after a smart cast) has the members of every component.
         if (recvType.intersection.any { c -> service.membersNamedForCheck(c.qualifiedName, c.typeArguments, name).any { it.name == name } }) return null
-        val matching = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name) +
+        // A HIDDEN-deprecated declaration is invisible to resolution ([hiddenFromUse]).
+        val matching = (service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name) +
             (if (resolver.isTypeReceiver(receiver)) service.companionMembersFor(recvType.qualifiedName, name).filter { it.name == name } else emptyList()) +
-            typeStatics
+            typeStatics).filterNot { it.name == name && hiddenFromUse(it, expr) }
         // An extension declared ON THE COMPANION, reached through the class name: `String.CASE_INSENSITIVE_ORDER`
         // is `val String.Companion.CASE_INSENSITIVE_ORDER`, and `fun Foo.Companion.create()` is the usual way
         // to add a factory to a class one does not own. The companion is a classifier of its own, so neither
