@@ -395,6 +395,32 @@ object KotlinDiagnosticCodes {
     const val ASSIGN_OPERATOR_AMBIGUITY = "kt.assignOperatorAmbiguity"
     /** `A()` calling a protected constructor from a subclass body (PROTECTED_CONSTRUCTOR_NOT_IN_SUPER_CALL). */
     const val PROTECTED_CONSTRUCTOR_NOT_IN_SUPER_CALL = "kt.protectedConstructorNotInSuperCall"
+
+    /** A class whose supertypes mix a plain function type with a suspend one (MIXING_SUSPEND_AND_NON_SUSPEND_SUPERTYPES). */
+    const val MIXING_SUSPEND_AND_NON_SUSPEND_SUPERTYPES = "kt.mixingSuspendAndNonSuspendSupertypes"
+
+    /** A construct K2 parses but does not support (UNSUPPORTED): a dynamic type on the JVM, a local type alias, a
+     *  default value or modifier on a function type's parameter, a callable reference to a local variable. */
+    const val UNSUPPORTED = "kt.unsupported"
+
+    /** An annotation use or an enum entry that leaves a constructor parameter without a value (NO_VALUE_FOR_PARAMETER). */
+    const val NO_VALUE_FOR_PARAMETER = "kt.noValueForParameter"
+
+    /** A reference closing a cycle of implicitly typed bodies (TYPECHECKER_HAS_RUN_INTO_RECURSIVE_PROBLEM). */
+    const val RECURSIVE_IMPLICIT_TYPE = "kt.recursiveImplicitType"
+
+    // The shape rules of a value class (FirValueClassDeclarationChecker), one code per K2 name.
+    const val VALUE_CLASS_NOT_TOP_LEVEL = "kt.valueClassNotTopLevel"
+    const val VALUE_CLASS_NOT_FINAL = "kt.valueClassNotFinal"
+    const val VALUE_CLASS_CANNOT_EXTEND_CLASSES = "kt.valueClassCannotExtendClasses"
+    const val VALUE_CLASS_CANNOT_IMPLEMENT_INTERFACE_BY_DELEGATION = "kt.valueClassCannotImplementInterfaceByDelegation"
+    const val INNER_CLASS_INSIDE_VALUE_CLASS = "kt.innerClassInsideValueClass"
+    const val DELEGATED_PROPERTY_INSIDE_VALUE_CLASS = "kt.delegatedPropertyInsideValueClass"
+    const val PROPERTY_WITH_BACKING_FIELD_INSIDE_VALUE_CLASS = "kt.propertyWithBackingFieldInsideValueClass"
+    const val ABSENCE_OF_PRIMARY_CONSTRUCTOR_FOR_VALUE_CLASS = "kt.absenceOfPrimaryConstructorForValueClass"
+    const val INLINE_CLASS_CONSTRUCTOR_WRONG_PARAMETERS_SIZE = "kt.inlineClassConstructorWrongParametersSize"
+    const val VALUE_CLASS_CONSTRUCTOR_NOT_FINAL_READ_ONLY_PARAMETER = "kt.valueClassConstructorNotFinalReadOnlyParameter"
+    const val VALUE_CLASS_HAS_INAPPLICABLE_PARAMETER_TYPE = "kt.valueClassHasInapplicableParameterType"
     /** A member inherited from several supertypes whose types no one of them can stand for
      *  (RETURN_TYPE_MISMATCH_ON_INHERITANCE, PROPERTY_TYPE_MISMATCH_ON_INHERITANCE, VAR_TYPE_MISMATCH_ON_INHERITANCE). */
     const val INHERITANCE_TYPE_MISMATCH = "kt.inheritanceTypeMismatch"

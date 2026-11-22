@@ -848,6 +848,189 @@ class KotlinCompilerParityTest {
         clean("fun test(): Int = run { return 1 }")
     }
 
+    /** A class may not inherit both a plain and a suspend function type, directly or through a supertype of this
+     *  file; one kind alone is fine. */
+    @Test
+    fun suspendAndNonSuspendFunctionSupertypesDoNotMix() {
+        val m = KotlinDiagnosticCodes.MIXING_SUSPEND_AND_NON_SUSPEND_SUPERTYPES
+        assertCodes("abstract class C : suspend () -> Unit, () -> Unit", m)
+        assertCodes("interface ISuper : () -> Unit\ninterface I : suspend () -> Unit, ISuper", m)
+        assertCodes("import kotlin.coroutines.*\ninterface I : SuspendFunction0<Unit>, () -> Unit", m)
+        clean("interface I : suspend () -> Unit\ninterface J : () -> Unit, (Int) -> Unit")
+        clean("interface SuspendFunction0<T>\ninterface I : SuspendFunction0<Unit>, () -> Unit")
+    }
+
+    /** UNSUPPORTED shapes: a function type's parameter with a default, a modifier or (when named) an annotation;
+     *  a named parameter of a function type written as a supertype; `dynamic`; a local type alias; delegation in a
+     *  class without a primary constructor; a callable reference to a local variable. */
+    @Test
+    fun unsupportedConstructsAreReported() {
+        val u = KotlinDiagnosticCodes.UNSUPPORTED
+        assertCodes("val f: (x: Int = 0) -> Unit = {}", u)
+        assertCodes("fun g(fn: (vararg x: Int) -> Unit) {}", u)
+        assertCodes("annotation class Ann\nfun g(fn: (@Ann x: Int) -> Unit) {}", u)
+        assertCodes("abstract class C : (x: Int) -> Unit", u)
+        clean("abstract class C : (Int) -> Unit\nfun g(fn: (x: Int) -> Unit, h: ((k: String) -> Unit) -> Unit) {}")
+        assertCodes("val foo: dynamic = 1", u)
+        assertCodes("interface A\nclass AImpl : A\nclass B : A by AImpl() {\n constructor()\n}", u)
+        clean("interface A\nclass AImpl : A\nclass B : A by AImpl()")
+        assertCodes("fun eat(a: Any) {}\nfun test(param: String) {\n eat(::param)\n}", u)
+        clean("fun eat(a: Any) {}\nfun top() {}\nfun test() {\n eat(::top)\n}")
+    }
+
+    /** An annotation's constructor parameters without a default need an argument, positional or named; a vararg
+     *  takes every positional argument from it on. */
+    @Test
+    fun annotationArgumentsFillTheirParameters() {
+        val n = KotlinDiagnosticCodes.NO_VALUE_FOR_PARAMETER
+        assertCodes("annotation class My1(val i: Int)\n@My1 fun foo() {}", n)
+        clean("annotation class My1(val i: Int)\nannotation class My2(val i: Int = 0)\n@My1(2) fun a() {}\n@My2 fun b() {}\n@My1(i = 1) fun c() {}")
+        assertCodes("annotation class AnnVarargs(val x: Int, vararg val y: String, val z: Int)\n@AnnVarargs(1, \"a\", \"b\") class B", n)
+        clean("annotation class AnnVarargs(val x: Int, vararg val y: String, val z: Int)\n@AnnVarargs(1, \"a\", z = 2) class B")
+        assertCodes("enum class E(val i: Int) {\n A(12),\n B\n}", n)
+        clean("enum class E(val x: String = \"OK\") {\n TEST1,\n TEST2(),\n TEST3(\"Hello\")\n}")
+    }
+
+    /** A reference inside an implicitly typed body to a declaration whose implicit type needs that body again is a
+     *  recursive problem; a written type anywhere on the cycle breaks it. */
+    @Test
+    fun implicitTypesThatDependOnThemselvesAreRecursive() {
+        val r = KotlinDiagnosticCodes.RECURSIVE_IMPLICIT_TYPE
+        assertCodes("fun foo() = bar()\nfun bar() = foo()", r, r)
+        assertTrue(r in codes("val z = z"))
+        assertCodes("fun fact(n: Int) = if (n < 2) 1 else n * fact(n - 1)", r)
+        assertCodes("class A {\n val a get() = b\n val b get() = a\n}", r, r)
+        clean("fun foo(): Int = bar()\nfun bar() = foo()")
+        clean("fun fact(n: Int): Int = if (n < 2) 1 else n * fact(n - 1)")
+        clean("fun foo(x: Int) = x\nfun bar() = foo(1)")
+        clean("fun bar(s: String) = s.length\nfun t() = with(\"x\") { bar(this) }")
+        assertCodes(
+            "class Scope\nfun <T> simpleAsync0(block: Scope.() -> T) {}\nfun insideJob0() = doTheJob0()\nfun doTheJob0() = simpleAsync0 { insideJob0() }",
+            r, r,
+        )
+    }
+
+    /** A callable reference's or class literal's left side gives a class exactly its own type parameters. */
+    @Test
+    fun typeArgumentsLeftOfDoubleColonMatchTheClass() {
+        val n = KotlinDiagnosticCodes.TYPE_ARGUMENT_COUNT
+        assertCodes("open class X<A> {\n inner class Y<B> { fun foo() {} }\n val ref = Y<Int, Int>::foo\n}", n)
+        assertCodes("class L\nval k = L<Int>::class", n)
+        clean("class G<T> { fun foo() {} }\nval r = G<Int>::foo\nval k = G::class")
+    }
+
+    /** Overloads compare by their types as K2 sees them: a type parameter renamed, bounds reordered, an alias
+     *  expanded or an annotation added is the same signature; a data class's generated members count too. */
+    @Test
+    fun overloadSignaturesCompareModuloRenamingAndAliases() {
+        val c = KotlinDiagnosticCodes.CONFLICTING_DECLARATION
+        assertCodes("fun <T1> test1(x: List<T1>) = x\nfun <T2> test1(x: List<T2>) = x", c, c)
+        assertCodes("interface I1\ninterface I2\nfun <T> foo(t: T) where T : I1, T : I2 {}\nfun <T> foo(t: T) where T : I2, T : I1 {}", c, c)
+        assertCodes("class K\ntypealias SameK = K\nfun f(a: K) {}\nfun f(a: SameK) {}", c, c)
+        clean("fun <T, R> m(a: Map<T, R>) {}\nfun <T, R> m(a: Map<R, T>) {}")
+        clean("interface I1\ninterface I2\nfun <T : I1> g(a: List<T>) {}\nfun <T : I2> g(a: List<T>) {}")
+        assertCodes("data class A(val x: Int, val y: String) {\n fun component1() = 1\n}", c, c)
+        assertCodes("class C(val x: Int)\ntypealias CC = C\nfun CC(x: Int) = x", c, c)
+        assertCodes("class D(val x: List<String>)\nfun D(x: List<String>) = x", c, c)
+        assertCodes("interface T1 {\n fun <T> foo(t: T) where T : I1, T : I2\n @Deprecated(\"foo\", level = DeprecationLevel.HIDDEN)\n fun <T> foo(t: T) where T : I2, T : I1\n}\ninterface I1\ninterface I2", c, c)
+        clean("data class A(val x: Int, val y: String) {\n fun component3() = 1\n fun copy(x: Int) = x\n}")
+    }
+
+    /** An extension function's receiver is an implicit receiver with its class's DSL markers: a call through it
+     *  from inside a lambda whose receiver carries the same marker violates the DSL scope. */
+    @Test
+    fun anExtensionReceiverTakesPartInDslScopes() {
+        val prelude = "@DslMarker annotation class Ann\n@Ann class A { fun a() = 1 }\n@Ann class B { fun b() = 2 }\nfun bar(x: B.() -> Unit) {}\n"
+        assertCodes(prelude + "fun A.test() { bar { a() } }", KotlinDiagnosticCodes.DSL_SCOPE_VIOLATION)
+        clean(prelude + "fun A.test() { bar { this@test.a(); b() } }")
+    }
+
+    /** An inferred type is exposed like a written one: a public function returning a constructor call of a private
+     *  class exposes that class. */
+    @Test
+    fun inferredTypesCanExposeLessVisibleClasses() {
+        val e = KotlinDiagnosticCodes.EXPOSED_VISIBILITY
+        assertCodes("private class A\nfun makeA() = A()", e)
+        assertCodes("internal class My\nclass C { val x = My() }", e)
+        clean("private class A\nprivate fun makeA() = A()\ninternal class My\ninternal val x = My()")
+        clean("private class A\nfun makeA(): Any = A()")
+    }
+
+    /** `B() += 1` needs a variable when `B` has `plus` but no `plusAssign`; an object is not a variable for `++`. */
+    @Test
+    fun compoundAssignmentsAndIncrementsNeedVariables() {
+        val v = KotlinDiagnosticCodes.VARIABLE_EXPECTED
+        assertCodes("class B { operator fun plus(x: Int): B = B() }\nfun t() { B() += 1 }", v)
+        clean("class A { operator fun plusAssign(x: Int) {} }\nfun t() { A() += 1 }")
+        assertCodes("object AAA { operator fun inc(): AAA = this }\nfun t() { AAA++ }", v)
+    }
+
+    /** `Enum`'s `name`, `ordinal`, `equals`, `hashCode`, `compareTo` are final, and so is an enum's own member that
+     *  is not `open`: an entry cannot override it. */
+    @Test
+    fun enumFinalMembersCannotBeOverridden() {
+        val f = KotlinDiagnosticCodes.OVERRIDING_FINAL
+        assertCodes("enum class E {\n ENTRY;\n override fun hashCode() = -1\n}", f)
+        assertCodes("enum class E {\n E2 { override fun f() = 3 };\n fun f() = 2\n}", f)
+        clean("enum class E {\n E1 { override fun foo() = 1 };\n open fun foo() = 1\n override fun toString() = \"e\"\n}")
+    }
+
+    /** A non-private property delegated to `lazy { object : A, B {} }` has the object's ambiguous type. */
+    @Test
+    fun lazyObjectsWithTwoSupertypesAreAmbiguous() {
+        val prelude = "interface A\ninterface B\n"
+        assertCodes(prelude + "val p by lazy { object : A, B {} }", KotlinDiagnosticCodes.FUNCTION_SHAPE)
+        clean(prelude + "private val p by lazy { object : A, B {} }\nval q by lazy { object : A {} }")
+    }
+
+    /** A file's own non-inline `run` takes a bare `run { }` before the stdlib's inline one, so a `return` in its
+     *  lambda cannot leave the enclosing function. */
+    @Test
+    fun aSamePackageNonInlineFunctionShadowsTheStdlibInlineOne() {
+        assertCodes("fun test() {\n run { return }\n}\nfun <T> run(f: () -> T): T { return f() }", KotlinDiagnosticCodes.RETURN_NOT_ALLOWED)
+        clean("fun test() {\n run { return }\n}")
+    }
+
+    /** A `when` used as a value over a subject written as `Any` or `CharSequence` is exhaustive only through an
+     *  `is` of that type (or a supertype), nullable included when the subject is. */
+    @Test
+    fun whenOverAnOpenTypeNeedsAnElse() {
+        val w = KotlinDiagnosticCodes.WHEN_EXHAUSTIVE
+        assertCodes("fun t(x: CharSequence): Int = when (x) { is String -> 1 }", w)
+        assertCodes("fun t(x: CharSequence?): Int = when (x) { is Any -> 1 }", w)
+        clean("fun t(x: CharSequence): Int = when (x) { is CharSequence -> 1 }")
+        clean("fun t(x: CharSequence?): Int = when (x) { is Any? -> 1 }")
+        clean("fun t(x: Any) { when (x) { is String -> println() } }")
+    }
+
+    /** A value class is final, extends no class, stores exactly one final `val`, and keeps no other state. */
+    @Test
+    fun valueClassesHaveTheirShape() {
+        clean("@JvmInline value class A0(val x: Int)\ninterface I\n@JvmInline value class A1(val x: I) : I by x\n@JvmInline value class A2(val x: Int) { val y get() = x }")
+        assertCodes("@JvmInline value class A3(var x: Int)", KotlinDiagnosticCodes.VALUE_CLASS_CONSTRUCTOR_NOT_FINAL_READ_ONLY_PARAMETER)
+        assertCodes("@JvmInline value class A5(val x: Int, val y: Int)", KotlinDiagnosticCodes.INLINE_CLASS_CONSTRUCTOR_WRONG_PARAMETERS_SIZE)
+        assertCodes("@JvmInline value class A6(val x: Int) { val a1 = 0 }", KotlinDiagnosticCodes.PROPERTY_WITH_BACKING_FIELD_INSIDE_VALUE_CLASS)
+        assertCodes("open class Base\n@JvmInline value class A7(val x: Int) : Base()", KotlinDiagnosticCodes.VALUE_CLASS_CANNOT_EXTEND_CLASSES)
+        assertCodes("@JvmInline value class A8(val u: Unit)", KotlinDiagnosticCodes.VALUE_CLASS_HAS_INAPPLICABLE_PARAMETER_TYPE)
+    }
+
+    /** A local `val` read before it is assigned is reported in an accessor's or an `init` block's body too. */
+    @Test
+    fun uninitializedLocalsInAccessorsAndInitializers() {
+        val u = KotlinDiagnosticCodes.UNINITIALIZED_VARIABLE
+        assertCodes("val a: Int\n get() {\n val b: Int\n return b\n }", u)
+        assertCodes("class A {\n init {\n val b: Int\n println(b)\n }\n}", u)
+        clean("val a: Int\n get() {\n val b: Int\n b = 1\n return b\n }")
+    }
+
+    /** A function whose implicit return type is `Nothing` through a `run { ... }` that never completes. */
+    @Test
+    fun runThatNeverCompletesMakesAnImplicitNothing() {
+        val n = KotlinDiagnosticCodes.FUNCTION_SHAPE
+        assertTrue(n in codes("fun test1() = run {\n return \"OK\"\n}"))
+        assertTrue(n !in codes("fun test1() = run { if (true) return@run 1; throw Exception() }"))
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

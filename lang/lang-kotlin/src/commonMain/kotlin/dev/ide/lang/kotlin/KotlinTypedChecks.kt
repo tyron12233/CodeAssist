@@ -1261,10 +1261,17 @@ internal fun KotlinSemanticChecks.lambdaNotInlined(lambda: KtLambdaExpression, r
     if (callee.kind == SymbolKind.CONSTRUCTOR) return psi is KtClass || psi is KtPrimaryConstructor || psi is KtSecondaryConstructor
     val fn = psi as? KtNamedFunction ?: return false
     if (!fn.hasModifier(KtTokens.INLINE_KEYWORD)) {
-        // A bare call could also reach an `inline` overload declared elsewhere; let any such overload win.
+        // A bare call could also reach an `inline` overload declared elsewhere; let any such overload win. One the
+        // file reaches only through a star or default import does not: a function of the file's own package that
+        // takes the call comes first (`fun <T> run(f: () -> T)` beside the stdlib's inline `run`).
         val name = fn.name ?: return false
+        val file = call.containingFile
+        val samePackage = fn.parent is KtFile && fn.containingFile.packageFqName.asString() == file.packageFqName.asString()
         if (call.parent !is KtQualifiedExpression &&
-            service.topLevelByName(name).any { it.kind == SymbolKind.METHOD && it.isInline }) return false
+            service.topLevelByName(name).any { s ->
+                s.kind == SymbolKind.METHOD && s.isInline && (!samePackage || s.packageName == file.packageFqName.asString() ||
+                    file.importDirectives.any { !it.isAllUnder && it.importedFqName?.asString() == "${s.packageName}.$name" })
+            }) return false
         return true
     }
     val param = fn.valueParameters.getOrNull(resolver.lambdaParamIndex(call, argIndex, callee)) ?: return false

@@ -521,7 +521,7 @@ internal class KotlinSemanticChecks(
             KotlinPerf.span("sem.finalSuper") { reportAll(finalSupertype(psi, resolver)) }
             KotlinPerf.span("sem.superCtor") { if (resolveReady) reportAll(supertypeConstructorCall(psi, resolver)) }
         },
-    ) + declarationPortedCheckers() + expressionPortedCheckers() + round6PortedCheckers() + inheritanceClashCheckers() + delegationCallCheckers() + boundCheckers() + lambdaArgumentCheckers() + callableReferenceCheckers()
+    ) + declarationPortedCheckers() + expressionPortedCheckers() + round6PortedCheckers() + inheritanceClashCheckers() + delegationCallCheckers() + boundCheckers() + lambdaArgumentCheckers() + callableReferenceCheckers() + round7PortedCheckers()
 
     /**
      * A class-type supertype written WITHOUT its constructor call — Kotlin's SUPERTYPE_NOT_INITIALIZED
@@ -1032,14 +1032,11 @@ internal class KotlinSemanticChecks(
                     // foo(a: T)` and `fun <T : Number> foo(a: T)` are two overloads, as are `fun <T> foo()` and
                     // `fun foo()`. Keyed on the text alone, every pair of generic functions whose parameters happen
                     // to be written `T` read as one declaration twice.
+                    // The types compare as K2 sees them: a type alias of this file expanded, annotations dropped, and
+                    // a type parameter named by its position and bounds (`List<T1>` and `List<T2>` are one type).
                     if (d.nameIdentifier != null && name != null) {
-                        val bounds = typeParameterBounds(d)
-                        fun erase(t: String?): String {
-                            val text = t ?: return "?"
-                            val head = text.substringBefore('<').removeSuffix("?").trim()
-                            return bounds[head]?.let { b -> b + if (text.trim().endsWith("?")) "?" else "" } ?: text
-                        }
-                        record("F<${d.typeParameters.size}>:${erase(d.receiverTypeReference?.text).takeIf { d.receiverTypeReference != null } ?: ""}:$name(${d.valueParameters.joinToString(",") { p -> (if (p.isVarArg) "vararg " else "") + erase(p.typeReference?.text) }})", d)
+                        val sig = OverloadSignature(this, d)
+                        record("F<${d.typeParameters.size}>:${sig.key(d.receiverTypeReference?.text).takeIf { d.receiverTypeReference != null } ?: ""}:$name(${d.valueParameters.joinToString(",") { p -> (if (p.isVarArg) "vararg " else "") + sig.key(p.typeReference?.text) }})", d)
                     }
                 }
                 // Classifiers share one namespace: two classes, a class and an object, a class and a typealias.
@@ -1054,10 +1051,13 @@ internal class KotlinSemanticChecks(
         }
         // A `@Deprecated(level = HIDDEN)` declaration is invisible to resolution, so it clashes with nothing, but
         // only among FINAL non-local declarations: K2 still reports the pair when either one is `open`/`abstract`
-        // (an override could see both) and between local functions.
+        // (an override could see both) and between local functions. A non-private interface member is open too.
         val groups = byKey.values.map { g ->
             val exempt = g.size > 1 && g.none { it.parent is KtBlockExpression } &&
-                g.none { it.hasModifier(KtTokens.OPEN_KEYWORD) || it.hasModifier(KtTokens.ABSTRACT_KEYWORD) }
+                g.none {
+                    it.hasModifier(KtTokens.OPEN_KEYWORD) || it.hasModifier(KtTokens.ABSTRACT_KEYWORD) ||
+                        (((it.parent as? KtClassBody)?.parent as? KtClass)?.isInterface() == true && !it.hasModifier(KtTokens.PRIVATE_KEYWORD))
+                }
             if (exempt) g.filterNot { isHiddenDeprecated(it) } else g
         }
         return conflicts(groups) + constructorFunctionConflicts(decls, byKey, groups) + propertyClassifierConflicts(byKey, groups)
@@ -1092,56 +1092,58 @@ internal class KotlinSemanticChecks(
      * each as a conflicting overload. A factory function whose parameters differ is the usual idiom and is fine.
      * Only a non-generic class is keyed (its constructors carry no type parameters of their own to compare), and
      * a function `@Deprecated(level = HIDDEN)` at the top level or in a class is invisible to the call, as it is
-     * to [duplicateDeclarations]; the class's own deprecation does not hide its constructors.
+     * to [duplicateDeclarations]; the class's own deprecation does not hide its constructors. A type alias of such a
+     * class in the same scope (`typealias CC = C` beside `fun CC(x: Int)`) is called the same way, and clashes too.
      */
     private fun constructorFunctionConflicts(
         decls: List<KtDeclaration>, byKey: Map<String, List<KtNamedDeclaration>>, groups: List<List<KtNamedDeclaration>>,
     ): List<Diagnostic> {
         val out = ArrayList<Diagnostic>()
         val reported = groups.filter { it.size > 1 }.flatten().toHashSet()
+        // A type alias of a class of the same scope (`typealias CC = C`) is called like the class: `CC(1)`.
+        val aliasesOf = HashMap<String, MutableList<KtTypeAlias>>()
+        for (d in decls) {
+            if (d !is KtTypeAlias || d.typeParameters.isNotEmpty() || d.nameIdentifier == null) continue
+            val rhs = d.typeReference?.typeElement as? KtUserType ?: continue
+            if (rhs.qualifier != null || rhs.typeArgumentList != null) continue
+            rhs.referencedName?.let { aliasesOf.getOrPut(it) { ArrayList() } += d }
+        }
         for (cls in decls) {
             if (cls !is KtClass || cls is KtEnumEntry || cls.isInterface() || cls.isAnnotation() || cls.isEnum() || cls.typeParameters.isNotEmpty()) continue
             if (cls.hasModifier(KtTokens.EXPECT_KEYWORD) || cls.hasModifier(KtTokens.ACTUAL_KEYWORD)) continue
-            val name = cls.name ?: continue
             if (cls.nameIdentifier == null) continue
-            val ctors = ArrayList<Pair<KtElement, List<KtParameter>>>()
-            cls.primaryConstructor?.let { ctors += it to it.valueParameters }
-            cls.secondaryConstructors.forEach { ctors += it to it.valueParameters }
-            if (ctors.isEmpty()) ctors += cls to emptyList()
-            for ((ctor, params) in ctors) {
-                if (params.any { it.typeReference == null }) continue
-                val key = "F<0>::$name(${params.joinToString(",") { p -> (if (p.isVarArg) "vararg " else "") + p.typeReference?.text }})"
-                val fns = byKey[key].orEmpty().filter { it is KtNamedFunction }
-                    .filterNot { it.parent !is KtBlockExpression && isHiddenDeprecated(it) && !it.hasModifier(KtTokens.OPEN_KEYWORD) }
-                if (fns.isEmpty()) continue
-                if (ctor !is KtClass && (ctor as KtDeclaration).annotationEntries.any { it.shortName?.asString() == "Deprecated" && it.text.contains("HIDDEN") }) continue
-                val at = when (ctor) {
-                    is KtClass -> ctor.nameIdentifier ?: ctor
-                    is KtPrimaryConstructor -> ctor
-                    else -> (ctor as KtSecondaryConstructor).let { it.valueParameterList ?: it }
-                }
-                val r = at.textRange
-                out += Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Conflicting overloads: constructor of '$name'", KotlinDiagnosticCodes.CONFLICTING_DECLARATION)
-                for (f in fns) {
-                    if (!reported.add(f)) continue
-                    val fr = (f.nameIdentifier ?: f).textRange
-                    out += Diagnostic(TextRange(fr.startOffset, fr.endOffset), Severity.ERROR, "Conflicting overloads: '$name'", KotlinDiagnosticCodes.CONFLICTING_DECLARATION)
+            val alias = cls.name?.let { aliasesOf[it] }.orEmpty()
+            for (named in listOf<KtNamedDeclaration>(cls) + alias) {
+                val name = named.name ?: continue
+                val ctors = ArrayList<Pair<KtElement, List<KtParameter>>>()
+                cls.primaryConstructor?.let { ctors += it to it.valueParameters }
+                cls.secondaryConstructors.forEach { ctors += it to it.valueParameters }
+                if (ctors.isEmpty()) ctors += cls to emptyList()
+                val sig = OverloadSignature(this, cls.containingFile as? KtFile)
+                for ((ctor, params) in ctors) {
+                    if (params.any { it.typeReference == null }) continue
+                    val key = "F<0>::$name(${params.joinToString(",") { p -> (if (p.isVarArg) "vararg " else "") + sig.key(p.typeReference?.text) }})"
+                    val fns = byKey[key].orEmpty().filter { it is KtNamedFunction }
+                        .filterNot { it.parent !is KtBlockExpression && isHiddenDeprecated(it) && !it.hasModifier(KtTokens.OPEN_KEYWORD) }
+                    if (fns.isEmpty()) continue
+                    if (ctor !is KtClass && (ctor as KtDeclaration).annotationEntries.any { it.shortName?.asString() == "Deprecated" && it.text.contains("HIDDEN") }) continue
+                    val at = when {
+                        named is KtTypeAlias -> named
+                        ctor is KtClass -> ctor.nameIdentifier ?: ctor
+                        ctor is KtPrimaryConstructor -> ctor
+                        else -> (ctor as KtSecondaryConstructor).let { it.valueParameterList ?: it }
+                    }
+                    val r = at.textRange
+                    if (named !is KtTypeAlias || reported.add(named)) {
+                        out += Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Conflicting overloads: constructor of '$name'", KotlinDiagnosticCodes.CONFLICTING_DECLARATION)
+                    }
+                    for (f in fns) {
+                        if (!reported.add(f)) continue
+                        val fr = (f.nameIdentifier ?: f).textRange
+                        out += Diagnostic(TextRange(fr.startOffset, fr.endOffset), Severity.ERROR, "Conflicting overloads: '$name'", KotlinDiagnosticCodes.CONFLICTING_DECLARATION)
+                    }
                 }
             }
-        }
-        return out
-    }
-
-    /** Each of [fn]'s type parameters mapped to the text of its upper bound (`Any?` when it has none), from
-     *  the declaration and its `where` clause. */
-    private fun typeParameterBounds(fn: KtNamedFunction): Map<String, String> {
-        val out = HashMap<String, String>()
-        for (tp in fn.typeParameters) {
-            val n = tp.name ?: continue
-            out[n] = tp.extendsBound?.text?.trim()
-                ?: fn.typeConstraints.firstOrNull { it.subjectTypeParameterName?.getReferencedName() == n }
-                    ?.boundTypeReference?.text?.trim()
-                ?: "Any?"
         }
         return out
     }
@@ -1519,8 +1521,11 @@ internal class KotlinSemanticChecks(
         )
     }
 
-    private fun uninitializedVariables(fn: KtNamedFunction, resolver: KotlinResolver): List<Diagnostic> {
-        val body = fn.bodyBlockExpression ?: return emptyList()
+    private fun uninitializedVariables(fn: KtNamedFunction, resolver: KotlinResolver): List<Diagnostic> =
+        uninitializedVariablesIn(fn.bodyBlockExpression ?: return emptyList(), resolver)
+
+    /** [uninitializedVariables] over any block body: a function's, an accessor's, an initializer's. */
+    internal fun uninitializedVariablesIn(body: KtBlockExpression, resolver: KotlinResolver): List<Diagnostic> {
         val uninitialized = KotlinDefiniteAssignment(resolver).uninitializedReads(body).map { ref ->
             val r = ref.textRange
             Diagnostic(
@@ -1601,7 +1606,10 @@ internal class KotlinSemanticChecks(
 
     /** Reset the per-pass caches (PSI-keyed, so they must not survive a reparse). Called at the start of each
      *  analyze pass by [IncrementalSemanticAnalysis.diagnostics]. */
-    fun resetPassCaches() { blockUsageMemo.clear(); redeclaredMemo = null }
+    fun resetPassCaches() { blockUsageMemo.clear(); redeclaredMemo = null; round7Memo.clear() }
+
+    /** The per-pass tables of the seventh round of ported rules ([Round7Memo]). */
+    internal val round7Memo = Round7Memo()
 
     /** The file [redeclaredClassifiers] last answered for, and its answer; dropped with the pass caches. */
     internal var redeclaredMemo: Pair<KtFile, Set<String>>? = null
@@ -3145,6 +3153,23 @@ internal class KotlinSemanticChecks(
         return found
     }
 
+    /** The written type (whitespace removed) of the local variable or parameter [subject] names, also through a
+     *  `!!`, or the `when (val x: T = ...)` subject's own; null for anything else. */
+    private fun declaredLocalType(subject: KtExpression, resolver: KotlinResolver): String? {
+        var e = unwrapParen(subject)
+        if (e is KtProperty) return e.typeReference?.text?.filterNot { it.isWhitespace() }
+        if (e is KtPostfixExpression && e.operationToken == KtTokens.EXCLEXCL) e = e.baseExpression?.let { unwrapParen(it) } ?: return null
+        val ref = e as? KtNameReferenceExpression ?: return null
+        val local = resolver.localsAt(ref.textRange.startOffset, ref.getReferencedName()).firstOrNull() ?: return null
+        val psi = (local.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi
+        val typeRef = when (psi) {
+            is KtParameter -> psi.typeReference
+            is KtProperty -> psi.typeReference
+            else -> null
+        } ?: return null
+        return typeRef.text.filterNot { it.isWhitespace() }
+    }
+
     private fun subjectWhenNotExhaustive(
         expr: KtWhenExpression, subject: KtExpression, type: KotlinType, used: Boolean, resolver: KotlinResolver,
     ): Diagnostic? {
@@ -3163,6 +3188,23 @@ internal class KotlinSemanticChecks(
         if (type.qualifiedName in NON_EXHAUSTIVE_SUBJECT_TYPES) {
             // A string or a number: no set of constants covers it, so only an `is` of its own type would.
             if (!used || expr.entries.any { e -> e.conditions.any { it is KtWhenConditionIsPattern } }) return null
+            return whenDiag(expr, "'when' expression must be exhaustive. Add an 'else' branch.")
+        }
+        // `Any` and `CharSequence` have open-ended subtypes: only an `is` of the type itself (or of a supertype)
+        // covers them, nullable included when the type is (`is Any?`).
+        OPEN_SUBJECT_SUPERTYPES[type.qualifiedName]?.let { supers ->
+            if (!used) return null
+            // Only a subject whose type is WRITTEN that way: an inferred `Any` can be a join this model widened.
+            val declared = declaredLocalType(subject, resolver) ?: return null
+            if (declared.removeSuffix("?") !in supers) return null
+            val coversAll = expr.entries.any { e ->
+                e.conditions.any { c ->
+                    c is KtWhenConditionIsPattern && !c.isNegated && c.typeReference?.text?.filterNot { it.isWhitespace() }?.let { t ->
+                        t.removeSuffix("?") in supers && (!missingNull || t.endsWith("?"))
+                    } == true
+                }
+            }
+            if (coversAll) return null
             return whenDiag(expr, "'when' expression must be exhaustive. Add an 'else' branch.")
         }
         if (type.qualifiedName.startsWith("kotlin.") && service.isBuiltinType(type.qualifiedName)) return null
@@ -4962,6 +5004,13 @@ internal fun hasBackingField(prop: KtProperty): Boolean {
 }
 
 /** Subject types no set of `when` constants can cover: a `when` over one needs an `else` to be exhaustive. */
+/** A `when` subject type whose subtypes no set of branches enumerates, mapped to the `is` types (written short
+ *  or qualified) that cover it whole: itself and its supertypes. */
+private val OPEN_SUBJECT_SUPERTYPES = mapOf(
+    "kotlin.Any" to setOf("Any", "kotlin.Any"),
+    "kotlin.CharSequence" to setOf("Any", "kotlin.Any", "CharSequence", "kotlin.CharSequence"),
+)
+
 private val NON_EXHAUSTIVE_SUBJECT_TYPES = setOf(
     "kotlin.String", "kotlin.Int", "kotlin.Long", "kotlin.Short", "kotlin.Byte", "kotlin.Char", "kotlin.Double",
     "kotlin.Float", "kotlin.UInt", "kotlin.ULong",

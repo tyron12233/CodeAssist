@@ -1,6 +1,9 @@
 package dev.ide.lang.kotlin
 
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
+import dev.ide.kotlin.syntax.psi.KtCallExpression
+import dev.ide.kotlin.syntax.psi.KtExpression
+import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtCallableDeclaration
 import dev.ide.kotlin.syntax.psi.KtClass
 import dev.ide.kotlin.syntax.psi.KtClassBody
@@ -32,6 +35,10 @@ import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.kotlin.resolve.KotlinResolver
 import dev.ide.lang.kotlin.resolve.enclosingClassFqnOf
 import dev.ide.lang.kotlin.resolve.isTypeParameterInScope
+import dev.ide.lang.kotlin.resolve.enclosingClassMembersContain
+import dev.ide.lang.kotlin.resolve.localFunctionsInScope
+import dev.ide.lang.kotlin.resolve.localsAt
+import dev.ide.lang.kotlin.parse.unwrapParen
 
 /**
  * K2's effective visibility (`core/compiler.common/.../descriptors/EffectiveVisibility.kt`, Apache 2.0): how far a
@@ -283,6 +290,9 @@ internal fun KotlinSemanticChecks.exposedVisibility(d: KtDeclaration, resolver: 
             if (base == EffectiveVisibility.Local) return emptyList()
             val out = ArrayList<Diagnostic>()
             d.typeReference?.let { t -> findExposure(t, base, resolver)?.let { out += exposedAt(t, exposedMessage("function", base, it)) } }
+            if (d.typeReference == null && !d.hasBlockBody()) {
+                implicitExposure(d.bodyExpression, base, resolver)?.let { out += exposedAt(d.nameIdentifier ?: d, exposedMessage("function", base, it)) }
+            }
             for (p in d.valueParameters) {
                 val t = p.typeReference ?: continue
                 findExposure(t, base, resolver)?.let { out += exposedAt(p, exposedMessage("function", base, it)) }
@@ -315,6 +325,9 @@ internal fun KotlinSemanticChecks.exposedVisibility(d: KtDeclaration, resolver: 
             if (base == EffectiveVisibility.Local) return emptyList()
             val out = ArrayList<Diagnostic>()
             d.typeReference?.let { t -> findExposure(t, base, resolver)?.let { out += exposedAt(t, exposedMessage("property", base, it)) } }
+            if (d.typeReference == null && !d.hasDelegate()) {
+                implicitExposure(d.initializer, base, resolver)?.let { out += exposedAt(d.nameIdentifier ?: d, exposedMessage("property", base, it)) }
+            }
             d.receiverTypeReference?.let { t -> findExposure(t, base, resolver)?.let { out += exposedAt(t, exposedMessage("member", base, it)) } }
             return out
         }
@@ -346,6 +359,50 @@ internal fun KotlinSemanticChecks.exposedVisibility(d: KtDeclaration, resolver: 
             return listOf(exposedAt(d.nameIdentifier ?: d, exposedMessage("typealias", base, e)))
         }
         else -> return emptyList()
+    }
+}
+
+/**
+ * The exposure an inferred type brings, judged where the type is plainly one class of the project: a constructor
+ * call (`fun make() = Hidden()`) or a reference to an object (`val o = HiddenObject`).
+ */
+private fun KotlinSemanticChecks.implicitExposure(body: KtExpression?, base: EffectiveVisibility, resolver: KotlinResolver): Exposure? {
+    val e = body?.let { unwrapParen(it) } ?: return null
+    val cls = implicitClassOf(e, resolver) ?: return null
+    if (!accessibleFrom(cls, e)) return null
+    val ev = effectiveVisibilityOf(cls) ?: return null
+    val rel = ev.relation(base) { a, b -> isSubclassOf(a, b) }
+    if (rel != EffectiveVisibility.Permissiveness.LESS && rel != EffectiveVisibility.Permissiveness.UNKNOWN) return null
+    val name = cls.name ?: return null
+    if (!noTopLevelCallableNamed(name)) return null
+    return Exposure(name, ev, false)
+}
+
+/** The project class [e] evaluates to an instance of, when that is certain from its shape: `Name(...)` naming a
+ *  class (no local, member, function of this file or import of the name that a call could reach instead), or a
+ *  bare `Name` naming an object. A caller confirms [noTopLevelCallableNamed] once the rest of its rule holds: that
+ *  lookup scans the project's top-level declarations. */
+/** No top-level function or property of the project or its libraries is called [name]. */
+internal fun KotlinSemanticChecks.noTopLevelCallableNamed(name: String): Boolean = service.topLevelByName(name).isEmpty()
+
+internal fun KotlinSemanticChecks.implicitClassOf(e: KtExpression, resolver: KotlinResolver): KtClassOrObject? {
+    val call = e as? KtCallExpression
+    val ref = (call?.calleeExpression ?: e) as? KtNameReferenceExpression ?: return null
+    if (call != null && call.typeArgumentList != null) return null
+    val name = ref.getReferencedName()
+    if (name.isEmpty() || !name[0].isUpperCase()) return null
+    val offset = ref.textRange.startOffset
+    if (resolver.localsAt(offset, name).isNotEmpty() || resolver.localFunctionsInScope(offset, name).isNotEmpty()) return null
+    if (resolver.enclosingClassMembersContain(offset, name)) return null
+    val file = e.containingFile as? KtFile ?: return null
+    if (file.declarations.any { (it is KtNamedFunction || it is KtProperty) && (it as KtCallableDeclaration).name == name }) return null
+    if (file.importDirectives.any { it.aliasName == name }) return null
+    val fqn = service.resolveTypeName(name, resolver.fileContext, enclosingClassFqnOf(e))?.takeIf { service.isKnownType(it) } ?: return null
+    val cls = (service.sourceClass(fqn)?.node as? KotlinDomNode)?.psi as? KtClassOrObject ?: return null
+    return when {
+        call != null -> cls.takeIf { it is KtClass && !it.isInterface() && !it.isEnum() && !it.isAnnotation() && it !is KtEnumEntry && !it.hasModifier(KtTokens.ABSTRACT_KEYWORD) && !it.isSealed() }
+        cls is KtObjectDeclaration && !cls.isCompanion() && !cls.isObjectLiteral() -> cls
+        else -> null
     }
 }
 

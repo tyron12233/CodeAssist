@@ -1201,6 +1201,7 @@ private fun certainlyNothing(e: KtExpression?, visiting: MutableSet<KtNamedFunct
         is dev.ide.kotlin.syntax.psi.KtPostfixExpression ->
             x.operationReference.text == "!!" && x.baseExpression?.text?.trim() == "null"
         is dev.ide.kotlin.syntax.psi.KtCallExpression -> {
+            if (runReturningNothing(x, visiting)) return true
             if (x.parent is KtQualifiedExpression || x.typeArgumentList != null || x.lambdaArguments.isNotEmpty()) return false
             val name = (x.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return false
             val candidates = x.containingFile.declarations.filterIsInstance<KtNamedFunction>().filter { it.name == name }
@@ -1217,6 +1218,33 @@ private fun certainlyNothing(e: KtExpression?, visiting: MutableSet<KtNamedFunct
         }
         else -> false
     }
+}
+
+/**
+ * `run { ...; throw e }` or `run { return x }` called with no receiver: the lambda's value is its last statement,
+ * so when that never completes the call's type is `Nothing`. Not when the lambda can return a value through a
+ * labeled `return@...`, or when this file declares its own `run`.
+ */
+private fun runReturningNothing(call: dev.ide.kotlin.syntax.psi.KtCallExpression, visiting: MutableSet<KtNamedFunction>): Boolean {
+    if ((call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() != "run") return false
+    val q = call.parent as? KtQualifiedExpression
+    if (q != null && q.selectorExpression === call) return false
+    if (call.typeArgumentList != null || call.valueArguments.size != 1) return false
+    val lambda = call.lambdaArguments.singleOrNull()?.getLambdaExpression() ?: return false
+    if (lambda.valueParameters.isNotEmpty()) return false
+    val body = lambda.bodyExpression ?: return false
+    val last = body.statements.lastOrNull() ?: return false
+    if (call.containingFile.declarations.any { it is KtNamedFunction && it.name == "run" }) return false
+    if (localFunctionNamed(call, "run")) return false
+    var labeled = false
+    fun scan(e: KtElement) {
+        if (labeled) return
+        if (e is dev.ide.kotlin.syntax.psi.KtReturnExpression && e.getLabelName() != null) { labeled = true; return }
+        var c = e.firstChild
+        while (c != null) { scan(c); c = c.nextSibling }
+    }
+    scan(body)
+    return !labeled && certainlyNothing(last, visiting)
 }
 
 private fun localFunctionNamed(from: KtElement, name: String): Boolean {
@@ -1354,10 +1382,12 @@ internal fun ambiguousAnonymousType(d: KtDeclaration): Diagnostic? {
             d.bodyExpression to (d.nameIdentifier ?: d)
         }
         is KtProperty -> {
-            if (d.typeReference != null || d.hasDelegate()) return null
+            if (d.typeReference != null) return null
             if (d.hasModifier(KtTokens.PRIVATE_KEYWORD) && !d.hasModifier(KtTokens.INLINE_KEYWORD)) return null
             val getter = d.getter
             when {
+                // `by lazy { object : A, B {} }`: the delegate's `getValue` returns the lambda's value, the object.
+                d.hasDelegate() -> lazyValue(d.delegateExpression) to (d.nameIdentifier ?: d)
                 d.initializer != null -> d.initializer to (d.nameIdentifier ?: d)
                 getter != null && getter.returnTypeReference == null && !getter.hasBlockBody() ->
                     getter.bodyExpression to getter.namePlaceholder
@@ -1371,4 +1401,15 @@ internal fun ambiguousAnonymousType(d: KtDeclaration): Diagnostic? {
     val literal = (e as? KtObjectLiteralExpression)?.objectDeclaration ?: return null
     if (literal.superTypeListEntries.size < 2) return null
     return diagnostic(at, "Right-hand side has anonymous type. Please specify type explicitly", KotlinDiagnosticCodes.FUNCTION_SHAPE)
+}
+
+/** The value a `lazy { ...; value }` delegate (called bare, with only its lambda) gives: the lambda's last
+ *  statement. Null for any other delegate, or when this file declares its own `lazy`. */
+private fun lazyValue(delegate: KtExpression?): KtExpression? {
+    val call = delegate as? dev.ide.kotlin.syntax.psi.KtCallExpression ?: return null
+    if ((call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() != "lazy") return null
+    if (call.valueArguments.size != 1) return null
+    if (call.containingFile.declarations.any { it is KtNamedFunction && it.name == "lazy" }) return null
+    val lambda = call.lambdaArguments.singleOrNull()?.getLambdaExpression() ?: return null
+    return lambda.bodyExpression?.statements?.lastOrNull()
 }

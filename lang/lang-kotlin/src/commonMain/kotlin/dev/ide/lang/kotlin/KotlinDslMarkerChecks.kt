@@ -56,6 +56,8 @@ internal fun KotlinSemanticChecks.dslScopeViolation(call: KtCallExpression, reso
 
 private class ReceiverScope(val type: KotlinType, val markers: Set<String>)
 
+private val MARKER_ANNOTATION = Regex("""@([A-Za-z_][A-Za-z0-9_.]*)""")
+
 /** The receiver lambdas around [at], innermost first, each with its receiver type and DSL markers. Stops at a
  *  class or a named function: past one, receivers of the enclosing lambdas belong to another scope. */
 private fun KotlinSemanticChecks.receiverScopes(at: KtElement, resolver: KotlinResolver): List<ReceiverScope> {
@@ -66,7 +68,19 @@ private fun KotlinSemanticChecks.receiverScopes(at: KtElement, resolver: KotlinR
             is KtLambdaExpression -> resolver.lambdaReceiverType(node)?.let { rt ->
                 out += ReceiverScope(rt, typeUsageMarkers(node, resolver) + classMarkers(rt.qualifiedName, resolver))
             }
-            is KtClassOrObject, is KtNamedFunction -> return out
+            // An extension function's receiver is the next implicit receiver out (`fun A.test() { bar { a() } }`),
+            // with the markers its class carries and those written on the receiver type (`fun (@L1 A).test()`).
+            is KtNamedFunction -> {
+                val ref = node.receiverTypeReference ?: return out
+                if (node.name == null) return out
+                service.typeFromText(ref.text, resolver.fileContext)?.let { rt ->
+                    val written = MARKER_ANNOTATION.findAll(ref.text).map { it.groupValues[1].substringAfterLast('.') }
+                        .filter { isDslMarker(it, resolver) }.toSet()
+                    out += ReceiverScope(rt, written + classMarkers(rt.qualifiedName, resolver))
+                }
+                return out
+            }
+            is KtClassOrObject -> return out
             else -> {}
         }
         node = node.parent as? KtElement
