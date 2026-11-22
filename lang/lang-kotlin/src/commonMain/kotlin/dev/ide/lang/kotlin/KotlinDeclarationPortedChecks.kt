@@ -4,6 +4,7 @@ import dev.ide.kotlin.syntax.psi.KtBlockExpression
 import dev.ide.kotlin.syntax.psi.KtClass
 import dev.ide.kotlin.syntax.psi.KtClassBody
 import dev.ide.kotlin.syntax.psi.KtClassOrObject
+import dev.ide.kotlin.syntax.psi.getStrictParentOfType
 import dev.ide.kotlin.syntax.psi.KtConstantExpression
 import dev.ide.kotlin.syntax.psi.KtConstructorDelegationCall
 import dev.ide.kotlin.syntax.psi.KtDeclaration
@@ -191,29 +192,26 @@ internal fun KotlinSemanticChecks.classifierFqnOf(typeRef: KtTypeReference, reso
     if (user.qualifier == null) {
         val name = user.referencedName ?: return null
         if (resolver.isTypeParameterInScope(name, typeRef.textRange.startOffset)) return null
-        if (name in redeclaredClassifiers(typeRef.containingFile)) return null
         if (service.isProjectTypeAlias(name)) return service.typeAliasChainTargetFqn(name, resolver.fileContext)
     }
-    val fqn = service.resolveTypeName(text, resolver.fileContext, enclosingClassFqnOf(typeRef)) ?: return null
-    return fqn.takeIf { service.isKnownType(it) }
-}
-
-/** The classifier names declared more than once in [file]: which declaration a use of one means is the
- *  redeclaration error's business, and every judgement that needs the class backs off. Kept for the pass in
- *  [KotlinSemanticChecks.redeclaredMemo] (the checks of one pass all ask about the same file). It was a global
- *  once, which pinned the last file's whole tree for the life of the process and was shared by every thread. */
-private fun KotlinSemanticChecks.redeclaredClassifiers(file: KtFile): Set<String> {
-    redeclaredMemo?.takeIf { it.first === file }?.let { return it.second }
-    val counts = HashMap<String, Int>()
-    fun rec(e: KtElement) {
-        if (e is KtClassOrObject || e is dev.ide.kotlin.syntax.psi.KtTypeAlias) (e as KtNamedDeclaration).name?.let { counts[it] = (counts[it] ?: 0) + 1 }
-        var c = e.firstChild
-        while (c != null) { rec(c); c = c.nextSibling }
+    // A class's supertypes are resolved outside its body: its own nested classes are not in scope there
+    // (`class MyClass : Base { interface Base }` names the outer `Base`), so the scope starts at its outer class.
+    // Anything written in a supertype entry, the annotations on it included (`: @Anno(c) Base by d`), is in the
+    // header. The walk stops at the first body, class or file, so a reference inside a body costs a step or two.
+    var node: dev.ide.kotlin.syntax.psi.KtElement? = typeRef.parent
+    var entry: dev.ide.kotlin.syntax.psi.KtSuperTypeListEntry? = null
+    while (node != null) {
+        if (node is dev.ide.kotlin.syntax.psi.KtSuperTypeListEntry) { entry = node; break }
+        if (node is KtClassOrObject || node is dev.ide.kotlin.syntax.psi.KtClassBody || node is dev.ide.kotlin.syntax.psi.KtBlockExpression ||
+            node is dev.ide.kotlin.syntax.psi.KtFile || node is dev.ide.kotlin.syntax.psi.KtDeclaration
+        ) break
+        node = node.parent
     }
-    rec(file)
-    val names = counts.filterValues { it > 1 }.keys
-    redeclaredMemo = file to names
-    return names
+    val header = entry?.getStrictParentOfType<KtClassOrObject>()
+    val headerFqn = header?.let { enclosingClassFqnOf(it) }
+    val fqn = (if (headerFqn != null && service.sourceClass(headerFqn)?.isLocal == false) service.headerTypeName(text, resolver.fileContext, headerFqn)
+        else service.resolveTypeName(text, resolver.fileContext, enclosingClassFqnOf(typeRef))) ?: return null
+    return fqn.takeIf { service.isKnownType(it) }
 }
 
 // --- FirFunctionParameterChecker.checkParameterTypes, and the parameter-type diagnostic K2 raises for a lambda

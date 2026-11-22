@@ -1,12 +1,24 @@
 package dev.ide.lang.kotlin
 
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
+import dev.ide.kotlin.syntax.psi.KtWhenEntry
+import dev.ide.kotlin.syntax.psi.KtTryExpression
+import org.jetbrains.kotlin.kmp.parser.KtNodeTypes
+import dev.ide.kotlin.syntax.psi.KtFinallySection
+import dev.ide.kotlin.syntax.psi.KtExpression
+import dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression
+import dev.ide.kotlin.syntax.psi.KtContainerNodeForControlStructureBody
+import dev.ide.kotlin.syntax.psi.KtClassInitializer
+import dev.ide.kotlin.syntax.psi.KtCatchClause
+import dev.ide.kotlin.syntax.psi.KtBlockExpression
+import dev.ide.kotlin.syntax.psi.KtAnnotatedExpression
 import dev.ide.kotlin.syntax.psi.KtBreakExpression
 import dev.ide.kotlin.syntax.psi.KtCallExpression
 import dev.ide.kotlin.syntax.psi.KtClass
 import dev.ide.kotlin.syntax.psi.KtClassBody
 import dev.ide.kotlin.syntax.psi.KtClassOrObject
 import dev.ide.kotlin.syntax.psi.KtConstructorDelegationCall
+import dev.ide.kotlin.syntax.psi.KtDoWhileExpression
 import dev.ide.kotlin.syntax.psi.KtElement
 import dev.ide.kotlin.syntax.psi.KtExpressionWithLabel
 import dev.ide.kotlin.syntax.psi.KtFile
@@ -53,8 +65,11 @@ internal object KotlinStructuralChecks {
                 is KtLoopExpression -> {
                     // Only the BODY is inside the loop: a jump in `for (x in <here>)` belongs to whatever
                     // encloses the loop.
+                    // A do-while's condition is the exception (K2 prepares that loop's target before building the
+                    // condition), so `do { } while (continue)` jumps within that loop.
                     val body = node.body
-                    if (body != null && contains(body, jump)) {
+                    val cond = (node as? KtDoWhileExpression)?.condition
+                    if (body != null && contains(body, jump) || cond != null && contains(cond, jump)) {
                         sawLoop = true
                         if (label == null) return null
                         if ((node.parent as? KtLabeledExpression)?.getLabelName() == label) return null
@@ -94,6 +109,13 @@ internal object KotlinStructuralChecks {
             when (node) {
                 is KtLabeledExpression -> if (bare(node.getLabelName()) == label) return null
                 is KtNamedFunction -> if (bare(node.name) == label) return null
+                    // An anonymous function passed to a call is labeled by that call, as a lambda is
+                    // (`notInline(fun(b: Boolean) { return@notInline })`).
+                    // An explicit label (`l@ fun(i: Int) { }`) replaces that one.
+                    else if (node.nameIdentifier == null && node.parent !is KtLabeledExpression) when (val name = implicitCallLabel(node)) {
+                        null -> return null
+                        else -> if (bare(name) == label) return null
+                    }
                 is KtFunctionLiteral -> when (val name = implicitLambdaLabel(node)) {
                     null -> return null // an implicit label that cannot be read: do not guess
                     else -> if (bare(name) == label) return null
@@ -174,8 +196,13 @@ internal object KotlinStructuralChecks {
 
     /** The label a lambda gets from the call it is passed to; "" when it is not passed to a call at all (it
      *  then has only an explicit label), null when it is passed to something this cannot name. */
-    private fun implicitLambdaLabel(literal: KtFunctionLiteral): String? {
-        var holder: KtElement = literal.parent as? KtLambdaExpression ?: return null
+    private fun implicitLambdaLabel(literal: KtFunctionLiteral): String? =
+        implicitCallLabel(literal.parent as? KtLambdaExpression ?: return null)
+
+    /** The label a function value [value] (a lambda expression or an anonymous function) gets from the call it is
+     *  passed to; "" when it is passed to none, null when the call is not one this can name. */
+    private fun implicitCallLabel(value: KtElement): String? {
+        var holder: KtElement = value
         while (true) {
             val p = holder.parent ?: return ""
             if (p is KtLabeledExpression || p is KtParenthesizedExpression) holder = p else break
@@ -220,30 +247,55 @@ internal object KotlinStructuralChecks {
     private fun hasContext(decl: KtElement): Boolean = decl.text.trimStart().startsWith("context")
 
     /**
-     * An `if` with no `else` in a position that consumes its value: an initializer, an assigned value, a call
-     * argument. Without the `else` there is no value on the other path. A statement, a lambda's last
-     * statement and an expression body are left alone, since each may be read as a statement.
+     * INVALID_IF_AS_EXPRESSION (FirExhaustiveWhenChecker): an `if` whose value is used ([usedAsExpression]) needs an
+     * `else` and a non-empty `then` (`val x = if (c) 1`, `return if (c);`, `if (c) else 1`). An `else` keyword with
+     * no branch after it is a syntax error of its own, and K2 builds that `if` with its (error) `else`.
      */
     fun ifWithoutElseAsValue(expr: KtIfExpression): Diagnostic? {
-        if (expr.`else` != null || expr.then == null) return null
-        var holder: KtElement = expr
-        while (true) {
-            val p = holder.parent ?: return null
-            if (p is KtParenthesizedExpression || p is KtLabeledExpression) holder = p else break
-        }
-        val used = when (val p = holder.parent) {
-            is KtProperty -> p.initializer === holder
-            is KtValueArgument -> p !is KtLambdaArgument
-            is KtBinaryExpression -> p.operationToken == KtTokens.EQ && p.right === holder
-            else -> false
-        }
-        if (!used) return null
+        // K2 builds the `else` branch from whatever follows the keyword, a declaration the parser put there
+        // included (`else <error> fun named() = 1`); `else;` has none and the `if` is not exhaustive.
+        val elseWritten = expr.`else` != null ||
+            expr.childrenWithTrivia.firstOrNull { it.elementType == KtNodeTypes.ELSE }?.children?.isNotEmpty() == true
+        if (elseWritten && expr.then != null) return null
+        if (!usedAsExpression(expr)) return null
         val r = expr.firstChild?.textRange ?: expr.textRange // the `if` keyword
         return Diagnostic(
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,
             "'if' must have both main and 'else' branches when used as an expression",
             KotlinDiagnosticCodes.IF_AS_EXPRESSION,
         )
+    }
+
+    /**
+     * Whether the value of [e] is used, the way K2's raw FIR builder decides `usedAsExpression` (PsiRawFirBuilder):
+     * a branch of an `if`/`when` is used when that `if`/`when` is; a block's statement only when it is the block's
+     * last and the block is used; a lambda's, an initializer's, a secondary constructor's, a `finally`'s and a
+     * block-bodied function's statements never; a loop body never; a `.` call's receiver yes, its selector no;
+     * every other position (an initializer, an argument, an operand, a `return`, an expression body) yes.
+     */
+    fun usedAsExpression(e: KtExpression, depth: Int = 0): Boolean {
+        if (depth > 64) return true
+        var cur: KtElement = e
+        var parent = e.parent ?: return false
+        while (parent is KtAnnotatedExpression || parent is KtLabeledExpression) {
+            cur = parent
+            parent = parent.parent ?: return false
+        }
+        if (parent.elementType == KtNodeTypes.THEN || parent.elementType == KtNodeTypes.ELSE) {
+            return (parent.parent as? KtExpression)?.let { usedAsExpression(it, depth + 1) } != false
+        }
+        if (parent is KtWhenEntry) return (parent.parent as? KtExpression)?.let { usedAsExpression(it, depth + 1) } != false
+        return when (parent) {
+            is KtBlockExpression -> parent.statements.lastOrNull() === cur && usedAsExpression(parent, depth + 1)
+            is KtTryExpression -> parent.tryBlock === cur && usedAsExpression(parent, depth + 1)
+            is KtCatchClause -> (parent.parent as? KtTryExpression)?.let { usedAsExpression(it, depth + 1) } == true
+            is KtClassInitializer, is KtSecondaryConstructor, is KtFunctionLiteral, is KtFinallySection -> false
+            is KtDotQualifiedExpression -> parent.receiverExpression === cur
+            is KtNamedFunction -> parent.bodyExpression === cur && !parent.hasBlockBody()
+            is KtPropertyAccessor -> parent.bodyExpression === cur && !parent.hasBlockBody()
+            is KtContainerNodeForControlStructureBody -> parent.parent !is KtLoopExpression
+            else -> true
+        }
     }
 
     /** A `data class` needs at least one primary constructor parameter, and each must be a `val` or `var`. */

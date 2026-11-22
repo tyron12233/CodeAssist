@@ -1537,6 +1537,178 @@ class KotlinCompilerParityTest {
         assertCodes("@Deprecated(\"\")\n@DeprecatedSinceKotlin(\"1.3\")\nfun test() {}", KotlinDiagnosticCodes.DEPRECATED_SINCE_KOTLIN_OUTSIDE_KOTLIN_SUBPACKAGE)
     }
 
+    /** A jump in a do-while's condition targets that loop; a lambda-result scope call ending in `null` or a jump
+     *  is `Nothing?`, so an elvis with a jumping right side never completes. */
+    @Test
+    fun doWhileConditionJumpsAndNothingTypedElvisLeftSides() {
+        clean("fun t(): Int { var i = 0\n do { ++i } while (when (i) { 1 -> break; 2 -> continue; else -> true })\n l@ do {} while (continue@l)\n return i }")
+        clean("fun test1(): String { run { null } ?: return \"\" }")
+        clean("fun test4(): String { run { run { null } ?: return \"\" } }")
+        clean("fun test3(a: Int?): Any? { a?.let { return a } ?: return null }")
+        assertCodes("fun t(a: String?): String { a ?: return \"\" }", KotlinDiagnosticCodes.MISSING_RETURN)
+        assertCodes("fun t() { break }", KotlinDiagnosticCodes.JUMP_OUTSIDE_LOOP)
+    }
+
+    /** Members an abstract superclass implements by delegation are implemented in its subclasses, and a class
+     *  redeclared in one file is its first declaration. */
+    @Test
+    fun superclassDelegationAndRedeclaredClassifiers() {
+        clean(
+            "abstract class Nav\nobject V : P { override val e: String = \"\" }\ninterface P { val e: String }\n" +
+                "abstract class Base<K> : P by V\nclass F : Base<Nav>()",
+        )
+        assertCodes("interface P { val e: String }\nabstract class Base : P\nclass F : Base()", KotlinDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED)
+        val codes = codes("sealed interface SE\nsealed class SEB : SE\nsealed class SB : SEB(), SE\nabstract class SE : SEB()")
+        assertTrue(KotlinDiagnosticCodes.SUPERTYPE_NOT_INITIALIZED !in codes, "$codes")
+    }
+
+    /** A star import skips a class private to another file or nested privately, and goes on to the next package. */
+    @Test
+    fun starImportsSkipInvisibleClasses() {
+        assertEquals(
+            emptyList(),
+            errorsIn(
+                mapOf(
+                    "File1.kt" to "package pack1\nprivate class SomeClass",
+                    "File2.kt" to "package pack2\npublic open class SomeClass",
+                    "Main.kt" to "package a\nimport pack1.*\nimport pack2.*\nclass X : SomeClass()",
+                ),
+                "Main.kt",
+            ).map { it.code },
+        )
+        assertEquals(
+            emptyList(),
+            errorsIn(
+                mapOf(
+                    "File1.kt" to "package pack1\npublic class SomeClass { private class N }",
+                    "File2.kt" to "package pack2\npublic open class N",
+                    "Main.kt" to "package a\nimport pack1.SomeClass.*\nimport pack2.*\nclass X : N()",
+                ),
+                "Main.kt",
+            ).map { it.code },
+        )
+    }
+
+    /** An inner class's supertype written with the outer's arguments (`Super<T1>.Inner`) is that inner class. */
+    @Test
+    fun innerSupertypeWithOuterArguments() {
+        clean(
+            "open class Super<T> { inner open class Inner { open fun getOuter(): Super<T> = TODO() } }\n" +
+                "class Sub<T1>() : Super<T1>() { inner class SubInner : Super<T1>.Inner() { override fun getOuter(): Sub<T1> = TODO() } }",
+        )
+    }
+
+    /** `lit += x` calls an in-scope `plusAssign` before it needs a variable. */
+    @Test
+    fun compoundAssignmentOnLiteralUsesAssignOperator() {
+        clean("class R<T>\nfun <T> f(): R<T> = R<T>()\noperator fun Int.plusAssign(y: R<Int>) {}\nfun box() { 1 += f() }")
+        assertCodes("fun box() { 1 += 2 }", KotlinDiagnosticCodes.VARIABLE_EXPECTED)
+    }
+
+    /** A lambda for an extension function type may name the receiver as its first parameter (KT-81115). */
+    @Test
+    fun lambdaMayDeclareTheReceiverAsParameter() {
+        clean("val l2: String.() -> String = { x: String -> \"\" }\nval l4: String.() -> String = { x -> x }\nval l6: String.(Int) -> String = { x: String, y -> \"\" }")
+        assertCodes("val l: () -> String = { x -> \"\" }", KotlinDiagnosticCodes.LAMBDA_PARAMETERS)
+    }
+
+    /** A companion's member function imported beside a nested class of the same name does not conflict with it. */
+    @Test
+    fun importedMemberFunctionDoesNotConflictWithClass() {
+        val outer = "package abc\nclass Outer {\n inner class Inner()\n companion object { fun Inner(x: String) {} }\n}"
+        val codes = errorsIn(mapOf("Outer.kt" to outer, "imported.kt" to "import abc.Outer.Inner\nimport abc.Outer.Companion.Inner\nfun bar() { Inner(\"\") }"), "imported.kt").map { it.code }
+        assertTrue(KotlinDiagnosticCodes.CONFLICTING_IMPORT !in codes, "$codes")
+    }
+
+    /** A declaration without `override` hides only a visible supertype member of the same substituted signature,
+     *  and a Java member of a JVM-mapped built-in needs no `override`. */
+    @Test
+    fun hiddenSupertypeMembersFollowK2() {
+        clean("open class B { fun foo(l: List<String>) {} }\nclass C : B() { fun foo(l: List<Int>) {} }")
+        clean("interface Foo<T> { fun foo(l: List<T>) {} }\ninterface Bar<T> { fun foo(l: List<T>) {} }\nclass Baz() : Foo<String>, Bar<Int> { fun foo(l: List<Long>) {} }")
+        clean("open class A { private fun foo(): Int = 1 }\nclass B : A() { fun foo(): String = \"\" }")
+        clean("class ControlFlowException : Throwable() { fun fillInStackTrace() = this }")
+        assertCodes("open class B { open fun foo(l: List<String>) {} }\nclass C : B() { fun foo(l: List<String>) {} }", KotlinDiagnosticCodes.OVERRIDE_REQUIRED)
+    }
+
+    /** An anonymous function passed to a call is labeled by it; an aliased import names a function too. */
+    @Test
+    fun anonymousFunctionLabelsAndAliasedFunctionImports() {
+        clean("fun notInline(block: (Boolean) -> Unit): String = \"\"\nfun test(): String { return notInline(fun(b: Boolean) { return@notInline }) }")
+        assertEquals(
+            emptyList(),
+            errorsIn(mapOf("B.kt" to "package b\nfun I() {}\ninterface I {}", "A.kt" to "package a\nimport b.I as I2\nfun bar() { I2() }"), "A.kt").map { it.code },
+        )
+    }
+
+    /** Defaults combine across the functions an override implements (KT-40327); a second vararg may be empty. */
+    @Test
+    fun overrideDefaultsAndVarargsAreOptional() {
+        clean(
+            "interface Foo { fun some(x: Int = 1, y: Int) }\ninterface Bar { fun some(x: Int, y: Int = 2) }\n" +
+                "class Impl : Foo, Bar { override fun some(x: Int, y: Int) {} }\nfun main() { Impl().some() }",
+        )
+        clean("@Suppress(\"MULTIPLE_VARARG_PARAMETERS\")\nfun <T> f2_(vararg x: T, vararg y: T) = Unit\nfun t() { f2_(1, 2) }")
+        assertCodes("interface Foo { fun some(x: Int = 1, y: Int) }\nclass Impl : Foo { override fun some(x: Int, y: Int) {} }\nfun main() { Impl().some() }", KotlinDiagnosticCodes.ARGUMENT_COUNT)
+    }
+
+    /** A nested object read from its companion is a value; a class implementing a function type inherits `invoke`. */
+    @Test
+    fun nestedObjectsAndFunctionTypeSupertypes() {
+        clean("sealed class SourceLocation {\n object NoLocation : SourceLocation()\n companion object { fun NoLocation(description: String): SourceLocation = NoLocation }\n}")
+        clean("fun interface FunInterface : () -> Unit\nclass C2 : FunInterface { override fun invoke() {} }\nabstract class Test : () -> String\nopen class Child : Test() { override fun invoke() = \"OK\" }")
+    }
+
+    /** Const errors sit where K2 puts them, so an `@Suppress` there covers them; every code maps to its K2 name. */
+    @Test
+    fun constErrorsAndProjectionsAreSuppressible() {
+        clean("const val x = \"123\"\n    @Suppress(\"CONST_VAL_WITH_GETTER\")\n    get() = field")
+        clean("@Suppress(\"CONFLICTING_PROJECTION\")\nval <T> List<Map<Int, Map<String, in T>>>.h: Int get() = 7")
+        assertCodes("val <T> List<Map<Int, Map<String, in T>>>.h: Int get() = 7", KotlinDiagnosticCodes.CONFLICTING_PROJECTION)
+    }
+
+    /** The file's own class that cannot take the arguments gives way to the default-imported one that can. */
+    @Test
+    fun shadowedDefaultImportConstructorStillResolves() {
+        clean("class Pair(x: Int) {\n val k = Pair(1, 2)\n}")
+    }
+
+    /** A private member whose signature breaks its class's variance is private to `this`: another instance of
+     *  the class cannot reach it, even inside the class body (FirPrivateToThisAccessChecker). */
+    @Test
+    fun privateToThisMembersNeedThis() {
+        val inv = KotlinDiagnosticCodes.INVISIBLE_REFERENCE
+        val cls = "fun <T> getT(): T = null!!\nclass Test<in I> {\n private fun foo(): I = getT()\n private var i: I = getT()\n fun apply(i: I) {}\n"
+        assertCodes(cls + " fun <I> test(t: Test<I>) { t.apply(t.foo()) }\n}", inv)
+        assertCodes(cls + " companion object { fun <I> test(t: Test<I>) { t.i = getT() } }\n}", inv)
+        clean(cls + " fun test() { apply(foo()); apply(this.foo()); this.i = getT(); with(Test<I>()) { apply(this@Test.foo()) } }\n}")
+        clean("class A<in T>(t: T) {\n private val i: B = B()\n inner class B { fun baz(a: A<*>) { a.i } }\n}")
+    }
+
+    /** An import through a class private to another file, a private companion, or to a private member of an
+     *  object of another file is invisible on that segment (FirImportsChecker). */
+    @Test
+    fun importsThroughPrivateDeclarationsAreInvisible() {
+        val inv = KotlinDiagnosticCodes.INVISIBLE_REFERENCE
+        val a = "package a\nclass A { companion object { fun foo() {} } }\nprivate class B { companion object { fun bar() {} } }\n" +
+            "class C { private companion object { fun baz() {} } }\nobject O { private fun p() {}; fun q() {} }"
+        fun errs(imports: String) = errorsIn(mapOf("a.kt" to a, "b.kt" to "package b\n$imports\nfun t() {}"), "b.kt").map { it.code }
+        assertEquals(emptyList(), errs("import a.A.Companion.foo\nimport a.O.q"))
+        assertEquals(listOf(inv), errs("import a.B.Companion.bar"))
+        assertEquals(listOf(inv), errs("import a.C.Companion.baz"))
+        assertEquals(listOf(inv), errs("import a.O.p"))
+    }
+
+    /** A function-typed value is invoked with every parameter given: its `invoke` has no defaults. */
+    @Test
+    fun functionValueNeedsEveryArgument() {
+        val c = KotlinDiagnosticCodes.ARGUMENT_COUNT
+        assertCodes("fun foo(p: (Int, () -> Int) -> Unit) { p { 1 } }", c)
+        assertCodes("fun foo(p: (Int, () -> Int) -> Unit) { p() { 2 } }", c)
+        clean("fun foo(p: (Int, () -> Int) -> Unit) { p(3) { 4 } }")
+        clean("fun foo(p: Int.() -> Unit) { 1.p(); with(2) { p() } }")
+    }
+
     /** The errors of [target], one of several [files] of one project (each taken as written, no package added). */
     private fun errorsIn(files: Map<String, String>, target: String): List<Diagnostic> = runBlocking {
         val src = tempProject(files)

@@ -433,11 +433,32 @@ fun KotlinResolver.missingRequiredArgument(call: KtCallExpression): String? {
     // Every candidate must carry KNOWN per-parameter defaults (size matches its params); else an overload we
     // can't judge might accept the call, so we must not flag.
     if (candidates.any { it.paramTypes.isNotEmpty() && it.paramHasDefault.size != it.paramTypes.size }) return null
+    // A first pass on the candidates' own defaults: the common outcome, some overload satisfied, costs nothing more.
+    for (c in candidates) {
+        val supplied = suppliedValueParameterIndices(c, call)
+        if (c.paramTypes.indices.none { i -> i !in supplied && i != c.varargParamIndex && c.paramHasDefault.getOrElse(i) { true } == false }) return null
+    }
+    // An override takes its parameters' defaults from what it overrides, from EVERY overridden function: with
+    // `Foo.some(x = 1, y)` and `Bar.some(x, y = 2)` both implemented by `Impl.some(x, y)`, `Impl().some()` is
+    // complete (KT-40327). Candidates of one signature are one override family, so their defaults combine.
+    fun signature(c: KotlinSymbol) = c.paramTypes.joinToString(",") { (it as? KotlinType)?.qualifiedName?.substringAfterLast('.') ?: "?" }
+    val familyDefaults = HashMap<String, BooleanArray>()
+    for (c in candidates) {
+        if (c.kind != SymbolKind.METHOD) continue
+        val acc = familyDefaults.getOrPut(signature(c)) { BooleanArray(c.paramTypes.size) }
+        if (acc.size != c.paramTypes.size) continue
+        c.paramHasDefault.forEachIndexed { i, d -> if (d) acc[i] = true }
+    }
     var report: String? = null
     for (c in candidates) {
         val supplied = suppliedValueParameterIndices(c, call)
+        val inherited = if (c.kind == SymbolKind.METHOD) familyDefaults[signature(c)]?.takeIf { it.size == c.paramTypes.size } else null
+        // Every `vararg` parameter may be left empty, a second one too (`fun f(vararg x: T, vararg y: T)`, an error
+        // of its own that can be suppressed): the symbol records only one vararg index, the source says which.
+        val sourceParams = if (c.origin.fromSource) ((c.declaration() as? KotlinDomNode)?.psi as? KtNamedFunction)?.valueParameters else null
         val missing = c.paramTypes.indices.firstOrNull { i ->
-            i !in supplied && i != c.varargParamIndex && c.paramHasDefault.getOrElse(i) { true } == false
+            i !in supplied && i != c.varargParamIndex && c.paramHasDefault.getOrElse(i) { true } == false &&
+                inherited?.get(i) != true && sourceParams?.getOrNull(i)?.isVarArg != true
         } ?: return null // this overload is fully satisfied → the call is valid
         if (report == null) {
             val nm = c.paramNames.getOrNull(missing)

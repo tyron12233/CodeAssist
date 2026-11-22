@@ -254,7 +254,29 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
             liveness(b) == Liveness.DEAD || alwaysNull(lastValue(b))
         }
         is KtBlockExpression -> alwaysNull(lastValue(u))
+        // `run { null }`, `x.let { return it }`, `x?.let { return it }`: a call that yields its lambda's result is
+        // `Nothing?` when that lambda's body ends in `null` or never completes, and a `?.` call adds only `null`.
+        is KtCallExpression, is KtQualifiedExpression -> lambdaResultBody(u)?.let { body ->
+            // A labeled `return@run v` gives the call another value.
+            !hasReturn(body, labeled = true) && (liveness(body) == Liveness.DEAD || alwaysNull(lastValue(body)))
+        } == true
         else -> u.text == "null"
+    }
+
+    /** The lambda body whose value [e] yields: `run { }`/`with(x) { }` unqualified, `run`/`let` on a `.` or `?.`
+     *  receiver (`also`/`apply` yield the receiver instead). Null for any other call. */
+    private fun lambdaResultBody(e: KtExpression): KtExpression? {
+        val (call, qualified) = when (e) {
+            is KtCallExpression -> e to false
+            is KtQualifiedExpression -> (e.selectorExpression as? KtCallExpression ?: return null) to true
+            else -> return null
+        }
+        val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+        val yields = if (qualified) name == "run" || name == "let" else name == "run" || name == "with"
+        if (!yields) return null
+        val lambda = call.lambdaArguments.lastOrNull()?.getLambdaExpression()
+            ?: call.valueArguments.lastOrNull()?.getArgumentExpression() as? KtLambdaExpression
+        return lambda?.bodyExpression
     }
 
     private fun lastValue(e: KtExpression?): KtExpression? =

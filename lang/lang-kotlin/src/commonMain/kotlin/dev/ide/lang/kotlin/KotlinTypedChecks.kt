@@ -589,7 +589,10 @@ internal fun KotlinSemanticChecks.lambdaAgainstFunctionType(declared: KotlinType
     val plainFunction = canonicalName(declared) == "kotlin.Function" && declared.typeArguments.size == 1
     if (arity == null && !plainFunction) return null
     val n = lambda.valueParameters.size
-    if (arity != null && n > 0 && n != arity) return lambdaParameterDiagnostic(lambda, arity)
+    // A lambda written for a DECLARED extension function type may also name the receiver as its first parameter
+    // (`val f: String.() -> String = { x -> x }`, KT-81115), so one more parameter than the type's is fine. Not so
+    // for a call's argument, where it is a mismatch (KT-56138).
+    if (arity != null && n > 0 && n != arity && !(declared.isExtensionFunctionType && n == arity + 1)) return lambdaParameterDiagnostic(lambda, arity)
     val result = declared.typeArguments.lastOrNull() as? KotlinType ?: return null
     if (result.isTypeParameter || result.projection == "*") return null
     val rn = canonicalName(result)
@@ -1599,6 +1602,8 @@ internal fun KotlinSemanticChecks.projectConstructorMismatch(call: KtCallExpress
     val n = call.valueArguments.size
     fun arities(c: dev.ide.lang.kotlin.symbols.RawCallable) = c.paramHasDefault.count { !it }..c.paramTexts.size
     val fitting = ctors.filter { n in arities(it) }
+    // A default-imported class of that name that can take the arguments is what the call resolves to instead.
+    if (fitting.isEmpty() && name == callee.getReferencedName() && defaultImportedConstructorTakes(name, fqn, n)) return null
     if (fitting.isEmpty()) {
         val expected = ctors.flatMap { arities(it) }.distinct().sorted().joinToString("/")
         return error(

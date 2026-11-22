@@ -1381,6 +1381,25 @@ class KotlinSymbolService(
         return computed
     }
 
+    /** [text] without its type-argument lists, on every segment: `Outer<T>.Inner<U>` is `Outer.Inner` (cutting at
+     *  the first `<` read an inner class's supertype `Super<T1>.Inner` as `Super`). */
+    internal fun withoutTypeArguments(text: String): String {
+        val lt = text.indexOf('<')
+        if (lt < 0) return text
+        val sb = StringBuilder(text.length)
+        var depth = 0
+        var prev = ' '
+        for (c in text) {
+            when {
+                c == '<' -> depth++
+                c == '>' && prev != '-' && depth > 0 -> depth--
+                depth == 0 -> sb.append(c)
+            }
+            prev = c
+        }
+        return sb.toString()
+    }
+
     /** [resolveTypeName]'s resolution proper, on an already-normalized [simple] name. */
     private fun resolveTypeNameUncached(simple: String, ctx: FileContext?, enclosingClassFqn: String?): String? {
         if ('.' in simple) {
@@ -1518,7 +1537,16 @@ class KotlinSymbolService(
             // The module model is consulted alongside the type-shape index because a project SOURCE class has
             // no shape (nothing compiled it yet), so a star-imported one would otherwise never resolve here,
             // the way the same-package step above already handles.
-            if (cand in model().classByFqn || typeShape(cand) != null) return cand
+            // A star import brings in only what this file can see, as K2's star-import scope filters invisible
+            // classifiers: a `private` project class is skipped and the name goes on to the next package. A
+            // private top-level class is seen only in its own file, which reaches it by its own package (step 2)
+            // first; a private nested one only inside its outer class, which step 1 resolves.
+            val src = model().classByFqn[cand]
+            if (src != null) {
+                if (src.isPrivate) continue
+                return cand
+            }
+            if (typeShape(cand) != null) return cand
         }
         // 9. A nested type in the enclosing chain that has a compiled type SHAPE but no source class (step 1
         //    covers the source model). Last-resort, as it always was, so the index probe stays off the hot path.
@@ -1539,6 +1567,19 @@ class KotlinSymbolService(
         // `androidx.activity.ComponentActivity`, then its members/extensions completing as if imported). The
         // name is returned verbatim so callers can detect "unresolved" via `isKnownType` (false for a bare name).
         return simple
+    }
+
+    /**
+     * The members a class inherits from a function-type supertype (`fun interface F : () -> Unit`): `kotlin.FunctionN`
+     * is synthetic (no class file declares it), and its `invoke` is the one of the JVM interface it compiles to,
+     * `kotlin.jvm.functions.FunctionN`. Null when [superFqn] is not a function type. Only the supertype walk asks:
+     * a value OF a function type is invoked through its own call path.
+     */
+    private fun functionTypeSupertypeMembers(superFqn: String, args: List<TypeRef>, visited: MutableSet<String>): List<KotlinSymbol>? {
+        if (!superFqn.startsWith("kotlin.Function") || superFqn.length <= 15 || !superFqn.substring(15).all { it.isDigit() }) return null
+        val shape = typeShape("kotlin.jvm.functions.Function${superFqn.substring(15)}") ?: return null
+        if (!visited.add(superFqn)) return emptyList()
+        return membersFromShape(shape, args, visited, synthesizeBeanProps = false)
     }
 
     /**
@@ -1894,7 +1935,13 @@ class KotlinSymbolService(
                 else markTypeParameters(typeFromText(text, rc.ctx, fqn), tps)?.typeArguments.orEmpty()
                     .map { if (classBindings.isEmpty()) it else substitute(it, classBindings) }
                 superFqn to args
-            }.flatMap { (superFqn, args) -> ownAndInherited(superFqn, args, visited) }
+            }.flatMap { (superFqn, args) ->
+                // The class's own `override fun invoke(myParamName: String)` replaces the function type's `invoke`,
+                // whose `p1` names are not the class's.
+                functionTypeSupertypeMembers(superFqn, args, visited)
+                    ?.filter { inh -> own.none { it.name == inh.name && it.paramTypes.size == inh.paramTypes.size } }
+                    ?: ownAndInherited(superFqn, args, visited)
+            }
             // …and the supertypes the compiler adds that source never writes down ([implicitSupertypes]).
             // LAST, so an explicit supertype's override (or the class's own member) is found before the
             // inherited default — the enumeration is order-sensitive, first match wins.
@@ -4556,7 +4603,10 @@ class KotlinSymbolService(
         // aliased class, and that class's members and nested types are what `B` inherits. Generic aliases
         // count too, since only the head classifier matters for the chain.
         val head = text.substringBefore('<').removeSuffix("?").trim()
-        val direct = resolveTypeName(text, ctx, ownerFqn)
+        // `Super<T1>.Inner` (an inner class's supertype) is `Super.Inner`: the arguments sit on every segment.
+        val written = if ('.' in text && '<' in text) withoutTypeArguments(text) else text
+        val direct = if (model().classByFqn[ownerFqn]?.isLocal == true) resolveTypeName(written, ctx, ownerFqn)
+        else headerTypeName(written, ctx, ownerFqn)
         if (direct == null || direct !in model().classByFqn && !isKnownType(direct)) {
             projectAliasClassifier(head, ctx)?.let { return it }
         }
@@ -4565,6 +4615,23 @@ class KotlinSymbolService(
             return "kotlin.$resolved"
         }
         return resolved
+    }
+
+    /**
+     * [name] as written in the header of the class [ownerFqn] (its supertype list): resolved from the class's OUTER
+     * scope, since a class's own nested classifiers, its companion's included, are not in scope there
+     * (`class MyClass : Base { interface Base }` names the outer `Base`; `companion object : B() { class B }` the
+     * outer `B`). A scope that still answers with something nested in [ownerFqn] is left for the next one out.
+     */
+    fun headerTypeName(name: String, ctx: FileContext?, ownerFqn: String): String? {
+        val classes = model().classByFqn
+        fun outer(fqn: String?): String? = fqn?.substringBeforeLast('.', "")?.ifEmpty { null }?.takeIf { it in classes }
+        var scope = outer(ownerFqn)
+        while (true) {
+            val r = resolveTypeName(name, ctx, scope)
+            if (r == null || !r.startsWith("$ownerFqn.") || scope == null) return r
+            scope = outer(scope)
+        }
     }
 
     /** The classifier a project typealias named [name] finally denotes, following alias-of-alias chains, or
@@ -4822,6 +4889,9 @@ class KotlinSymbolService(
         if (ctx == null) return candidates?.singleOrNull()
         ctx.explicitImportsBySimpleName[simpleName]?.let { return m.typeAliasByFqn[it.fqn] }
         if (candidates == null) return null
+        // The file's own declaration first: two files of one package may each declare a `private typealias TA`,
+        // and each file sees only its own.
+        candidates.firstOrNull { !it.isNested && it.ctx.path == ctx.path }?.let { return it }
         candidates.firstOrNull { it.fqn.substringBeforeLast('.', "") == ctx.packageName }?.let { return it }
         val stars = ctx.starImportPackages
         if (stars.isEmpty()) return null
