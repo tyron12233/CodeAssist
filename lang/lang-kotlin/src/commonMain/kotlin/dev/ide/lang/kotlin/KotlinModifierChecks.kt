@@ -161,7 +161,7 @@ internal object KotlinModifierChecks {
      * whose backing field the tree cannot settle (for a FIELD-only annotation) are left alone.
      */
     fun annotationTarget(entry: dev.ide.kotlin.syntax.psi.KtAnnotationEntry): Diagnostic? {
-        if (entry.useSiteTarget != null) return useSiteTarget(entry)
+        if (entry.useSiteTarget != null) return useSiteTarget(entry) ?: useSiteNotAllowedByClass(entry)
         val file = entry.containingFile
         if (file.name.endsWith(".kts")) return null
         val allowed = allowedTargetsOf(entry, file) ?: return null
@@ -222,7 +222,15 @@ internal object KotlinModifierChecks {
      */
     private fun useSiteTarget(entry: dev.ide.kotlin.syntax.psi.KtAnnotationEntry): Diagnostic? {
         if (entry.containingFile.name.endsWith(".kts")) return null
-        val site = entry.useSiteTarget?.trim()?.removePrefix("@")?.removeSuffix(":") ?: return null
+        val site = entry.useSiteTarget?.filterNot { it.isWhitespace() }?.removePrefix("@")?.removeSuffix(":") ?: return null
+        val owner = (entry.parent as? dev.ide.kotlin.syntax.psi.KtModifierList)?.parent ?: return null
+        // On a TYPE no use-site target applies (`@file:` included), save `@receiver:` on an extension's own receiver
+        // type (`fun @receiver:A String.f()`): `i: @param:A Int` and `((@setparam:A Int) -> Unit)` are wrong.
+        if (owner is dev.ide.kotlin.syntax.psi.KtTypeReference) {
+            val receiverOf = owner.parent as? dev.ide.kotlin.syntax.psi.KtCallableDeclaration
+            if (site == "receiver" && receiverOf != null && receiverOf.receiverTypeReference === owner) return null
+            return useSiteDiagnostic(entry, "type usage", site)
+        }
         val mapped = when (site) {
             "field", "delegate" -> T.FIELD
             "property" -> T.PROPERTY
@@ -231,7 +239,21 @@ internal object KotlinModifierChecks {
             "param", "setparam", "receiver" -> T.VALUE_PARAMETER
             else -> return null
         }
-        val owner = (entry.parent as? dev.ide.kotlin.syntax.psi.KtModifierList)?.parent ?: return null
+        // `@receiver:` names an extension receiver, which only a function or property declared with one has.
+        if (site == "receiver") {
+            val callable = owner as? dev.ide.kotlin.syntax.psi.KtCallableDeclaration
+            if (callable != null && (callable is KtNamedFunction || callable is KtProperty) && callable.receiverTypeReference != null) return null
+            if (owner !is KtDeclaration || owner is KtEnumEntry || (owner as? KtObjectDeclaration)?.isObjectLiteral() == true) return null
+            val what = when (owner) {
+                is KtClassOrObject -> "class"
+                is KtPrimaryConstructor, is KtSecondaryConstructor -> "constructor"
+                is KtNamedFunction -> "function"
+                is KtProperty -> if (owner.parent is KtBlockExpression) "local variable" else "member property"
+                is KtParameter -> "value parameter"
+                else -> return null
+            }
+            return useSiteDiagnostic(entry, what, site)
+        }
         val (targets, extra) = when (owner) {
             is KtEnumEntry -> return null
             is KtClassOrObject -> if ((owner as? KtObjectDeclaration)?.isObjectLiteral() == true) return null else (classTargets(owner) ?: return null) to emptyList()
@@ -248,11 +270,38 @@ internal object KotlinModifierChecks {
             else -> return null
         }
         if (mapped in targets || mapped in extra) return null
+        return useSiteDiagnostic(entry, targets.first().description, site)
+    }
+
+    /**
+     * A use-site target the declaration has, on an annotation class that does not allow what it names:
+     * `@delegate:A` with `@Target(PROPERTY)`, `@param:A` with `@Target(FIELD)`, `@receiver:A` with `@Target(FILE)`.
+     * Judged only for an annotation class whose `@Target` this file spells out ([allowedTargetsOf]).
+     */
+    private fun useSiteNotAllowedByClass(entry: dev.ide.kotlin.syntax.psi.KtAnnotationEntry): Diagnostic? {
+        val site = entry.useSiteTarget?.filterNot { it.isWhitespace() }?.removePrefix("@")?.removeSuffix(":") ?: return null
+        val needed = when (site) {
+            "field", "delegate" -> T.FIELD
+            "property" -> T.PROPERTY
+            "get" -> T.PROPERTY_GETTER
+            "set" -> T.PROPERTY_SETTER
+            "param", "setparam", "receiver" -> T.VALUE_PARAMETER
+            // A misplaced `@file:` is INAPPLICABLE_FILE_TARGET's, not a mismatch with the class.
+            else -> return null
+        }
+        val file = entry.containingFile
+        if (file.name.endsWith(".kts")) return null
+        val allowed = allowedTargetsOf(entry, file) ?: return null
+        if (needed in allowed) return null
+        return useSiteDiagnostic(entry, needed.description, site)
+    }
+
+    private fun useSiteDiagnostic(entry: dev.ide.kotlin.syntax.psi.KtAnnotationEntry, what: String, site: String): Diagnostic {
         val r = entry.textRange
         return Diagnostic(
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,
-            "This annotation is not applicable to target '${targets.first().description}' and use site target '@$site'",
-            KotlinDiagnosticCodes.WRONG_ANNOTATION_TARGET,
+            "This annotation is not applicable to target '$what' and use site target '@$site'",
+            KotlinDiagnosticCodes.WRONG_ANNOTATION_TARGET_WITH_USE_SITE_TARGET,
         )
     }
 
@@ -293,7 +342,10 @@ internal object KotlinModifierChecks {
                 bareEntriesImported && e is dev.ide.kotlin.syntax.psi.KtNameReferenceExpression -> text
                 else -> return null
             }
-            out += ANNOTATION_TARGET_NAMES.firstOrNull { it.first == entryName }?.second ?: return null
+            // An entry naming no `AnnotationTarget` constant (`AnnotationTarget.INIT`, itself an unresolved reference)
+            // adds nothing, as in K2: the list above is all fifteen, so what it lacks names nothing. Every other
+            // entry still counts, and an annotation whose entries all fail has no target at all.
+            ANNOTATION_TARGET_NAMES.firstOrNull { it.first == entryName }?.second?.let { out += it }
         }
         return out
     }

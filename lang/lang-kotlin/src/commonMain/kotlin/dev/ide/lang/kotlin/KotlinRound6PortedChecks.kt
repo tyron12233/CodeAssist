@@ -1142,6 +1142,8 @@ internal fun missingConstructorKeyword(ctor: dev.ide.kotlin.syntax.psi.KtPrimary
  *  `package` directive; anywhere else it lands on a declaration. Reported on the `file` target. */
 internal fun inapplicableFileTarget(e: KtElement): Diagnostic? {
     if (e !is dev.ide.kotlin.syntax.psi.KtAnnotationEntry && e !is dev.ide.kotlin.syntax.psi.KtAnnotation) return null
+    // On a type, `@file:` is a use-site target the type cannot have: WRONG_ANNOTATION_TARGET_WITH_USE_SITE_TARGET.
+    if ((e.parent as? dev.ide.kotlin.syntax.psi.KtModifierList)?.parent is dev.ide.kotlin.syntax.psi.KtTypeReference) return null
     var p = e.parent
     while (p != null && p !is KtFile) {
         if (p is dev.ide.kotlin.syntax.psi.KtFileAnnotationList) return null

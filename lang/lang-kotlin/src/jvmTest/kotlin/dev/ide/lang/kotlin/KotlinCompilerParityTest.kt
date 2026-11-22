@@ -2019,6 +2019,22 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), errors(clean).map { it.code }, "for `$clean`")
     }
 
+    /** Annotation targets: a `@Target` entry naming no constant adds nothing (every use is then wrong); no use-site
+     *  target applies on a type but `@receiver:` on an extension receiver; `@receiver:` needs a declared receiver;
+     *  and the target a use-site names must be one the annotation class allows. Valid use-site targets stay clean. */
+    @Test
+    fun annotationTargetsAndUseSites() {
+        assertEquals(listOf(KotlinDiagnosticCodes.WRONG_ANNOTATION_TARGET),
+            errors("@Target(AnnotationTarget.FUNCTION, AnnotationTarget.CLASS) annotation class A\n@A val x = 1").map { it.code })
+        val wrong = "annotation class A\n@Target(AnnotationTarget.FIELD) annotation class F\n" +
+            "fun t(i: @param:A Int) {}\n@receiver:A fun g() {}\nfun Int.p(@receiver:A a: Int) {}\nclass C(@param:F val b: Int)"
+        assertEquals(List(4) { KotlinDiagnosticCodes.WRONG_ANNOTATION_TARGET_WITH_USE_SITE_TARGET }, errors(wrong).map { it.code }, "for `$wrong`")
+        val clean = "annotation class A\nclass C(@field:A val x: Int, @param:A val y: Int, @property:A val z: Int, @get:A val w: Int) {\n" +
+            " @get:A @set:A var v: Int = 0\n @setparam:A var u: Int = 0\n @delegate:A val d by lazy { 1 }\n fun @receiver:A String.ext() = 1\n}\n" +
+            "@receiver:A fun String.top() = 1"
+        assertEquals(emptyList(), errors(clean).map { it.code }, "for `$clean`")
+    }
+
     /** A builder lambda's receiver takes the call's explicit type arguments: inside `buildMap<String, MutableList<C>> { }`
      *  `this` is a `MutableMap<String, MutableList<C>>`, so `getOrPut(k) { ArrayList() }` is a `MutableList<C>`. */
     @Test

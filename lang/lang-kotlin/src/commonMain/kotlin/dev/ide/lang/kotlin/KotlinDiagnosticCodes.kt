@@ -196,6 +196,8 @@ object KotlinDiagnosticCodes {
     const val WRONG_MODIFIER_CONTAINER = "kt.wrongModifierContainer"
     /** An annotation whose class's `@Target` does not allow where it is written. */
     const val WRONG_ANNOTATION_TARGET = "kt.wrongAnnotationTarget"
+    /** A use-site target (`@field:`, `@receiver:`, …) naming something its declaration or type does not have. */
+    const val WRONG_ANNOTATION_TARGET_WITH_USE_SITE_TARGET = "kt.wrongAnnotationTargetWithUseSiteTarget"
     /** An `operator` function no operator convention accepts (wrong name, arity, receiver or return type). */
     const val INAPPLICABLE_OPERATOR = "kt.inapplicableOperator"
     /** An `infix` function that is not a member or extension with exactly one non-vararg parameter. */

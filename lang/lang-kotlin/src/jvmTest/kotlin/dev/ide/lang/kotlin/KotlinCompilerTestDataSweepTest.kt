@@ -355,6 +355,7 @@ class KotlinCompilerTestDataSweepTest {
             "kt.modifiers" to setOf("INCOMPATIBLE_MODIFIERS", "REPEATED_MODIFIER", "REPEATED_ANNOTATION"),
             "kt.lateinit" to setOf("INAPPLICABLE_LATEINIT_MODIFIER"),
             "kt.wrongAnnotationTarget" to setOf("WRONG_ANNOTATION_TARGET", "WRONG_ANNOTATION_TARGET_WITH_USE_SITE_TARGET"),
+            "kt.wrongAnnotationTargetWithUseSiteTarget" to setOf("WRONG_ANNOTATION_TARGET_WITH_USE_SITE_TARGET", "WRONG_ANNOTATION_TARGET"),
             "kt.notConstant" to setOf("ANNOTATION_ARGUMENT_MUST_BE_CONST", "NON_CONST_VAL_USED_IN_CONSTANT_EXPRESSION", "CONST_VAL_WITH_NON_CONST_INITIALIZER"),
             "kt.cannotWeakenAccess" to setOf("CANNOT_WEAKEN_ACCESS_PRIVILEGE", "CANNOT_CHANGE_ACCESS_PRIVILEGE"),
             "kt.uninitializedEnumCompanion" to setOf("UNINITIALIZED_ENUM_COMPANION"),

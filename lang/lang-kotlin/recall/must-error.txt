@@ -279,7 +279,7 @@ const val c = v
 //// kt.wrongAnnotationTarget
 annotation class Plain
 fun f(x: @Plain Int) = x
-//// kt.wrongAnnotationTarget
+//// kt.wrongAnnotationTargetWithUseSiteTarget
 annotation class Plain
 @field:Plain class C
 //// kt.declarationShape
