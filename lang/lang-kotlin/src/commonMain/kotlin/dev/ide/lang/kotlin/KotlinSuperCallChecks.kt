@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.kotlin.syntax.psi.KtEnumEntry
 import dev.ide.kotlin.syntax.psi.KtCallExpression
 import dev.ide.kotlin.syntax.psi.KtCallableDeclaration
 import dev.ide.kotlin.syntax.psi.KtNamedDeclaration
@@ -58,6 +59,10 @@ internal object KotlinSuperCallChecks {
         val qualifier = e.superTypeQualifier
         val types: List<String> = if (qualifier != null) {
             listOf(resolve(checks, qualifier.text, resolver.fileContext, cls) ?: return null)
+        } else if (cls is KtEnumEntry) {
+            // An enum entry's only supertype is its enum class, which it never writes down.
+            val enumCls = (cls.parent?.parent as? KtClass)?.takeIf { it.isEnum() } ?: return null
+            listOf(enclosingClassFqnOf(enumCls) ?: return null)
         } else {
             val entries = cls.superTypeListEntries
             if (entries.isEmpty() || entries.any { it is KtDelegatedSuperTypeEntry }) return null

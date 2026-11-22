@@ -136,7 +136,9 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
             .filter { it.kind == SymbolKind.METHOD }
         if (javaStatics.isNotEmpty()) javaStatics + companionMethods
         else memberPropertyInvokeTargets(members, receiverType, name)
-            ?: (kotlinCandidateOrder(members, scopeExts) + companionMethods).ifEmpty { receiverValueInvokeTargets(call, name, receiverType) }
+            ?: (kotlinCandidateOrder(members, scopeExts) + companionMethods).ifEmpty {
+                extensionPropertyInvokeTargets(call, receiverType, name).ifEmpty { receiverValueInvokeTargets(call, name, receiverType) }
+            }
     } else if (q != null && q.selectorExpression === call) {
         // An EXPLICIT receiver whose type is unknown (`unresolved?.let { }`). Only a package-qualified call
         // (`kotlinx.coroutines.delay(…)`) can still resolve, to a plain top-level function. The scope walk below
@@ -600,7 +602,11 @@ fun KotlinResolver.calleeFunctionOf(call: KtCallExpression): KotlinSymbol? =
 fun KotlinResolver.resolveInfixFunction(e: KtBinaryExpression): KotlinSymbol? {
     if (e.operationToken != KtTokens.IDENTIFIER) return null
     val name = e.operationReference.getReferencedName()
-    val leftType = inferType(e.left) ?: return null
+    // A lambda written as the receiver (`{ ... } foo { ... }`) is typed by itself, as K2 types a lambda nothing
+    // gives an expected type: its declared parameters and its last expression (`{}` is `() -> Unit`).
+    val leftType = inferType(e.left)
+        ?: (stripAll(e.left) as? KtLambdaExpression)?.let { lambdaFunctionType(it) }
+        ?: return null
     return service.membersNamed(leftType.qualifiedName, leftType.typeArguments, name)
         .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
         ?: service.extensionsFor(
@@ -609,7 +615,11 @@ fun KotlinResolver.resolveInfixFunction(e: KtBinaryExpression): KotlinSymbol? {
             name,
             exactName = true
         )
-            .firstOrNull { it.name == name && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
+            .filter { it.name == name && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
+            // The file's own package outranks the default imports: a project `infix fun <A, B> A.to(that: B)`
+            // beside `class Pair` is the `to` there, not `kotlin.to`. Out-of-scope extensions take no part.
+            .let { exts -> exts.filter { extensionInScope(it) }.ifEmpty { exts } }
+            .let { exts -> exts.firstOrNull { it.origin.fromSource } ?: exts.firstOrNull() }
 }
 
 /** Every function/constructor a [call] could resolve to: a `recv.foo(…)` member, else top-level + in-scope
@@ -659,7 +669,9 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
             }
         }
         memberPropertyInvokeTargets(members, receiverType, name)?.let { return it }
-        return (kotlinCandidateOrder(members, scopeExts) + companionMethods).ifEmpty { receiverValueInvokeTargets(call, name, receiverType) }
+        return (kotlinCandidateOrder(members, scopeExts) + companionMethods).ifEmpty {
+            extensionPropertyInvokeTargets(call, receiverType, name).ifEmpty { receiverValueInvokeTargets(call, name, receiverType) }
+        }
     }
     // A nearer function-typed value: the call's targets are its `invoke`, not the top-level functions it
     // shadows ([nearerValueInvokeTargets]).
@@ -964,6 +976,50 @@ internal fun KotlinResolver.memberPropertyInvokeTargets(
             paramHasDefault = List(shape.parameterTypes.size) { false },
         )
     )
+}
+
+/**
+ * `x.f()` where the receiver has no function `f` but an EXTENSION property `f` of (plain) function type
+ * (`val Int.b: () -> String`; `5.b()`): the property is read on `x` and its value invoked. K2 tries this before a
+ * variable of extension function type called with `x` as its receiver ([receiverValueInvokeTargets]), so with both
+ * `val b: Int.() -> Int` and `val Int.b: () -> String` in scope, `5.b()` is a String (KT-64891).
+ */
+internal fun KotlinResolver.extensionPropertyInvokeTargets(
+    call: KtCallExpression,
+    receiverType: KotlinType,
+    name: String,
+): List<KotlinSymbol> {
+    // The extension properties of that name on the receiver: top-level ones, and member extensions an implicit
+    // receiver brings into scope (`val <X> Property<LoadingValue<X>>.liveLoaded: X` inside an interface the
+    // enclosing function extends), each bound to the receiver's arguments.
+    val props = service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
+        .filter { it.kind == SymbolKind.FIELD && it.isExtension } +
+        scopeMemberExtensions(call.textRange.startOffset, receiverType, name, exactName = true)
+            .filter { it.kind == SymbolKind.FIELD && it.name == name }
+    // The most specific receiver wins, as for any extension (`C.attr` and `D.attr` on a `D`: `D.attr`): the
+    // receiver's own type first, then its supertypes nearest first.
+    val chain = listOf(receiverType.qualifiedName) + service.supertypesOf(receiverType.qualifiedName).mapNotNull { (it as? KotlinType)?.qualifiedName }
+    fun rank(p: KotlinSymbol): Int = chain.indexOf(p.receiverTypeFqn).let { if (it < 0) Int.MAX_VALUE else it }
+    for (prop in props.sortedBy(::rank)) {
+        val value = prop.type as? KotlinType ?: continue
+        // A value of plain function type is invoked directly.
+        service.functionalShape(value)?.takeIf { !it.isExtension }?.let { shape ->
+            return listOf(
+                KotlinSymbol(
+                    "invoke", SymbolKind.METHOD, type = shape.returnType,
+                    paramTypes = shape.parameterTypes,
+                    paramHasDefault = List(shape.parameterTypes.size) { false },
+                )
+            )
+        }
+        // Any other value through its `operator fun invoke`, a member or an extension
+        // (`operator fun <T : AsyncModule, R> T.invoke(handler: T.() -> R)`), bound to the value's type.
+        if (value.isTypeParameter) continue
+        val invokes = service.membersNamed(value.qualifiedName, value.typeArguments, "invoke")
+            .filter { it.kind == SymbolKind.METHOD && (!it.isExtension || extensionInScope(it)) }
+        if (invokes.isNotEmpty()) return invokes
+    }
+    return emptyList()
 }
 
 /**

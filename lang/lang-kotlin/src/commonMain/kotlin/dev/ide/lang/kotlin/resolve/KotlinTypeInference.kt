@@ -29,6 +29,8 @@ import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.kotlin.syntax.psi.KtQualifiedExpression
 import dev.ide.kotlin.syntax.psi.KtStringTemplateExpression
 import dev.ide.kotlin.syntax.psi.KtSuperExpression
+import dev.ide.kotlin.syntax.psi.KtClass
+import dev.ide.kotlin.syntax.psi.KtEnumEntry
 import dev.ide.kotlin.syntax.psi.KtThisExpression
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.KtWhenExpression
@@ -286,9 +288,15 @@ internal fun KotlinResolver.binaryConventionReturn(
     // stdlib `Ranges.kt`, not a class member like `Int.rangeTo`). The specific one must win, else the range
     // is mis-typed as its `ClosedRange` supertype and `val r: ClosedFloatingPointRange<Float> = 10f..3f` is
     // false-flagged a type mismatch. Without the tiebreak the first match (the generic one) wins arbitrarily.
+    // Only extensions in scope count, and among equally specific ones the file's own package (a project source
+    // declaration) outranks the default imports: `infix fun <A, B> A.to(that: B)` beside a project `Pair` is
+    // the `to` there, not `kotlin.to`.
+    val scoped = exts.filter { extensionInScope(it) }.ifEmpty { exts }
     val callable = member
-        ?: exts.firstOrNull { it.receiverTypeFqn == leftType.qualifiedName }
-        ?: exts.firstOrNull()
+        ?: scoped.firstOrNull { it.receiverTypeFqn == leftType.qualifiedName && it.origin.fromSource }
+        ?: scoped.firstOrNull { it.receiverTypeFqn == leftType.qualifiedName }
+        ?: scoped.firstOrNull { it.origin.fromSource }
+        ?: scoped.firstOrNull()
     val raw = callable?.type as? KotlinType
     if (raw == null || callable.typeParameters.isEmpty()) return raw
     val bindings = HashMap<String, TypeRef>()
@@ -463,6 +471,13 @@ internal fun KotlinResolver.superType(expr: KtSuperExpression): KotlinType? {
     val cls = (if (label != null) generateSequence(expr.parent as? KtElement) { it.parent as? KtElement }
         .filterIsInstance<KtClassOrObject>().firstOrNull { it.name == label } else null)
         ?: enclosingClassOrObject(expr.textRange.startOffset) ?: return null
+    // An enum entry with a body is a subclass of its enum class, which it never writes as a supertype:
+    // `E1 { override fun foo() = super.outerFun() }` calls the enum's own `outerFun`.
+    if (cls is KtEnumEntry) {
+        (cls.parent?.parent as? KtClass)?.takeIf { it.isEnum() }?.let { enumCls ->
+            enclosingClassFqnOf(enumCls)?.let { return service.typeByFqn(it) }
+        }
+    }
     val owner = enclosingClassFqnOf(cls)
     val supers = cls.superTypeListEntries.mapNotNull { e -> e.typeReference?.text?.let { service.typeFromText(it, fileContext, owner) } }
     // An unqualified `super.m()` reaches `m` in WHICHEVER supertype declares it, the interfaces included:

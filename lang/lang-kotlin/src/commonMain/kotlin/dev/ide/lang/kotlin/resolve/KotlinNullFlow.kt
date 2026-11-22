@@ -215,7 +215,7 @@ private fun neverReassigned(local: KtProperty, block: KtBlockExpression): Boolea
     return !written
 }
 
-private val ASSIGNMENTS = setOf(
+internal val ASSIGNMENTS = setOf(
     KtTokens.EQ, KtTokens.PLUSEQ, KtTokens.MINUSEQ, KtTokens.MULTEQ, KtTokens.DIVEQ, KtTokens.PERCEQ,
 )
 
@@ -1477,7 +1477,7 @@ private fun stripParens(e: KtElement?): KtElement? {
 }
 
 /** Unwrap parentheses, labels and annotations: `(x)`, `l@ x`, `@A x` all evaluate to `x`. */
-private fun stripAll(e: KtElement?): KtElement? {
+internal fun stripAll(e: KtElement?): KtElement? {
     var cur = e
     while (true) {
         cur = when (cur) {

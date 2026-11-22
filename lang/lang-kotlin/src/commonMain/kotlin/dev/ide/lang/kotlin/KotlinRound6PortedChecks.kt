@@ -1212,6 +1212,10 @@ internal fun KotlinSemanticChecks.extensionInClassReference(ref: dev.ide.kotlin.
     val name = callee.getReferencedName()
     val receiverName = when (receiver) {
         is KtNameReferenceExpression -> receiver.getReferencedName()
+        // `B<*>::extensionFun` parses as an argument-less call carrying the type arguments.
+        is dev.ide.kotlin.syntax.psi.KtCallExpression ->
+            (receiver.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()?.takeIf { receiver.valueArgumentList == null }
+                ?: return null
         else -> return null
     }
     var declaringClass: KtClassOrObject? = null
@@ -1220,7 +1224,8 @@ internal fun KotlinSemanticChecks.extensionInClassReference(ref: dev.ide.kotlin.
         if (n is KtClassOrObject) {
             val named = n.declarations.filter { (it as? dev.ide.kotlin.syntax.psi.KtNamedDeclaration)?.name == name }
             if (named.isNotEmpty()) {
-                if (named.any { it !is KtNamedFunction || it.receiverTypeReference == null }) return null
+                // Member extension functions and properties alike (`fun B.extensionFun()`, `val B.extensionVal`).
+                if (named.any { (it as? dev.ide.kotlin.syntax.psi.KtCallableDeclaration)?.receiverTypeReference == null }) return null
                 declaringClass = n
                 break
             }

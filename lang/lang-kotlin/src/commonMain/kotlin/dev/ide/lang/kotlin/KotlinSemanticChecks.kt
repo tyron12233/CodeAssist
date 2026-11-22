@@ -4875,6 +4875,13 @@ internal class KotlinSemanticChecks(
         // or `inferred` unchanged (not a scope type parameter). Run FIRST so the marked-T back-off below only
         // catches a LEAKED `T` (a stdlib/library generic inference left unbound, not declared here): its
         // universal `T`-receiver extensions (`let`/`run`/…) would falsely "resolve" everything, so back off.
+        // A member extension declared on that very type parameter by an enclosing class (`abstract fun T.foo()`
+        // in `class A<T : Any>`, called as `x.foo()` on an `x: T`): looked up before the receiver is widened to
+        // the parameter's bound, which no longer names it.
+        if ((inferred.isTypeParameter || ('.' !in inferred.qualifiedName && resolver.isTypeParameterInScope(inferred.qualifiedName, receiver.textRange.startOffset))) &&
+            resolver.scopeMemberExtensions(expr.textRange.startOffset, inferred, expr.getReferencedName(), exactName = true)
+                .any { it.name == expr.getReferencedName() }
+        ) return null
         val recvType = resolver.receiverForMembers(inferred, receiver.textRange.startOffset) ?: return null
         if (recvType.isTypeParameter) return null
         // A `Nothing` receiver (`todo().bar(1)`) is never evaluated: the call is dead code, and K2 resolves it

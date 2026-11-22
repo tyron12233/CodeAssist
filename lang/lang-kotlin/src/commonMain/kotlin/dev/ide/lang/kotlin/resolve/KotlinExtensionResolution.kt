@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin.resolve
 
+import dev.ide.kotlin.syntax.psi.KtTypeParameterListOwner
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
 import dev.ide.kotlin.syntax.psi.KtCallableDeclaration
 import dev.ide.kotlin.syntax.psi.KtClassOrObject
@@ -57,7 +58,12 @@ fun KotlinResolver.scopeMemberExtensions(
      *  fuzzy-match and receiver-bind every extension starting with it for the caller to drop. */
     exactName: Boolean = false,
 ): List<KotlinSymbol> {
-    if (receiverType.isTypeParameter) return emptyList()
+    // A type-parameter receiver (`x: T`) reaches only member extensions declared on that same type parameter by
+    // an enclosing class (`abstract class A<T : Any> { abstract fun T.foo() }`, called as `x.foo()` in `A`): it
+    // has no supertype chain to key a library or imported extension on.
+    if (receiverType.isTypeParameter || ('.' !in receiverType.qualifiedName && isTypeParameterInScope(receiverType.qualifiedName, offset))) {
+        return typeParameterMemberExtensions(offset, receiverType, namePrefix, exactName)
+    }
     val recvTargets = receiverTargetsOf(receiverType)
 
     fun matches(n: String) = namePrefix.isEmpty() || (if (exactName) n == namePrefix else n.startsWith(namePrefix, ignoreCase = true))
@@ -98,9 +104,13 @@ fun KotlinResolver.scopeMemberExtensions(
     // (b) Model implicit-receiver types (an extension-fn receiver, a `with`/`apply` block receiver, or a
     //     saved / cross-file enclosing class) — query their members for matching extensions.
     for (scope in implicitReceiversAt(offset)) {
-        if (scope.qualifiedName in liveOwners) continue // already covered from the live buffer above
+        // A class of the live buffer had its OWN member extensions collected above; what it inherits from its
+        // supertypes (`abstract class A : Context`, where `Context` declares `val Variable.value`) is still in
+        // scope there and only the model lists it, so those are kept.
+        val live = scope.qualifiedName in liveOwners
         service.membersForCompletion(scope.qualifiedName, scope.typeArguments, namePrefix, exactName && namePrefix.isNotEmpty())
             .filter { it.isExtension && it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets }
+            .filter { c -> !live || out.none { it.name == c.name && it.receiverTypeFqn == c.receiverTypeFqn && it.kind == c.kind } }
             .forEach { out += bindMemberExtensionReceiver(it, receiverType) }
     }
     // (c) IMPORTED through a singleton: `import okhttp3.MediaType.Companion.toMediaType`, then
@@ -125,6 +135,35 @@ fun KotlinResolver.scopeMemberExtensions(
                 .filter { it.isExtension && it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets }
                 .forEach { out += bindMemberExtensionReceiver(it, receiverType) }
         }
+    }
+    return out
+}
+
+/** [scopeMemberExtensions] for a type-parameter receiver: the enclosing classes' member extensions whose receiver
+ *  is written as that same type parameter (`T.foo()`, `T?.foo()`). */
+private fun KotlinResolver.typeParameterMemberExtensions(
+    offset: Int,
+    receiverType: KotlinType,
+    namePrefix: String,
+    exactName: Boolean,
+): List<KotlinSymbol> {
+    val tp = receiverType.qualifiedName
+    fun matches(n: String) = namePrefix.isEmpty() || (if (exactName) n == namePrefix else n.startsWith(namePrefix, ignoreCase = true))
+    val out = ArrayList<KotlinSymbol>()
+    var node: KtElement? = elementAt(offset)
+    while (node != null) {
+        if (node is KtClassOrObject && node is KtTypeParameterListOwner && node.typeParameters.any { it.name == tp }) {
+            for (d in node.declarations) {
+                if (d !is KtCallableDeclaration) continue
+                val name = d.name ?: continue
+                if (!matches(name)) continue
+                val recv = d.receiverTypeReference?.text?.trim()?.removeSuffix("?")?.trim() ?: continue
+                if (recv != tp) continue
+                sameFileMemberExtension(d, tp)?.let { out += it }
+            }
+            break
+        }
+        node = node.parent
     }
     return out
 }
@@ -295,10 +334,17 @@ internal fun KotlinResolver.bindMemberExtensionReceiver(
 ): KotlinSymbol {
     val bindings = HashMap<String, TypeRef>()
     ext.receiverTypeParam?.let { bindings[it] = receiverType }
+    // Through nested arguments too: `val <X> Property<LoadingValue<X>>.liveLoaded: X` on a
+    // `Property<LoadingValue<AsyncModule>>` binds `X` to `AsyncModule`.
+    fun unify(declared: KotlinType, actual: TypeRef?) {
+        val a = actual as? KotlinType ?: return
+        if (declared.isTypeParameter) { bindings.getOrPut(declared.qualifiedName) { a }; return }
+        if (declared.qualifiedName != a.qualifiedName) return
+        declared.typeArguments.forEachIndexed { j, d -> (d as? KotlinType)?.let { unify(it, a.typeArguments.getOrNull(j)) } }
+    }
     ext.receiverTypeArgs.forEachIndexed { i, ra ->
         val k = ra as? KotlinType ?: return@forEachIndexed
-        if (k.isTypeParameter && i < receiverType.typeArguments.size) bindings[k.qualifiedName] =
-            receiverType.typeArguments[i]
+        if (i < receiverType.typeArguments.size) unify(k, receiverType.typeArguments[i])
     }
     return if (bindings.isEmpty()) ext else service.substituteSymbol(ext, bindings)
 }

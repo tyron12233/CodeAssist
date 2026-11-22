@@ -2440,6 +2440,10 @@ class KotlinSymbolService(
      */
     private fun sourceReceiverFqn(rc: RawCallable, ownerFqn: String?): String? {
         val text = rc.receiverText ?: return null
+        // A function-type receiver (`infix fun (() -> Unit).foo(...)`, `fun (suspend () -> T).bar()`) is keyed
+        // under its `kotlin.FunctionN`, which the type-text reader assembles; read as a plain name it resolved to
+        // nothing and the extension was never found on a lambda.
+        if ("->" in text) return typeFromText(text, rc.ctx, ownerFqn)?.qualifiedName
         // An extension on a project TYPEALIAS (`typealias Stroke = List<Offset>`, `fun Stroke.extendedWith(…)`) is
         // an extension on the alias's target, so it is keyed there; under the alias name no value ever finds it.
         // A function-type receiver (`infix fun (() -> Unit).foo(...)`) is keyed under its `kotlin.FunctionN`.

@@ -1,5 +1,10 @@
 package dev.ide.lang.kotlin.resolve
 
+import dev.ide.kotlin.syntax.psi.KtProperty
+import dev.ide.kotlin.syntax.psi.KtClassOrObject
+import dev.ide.kotlin.syntax.psi.KtNamedFunction
+import dev.ide.kotlin.syntax.psi.KtLambdaExpression
+import dev.ide.kotlin.syntax.psi.KtUnaryExpression
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
 import dev.ide.kotlin.syntax.psi.KtBinaryExpressionWithTypeRHS
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
@@ -257,7 +262,7 @@ internal fun KotlinResolver.narrowingAtNode(
         }
 
         is KtWhenExpression -> whenSubjectNarrowing(node, child, name)?.let { return it }
-        is KtBlockExpression -> earlyExitNarrowing(node, child, name)?.let { return it }
+        is KtBlockExpression -> earlyExitNarrowing(node, child, name, offset)?.let { return it }
     }
     return null
 }
@@ -653,14 +658,149 @@ private fun KotlinResolver.branchesAssignSameType(block: KtBlockExpression, st: 
     return t.takeIf { e.qualifiedName == t.qualifiedName }
 }
 
+/** Whether the read at [offset] inside [st] sits in a lambda that is not called in place, a local function or a
+ *  local class. */
+private fun KotlinResolver.readInLeakingClosure(st: KtElement, offset: Int): Boolean {
+    var node: KtElement? = elementAt(offset)
+    val flow = KotlinVarNullFlow(this)
+    while (node != null && node !== st) {
+        when (node) {
+            is KtNamedFunction, is KtClassOrObject -> return true
+            is KtLambdaExpression -> if (flow.inPlaceKind(node) == null) return true
+        }
+        node = node.parent
+    }
+    return false
+}
+
+/** Whether [e]'s type cannot depend on an expected type: a literal, a string, a name or `this`, a constructor or
+ *  other call of a non-generic function, or a qualified such call or read. */
+private fun KotlinResolver.fixedTypeValue(e: KtExpression): Boolean = when (e) {
+    is dev.ide.kotlin.syntax.psi.KtConstantExpression, is dev.ide.kotlin.syntax.psi.KtStringTemplateExpression,
+    is KtNameReferenceExpression, is dev.ide.kotlin.syntax.psi.KtThisExpression -> true
+    is KtCallExpression -> e.typeArguments.isNotEmpty() || resolveCalleeFunction(e)?.typeParameters?.isEmpty() == true
+    is dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression -> when (val sel = e.selectorExpression) {
+        is KtCallExpression -> fixedTypeValue(sel)
+        is KtNameReferenceExpression -> true
+        else -> false
+    }
+    else -> false
+}
+
+/** Whether [name] is assigned (`=`, a compound assignment, `++`/`--`) inside a lambda, local function or local
+ *  class anywhere in [block]. */
+private fun writtenInClosure(block: KtBlockExpression, name: String): Boolean {
+    var found = false
+    fun visit(e: KtElement, inClosure: Boolean) {
+        if (found) return
+        val closure = inClosure || e is KtLambdaExpression || e is KtNamedFunction || e is KtClassOrObject
+        if (closure) {
+            val writes = when (e) {
+                is KtBinaryExpression -> e.operationToken in ASSIGNMENTS &&
+                    (unwrapParenPsi(e.left) as? KtNameReferenceExpression)?.getReferencedName() == name
+                is KtUnaryExpression -> (e.operationToken == KtTokens.PLUSPLUS || e.operationToken == KtTokens.MINUSMINUS) &&
+                    (unwrapParenPsi(e.baseExpression) as? KtNameReferenceExpression)?.getReferencedName() == name
+                else -> false
+            }
+            if (writes) { found = true; return }
+        }
+        var c = e.firstChild
+        while (c != null) { visit(c, closure); c = c.nextSibling }
+    }
+    visit(block, false)
+    return found
+}
+
+private fun unwrapParenPsi(e: KtElement?): KtElement? {
+    var cur = e
+    while (cur is dev.ide.kotlin.syntax.psi.KtParenthesizedExpression) cur = cur.expression
+    return cur
+}
+
+/**
+ * The type statement [st] leaves the variable [name] holding when [st] is a plain write of it: `name = value`,
+ * or a statement whose only write of it is an increment or decrement (`++name`, `name--`, also inside an
+ * initializer such as `val x = ++name`), whose new value is the operator's result. Null for anything else, or
+ * when the type is unknown, nullable or a type parameter.
+ */
+private fun KotlinResolver.assignedValueType(st: KtExpression, name: String): KotlinType? {
+    fun known(t: KotlinType?) = t?.takeIf {
+        !it.isTypeParameter && !it.nullable && it.qualifiedName != "kotlin.Unit" && it.qualifiedName != "kotlin.Nothing" &&
+            service.isKnownType(it.qualifiedName)
+    }
+    val assign = st as? KtBinaryExpression
+    if (assign != null && assign.operationToken == KtTokens.EQ &&
+        (unwrapParens(assign.left) as? KtNameReferenceExpression)?.getReferencedName() == name
+    ) {
+        // K2 types the value against the variable's own type, so a value whose type comes out of inference (a
+        // generic call, an elvis, an if/when/try merge) may be the variable's type there rather than what it
+        // reads as alone (`x = checkNotNull(a, b)` into an `Any` is an `Any`, KT-50875). Only a value whose type
+        // no expected type can change is recorded.
+        val value = unwrapParens(assign.right) ?: return null
+        if (!fixedTypeValue(value)) return null
+        return known(inferType(value))
+    }
+    if (name !in writtenNames(st).written) return null
+    var found: KtUnaryExpression? = null
+    var other = false
+    fun visit(e: KtElement) {
+        if (other || e is KtLambdaExpression || e is KtNamedFunction || e is KtClassOrObject) return
+        if (e is KtUnaryExpression && (e.operationToken == KtTokens.PLUSPLUS || e.operationToken == KtTokens.MINUSMINUS) &&
+            (unwrapParens(e.baseExpression) as? KtNameReferenceExpression)?.getReferencedName() == name
+        ) {
+            if (found != null) other = true else found = e
+            return
+        }
+        if (e is KtBinaryExpression && e.operationToken in ASSIGNMENTS &&
+            (unwrapParens(e.left) as? KtNameReferenceExpression)?.getReferencedName() == name
+        ) { other = true; return }
+        var c = e.firstChild
+        while (c != null) { visit(c); c = c.nextSibling }
+    }
+    visit(st)
+    val inc = found ?: return null
+    if (other) return null
+    val operand = inferType(inc.baseExpression)?.withNullable(false) ?: return null
+    if (operand.isTypeParameter) return null
+    val op = if (inc.operationToken == KtTokens.PLUSPLUS) "inc" else "dec"
+    return known(if (operand.qualifiedName in NUMERIC_RANK) operand else unaryOperator(operand, op))
+}
+
 internal fun KotlinResolver.earlyExitNarrowing(
     block: KtBlockExpression,
     fromChild: KtElement?,
-    name: String
+    name: String,
+    /** Where the read is, when known: an assignment's narrowing does not reach into a closure that may run after a
+     *  later write. */
+    readAt: Int = -1,
 ): KotlinType? {
     var result: KotlinType? = null
+    var fromAssignment = false
     for (st in block.statements) {
-        if (st === fromChild) break
+        if (st === fromChild) {
+            // A narrowing an assignment made holds only up to a statement that writes the variable again on the
+            // way to the read: a `catch` may follow any write in its `try`, a loop body may run after its own write.
+            if (fromAssignment && name in writtenNames(st).written) return null
+            // Read inside a closure that is not called in place (a stored lambda, a local function or class), with a
+            // write of the variable later in the block: the closure may run after that write, so K2 does not
+            // smart cast there (SMARTCAST_IMPOSSIBLE).
+            if (fromAssignment && readAt >= 0 && readInLeakingClosure(st, readAt) &&
+                block.statements.dropWhile { it !== st }.drop(1).any { name in writtenNames(it).written }
+            ) return null
+            break
+        }
+        // A local `var` given a value records that value's type even when nothing narrowed it before: after
+        // `local = ST()`, `++local` or `local++` (whose new value is what `inc()` returns, KT-57178) the variable is
+        // an `ST` until it is written again. Only a local: a property's smart cast is not stable.
+        if (result == null) {
+            assignedValueType(st, name)?.let { t ->
+                val local = block.statements.firstOrNull { it is KtProperty && it.name == name && it.textRange.endOffset <= st.textRange.startOffset } as? KtProperty
+                // K2's stability rule for a captured `var` (FirLocalVariableAssignmentAnalyzer): one that a lambda,
+                // local function or local class also writes is not smart cast, so only a local written nowhere but
+                // in its own flow gets the assigned type.
+                if (local != null && !local.hasDelegate() && !writtenInClosure(block, name)) { result = t; fromAssignment = true; continue }
+            }
+        }
         // A write after the narrowing replaces what it said: `x = 10` makes `x` an `Int` from there on (K2 records
         // the assigned value's type), and a write nested in the statement leaves nothing known. Only looked at
         // once something narrows, so the common block pays nothing.
