@@ -4231,7 +4231,6 @@ internal class KotlinSemanticChecks(
         val name = expr.getReferencedName()
         if (name.isEmpty()) return null
         if (name == "it" && hasAncestor(expr) { it is KtLambdaExpression }) return null
-        if (name == "field" && hasAncestor(expr) { it is KtPropertyAccessor }) return null
         val off = expr.textRange.startOffset
         // `_` names no value: an underscore parameter (`{ _, b -> }`) declares nothing, and no declaration may be
         // called `_` (UNDERSCORE_IS_RESERVED), so reading one is an unresolved reference wherever it stands.

@@ -522,8 +522,11 @@ internal fun KotlinResolver.accessorScopeLocals(offset: Int): List<KotlinSymbol>
             ?: prop.getter?.takeIf { it !== accessor && !it.hasBlockBody() }?.bodyExpression?.let { inferType(it) }
     val out = ArrayList<KotlinSymbol>(2)
     // An extension property has no backing field: `field` in its accessor is an ordinary name
-    // (`val String.x get() = field.foo()` reads the member extension `String.field`).
-    if (prop.receiverTypeReference == null) out += KotlinSymbol(
+    // (`val String.x get() = field.foo()` reads the member extension `String.field`). Nor has a property
+    // whose type is inferred from its getter (no type, no initializer): `val u get() = field` names no field,
+    // so a member `field` of the class is what it reads.
+    val typedByGetter = prop.typeReference == null && prop.initializer == null && prop.delegate == null
+    if (prop.receiverTypeReference == null && !typedByGetter) out += KotlinSymbol(
         "field", SymbolKind.FIELD, type = propType, origin = SOURCE,
         declarationNode = runCatching { parsed.adapt(prop) }.getOrNull(),
     )

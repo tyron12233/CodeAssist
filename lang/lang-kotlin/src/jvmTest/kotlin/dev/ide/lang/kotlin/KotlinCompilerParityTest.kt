@@ -2499,6 +2499,17 @@ class KotlinCompilerParityTest {
         assertCodes("class Sym(val n: Int)\nfun t(): List<Sym> = emptyList()\nfun f() { val a: Int = runCatching { t() }.getOrDefault(emptyList()) }", KotlinDiagnosticCodes.TYPE_MISMATCH)
     }
 
+    /** An extension property has no backing field, nor has a property typed by its getter (no type, no
+     *  initializer): `field` there is unresolved; a typed member property's `field` resolves. */
+    @Test
+    fun fieldOutsideABackingFieldIsUnresolved() {
+        assertCodes("val String.bar: Int get() = field", KotlinDiagnosticCodes.UNRESOLVED)
+        assertCodes("class A { val u get() = field }", KotlinDiagnosticCodes.UNRESOLVED)
+        assertCodes("class B {\n    var Any.y: String\n        get() = \"\"\n        set(arg) { field = arg }\n}", KotlinDiagnosticCodes.UNRESOLVED)
+        clean("class C {\n    var n: Int = 0\n        set(v) { field = v }\n    val m: Int = 1\n        get() = field + 1\n}")
+        clean("class D { val field: Any = 1; val property get() = field }")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {
