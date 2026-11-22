@@ -26,7 +26,9 @@ class KotlinDeclarationShapePortTest {
         val src = "package demo\n${code.trimIndent()}\n"
         val doc = SnippetDoc(src, DiskFile(srcDir.resolve("S.kt")))
         val diags: List<Diagnostic> = runBlocking { analyzer.incrementalParser.parseFull(doc); analyzer.analyze(doc.file).diagnostics }
-        return diags.filter { it.code == wanted }.map { d -> src.take(d.range.start).count { it == '\n' } }.sorted()
+        // The "must implement" family is one judgment split by K2 into several names.
+        val family = if (wanted in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS) KotlinDiagnosticCodes.IMPLEMENT_MEMBERS else setOf(wanted)
+        return diags.filter { it.code in family }.map { d -> src.take(d.range.start).count { it == '\n' } }.sorted()
     }
 
     @Test

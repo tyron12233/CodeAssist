@@ -198,7 +198,7 @@ and tests key on). Categories, with representative codes:
 - **Declarations / modifiers** — `kt.conflictingDeclaration`, `kt.conflictingImport`, `kt.modifiers`,
   `kt.valReassign`, `kt.valVarParameter`, `kt.mustBeInitialized`, `kt.lateinit`, `kt.constMisuse`, `kt.functionNoBody`,
   `kt.dataClass`, `kt.exposedVisibility`, `kt.invisibleReference`.
-- **Inheritance / override** — `kt.abstractNotImplemented`, `kt.nothingToOverride`, `kt.overrideRequired`,
+- **Inheritance / override** — `kt.abstractNotImplemented` (with `kt.abstractClassMemberNotImplemented`, `kt.manyImplMemberNotImplemented` and `kt.manyInterfacesMemberNotImplemented`, K2's four names for it), `kt.nothingToOverride`, `kt.overrideRequired`,
   `kt.abstractInstantiation`, `kt.supertypeNotInitialized`, `kt.overridingFinal`, `kt.overrideReturnType`,
   `kt.noConstructor`.
 - **Generics / variance** — `kt.typeArgumentCount`, `kt.upperBoundViolated`, `kt.varianceConflict`,
@@ -235,7 +235,7 @@ Diagnostics carry code-keyed fixes into the editor lightbulb / Alt-Enter:
   `import android.widget.LinearLayout.LayoutParams`), spliced in sorted position; a `kt.delegateOperator`
   additionally offers the missing `getValue`/`setValue` import (`import androidx.compose.runtime.getValue`
   for `by mutableStateOf`).
-- **Implement members** — for `kt.abstractNotImplemented`, generate `override` stubs for the unimplemented
+- **Implement members** — for `kt.abstractNotImplemented` and its siblings, generate `override` stubs for the unimplemented
   inherited members and insert them into the class body (same stub text completion's override items use).
 
 ## Other editor features

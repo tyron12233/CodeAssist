@@ -69,7 +69,7 @@ internal fun KotlinSemanticChecks.manyImplementationsNotOverridden(cls: KtClassO
         // A member a `by` delegate supplies is the delegated one, not an intersection: only two delegates clash.
         if (kept.any { it.delegated }) {
             if (kept.count { it.delegated } > 1) {
-                out += report(cls, "Class '${cls.name}' must override '$name' because it inherits multiple implementations of it", KotlinDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED)
+                out += report(cls, "Class '${cls.name}' must override '$name' because it inherits multiple implementations of it", KotlinDiagnosticCodes.MANY_IMPL_MEMBER_NOT_IMPLEMENTED)
             }
             continue
         }
@@ -79,10 +79,10 @@ internal fun KotlinSemanticChecks.manyImplementationsNotOverridden(cls: KtClassO
         val ambiguous = nonAbstract.size > 1 || (nonAbstractInInterface > 0 && abstractInInterface > 0)
         if (!ambiguous) continue
         if (nonAbstract.any { !it.fromInterface }) {
-            out += report(cls, "Class '${cls.name}' must override '$name' because it inherits multiple implementations of it", KotlinDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED)
+            out += report(cls, "Class '${cls.name}' must override '$name' because it inherits multiple implementations of it", KotlinDiagnosticCodes.MANY_IMPL_MEMBER_NOT_IMPLEMENTED)
         } else {
             if (canHaveAbstract && kept.any { it.abstract && !it.fromInterface }) continue
-            out += report(cls, "Class '${cls.name}' must override '$name' because it inherits multiple interface methods of it", KotlinDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED)
+            out += report(cls, "Class '${cls.name}' must override '$name' because it inherits multiple interface methods of it", KotlinDiagnosticCodes.MANY_INTERFACES_MEMBER_NOT_IMPLEMENTED)
         }
     }
     return out

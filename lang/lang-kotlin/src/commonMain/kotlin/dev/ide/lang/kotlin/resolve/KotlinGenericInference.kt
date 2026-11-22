@@ -594,8 +594,27 @@ internal fun KotlinResolver.unify(
             ?: companionSupertypeArgs(arg, param.qualifiedName)
             ?: arg.typeArguments
     else arg.typeArguments
-    param.typeArguments.zip(argArgs).forEach { (p, a) ->
-        if (p is KotlinType && a is KotlinType) unify(p, a, bindings)
+    // A bare variable at a CONTRAVARIANT position (`In<in T>` given an `In<A>`) is only bounded above by the
+    // argument (`T <: A`). Alone, that bound is what it fixes to; meeting another, the more specific one wins
+    // (`foo(inA, inC)` is a `C`), and two unrelated ones (`foo(inA, inB)`) are left to the constraint system,
+    // where the expected type decides. Binding the first one made `foo(inA, inC)` an `A`.
+    val variances = if (param.typeArguments.any { (it as? KotlinType)?.isTypeParameter == true })
+        service.classTypeParameterVariance(param.qualifiedName) else emptyList()
+    param.typeArguments.zip(argArgs).forEachIndexed { i, (p, a) ->
+        if (p !is KotlinType || a !is KotlinType) return@forEachIndexed
+        val contravariant = p.projection == "in" || (p.projection.isEmpty() && variances.getOrNull(i) == "in")
+        val cur = bindings[p.qualifiedName] as? KotlinType
+        if (contravariant && p.isTypeParameter && a.projection != "*" && cur != null &&
+            !cur.isTypeParameter && !a.isTypeParameter && cur.qualifiedName != a.qualifiedName
+        ) {
+            when {
+                cur.isAssignableFrom(a) -> bindings[p.qualifiedName] = a
+                a.isAssignableFrom(cur) -> {}
+                else -> bindings.remove(p.qualifiedName)
+            }
+            return@forEachIndexed
+        }
+        unify(p, a, bindings)
     }
 }
 

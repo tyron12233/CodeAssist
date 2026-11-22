@@ -66,7 +66,7 @@ class KotlinImportActionProvider : ActionProvider {
 /** Code-keyed quick-fix: on `kt.abstractNotImplemented`, generate `override` stubs for the unimplemented
  *  inherited abstract members into the class body (the "Implement members" lightbulb). */
 class KotlinImplementMembersFixProvider : QuickFixProvider {
-    override val forCodes = setOf(KotlinDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED)
+    override val forCodes = KotlinDiagnosticCodes.IMPLEMENT_MEMBERS
     override val languages = setOf(KOTLIN)
 
     override fun fixes(diagnostic: Diagnostic, target: AnalysisTarget): List<QuickFix> {

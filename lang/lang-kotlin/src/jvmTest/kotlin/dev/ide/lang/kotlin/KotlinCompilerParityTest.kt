@@ -1944,6 +1944,48 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), errors("fun f(l: List<Int>) { val x: List<Int> = l + 1 }").map { it.code })
     }
 
+    /** STRAY round: a class-body destructuring parses (it is NON_LOCAL_DESTRUCTURING_DECLARATION, not a syntax error)
+     *  and its names are members of a local class too; each file sees its own private typealias; and an abstract
+     *  CLASS member left unimplemented is K2's ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED, apart from an interface's. */
+    @Test
+    fun strayRoundNonLocalDestructuringPrivateAliasAbstractKinds() {
+        val destructuring = "data class X(val a: Int, val b: String)\nfun f() { class L { val (a, b) = X(1, \"\") }\n L().b.length }"
+        assertEquals(listOf(KotlinDiagnosticCodes.NON_LOCAL_DESTRUCTURING_DECLARATION), errors(destructuring).map { it.code })
+        val files = mapOf(
+            "file1.kt" to "private class C { companion object }\nprivate typealias TA = C\nprivate val t: TA = TA()\n",
+            "file2.kt" to "private typealias TA = Int\n",
+        )
+        assertEquals(emptyList(), errorsIn(files, "file1.kt").map { it.code })
+        assertEquals(listOf(KotlinDiagnosticCodes.ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED),
+            errors("abstract class A { abstract fun f() }\nclass B : A()").map { it.code })
+        assertEquals(listOf(KotlinDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED),
+            errors("interface I { fun f() }\nclass B : I").map { it.code })
+    }
+
+    /** STRAY round 2: a function-typed value whose receiver is an error type (a recursive alias, an unresolved
+     *  class) takes any receiver; a variable bounded only from contravariant positions is their most specific
+     *  bound; and a Java class reaches the default methods of the JDK interfaces it implements
+     *  (`ArrayList.toArray(IntFunction)`), which a Kotlin `List` does not. */
+    @Test
+    fun strayRoundErrorReceiverContravariantBoundsJdkDefaults() {
+        assertEquals(listOf(KotlinDiagnosticCodes.UNRESOLVED),
+            errors("class Bar\nfun zbar(body: Unknown.() -> Unit) = Bar().body()").map { it.code })
+        assertEquals(listOf(KotlinDiagnosticCodes.UNRESOLVED),
+            errors("class Bar\nclass Baz\nfun zbar(body: Baz.() -> Unit) = Bar().body()").map { it.code })
+        val bounds = "interface In<in T>\ninterface A\ninterface B\ninterface C : A, B\nfun <T> foo(a: In<T>, b: In<T>): T = TODO()\n" +
+            "fun t(inA: In<A>, inB: In<B>, inC: In<C>) { val r: C = foo(inA, inC); val c: C = foo(inA, inB) }"
+        assertEquals(emptyList(), errors(bounds).map { it.code }, "for `$bounds`")
+        val jdk = "import java.util.function.IntFunction\nclass A<T> : ArrayList<T>() {\n" +
+            " override fun <R> toArray(generator: IntFunction<Array<R>>): Array<R> = super.toArray(generator)\n}"
+        assertEquals(emptyList(), jdkErrors(jdk).map { it.code }, "for `$jdk`")
+        // JDK 21's `List.getFirst()`: a Java `ArrayList` has it, a Kotlin `ArrayDeque` (which lists `MutableList`
+        // itself) keeps Kotlin's view, where it is not.
+        if (java.util.List::class.java.methods.any { it.name == "getFirst" }) {
+            assertEquals(emptyList(), jdkErrors("fun f(al: java.util.ArrayList<String>) { al.getFirst() }").map { it.code })
+            assertEquals(listOf(KotlinDiagnosticCodes.UNRESOLVED), jdkErrors("fun f(ad: ArrayDeque<String>) { ad.getFirst() }").map { it.code })
+        }
+    }
+
     /** A builder lambda's receiver takes the call's explicit type arguments: inside `buildMap<String, MutableList<C>> { }`
      *  `this` is a `MutableMap<String, MutableList<C>>`, so `getOrPut(k) { ArrayList() }` is a `MutableList<C>`. */
     @Test

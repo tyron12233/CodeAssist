@@ -635,18 +635,36 @@ internal class KotlinSemanticChecks(
      * Conservative throughout — [KotlinResolver.inheritanceProblems] backs off (emits nothing) whenever the
      * supertype closure can't be resolved, so the parse-only model never false-positives.
      */
+    /** Whether the abstract member [m] is declared in a CLASS (not an interface, not an enum): K2's
+     *  `isFromInterfaceOrEnum` negated. An owner that cannot be told counts as an interface, the common case. */
+    private fun declaredInAbstractClass(m: KotlinSymbol, resolver: KotlinResolver): Boolean {
+        val decl = (m.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi
+        val psiOwner = (decl as? KtElement)?.getStrictParentOfType<KtClassOrObject>()
+        if (psiOwner != null) return psiOwner is KtClass && !psiOwner.isInterface() && !psiOwner.isEnum()
+        val fqn = m.declaringClassFqn?.replace('$', '.') ?: (m.owner?.type as? KotlinType)?.qualifiedName ?: return false
+        if (service.isInterfaceType(fqn) != false) return false
+        return service.enumConstantsOf(fqn).isEmpty()
+    }
+
     private fun inheritanceDiagnostics(cls: KtClassOrObject, resolver: KotlinResolver, out: MutableList<Diagnostic>) {
         if (cls is KtEnumEntry) return // an enum entry's abstract impls belong to the enum constant's own body
         val report = resolver.inheritanceProblems(cls, concrete = isConcreteImplementor(cls))
         if (report.isEmpty) return
-        if (report.missing.isNotEmpty()) {
-            val names = report.missing.joinToString(", ") { if (it.kind == SymbolKind.METHOD) "${it.name}()" else it.name }
-            val word = if (report.missing.size == 1) "member" else "members"
+        // K2 tells an abstract CLASS's member apart from an interface's (or an enum's): two diagnostics, so a
+        // suppression or a test directive naming one leaves the other.
+        val (fromClass, fromInterface) = report.missing.partition { declaredInAbstractClass(it, resolver) }
+        for ((missing, code) in listOf(
+            fromInterface to KotlinDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED,
+            fromClass to KotlinDiagnosticCodes.ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED,
+        )) {
+            if (missing.isEmpty()) continue
+            val names = missing.joinToString(", ") { if (it.kind == SymbolKind.METHOD) "${it.name}()" else it.name }
+            val word = if (missing.size == 1) "member" else "members"
             val noun = if (cls is KtObjectDeclaration) "Object" else "Class"
             out += Diagnostic(
                 declNameRange(cls), Severity.ERROR,
                 "$noun '${cls.name ?: "<anonymous>"}' must implement abstract $word: $names",
-                KotlinDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED,
+                code,
             )
         }
         report.overridesNothing.forEach { m ->

@@ -1191,8 +1191,10 @@ internal fun KotlinResolver.receiverValueInvokeTargets(
     // The value's receiver must accept the explicit one (`s.f()` with `f: Int.() -> Unit` stays an error). A
     // type-parameter receiver on either side (`f: S.() -> S` on an `s: S`) is left to the checker's own leniency.
     val wanted = shape.receiverType as? KotlinType
+    // A receiver type that names nothing (an unresolved class, a recursive alias) is an error type, which takes
+    // any receiver: K2 reports the type once and not each call through it.
     if (wanted != null && receiverType != null && !wanted.isTypeParameter && !receiverType.isTypeParameter &&
-        !isTypeParameterInScope(wanted.qualifiedName, offset) &&
+        !isTypeParameterInScope(wanted.qualifiedName, offset) && service.isKnownType(wanted.qualifiedName) &&
         !wanted.isAssignableFrom(receiverType.withNullable(false))
     ) return emptyList()
     return listOf(

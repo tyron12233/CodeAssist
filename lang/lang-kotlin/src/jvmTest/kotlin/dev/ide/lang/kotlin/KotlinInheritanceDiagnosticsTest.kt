@@ -32,7 +32,7 @@ class KotlinInheritanceDiagnosticsTest {
     @Test
     fun concreteClassMissingAbstractMemberIsFlagged() {
         val diags = diagnose("Dog.kt", "package demo\nclass Dog : Animal")
-        val d = diags.firstOrNull { it.code == "kt.abstractNotImplemented" }
+        val d = diags.firstOrNull { it.code in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS }
         assertNotNull(d, "a concrete class leaving `sound` unimplemented should be flagged; got $diags")
         assertTrue(d.message.contains("sound"), "message names the missing member; got '${d.message}'")
     }
@@ -40,18 +40,18 @@ class KotlinInheritanceDiagnosticsTest {
     @Test
     fun implementingTheAbstractMemberClearsTheError() {
         val diags = diagnose("Dog.kt", "package demo\nclass Dog : Animal { override fun sound(): String = \"woof\" }")
-        assertFalse(diags.any { it.code == "kt.abstractNotImplemented" }, "implemented → no error; got $diags")
+        assertFalse(diags.any { it.code in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS }, "implemented → no error; got $diags")
     }
 
     @Test
     fun abstractPropertyImplementedByConstructorParameter() {
         // A primary-ctor `val name` implements the interface's abstract `val name`.
         assertFalse(
-            "kt.abstractNotImplemented" in codes("P.kt", "package demo\nclass Person(override val name: String) : Named"),
+            codes("P.kt", "package demo\nclass Person(override val name: String) : Named").any { it in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS },
             "a ctor `val name` implements the abstract property",
         )
         assertTrue(
-            "kt.abstractNotImplemented" in codes("P2.kt", "package demo\nclass Person2 : Named"),
+            codes("P2.kt", "package demo\nclass Person2 : Named").any { it in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS },
             "not implementing the abstract property is flagged",
         )
     }
@@ -60,13 +60,13 @@ class KotlinInheritanceDiagnosticsTest {
     fun interfaceDefaultMethodIsNotRequired() {
         // Clickable.onClick is abstract; onLongClick has a default body → only onClick is required.
         val d = diagnose("C.kt", "package demo\nclass C : Clickable { override fun onClick() {} }")
-        assertFalse(d.any { it.code == "kt.abstractNotImplemented" }, "default method must not be required; got $d")
+        assertFalse(d.any { it.code in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS }, "default method must not be required; got $d")
     }
 
     @Test
     fun abstractClassNeedNotImplementInheritedAbstracts() {
         assertFalse(
-            "kt.abstractNotImplemented" in codes("X.kt", "package demo\nabstract class X : Animal"),
+            codes("X.kt", "package demo\nabstract class X : Animal").any { it in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS },
             "an abstract class may leave abstract members unimplemented",
         )
     }
@@ -74,13 +74,13 @@ class KotlinInheritanceDiagnosticsTest {
     @Test
     fun classWithNoAbstractMembersInheritedIsNotFlagged() {
         // Base has only concrete (open/final) members → nothing to implement.
-        assertFalse("kt.abstractNotImplemented" in codes("D.kt", "package demo\nclass D : Base"), "no abstracts → no error")
+        assertFalse(codes("D.kt", "package demo\nclass D : Base").any { it in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS }, "no abstracts → no error")
     }
 
     @Test
     fun unresolvedSupertypeBacksOff() {
         // `Mystery` doesn't resolve → we can't see the whole picture, so emit nothing (conservative).
-        assertFalse("kt.abstractNotImplemented" in codes("U.kt", "package demo\nclass U : Mystery"), "unresolved super → back off")
+        assertFalse(codes("U.kt", "package demo\nclass U : Mystery").any { it in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS }, "unresolved super → back off")
     }
 
     // --- nothing to override ---
@@ -363,14 +363,14 @@ class KotlinInheritanceDiagnosticsTest {
         // The plugin generates writeToParcel()/describeContents() (+ CREATOR) at build time; the parse-only
         // editor can't see them, so a @Parcelize class must NOT be flagged for them (the reported bug).
         val diags = codes("AssetSource.kt", "package demo\n@Parcelize class AssetSource(val paths: List<String>) : Parcelable")
-        assertFalse("kt.abstractNotImplemented" in diags, "a @Parcelize class must not be flagged for Parcelable members; got $diags")
+        assertFalse(diags.any { it in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS }, "a @Parcelize class must not be flagged for Parcelable members; got $diags")
     }
 
     @Test
     fun withoutParcelizeTheSameClassIsStillFlagged() {
         // Negative control: no @Parcelize → the Parcelable abstracts are genuinely unimplemented.
         val d = diagnose("Plain.kt", "package demo\nclass Plain : Parcelable")
-        val err = d.firstOrNull { it.code == "kt.abstractNotImplemented" }
+        val err = d.firstOrNull { it.code in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS }
         assertNotNull(err, "without @Parcelize the Parcelable members are unimplemented; got $d")
         assertTrue(
             err.message.contains("writeToParcel") && err.message.contains("describeContents"),
@@ -382,7 +382,7 @@ class KotlinInheritanceDiagnosticsTest {
     fun parcelizeStillFlagsUnrelatedMissingMembers() {
         // Only Parcelable's members are excused; an unrelated abstract (Named.name) is still required.
         val d = diagnose("Half.kt", "package demo\n@Parcelize class Half(val paths: List<String>) : Parcelable, Named")
-        val err = d.firstOrNull { it.code == "kt.abstractNotImplemented" }
+        val err = d.firstOrNull { it.code in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS }
         assertNotNull(err, "an unrelated abstract member must still be flagged; got $d")
         assertTrue(err.message.contains("name"), "names the genuinely-missing member; got '${err.message}'")
         assertFalse(err.message.contains("writeToParcel"), "must not name the plugin-supplied member; got '${err.message}'")

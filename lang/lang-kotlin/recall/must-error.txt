@@ -383,7 +383,7 @@ class A {
 //// kt.exposedVisibility
 internal class I
 fun f(): I? = null
-//// kt.abstractNotImplemented
+//// kt.manyInterfacesMemberNotImplemented
 interface A { fun f() = 1 }
 interface B { fun f() = 2 }
 class C : A, B

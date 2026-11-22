@@ -42,8 +42,20 @@ object KotlinDiagnosticCodes {
     const val ABSTRACT_MODIFIER = "kt.abstractModifier"
 
     // --- inheritance / override correctness ---
-    /** A concrete class/object leaves an inherited abstract member unimplemented. */
+    /** A concrete class/object leaves an inherited abstract member of an INTERFACE (or enum) unimplemented
+     *  (K2's ABSTRACT_MEMBER_NOT_IMPLEMENTED). */
     const val ABSTRACT_NOT_IMPLEMENTED = "kt.abstractNotImplemented"
+    /** The same for an abstract member of an abstract CLASS (ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED). */
+    const val ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED = "kt.abstractClassMemberNotImplemented"
+    /** A member inherited with several implementations, one from a class (MANY_IMPL_MEMBER_NOT_IMPLEMENTED). */
+    const val MANY_IMPL_MEMBER_NOT_IMPLEMENTED = "kt.manyImplMemberNotImplemented"
+    /** A member inherited from several interfaces, one with a body (MANY_INTERFACES_MEMBER_NOT_IMPLEMENTED). */
+    const val MANY_INTERFACES_MEMBER_NOT_IMPLEMENTED = "kt.manyInterfacesMemberNotImplemented"
+    /** Every "the class must implement or override this" code: the ones the Implement-members fix answers. */
+    val IMPLEMENT_MEMBERS: Set<String> = setOf(
+        ABSTRACT_NOT_IMPLEMENTED, ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED,
+        MANY_IMPL_MEMBER_NOT_IMPLEMENTED, MANY_INTERFACES_MEMBER_NOT_IMPLEMENTED,
+    )
     /** A member is declared `override` but no supertype declares a member of that name. */
     const val NOTHING_TO_OVERRIDE = "kt.nothingToOverride"
     /** A member hides an inherited member of the same signature but is missing the `override` modifier. */
@@ -316,6 +328,8 @@ object KotlinDiagnosticCodes {
     const val DEFINITELY_NOT_NULL_COMPONENT = "kt.definitelyNotNullComponent"
     const val EXPECTED_PARAMETER_TYPE_MISMATCH = "kt.expectedParameterTypeMismatch"
     const val NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER = "kt.nameInConstraintIsNotATypeParameter"
+    /** `val (a, b) = …` outside a block: in a class body or at the top level. */
+    const val NON_LOCAL_DESTRUCTURING_DECLARATION = "kt.nonLocalDestructuringDeclaration"
     /** `interface A<T : A<*>>` (FINITE_BOUNDS_VIOLATION). */
     const val FINITE_BOUNDS_VIOLATION = "kt.finiteBoundsViolation"
     /** `super<String>` in a class that does not extend it (NOT_A_SUPERTYPE). */

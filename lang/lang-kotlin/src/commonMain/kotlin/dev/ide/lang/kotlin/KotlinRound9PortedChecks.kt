@@ -32,6 +32,9 @@ import dev.ide.lang.kotlin.resolve.localsAt
  * names the K2 code and checker it follows. Registered from [KotlinSemanticChecks.checkers], after the earlier rounds.
  */
 internal fun KotlinSemanticChecks.round9PortedCheckers(): List<KotlinChecker> = listOf(
+    KotlinChecker(dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration::class) { psi ->
+        report(nonLocalDestructuring(psi as dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration))
+    },
     KotlinChecker(dev.ide.kotlin.syntax.psi.KtTypeConstraint::class) { psi ->
         report(nameInConstraintNotATypeParameter(psi as dev.ide.kotlin.syntax.psi.KtTypeConstraint))
     },
@@ -290,6 +293,28 @@ internal fun KotlinSemanticChecks.functionValueMissingArguments(call: KtCallExpr
     return Diagnostic(
         TextRange(r.startOffset, r.endOffset), Severity.ERROR,
         "No value passed for parameter 'p${given + 1}'", KotlinDiagnosticCodes.ARGUMENT_COUNT,
+    )
+}
+
+/**
+ * NON_LOCAL_DESTRUCTURING_DECLARATION (FirDestructuringDeclarationChecker): a destructuring declaration in a class
+ * body or at the top level. Only a statement of a block (a local) may destructure. Spans the parenthesized
+ * entries, as K2 reports it.
+ */
+private fun nonLocalDestructuring(d: dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration): Diagnostic? {
+    val parent = d.parent
+    if (parent is dev.ide.kotlin.syntax.psi.KtBlockExpression) return null
+    if (parent !is dev.ide.kotlin.syntax.psi.KtClassBody && parent !is dev.ide.kotlin.syntax.psi.KtFile) return null
+    val first = d.entries.firstOrNull() ?: return null
+    val last = d.entries.last()
+    val text = d.text
+    val base = d.textRange.startOffset
+    val open = text.lastIndexOf('(', first.textRange.startOffset - base).takeIf { it >= 0 } ?: return null
+    val close = text.indexOf(')', last.textRange.endOffset - base).takeIf { it >= 0 } ?: return null
+    return Diagnostic(
+        TextRange(base + open, base + close + 1), Severity.ERROR,
+        "Destructuring declarations are only allowed for local variables/values",
+        KotlinDiagnosticCodes.NON_LOCAL_DESTRUCTURING_DECLARATION,
     )
 }
 

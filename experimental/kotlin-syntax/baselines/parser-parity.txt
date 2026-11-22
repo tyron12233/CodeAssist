@@ -10,10 +10,11 @@
 # whitespace and about what belongs inside an error element.
 #
 # Kinds seen when this file was written, most common first:
-#      12  ')' != ' '
 #      11  ERROR_ELEMENT != ERROR_ELEMENT
+#      11  ')' != ' '
 #       5  BAD_CHARACTER != '('
 #       5  ERROR_ELEMENT != CLASS
+#       4  '(' != LPAR
 #       4  VALUE_PARAMETER != ERROR_ELEMENT
 #       3  BODY != BODY
 #       2  PROPERTY != ERROR_ELEMENT
@@ -42,14 +43,17 @@ psi/ForWithMultiDecl.kt
 psi/FunctionLiterals_ERR.kt
 psi/Imports_ERR.kt
 psi/IncompleteFunctionLiteral.kt
+psi/MultiVariableDeclarations.kt
 psi/PropertiesFollowedByInitializers.kt
 psi/Properties_ERR.kt
 psi/TripleDot.kt
 psi/TryRecovery.kt
 psi/WhenWithSubjectVariable_ERR.kt
 psi/annotation/values/longStringTemplateEntryWithTwoExpressions.kt
+psi/destructuring/freezeKt79951.kt
 psi/destructuring/fullNameBasedDestructuringErrors.kt
 psi/destructuring/fullPositionBasedDestructuringErrors.kt
+psi/destructuring/ktij23263.kt
 psi/destructuring/shortPositionBasedDestructuringErrors.kt
 psi/destructuringInLambdas_ERR.kt
 psi/emptyContextParameters.kt

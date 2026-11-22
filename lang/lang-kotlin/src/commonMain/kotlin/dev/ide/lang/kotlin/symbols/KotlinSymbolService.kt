@@ -3063,7 +3063,51 @@ class KotlinSymbolService(
             functionTypeSupertypeMembers(sub.qualifiedName, sub.typeArguments, visited)
                 ?: ownAndInherited(sub.qualifiedName, sub.typeArguments, visited)
         }
-        return own + synthetic + inherited
+        // A JAVA class sees the default methods of a mapped JDK interface it implements in full (`ArrayList`
+        // reaches `Collection.toArray(IntFunction)`), where the Kotlin built-in it maps to (`MutableCollection`)
+        // declares only Kotlin's view. A Kotlin collection type keeps the built-in view: there those stay hidden.
+        val jdkDefaults = if (shape.isKotlin) emptyList() else shape.supertypes.flatMap { st ->
+            val sub = substitute(st, bindings) as? KotlinType ?: return@flatMap emptyList()
+            if (!sub.qualifiedName.startsWith("java.") || Builtins.kotlinTypeFor(sub.qualifiedName) == null) return@flatMap emptyList()
+            mappedInterfaceDefaults(sub.qualifiedName, sub.typeArguments, HashSet())
+        }.let { extra ->
+            if (extra.isEmpty()) extra
+            else {
+                // By erased signature: `toArray(IntFunction)` is not `toArray(Array)`.
+                fun key(m: KotlinSymbol) = m.name + m.paramTypes.map { (it as? KotlinType)?.let { t -> if (t.isTypeParameter) "?" else Builtins.kotlinTypeFor(t.qualifiedName) ?: t.qualifiedName } }
+                val taken = (own + inherited).mapTo(HashSet(), ::key)
+                extra.filter { taken.add(key(it)) }
+            }
+        }
+        // A KOTLIN class that lists a Kotlin collection interface itself (`AbstractMutableList : java.util.AbstractList,
+        // MutableList`) has that interface's view of the JDK one: what Kotlin grafts onto it stays
+        // ([Builtins.ADDITIONAL_JVM_MEMBERS]: `stream`, `removeIf`), the rest a Java superclass brings in from the
+        // JDK interface is hidden (`ArrayDeque.getFirst()` is unresolved, `ArrayList.getFirst()` is not).
+        val kotlinCollectionView = shape.isKotlin && shape.supertypes.any { Builtins.javaTypeFor(it.qualifiedName)?.startsWith("java.util.") == true }
+        val visibleInherited = if (!kotlinCollectionView) inherited else inherited.filterNot { m ->
+            val k = m.declaringClassFqn?.let { Builtins.kotlinTypeFor(it) } ?: return@filterNot false
+            Builtins.ADDITIONAL_JVM_MEMBERS.none { (owner, names) -> m.name in names && (owner == k || owner == k.replace("Mutable", "")) }
+        }
+        return own + synthetic + visibleInherited + jdkDefaults
+    }
+
+    /** The default (non-abstract, non-static) methods the mapped JDK interface [javaFqn] declares itself, bound
+     *  to [typeArgs]. See the caller in [membersFromShape]. */
+    private fun mappedInterfaceDefaults(javaFqn: String, typeArgs: List<TypeRef>, seen: MutableSet<String>): List<KotlinSymbol> {
+        if (!seen.add(javaFqn)) return emptyList()
+        val shape = typeShape(javaFqn) ?: return emptyList()
+        val bindings = classBindings(shape, typeArgs)
+        val own = shape.members
+            .filter { it.kind == SymbolKind.METHOD && Modifier.STATIC !in it.modifiers && Modifier.ABSTRACT !in it.modifiers }
+            .map { substituteSymbol(it, if (it.typeParameters.isEmpty()) bindings else bindings - it.typeParameters.toSet()) }
+        // And those of the JDK interfaces it extends in turn (`List` -> `Collection` -> `Iterable`).
+        val inherited = shape.supertypes.flatMap { st ->
+            val sub = substitute(st, bindings) as? KotlinType ?: return@flatMap emptyList()
+            if (sub.qualifiedName.startsWith("java.") && Builtins.kotlinTypeFor(sub.qualifiedName) != null)
+                mappedInterfaceDefaults(sub.qualifiedName, sub.typeArguments, seen)
+            else emptyList()
+        }
+        return own + inherited
     }
 
     /**
@@ -5165,7 +5209,12 @@ class KotlinSymbolService(
         if (candidates == null) return null
         // The file's own declaration first: two files of one package may each declare a `private typealias TA`,
         // and each file sees only its own.
-        candidates.firstOrNull { !it.isNested && it.ctx.path == ctx.path }?.let { return it }
+        // The model records a file by its full path and a resolver by its name, so a file is matched by name
+        // within the package (which is what makes two same-named files one file here).
+        candidates.firstOrNull {
+            !it.isNested && it.ctx.packageName == ctx.packageName &&
+                it.ctx.path.substringAfterLast('/') == ctx.path.substringAfterLast('/')
+        }?.let { return it }
         candidates.firstOrNull { it.fqn.substringBeforeLast('.', "") == ctx.packageName }?.let { return it }
         val stars = ctx.starImportPackages
         if (stars.isEmpty()) return null

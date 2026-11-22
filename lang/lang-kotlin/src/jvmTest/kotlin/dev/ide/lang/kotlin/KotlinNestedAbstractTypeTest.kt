@@ -36,7 +36,7 @@ class KotlinNestedAbstractTypeTest {
         // `lib.Base` has ONLY a nested abstract type `Callback` (the ScreenCaptureCallback shape) — a concrete
         // subclass must NOT be told to implement it.
         val d = diag("import lib.Base\nclass Impl : Base()")
-        assertTrue(d.none { it.code == "kt.abstractNotImplemented" }, "a nested abstract TYPE must not be a 'must implement' member; got $d")
+        assertTrue(d.none { it.code in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS }, "a nested abstract TYPE must not be a 'must implement' member; got $d")
     }
 
     @Test
@@ -44,7 +44,7 @@ class KotlinNestedAbstractTypeTest {
         // `lib.Base2` adds a genuine abstract method `doWork` alongside the nested type — that one must flag.
         val d = diag("import lib.Base2\nclass Impl2 : Base2()")
         assertTrue(
-            d.any { it.code == "kt.abstractNotImplemented" && it.message.contains("doWork") },
+            d.any { it.code in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS && it.message.contains("doWork") },
             "a real unimplemented abstract method must still flag; got $d",
         )
     }

@@ -378,7 +378,7 @@ internal class IosKotlinAnalysis(
             .filter { offset >= it.range.start && offset <= it.range.end }
             .map { it.code }
             .toSet()
-        if (KotlinDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED in covering) {
+        if (covering.any { it in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS }) {
             features.implementMembersFix(file, offset)?.let { out += it }
         }
         if (KotlinDiagnosticCodes.SUSPEND_OVERRIDE in covering) {

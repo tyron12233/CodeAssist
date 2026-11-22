@@ -1664,13 +1664,13 @@ internal class KotlinParsing private constructor(builder: SemanticWhitespaceAwar
         val beforeName = mark()
 
         if (multiDeclaration) {
-            val multiDecl = mark()
+            // Upstream parses a destructuring declaration in any position; one that is not local is the checker's
+            // NON_LOCAL_DESTRUCTURING_DECLARATION, not a syntax error (KT-90199).
             parseMultiDeclarationEntry(
                 follow = if (isShortForm) PROPERTY_NAME_FOLLOW_SET else DESTRUCTURING_PROPERTY_NAME_FOLLOW_SET,
                 recoverySet = PROPERTY_NAME_FOLLOW_MULTI_DECLARATION_RECOVERY_SET,
                 mode = if (isShortForm) MultiDeclarationMode.Short else MultiDeclarationMode.Full
             )
-            errorIf(multiDecl, !mode.destructuringAllowed, "Destructuring declarations are only allowed for local variables/values")
         } else {
             parseFunctionOrPropertyName(
                 receiverTypeDeclared,

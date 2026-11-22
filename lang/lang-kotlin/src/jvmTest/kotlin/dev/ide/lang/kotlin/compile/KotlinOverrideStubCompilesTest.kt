@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin.compile
 
+import dev.ide.lang.kotlin.KotlinDiagnosticCodes
 import dev.ide.lang.kotlin.DiskFile
 import dev.ide.lang.kotlin.KotlinSourceAnalyzer
 import dev.ide.lang.kotlin.SnippetDoc
@@ -68,7 +69,7 @@ class KotlinOverrideStubCompilesTest {
             val diagnostics = runBlocking {
                 analyzer.incrementalParser.parseFull(doc); analyzer.analyze(doc.file).diagnostics
             }
-            val missing = diagnostics.firstOrNull { it.code == "kt.abstractNotImplemented" }
+            val missing = diagnostics.firstOrNull { it.code in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS }
             assertNotNull(missing, "expected the missing-abstract diagnostic; got ${diagnostics.map { it.code }}")
             val fix = analyzer.implementMembersFix(doc.file, missing.range.start)
             assertNotNull(fix, "expected an Implement-members fix at the class name")
