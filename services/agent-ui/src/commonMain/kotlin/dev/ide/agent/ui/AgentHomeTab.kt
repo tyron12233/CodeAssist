@@ -682,7 +682,7 @@ private fun DrawerRow(title: String, subtitle: String?, onClick: () -> Unit) {
 
 @Composable
 private fun relativeTime(atMs: Long): String {
-    val minutes = ((System.currentTimeMillis() - atMs) / 60_000).coerceAtLeast(0)
+    val minutes = ((kotlin.time.Clock.System.now().toEpochMilliseconds() - atMs) / 60_000).coerceAtLeast(0)
     return when {
         minutes < 1 -> stringResource(Res.string.aihome_time_now)
         minutes < 60 -> minutes.toInt().let { n -> pluralStringResource(Res.plurals.aihome_time_minutes, n, n) }

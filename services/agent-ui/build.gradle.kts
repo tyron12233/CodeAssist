@@ -4,7 +4,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // tool window), the provider/key sheet, and the write-permission overlay. It reuses the :ide-ui shell's
 // design system (GlassSurface, the Ca theme, Primitives, markup helpers) and talks to the engine only
 // through the :ide-ui-api IdeBackend port. ide-core references AgentUiPlugin from here for the unified
-// BuiltInPlugins declaration. Mirrors :ide-ui's desktop (JVM) + Android KMP setup; commonMain is shared.
+// BuiltInPlugins declaration. Mirrors :ide-ui's desktop (JVM) + Android + iOS KMP setup; commonMain is shared.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kmp.library)
@@ -27,6 +27,11 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_17)
         }
     }
+
+    // iOS. The iOS app registers AgentUiPlugin itself: there, ide-core (and the BuiltInPlugins that bring this
+    // plugin on the JVM hosts) runs inside the embedded engine, which the Compose UI cannot reach.
+    iosSimulatorArm64()
+    iosArm64()
 
     sourceSets {
         commonMain.dependencies {
