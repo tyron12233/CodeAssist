@@ -927,6 +927,8 @@ internal fun KotlinResolver.typeOfCall(
             //    `Font` class) yields a `…googlefonts.Font` that names nothing. Constructing it typed the call as
             //    a non-existent type, which then bound to no parameter anywhere: `FontFamily(Font(googleFont =
             //    …))` lost every `FontFamily` overload and fell back to instantiating the abstract class.
+            // An `object` has no constructor: `Inv()` on `object Inv { operator fun invoke(): Int }` is its `invoke`.
+            if (service.isSingletonObject(typeFqn)) return invokeReturnType(call)
             val known = service.isKnownType(typeFqn)
             val factoryFunction = service.topLevelByName(name).any { it.kind == SymbolKind.METHOD } &&
                 (!known || service.isNonInstantiableType(typeFqn) == true)

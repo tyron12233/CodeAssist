@@ -441,6 +441,7 @@ internal class KotlinSemanticChecks(
             psi as KtPostfixExpression
             KotlinPerf.span("sem.notNull") { report(redundantNotNull(psi, resolver)) }
             KotlinPerf.span("sem.valIncDec") { report(valIncDecReassignment(psi) ?: incrementTargetExpected(psi) ?: (if (resolveReady) valMemberIncDec(psi, resolver) else null)) }
+            KotlinPerf.span("sem.unaryOp") { if (resolveReady) report(undefinedUnaryOperator(psi, resolver)) }
         },
         KotlinChecker(KtPrefixExpression::class) { psi ->
             psi as KtPrefixExpression

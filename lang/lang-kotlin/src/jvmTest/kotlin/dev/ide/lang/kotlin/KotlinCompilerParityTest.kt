@@ -2534,6 +2534,20 @@ class KotlinCompilerParityTest {
         clean("interface H { @Deprecated(\"\", level = DeprecationLevel.HIDDEN) var p: Int }\nclass S : H { override var p: Int = 1 }\nfun t(s: S) { s.p; s.p = 2 }")
     }
 
+    /** An operator whose convention function a fully known receiver lacks altogether is unresolved; one a
+     *  companion, an extension or a supertype supplies resolves. */
+    @Test
+    fun missingOperatorConventionOnAKnownType() {
+        assertCodes("fun t() { var a = \"\"; a++ }", KotlinDiagnosticCodes.UNRESOLVED)
+        assertCodes("object JustMod { fun mod(x: Int) {} }\nfun t() { JustMod % 1 }", KotlinDiagnosticCodes.UNRESOLVED)
+        assertCodes("class Foo { operator fun plusAssign(x: Foo) {} }\nfun t() { val f = Foo(); f + f }", KotlinDiagnosticCodes.UNRESOLVED)
+        assertCodes("class A\nfun t(a: A, b: A) { a < b }", KotlinDiagnosticCodes.UNRESOLVED)
+        clean("class X { companion object { operator fun plus(x: Int) = 1 } }\nfun t() { X + 1 }")
+        clean("class Q\noperator fun Q.plus(o: Q) = this\noperator fun Q.inc() = this\nfun t() { var q = Q(); q + q; q++; q += q }")
+        clean("enum class C { A, B }\nfun t(a: C, b: C) { a < b; \"a\"..\"b\"; 'a'..<'z'; var c = 'a'; c++ }")
+        clean("abstract class Base { operator fun times(x: Int) = this }\nclass Sub : Base()\nfun t(s: Sub) { s * 2 }")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

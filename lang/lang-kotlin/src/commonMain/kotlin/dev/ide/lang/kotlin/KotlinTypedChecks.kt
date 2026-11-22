@@ -34,6 +34,7 @@ import dev.ide.kotlin.syntax.psi.KtLambdaExpression
 import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
 import dev.ide.kotlin.syntax.psi.KtParameter
+import dev.ide.kotlin.syntax.psi.KtObjectDeclaration
 import dev.ide.kotlin.syntax.psi.KtPrefixExpression
 import dev.ide.kotlin.syntax.psi.KtProperty
 import dev.ide.kotlin.syntax.psi.KtPropertyAccessor
@@ -116,6 +117,20 @@ private val ARITHMETIC_NAMES = mapOf(
     KtTokens.DIV to "div", KtTokens.PERC to "rem",
 )
 private val ORDER_TOKENS = setOf(KtTokens.LT, KtTokens.GT, KtTokens.LTEQ, KtTokens.GTEQ)
+
+/** The other binary conventions [undefinedBinaryOperator] judges. */
+private val CONVENTION_NAMES = mapOf(
+    KtTokens.RANGE to "rangeTo", KtTokens.RANGE_UNTIL to "rangeUntil",
+    KtTokens.LT to "compareTo", KtTokens.GT to "compareTo", KtTokens.LTEQ to "compareTo", KtTokens.GTEQ to "compareTo",
+    KtTokens.IN_KEYWORD to "contains", KtTokens.NOT_IN to "contains",
+)
+
+/** A compound assignment's `xAssign` and the plain operator it falls back to. */
+private val COMPOUND_NAMES = mapOf(
+    KtTokens.PLUSEQ to ("plusAssign" to "plus"), KtTokens.MINUSEQ to ("minusAssign" to "minus"),
+    KtTokens.MULTEQ to ("timesAssign" to "times"), KtTokens.DIVEQ to ("divAssign" to "div"),
+    KtTokens.PERCEQ to ("remAssign" to "rem"),
+)
 
 private val NUMERIC_CONVERSIONS = setOf("toInt", "toLong", "toShort", "toByte", "toDouble", "toFloat")
 
@@ -441,37 +456,79 @@ private fun KotlinSemanticChecks.hasOperator(type: KotlinType, name: String, at:
     return resolver.scopeMemberExtensions(at.textRange.startOffset, c, name).any { it.name == name }
 }
 
-/** `"a" - 1`, `true * 2`: an arithmetic operator on a built-in value type that does not define it. */
+/**
+ * `"a" - 1`, `true * 2`, `Foo() + x`, `x in obj`, `a < b`: a binary operator whose convention function the
+ * receiver does not have at all. Judged where the receiver's members are known in full: a built-in value type, or
+ * a project class or object whose whole supertype chain is project source or built-ins. Any member of that name
+ * (an `operator`-less one is OPERATOR_MODIFIER_REQUIRED, a mistyped one an argument error), an applicable
+ * extension in scope, or a member extension of an implicit receiver backs off. A compound `x += y` needs neither
+ * `plusAssign` nor `plus`.
+ */
 internal fun KotlinSemanticChecks.undefinedBinaryOperator(e: KtBinaryExpression, resolver: KotlinResolver): Diagnostic? {
-    val name = ARITHMETIC_NAMES[e.operationToken] ?: return null
+    val token = e.operationToken ?: return null
+    val compound = COMPOUND_NAMES[token]
+    val name = compound?.second ?: ARITHMETIC_NAMES[token] ?: CONVENTION_NAMES[token] ?: return null
     val left = e.left ?: return null
-    e.right ?: return null
-    val lt = resolver.inferType(left) ?: return null
-    if (lt.isTypeParameter || lt.nullable || canonicalName(lt) !in CLOSED_VALUE_TYPES) return null
-    if (hasOperator(lt, name, left, resolver)) return null
+    val right = e.right ?: return null
+    // `a in b` calls `b.contains(a)`.
+    val receiver = if (name == "contains") right else left
+    // An import renamed to the convention name (`import a.plus as minus`) is what `-` calls.
+    if (renamedOnImport(resolver, name, compound?.first)) return null
+    // `a[i] += v` goes through `get`/`set`: judged elsewhere.
+    if (compound != null && unwrapParen(left) !is KtNameReferenceExpression) return null
+    val lt = operatorReceiverType(receiver, resolver) ?: return null
+    if (lt.isTypeParameter || lt.nullable) return null
+    if (!membersKnownInFull(lt)) return null
+    if (hasOperator(lt, name, receiver, resolver)) return null
+    if (compound != null && hasOperator(lt, compound.first, receiver, resolver)) return null
     return error(
         e.operationReference, "Unresolved reference: $name (no such operator on ${renderType(lt)})",
         KotlinDiagnosticCodes.UNRESOLVED,
     )
 }
 
-/** `!5`, `-"a"`: a unary operator on a built-in value type that does not define it. */
-internal fun KotlinSemanticChecks.undefinedUnaryOperator(e: KtPrefixExpression, resolver: KotlinResolver): Diagnostic? {
+/** `!5`, `-"a"`, `+obj`, `s++`: a unary operator whose convention function the receiver does not have at all
+ *  (judged as [undefinedBinaryOperator] judges a binary one). */
+internal fun KotlinSemanticChecks.undefinedUnaryOperator(e: KtUnaryExpression, resolver: KotlinResolver): Diagnostic? {
     val name = when (e.operationToken) {
         KtTokens.EXCL -> "not"; KtTokens.MINUS -> "unaryMinus"; KtTokens.PLUS -> "unaryPlus"
+        KtTokens.PLUSPLUS -> "inc"; KtTokens.MINUSMINUS -> "dec"
         else -> return null
     }
     val operand = e.baseExpression ?: return null
-    val t = resolver.inferType(operand) ?: return null
+    if (renamedOnImport(resolver, name, null)) return null
+    val t = operatorReceiverType(operand, resolver) ?: return null
     if (t.isTypeParameter || t.nullable) return null
     val tn = canonicalName(t)
-    val closed = tn in CLOSED_VALUE_TYPES || (name == "not" && tn in NUMERIC)
-    if (!closed || (name == "not" && tn == BOOLEAN)) return null
+    if (name == "not" && tn == BOOLEAN) return null
+    if (!(name == "not" && tn in NUMERIC) && !membersKnownInFull(t)) return null
     if (hasOperator(t, name, operand, resolver)) return null
     return error(
         e.operationReference, "Unresolved reference: $name (no such operator on ${renderType(t)})",
         KotlinDiagnosticCodes.UNRESOLVED,
     )
+}
+
+private fun renamedOnImport(resolver: KotlinResolver, name: String, other: String?): Boolean =
+    resolver.fileContext.imports.any { it.alias != null && (it.alias == name || it.alias == other) }
+
+/** The type an operator's receiver [e] has. A class NAME used as a value is its companion object, which the
+ *  inferred type does not say, so only an object's own name is judged. */
+private fun KotlinSemanticChecks.operatorReceiverType(e: KtExpression, resolver: KotlinResolver): KotlinType? {
+    val t = resolver.inferType(e) ?: return null
+    if (!resolver.isTypeReceiver(e)) return t
+    val decl = (service.sourceClass(t.qualifiedName)?.node as? KotlinDomNode)?.psi
+    return t.takeIf { decl is KtObjectDeclaration && !decl.isCompanion() }
+}
+
+/** Whether every function [t] could offer as an operator convention is known: a built-in value type, or a
+ *  project class/object whose supertype chain is wholly project source or built-ins. A numeric type has all the
+ *  arithmetic, comparison and inc/dec operators, so only `not` is judged on one (above). */
+private fun KotlinSemanticChecks.membersKnownInFull(t: KotlinType): Boolean {
+    val c = canonicalName(t)
+    if (c in CLOSED_VALUE_TYPES) return true
+    if (c in NUMERIC) return false
+    return service.sourceClass(c) != null && service.supertypeClosureKnown(c)
 }
 
 /** `a + 1` / `a < b` where `a` is a nullable number: the operator is a member call on a nullable receiver. */
