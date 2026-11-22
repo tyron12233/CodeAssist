@@ -2095,6 +2095,7 @@ class KotlinCompilerParityTest {
     fun aSmartCastToAnUnrelatedTypeIsAnIntersection() {
         clean("interface A { fun fa() }\ninterface B { fun fb() }\nfun f(a: A): B? { if (a is B) { a.fa(); a.fb(); val x: A = a; return a }; return null }")
         assertCodes("interface A { fun fa() }\ninterface B { fun fb() }\nfun g(a: A) { if (a is B) { a.fc() } }", KotlinDiagnosticCodes.UNRESOLVED)
+        assertCodes("interface A { fun fa(): Int }\ninterface B { fun fb(): String }\nfun f(a: A) { if (a is B) { val n: Int = a.fa(); val s: String = a.fb(); val bad: String = a.fa() } }", KotlinDiagnosticCodes.TYPE_MISMATCH)
         clean("sealed interface A\nsealed interface B\ndata class X(val s: String): A, B\ndata class Y(val s: String): A, B\n" +
             "fun problem(a: A): B { return when (a) { is X, is Y -> a } }")
     }

@@ -125,6 +125,11 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         val members =
             service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
                 .filter { it.kind == SymbolKind.METHOD }
+                // An intersection (`B & A` after a smart cast) has the members of every component.
+                .ifEmpty {
+                    receiverType.intersection.flatMap { c -> service.membersNamed(c.qualifiedName, c.typeArguments, name) }
+                        .filter { it.kind == SymbolKind.METHOD }
+                }
         // A member-extension declared in an enclosing scope (`fun Map<…>.printMap()` in this class) resolves
         // on a matching receiver without an import — same seam completion/diagnostics use.
         val scopeExts = scopeMemberExtensions(call.textRange.startOffset, receiverType, name, exactName = true)
@@ -659,6 +664,11 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
         val members =
             service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
                 .filter { it.kind == SymbolKind.METHOD }
+                // An intersection (`B & A` after a smart cast) has the members of every component.
+                .ifEmpty {
+                    receiverType.intersection.flatMap { c -> service.membersNamed(c.qualifiedName, c.typeArguments, name) }
+                        .filter { it.kind == SymbolKind.METHOD }
+                }
         // Member-extensions of an in-scope implicit receiver: `Modifier.weight(…)` resolves inside `Row { }`
         // because `RowScope` (the content lambda's receiver) declares `fun Modifier.weight()`, and a
         // `fun Map<…>.printMap()` declared in the enclosing class resolves on a `Map`. Scope-gated, so the
