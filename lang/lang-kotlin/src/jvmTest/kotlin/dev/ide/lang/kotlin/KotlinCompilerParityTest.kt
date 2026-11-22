@@ -2045,6 +2045,23 @@ class KotlinCompilerParityTest {
             errors(code).map { it.code }, "for `$code`")
     }
 
+    /** NO_ELSE_IN_WHEN: a `null` branch covers only the `?`; a used `when` over a string is never exhaustive whatever
+     *  its labels; an empty sealed type needs `is` itself; `Nothing?` needs `null`; an unrelated `is` covers no
+     *  enum entry. Exhaustive ones stay clean. */
+    @Test
+    fun whenExhaustivenessGaps() {
+        val code = "enum class E { A, B }\nsealed class Empty\nsealed class S { class X : S(); class Y : S() }\n" +
+            "fun t(e: E?, s: S?, str: String, em: Empty, n: Nothing?) {\n" +
+            " when (e) { E.A -> 1; null -> 2 }\n when (s) { is S.X -> 1; null -> 2 }\n" +
+            " val a = when (str) { \"a\" -> 1 }\n val b: Int = when (em) { }\n val c = when (n) { }\n" +
+            " val d = when (e) { E.A -> 1; E.B -> 2; is String -> 3 }\n}"
+        assertEquals(List(6) { KotlinDiagnosticCodes.WHEN_EXHAUSTIVE }, errors(code).map { it.code }.filter { it == KotlinDiagnosticCodes.WHEN_EXHAUSTIVE }, "for `$code`")
+        val clean = "enum class E { A, B }\nsealed class S { class X : S(); class Y : S() }\n" +
+            "fun t(e: E?, s: S?, n: Nothing) {\n when (e) { E.A -> 1; E.B -> 2; null -> 3 }\n when (s) { is S.X -> 1; is S.Y -> 2; null -> 3 }\n" +
+            " val c = when (n) { }\n val d = when (e) { E.A -> 1; is E -> 2; null -> 3 }\n}"
+        assertEquals(emptyList(), errors(clean).map { it.code }, "for `$clean`")
+    }
+
     /** A builder lambda's receiver takes the call's explicit type arguments: inside `buildMap<String, MutableList<C>> { }`
      *  `this` is a `MutableMap<String, MutableList<C>>`, so `getOrPut(k) { ArrayList() }` is a `MutableList<C>`. */
     @Test

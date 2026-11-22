@@ -3315,8 +3315,13 @@ internal class KotlinSemanticChecks(
         // Back off if any branch uses a condition we can't map to a concrete label/type — a range (`in …`), a
         // negated `!is`, or a computed expression. We can't tell what it covers, so we must not claim
         // non-exhaustiveness (soundness over completeness).
-        if (expr.entries.any { e -> e.conditions.any { !isModeledWhenCondition(it) } }) return null
         val type = resolver.inferType(subject) ?: return null
+        // A string or a number has no set of values a `when` can list, so what its conditions are (string
+        // templates, ranges, computed values) does not matter: without an `else` (or an `is` of its own type)
+        // a used one is not exhaustive. Only the other subjects need every condition to be one we can read.
+        val plain = type.qualifiedName in NON_EXHAUSTIVE_SUBJECT_TYPES &&
+            expr.entries.none { e -> e.conditions.any { it is KtWhenConditionIsPattern } }
+        if (!plain && expr.entries.any { e -> e.conditions.any { !isModeledWhenCondition(it) } }) return null
         val found = subjectWhenNotExhaustive(expr, subject, type, used, resolver) ?: return null
         // The flow questions are asked only of a `when` about to be reported, since they are the costly part.
         // A subject smart cast to a narrower type is exhaustive over that type, which the inferred type does
@@ -3352,11 +3357,16 @@ internal class KotlinSemanticChecks(
         val covered = coveredConstants(expr)
         // A nullable subject needs a `null` branch on top of the type's own cases. Only claimed when nothing
         // could have smart cast the value to non-null on the way here.
-        if (type.nullable) {
-            if ("null" in covered) return null
-            if (!nullableSubjectIsReliable(subject, resolver)) return null
+        // A `null` branch answers for the `?` only; the type's own cases still have to be covered (`E.A, null` on
+        // an `E?` is missing `B`).
+        val nullCovered = "null" in covered
+        if (type.nullable && !nullCovered && !nullableSubjectIsReliable(subject, resolver)) return null
+        val missingNull = type.nullable && !nullCovered
+        // `Nothing` has no values, so a `when` over it is exhaustive with no branch at all; `Nothing?` still needs
+        // its `null`.
+        if (type.qualifiedName == "kotlin.Nothing") {
+            return if (missingNull) whenDiag(expr, "'when' expression must be exhaustive. Add the necessary 'null' branch or an 'else' branch instead.") else null
         }
-        val missingNull = type.nullable
         if (type.qualifiedName == "kotlin.Boolean") {
             if ("true" in covered && "false" in covered && !missingNull) return null
             return whenDiag(expr, "'when' expression must be exhaustive. Add ${missingCasesText(listOfNotNull("'true'".takeIf { "true" !in covered }, "'false'".takeIf { "false" !in covered }), missingNull)}.")
@@ -3388,8 +3398,11 @@ internal class KotlinSemanticChecks(
         if (enumConsts.isNotEmpty()) {
             // `is E` (or a supertype) covers everything; `is E.A` names an entry, which is an error of its own and
             // covers nothing.
-            val entryNames = enumConsts.map { it.name }.toHashSet()
-            if (coveredTypeNames(expr).any { it !in entryNames }) return null
+            // An `is` of the enum or one of its supertypes covers every entry; one of an unrelated type (`is String`,
+            // an IMPOSSIBLE_IS_CHECK of its own) covers none.
+            val coversAllTypes = setOf(type.qualifiedName.substringAfterLast('.'), "Any") +
+                service.supertypesOf(type.qualifiedName).map { it.qualifiedName.substringAfterLast('.') }
+            if (coveredTypeNames(expr).any { it in coversAllTypes }) return null
             val missing = enumConsts.map { it.name }.filter { it !in covered }
             if (missing.isEmpty() && !missingNull) return null
             return whenDiag(expr, "'when' expression must be exhaustive. Add ${missingCasesText(missing.map { "'$it'" }, missingNull)}.")
@@ -3397,7 +3410,11 @@ internal class KotlinSemanticChecks(
         // Cross-file sound: a sealed type's subclasses are same-module, so the project model enumerates them
         // ALL (null → not a known source sealed type → back off, e.g. a library sealed class).
         val sealedSubs = service.sealedSubclassesOf(type.qualifiedName) ?: return null
-        if (sealedSubs.isEmpty()) return null
+        // A sealed type with no subclasses has no value a branch could list: only `is` of itself covers it.
+        if (sealedSubs.isEmpty()) {
+            if (type.qualifiedName.substringAfterLast('.') in coveredTypeNames(expr)) return null
+            return whenDiag(expr, "'when' expression must be exhaustive. Add the necessary 'is ${type.qualifiedName.substringAfterLast('.')}' branch or an 'else' branch instead.")
+        }
         // An `object` subclass is matched by VALUE as often as by type (`R.Loading ->`, `Loading ->`), and that
         // covers it just the same; only `is` patterns were counted, so `when (r) { R.Loading -> …; is R.Ok -> … }`
         // read as missing `Loading`.
