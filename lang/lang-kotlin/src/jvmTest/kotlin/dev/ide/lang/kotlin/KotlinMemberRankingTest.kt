@@ -57,11 +57,15 @@ class KotlinMemberRankingTest {
     }
 
     @Test
-    fun spellingTheAccessorOutStillOffersIt() {
-        val labels = items("fun f(a: android.widget.TextView) {\n  a.setTe|\n}").map { it.label }
-        assertTrue(labels.any { it.startsWith("setText(") }, "a `set` prefix offers the setters; got $labels")
+    fun spellingTheAccessorOutOffersTheProperty() {
+        // IntelliJ's K2 completion: the property answers to its accessors' names, and the accessors it stands for
+        // are not offered beside it (`GetPrefixForProperties`). An overload it cannot express stays.
+        val setters = items("fun f(a: android.widget.TextView) {\n  a.setTe|\n}").map { it.label }
+        assertTrue("text" in setters, "a `set` prefix reaches the property; got $setters")
+        assertTrue(setters.none { SINGLE_CHAR_SEQUENCE.matches(it) }, "setText(CharSequence) is left to `text`; got $setters")
         val getters = items("fun f(a: android.widget.TextView) {\n  a.getTe|\n}").map { it.label }
-        assertTrue(getters.any { it.startsWith("getText(") }, "a `get` prefix offers the getters; got $getters")
+        assertTrue("text" in getters, "a `get` prefix reaches the property; got $getters")
+        assertTrue(getters.none { it.startsWith("getText(") }, "getText() is left to `text`; got $getters")
     }
 
     @Test

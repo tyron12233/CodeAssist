@@ -762,8 +762,101 @@ class KotlinCompletionParityTest {
         assertFalse(pkg.any { it.startsWith("extFoo") }, "got $pkg")
     }
 
+    @Test
+    fun anAccessorPrefixOffersTheJavaPropertyAndNotTheAccessor() {
+        // IntelliJ's K2 completion (`GetPrefixForProperties`, `KT9166`): a Java getter or setter is left to the
+        // synthetic property standing for it, which answers to the accessor's name.
+        val get = javaLabels("import jv.View\nfun f(view: View) {\n  view.getTe|\n}")
+        assertTrue("text" in get, "got $get")
+        assertFalse(get.any { it.startsWith("getText(") }, "got $get")
+        val set = javaLabels("import jv.View\nfun f(view: View) {\n  view.setTe|\n}")
+        assertTrue("text" in set, "got $set")
+        assertFalse(set.any { it.startsWith("setText(") }, "got $set")
+        val g = javaLabels("import jv.View\nfun f(view: View) {\n  view.g|\n}")
+        assertTrue("text" in g, "`g` starts the getter's name; got $g")
+        assertFalse(g.any { it.startsWith("getText(") }, "got $g")
+        // A setter that returns a value makes no property setter: it stays a method (`SyntheticExtensionNonVoidSetter`).
+        val chained = javaLabels("import jv.View\nfun f(view: View) {\n  view.|\n}")
+        assertTrue(chained.any { it.startsWith("setWidth(") } && "width" in chained, "got $chained")
+    }
+
+    @Test
+    fun aCompletionThatFindsNothingReachesObjectMembersAndJavaStatics() {
+        // IntelliJ reruns an empty completion with a higher invocation count (`IncreaseInvocationCountIfNothingFound`,
+        // `RerunStaticFromClass`): an object's members (and, through the static-members index, a Java class's
+        // statics) by name, never a private one.
+        val ls = javaLabels(
+            "package rr\nobject Holder {\n  fun veryLongPrefixFun() {}\n  private fun veryLongPrefixHidden() {}\n}\n" +
+                "fun test() {\n  veryLongPref|\n}",
+        )
+        assertTrue(ls.any { it.startsWith("veryLongPrefixFun") }, "got $ls")
+        assertFalse(ls.any { it.startsWith("veryLongPrefixHidden") }, "got $ls")
+    }
+
+    @Test
+    fun anUnimportedClassQualifierCompletesItsStaticScope() {
+        // IntelliJ's chain completion (`StaticMembersOfNotImportedClassFromKotlin`): `Bar.` naming a class that is
+        // not imported completes what the class holds statically, and accepting an item imports the class.
+        val ls = javaLabels("package other\nfun buz() {\n  Holder.|\n}")
+        assertTrue(ls.any { it.startsWith("veryLongPrefixFun") }, "got $ls")
+        val item = runBlocking { javaAnalyzer.completeAtCaret(javaSrc, "Use.kt", "package other\nfun buz() {\n  Holder.|\n}") }
+            .items.first { it.label.startsWith("veryLongPrefixFun") }
+        assertTrue(item.additionalEdits.any { "import rr.Holder" in it.newText }, "got ${item.additionalEdits}")
+    }
+
+    @Test
+    fun parameterListsAndImportLinesOfferIntellijsKeywords() {
+        val fn = keywords("package kw1\nfun test(|) {}")
+        assertTrue(listOf("vararg", "noinline", "crossinline", "context").all { it in fn }, "got $fn")
+        val ctor = keywords("package kw2\nclass Sample(|)")
+        assertTrue(listOf("val", "var", "override", "open", "lateinit var", "crossinline").all { it in ctor }, "got $ctor")
+        val afterImport = keywords("import kotlin.String |")
+        assertTrue("as" in afterImport && "class" in afterImport && "import" in afterImport, "got $afterImport")
+        val header = keywords("package kw3\nclass Foo | {\n}")
+        assertTrue("constructor" in header, "got $header")
+        val subject = keywords("package kw4\nfun t() {\n  when (v|) {\n  }\n}")
+        assertTrue("val" in subject && "var" !in subject, "got $subject")
+    }
+
     // Per test instance, not in a companion: an analyzer parked in a static is heap that every later test
     // class in the fork runs without.
     private val srcDir: Path = tempProject(mapOf("Seed.kt" to "package seed\nclass Seed"))
     private val analyzer by lazy { KotlinSourceAnalyzer(fakeContext(srcDir)) }
+
+    /** A project with a Java library, a `View` with bean accessors compiled here, and a Kotlin `object`. */
+    private val javaSrc: Path = tempProject(
+        mapOf("Holder.kt" to "package rr\nobject Holder {\n  fun veryLongPrefixFun() {}\n  private fun veryLongPrefixHidden() {}\n}\n"),
+    )
+    private val javaAnalyzer by lazy {
+        val jar = compileJava(
+            mapOf(
+                "jv/View.java" to "package jv;\npublic class View {\n  public CharSequence getText() { return null; }\n" +
+                    "  public void setText(CharSequence t) {}\n  public int getWidth() { return 0; }\n" +
+                    "  public View setWidth(int w) { return this; }\n}\n",
+            ),
+        )
+        KotlinSourceAnalyzer(fakeContext(javaSrc, libJars = listOf(stdlibJarPath(), jar)))
+    }
+
+    private fun javaLabels(code: String): List<String> =
+        runBlocking { javaAnalyzer.completeAtCaret(javaSrc, "Use.kt", code) }.items.map { it.label }
+
+    private fun compileJava(files: Map<String, String>): Path {
+        val work = java.nio.file.Files.createTempDirectory("parity-java")
+        val classes = work.resolve("classes")
+        val paths = files.map { (p, t) ->
+            work.resolve("src").resolve(p).also { java.nio.file.Files.createDirectories(it.parent); java.nio.file.Files.writeString(it, t) }.toString()
+        }
+        val javac = javax.tools.ToolProvider.getSystemJavaCompiler()
+        check(javac.run(null, null, null, *(listOf("-d", classes.toString()) + paths).toTypedArray()) == 0)
+        val jar = work.resolve("lib.jar")
+        java.util.jar.JarOutputStream(java.nio.file.Files.newOutputStream(jar)).use { out ->
+            java.nio.file.Files.walk(classes).filter { java.nio.file.Files.isRegularFile(it) }.forEach { f ->
+                out.putNextEntry(java.util.jar.JarEntry(classes.relativize(f).toString().replace(java.io.File.separatorChar, '/')))
+                java.nio.file.Files.copy(f, out)
+                out.closeEntry()
+            }
+        }
+        return jar
+    }
 }

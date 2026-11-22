@@ -159,24 +159,36 @@ internal object KotlinCompletionWeighing {
      * an `is X` check (the class name alone is no value of the subject's type; an `object` is, and stays as it
      * is), and an `else -> ` branch while the `when` has none. The `is` checks rank with the values that fit the
      * subject, the `else` right after them, the bare class names below.
+     *
+     * A condition that fits the subject is named by its class name relative to its package, as IntelliJ's
+     * `K2WhenWithSubjectConditionContributor` names a sealed inheritor (`is SEALED.AAAA`, `SEALED.BBBB` for one
+     * nested in the sealed class): [relativeName] gives that name, null for a top-level class.
      */
     fun whenConditionItems(
         items: List<CompletionItem>,
         subjectFqn: String?,
         isObject: (KotlinSymbol) -> Boolean,
+        relativeName: (KotlinSymbol) -> String? = { null },
     ): List<CompletionItem> {
         val out = ArrayList<CompletionItem>(items.size + 8)
         for (item in items) {
             val sym = item.symbol as? KotlinSymbol
             if (sym == null || (sym.kind != SymbolKind.CLASS && sym.kind != SymbolKind.INTERFACE) || isObject(sym)) {
-                out += item
+                val nested = if (sym != null && item.relevance?.fitsExpectedType == true && sym.kind in CLASS_KINDS) relativeName(sym) else null
+                // Written through its outer class, a nested class needs no import of its own.
+                out += if (nested == null) item else item.copy(
+                    label = nested, insertText = nested, additionalEdits = emptyList(),
+                    relevance = item.relevance?.copy(inScope = true),
+                )
                 continue
             }
-            val relevance = item.relevance ?: CompletionRelevance()
+            val nested = if (item.relevance?.fitsExpectedType == true) relativeName(sym) else null
+            val relevance = (item.relevance ?: CompletionRelevance()).let { if (nested != null) it.copy(inScope = true) else it }
             // Each check right beside its class, so a page cut at the item cap keeps the pairs together.
             out += item.copy(
-                label = "is " + item.label,
-                insertText = "is " + item.insertText.substringBefore('(').substringBefore('<'),
+                label = "is " + (nested ?: item.label),
+                insertText = "is " + (nested ?: item.insertText.substringBefore('(').substringBefore('<')),
+                additionalEdits = if (nested != null) emptyList() else item.additionalEdits,
                 caret = CaretAction.AtEnd,
                 // A check on a subtype of the subject fits it; one on an unrelated class, or on the subject's own
                 // type (always true), ranks as that class.
@@ -203,6 +215,9 @@ internal object KotlinCompletionWeighing {
             relevance = CompletionRelevance(fitsExpectedType = true, proximity = CONDITION_PROXIMITY + 1),
         )
     }
+
+    /** The classifier kinds a `when` condition names (an `object` is a CLASS). */
+    private val CLASS_KINDS = setOf(SymbolKind.CLASS, SymbolKind.INTERFACE)
 
     /** Where an `is X` branch condition ranks: with the values that fit (an `object` of the subject's type). */
     private const val CONDITION_PROXIMITY = 2

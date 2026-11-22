@@ -160,10 +160,11 @@ class KotlinKeywordCompletionTest {
     }
 
     @Test
-    fun noinlineAndCrossinlineOnlyInInlineFunction() {
+    fun noinlineAndCrossinlineInAnyFunctionsParameterList() {
         assertTrue("noinline" in labels("package demo\ninline fun f(n|) {}"), "inline fun should offer `noinline`")
         assertTrue("crossinline" in labels("package demo\ninline fun f(cross|) {}"), "inline fun should offer `crossinline`")
-        assertFalse("noinline" in labels("package demo\nfun f(n|) {}"), "a non-inline fun must not offer `noinline`")
+        // IntelliJ's keyword completion offers them in any function's parameter list (`InTopFunParametersList`).
+        assertTrue("noinline" in labels("package demo\nfun f(n|) {}"), "a non-inline fun offers `noinline` as IntelliJ does")
     }
 
     @Test
@@ -362,12 +363,13 @@ class KotlinKeywordCompletionTest {
     }
 
     @Test
-    fun importAliasSpotOffersOnlyAs() {
-        // The alias slot admits `as` alone — the top-level declaration keywords the caret's file scope would
-        // otherwise surface (`abstract`, `annotation class`, …) must not leak in.
+    fun importAliasSpotOffersAsAndWhatMayFollowTheImport() {
+        // IntelliJ's `AfterImportDirective`: after the last import, on its line, `as` and what may start the next
+        // line (a declaration, another import). Before another import only `as` (`AsBetweenImportDirectives`).
         val ls = labels("package demo\nimport foo.Bar a|")
-        assertFalse("abstract" in ls, "no top-level modifier in an import-alias slot; got $ls")
-        assertFalse("annotation class" in ls, "no declaration head in an import-alias slot; got $ls")
+        assertTrue("as" in ls && "abstract" in ls && "annotation class" in ls, "got $ls")
+        val between = labels("package demo\nimport foo.Bar a|\nimport foo.Baz")
+        assertTrue("as" in between && "abstract" !in between, "got $between")
     }
 
     @Test

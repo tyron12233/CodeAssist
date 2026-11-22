@@ -13,6 +13,7 @@ import dev.ide.kotlin.syntax.psi.KtForExpression
 import dev.ide.kotlin.syntax.psi.KtFunctionLiteral
 import dev.ide.kotlin.syntax.psi.KtIfExpression
 import dev.ide.kotlin.syntax.psi.KtImportDirective
+import dev.ide.kotlin.syntax.psi.KtNameReferenceExpression
 import dev.ide.kotlin.syntax.psi.KtNamedFunction
 import dev.ide.kotlin.syntax.psi.KtObjectDeclaration
 import dev.ide.kotlin.syntax.psi.KtOperationReferenceExpression
@@ -65,9 +66,10 @@ import dev.ide.lang.template.lineIndentAt
  *   • [Place.TOP_LEVEL]           — file scope: top-level declarations + modifiers
  *   • [Place.EXPRESSION]          — an argument / initializer / default-value / expression-body / when-condition
  *                                   slot: expression keywords only
- *   • [Place.PARAM_PRIMARY_CTOR]  — a primary-constructor parameter: `val`/`var`/`override`/`vararg` + visibility
- *   • [Place.PARAM_SECONDARY_CTOR]— a secondary-constructor parameter: `vararg` only (no property modifiers)
- *   • [Place.PARAM_FUNCTION]      — a function parameter: `vararg` (+ `noinline`/`crossinline` in an `inline` fun)
+ *   • [Place.PARAM_PRIMARY_CTOR]  : a primary-constructor parameter: the function parameter's set, plus
+ *                                   `val`/`var`/`override`, visibility and the member-property modifiers
+ *   • [Place.PARAM_SECONDARY_CTOR]: a secondary-constructor parameter: `vararg`/`noinline`/`crossinline`/`context`
+ *   • [Place.PARAM_FUNCTION]      : a function parameter: the same as a secondary constructor's
  *   • [Place.NONE]                — a type, import, package, supertype or lambda-parameter position: nothing
  *
  * A handful of positions the [Place] walk can't classify from ancestry alone (`by` delegation, type-parameter
@@ -105,7 +107,10 @@ internal object KotlinKeywords {
         /** Whether a class is on this module's classpath: the Android and Compose templates need theirs. */
         hasType: (String) -> Boolean = { false },
     ): List<CompletionItem> {
-        val present = precedingModifiers(precedingText, tokenStart)
+        val declRun = precedingDeclRun(precedingText, tokenStart)
+        // Right after an import on its line (`import a.b.C █`): its words are no modifiers already typed.
+        val afterImport = importAliasSpot(declRun)
+        val present = if (afterImport) emptySet() else precedingModifiers(precedingText, tokenStart)
 
         val out = ArrayList<CompletionItem>()
         fun kw(text: String, trailingSpace: Boolean = false) {
@@ -147,8 +152,6 @@ internal object KotlinKeywords {
         // --- positions the ancestry walk classifies as NONE / STATEMENT / EXPRESSION but which admit their own
         //     keyword, so they're detected explicitly and offered BEFORE the [place] switch ---
 
-        val declRun = precedingDeclRun(precedingText, tokenStart)
-
         // Right after an annotation's `@` (`@<caret>`, `class C(@<caret>)`): the use-site targets (`file:`,
         // `get:`, `param:`, …), the only keywords an annotation's name may start with.
         if (annotationStartSpot(precedingText, tokenStart)) {
@@ -167,7 +170,8 @@ internal object KotlinKeywords {
         //
         //   `import a.b.C █`  → `as` (aliased import). The half-typed alias parses as a PsiErrorElement sibling
         //                        of the import directive, so it's read from the preceding text like `by`.
-        if (importAliasSpot(declRun)) { kw("as", trailingSpace = true); return out }
+        //                        What may follow the import line comes along (IntelliJ's AfterImportDirective).
+        if (afterImport) kw("as", trailingSpace = true)
         //   `for (x █`         → `in`, before the loop range's `in` keyword has been typed.
         if (forLoopInSpot(leaf)) { kw("in", trailingSpace = true); return out }
         //   `constructor() : █` → `this` / `super`, a secondary constructor's delegation call (the only two
@@ -191,6 +195,9 @@ internal object KotlinKeywords {
         if (whereSpot(declRun)) kw("where", trailingSpace = true)
         // An import on the line before may still take its alias (`import a.B` / `as C`).
         if (importOnLineBefore(precedingText, tokenStart)) kw("as", trailingSpace = true)
+        // A class's name written and nothing after it yet (`class Foo █ {`): its primary constructor may be
+        // spelled out (`class Foo constructor(…)`, `class Foo private constructor(…)`).
+        if ("class" in declRun && CLASS_HEADER_RE.matches(declRun)) kw("constructor")
         // `catch`/`finally` after a `try { }` block (or after an existing catch) at statement level.
         val afterTry = tryContinuationSpot(leaf)
         if (afterTry) { kw("catch"); kw("finally") }
@@ -258,7 +265,10 @@ internal object KotlinKeywords {
             return out
         }
 
-        val place = if (whenCond != null) Place.EXPRESSION else placeOf(leaf)
+        val whenSubject = whenSubjectSpot(leaf)
+        // A `when` subject may declare its value (`when (val v = …)`), never a `var` (IntelliJ's AllowValInWhen).
+        if (whenSubject) kw("val", trailingSpace = true)
+        val place = if (afterImport) Place.TOP_LEVEL else if (whenCond != null || whenSubject) Place.EXPRESSION else placeOf(leaf)
         if (place == Place.NONE) return out
 
         // Expression keywords — valid wherever an expression is (statement, argument, initializer, condition).
@@ -309,7 +319,7 @@ internal object KotlinKeywords {
                 val importBefore = file?.importDirectives?.any { it.textRange.endOffset <= tokenStart } == true
                 val declarationBefore = file?.declarations?.any { it.textRange.endOffset <= tokenStart } == true
                 val packageWritten = file?.packageDirective?.let { it.textLength > 0 && it.textRange.endOffset <= tokenStart } == true
-                if (!declarationBefore) kw("import", trailingSpace = true)
+                if (!declarationBefore || afterImport) kw("import", trailingSpace = true)
                 if (!declarationBefore && !importBefore && !packageWritten) kw("package", trailingSpace = true)
                 if (!importAfter) {
                     kw("val", trailingSpace = true); kw("var", trailingSpace = true); kw("fun", trailingSpace = true)
@@ -336,21 +346,23 @@ internal object KotlinKeywords {
             // A primary-constructor parameter may be promoted to a property (`val`/`var`), restricted by a
             // visibility modifier, made `vararg`, or `override` an inherited open property — the property stubs
             // for `override` come from KotlinCompletion (it has the supertype resolver); this offers the tokens.
+            // IntelliJ's keyword completion admits a modifier wherever one of its targets is a VALUE_PARAMETER
+            // (and, in a primary constructor, a MEMBER_PROPERTY too), without asking whether the function is
+            // `inline`: so `noinline`/`crossinline` everywhere, and the property modifiers in a primary
+            // constructor, the plugin's own test data noting that some of them do not compile there.
             Place.PARAM_PRIMARY_CTOR -> {
                 kw("val", trailingSpace = true); kw("var", trailingSpace = true)
                 kw("override", trailingSpace = true); kw("vararg", trailingSpace = true)
+                kw("noinline", trailingSpace = true); kw("crossinline", trailingSpace = true)
                 for (m in PARAM_VISIBILITY) kw(m, trailingSpace = true)
+                for (m in PRIMARY_CTOR_PROPERTY_MODIFIERS) kw(m, trailingSpace = true)
+                kw("context")
             }
-            // A secondary-constructor parameter is a plain function parameter: `vararg` only (it cannot declare a
-            // property, so no `val`/`var`/visibility).
-            Place.PARAM_SECONDARY_CTOR -> kw("vararg", trailingSpace = true)
-            // A function parameter: `vararg`, plus `noinline`/`crossinline` for the function-type parameters of
-            // an `inline` function.
-            Place.PARAM_FUNCTION -> {
+            // A secondary-constructor or function parameter cannot declare a property, so no `val`/`var`/visibility.
+            Place.PARAM_SECONDARY_CTOR, Place.PARAM_FUNCTION -> {
                 kw("vararg", trailingSpace = true)
-                if (enclosingFunctionIsInline(leaf)) {
-                    kw("noinline", trailingSpace = true); kw("crossinline", trailingSpace = true)
-                }
+                kw("noinline", trailingSpace = true); kw("crossinline", trailingSpace = true)
+                kw("context")
             }
             else -> {}
         }
@@ -432,6 +444,8 @@ internal object KotlinKeywords {
                 is KtParameterList -> return paramListPlace(n)
                 is KtProperty -> if (prev != null && prev === n.initializer) return Place.EXPRESSION
                 is KtNamedFunction -> if (prev != null && prev === n.bodyExpression) return Place.EXPRESSION
+                // A getter's or setter's expression body (`get() = |`).
+                is KtPropertyAccessor -> if (prev != null && prev === n.bodyExpression) return Place.EXPRESSION
             }
             prev = n
             n = n.parent
@@ -448,16 +462,6 @@ internal object KotlinKeywords {
         else -> Place.NONE
     }
 
-    /** True when the function enclosing [leaf] is declared `inline` (gating `noinline`/`crossinline`). */
-    private fun enclosingFunctionIsInline(leaf: KtElement?): Boolean {
-        var n: KtElement? = leaf
-        while (n != null) {
-            if (n is KtNamedFunction) return n.hasModifier(KtTokens.INLINE_KEYWORD)
-            n = n.parent
-        }
-        return false
-    }
-
     /** True when [leaf] sits inside a loop body without crossing a function/lambda boundary (`break`/`continue`). */
     fun isInLoop(leaf: KtElement?): Boolean {
         var n: KtElement? = leaf
@@ -469,6 +473,19 @@ internal object KotlinKeywords {
             n = n.parent
         }
         return false
+    }
+
+    /**
+     * `interface` at the name of a top-level or member `fun` being declared (`fun i|`), the rest of a `fun
+     * interface`, as IntelliJ's keyword completion has it there. Null anywhere else, or when [prefix] does not
+     * start it.
+     */
+    fun funInterfaceItem(leaf: KtElement?, prefix: String): CompletionItem? {
+        val fn = leaf?.parent as? KtNamedFunction ?: return null
+        if (fn.nameIdentifier !== leaf || fn.receiverTypeReference != null || fn.hasModifier(KtTokens.OVERRIDE_KEYWORD)) return null
+        if (fn.parent !is KtFile && fn.parent !is KtClassBody) return null
+        if (!"interface".startsWith(prefix)) return null
+        return keywordItem("interface", trailingSpace = true)
     }
 
     /** True when [leaf] is inside a function/lambda/accessor body (where `return` is allowed). */
@@ -518,6 +535,9 @@ internal object KotlinKeywords {
         "inline", "value", "operator", "infix", "tailrec", "external", "expect", "actual",
     )
     private val PARAM_VISIBILITY = listOf("private", "protected", "internal", "public")
+
+    /** The modifiers of a member property a primary-constructor parameter also takes as IntelliJ offers them. */
+    private val PRIMARY_CTOR_PROPERTY_MODIFIERS = listOf("open", "final", "abstract", "actual", "lateinit var")
 
     // Compound declaration heads offered as single popup items (the class-kind modifier + its declaration
     // keyword). `data class Foo(...)`, `enum class`, `companion object`, etc. — the common shapes, so the user
@@ -623,6 +643,9 @@ internal object KotlinKeywords {
      *  Detected from the preceding text (like `by`): the half-typed alias parses as a sibling PsiErrorElement,
      *  not into the import directive. A star import (`import a.*`) can't be aliased, so `*` fails the match. */
     private val IMPORT_ALIAS_RE = Regex("""import\s+[\w.]+""")
+
+    /** A class header up to its name and type parameters: `class Foo`, `data class Box<T>`. */
+    private val CLASS_HEADER_RE = Regex("""(?:[a-z]+\s+)*class\s+\w+\s*(?:<[^{}()]*>)?""")
     private fun importAliasSpot(run: String): Boolean = IMPORT_ALIAS_RE.matches(run)
 
     /** True when [leaf] is the operation-reference slot of a binary expression (`a foo█`, `0 downTo█`, `x as█`)
@@ -711,13 +734,20 @@ internal object KotlinKeywords {
         while (n != null) {
             when (n) {
                 is KtWhenEntry -> return if (prev == null || prev !== n.expression) whenCtxOf(n.parent) else null
-                is KtWhenExpression -> return WhenCtx(hasSubject = n.subjectExpression != null)
+                // The subject itself (`when (v█)`) is no condition: see [whenSubjectSpot].
+                is KtWhenExpression -> return if (prev != null && prev === n.subjectExpression) null else WhenCtx(hasSubject = n.subjectExpression != null)
                 is KtBlockExpression, is KtValueArgumentList, is KtClassBody, is KtFile -> return null
             }
             prev = n
             n = n.parent
         }
         return null
+    }
+
+    /** The subject of a `when` being written (`when (v█)`): an expression, or a `val` declaring the subject. */
+    private fun whenSubjectSpot(leaf: KtElement?): Boolean {
+        val ref = leaf?.getParentOfType<KtNameReferenceExpression>(strict = false) ?: return false
+        return (ref.parent as? KtWhenExpression)?.subjectExpression === ref
     }
 
     private fun whenCtxOf(entryParent: KtElement?): WhenCtx =
@@ -752,7 +782,10 @@ internal object KotlinKeywords {
             val tryBlockEnd = t.tryBlock.textRange.endOffset
             if (caret > tryBlockEnd) return t.finallyBlock == null || caret < t.finallyBlock!!.textRange.startOffset
         }
-        val before = (prevMeaningfulSibling(leaf) ?: prevMeaningfulSiblingUp(leaf)) as? KtTryExpression ?: return false
+        // A `try` that ends an `if` statement before the caret (`if (p) try { } catch (e: E) { }`) goes on too.
+        var prev = prevMeaningfulSibling(leaf) ?: prevMeaningfulSiblingUp(leaf)
+        while (prev is KtIfExpression) prev = prev.`else` ?: prev.then
+        val before = prev as? KtTryExpression ?: return false
         return before.finallyBlock == null
     }
 

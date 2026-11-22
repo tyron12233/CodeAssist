@@ -95,7 +95,8 @@ class KotlinApiLevelCheckTest {
         val items = runBlocking {
             analyzer.completeAtCaret(srcDir, "Doc.kt", "import android.app.NotificationChannel\nfun f(c: NotificationChannel) { c.get| }")
         }.items
-        val item = items.first { it.symbol?.name == "getId" }
+        // `get` reaches the property `id`, which stands for `getId()` (the getter itself is not offered beside it).
+        val item = items.first { it.symbol?.name == "id" }
         assertEquals("Added in API 26", item.documentation)
     }
 

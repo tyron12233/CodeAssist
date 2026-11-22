@@ -217,6 +217,9 @@ class KotlinCompletionTestDataSweepTest {
             rel, group, files, mainName, caret, d, keywordsOnly = dir == "keywords", weigher = weigher,
             skip = skip ?: when {
                 excluded -> "IntelliJ excluded-packages setting"
+                // Chain completion (an unimported class's static scope behind `Bar.`) is on by default, as here; a
+                // case switching that registry key off asks for a mode this backend does not have.
+                "// REGISTRY: kotlin.k2.chain.completion.enabled false" in raw -> "IntelliJ registry setting"
                 // Unreleased language features (`companion { }` blocks, `companion fun` extensions, rich errors),
                 // switched on per test with `-XXLanguage:+`, which this backend does not model.
                 UNRELEASED_FEATURES.any { "-XXLanguage:+$it" in raw } -> "unreleased language feature"
@@ -628,7 +631,7 @@ class KotlinCompletionTestDataSweepTest {
         /** The Kotlin indexes the IDE registers, plus the library halves of the `java.*` name indexes, which
          *  live in `:lang-java` (not a dependency of this module) and are mirrored below. */
         private val INDEXES: List<IndexExtension<*, *>> = listOf(
-            LibraryClassNames, LibraryPackages, LibraryPackageTypes,
+            LibraryClassNames, LibraryPackages, LibraryPackageTypes, LibraryStatics,
             KotlinClassNamesIndex, KotlinPackagesIndex, KotlinPackageTypesIndex, KotlinSourceSymbolsIndex,
             KotlinMembersIndex, KotlinTypeShapeIndex, KotlinBuiltinsIndex, KotlinCallableIndex,
             KotlinBuiltinCallableIndex, KotlinSourceCallableIndex, KotlinPackageDeclIndex,
@@ -684,6 +687,42 @@ class KotlinCompletionTestDataSweepTest {
                 return mapOf(pkg to listOf(ClassNameValue(fqn, input.origin, kind)))
             }
         }
+
+        /**
+         * `java.staticMembers` over class files: member name -> the class declaring a static of that name. The
+         * product indexes a library's public statics of public classes and a project `.java` file's non-private
+         * ones (nested owners too); a case's Java is project source compiled into a jar here, so a class outside
+         * the JDK's packages is read the project's way.
+         */
+        private object LibraryStatics : IndexExtension<String, String> {
+            override val id = dev.ide.index.IndexId("java.staticMembers")
+            override val version = 2
+            override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
+            override val valueExternalizer = StringExternalizer
+            override val matching = MatchingMode.PREFIX_ONLY
+            override val inputFilter = InputFilter { libraryClass(it) }
+            override fun index(input: IndexInput): Map<String, Collection<String>> {
+                val entry = input.unitName!!
+                val owner = (classEntryToFqn(entry) ?: nestedClassEntryToFqn(entry))?.first ?: return emptyMap()
+                val project = JDK_PACKAGES.none { owner.startsWith(it) }
+                // The product's bytecode half keys top-level classes only.
+                if (!project && classEntryToFqn(entry) == null) return emptyMap()
+                val cf = input.shared(IndexInput.CLASS_FILE) {
+                    runCatching { input.bytes() }.getOrNull()?.let { ClassFile.read(it) }
+                } ?: return emptyMap()
+                if (!project && cf.accessFlags and 0x0001 == 0) return emptyMap()
+                val names = LinkedHashSet<String>()
+                for (m in cf.methods + cf.fields) {
+                    val static = m.access and 0x0008 != 0
+                    val visible = if (project) m.access and 0x0002 == 0 else m.access and 0x0001 != 0
+                    if (!static || !visible || m.access and 0x1000 != 0 || m.name.startsWith("<") || '$' in m.name) continue
+                    names += m.name
+                }
+                return names.associateWith { listOf(owner) }
+            }
+        }
+
+        private val JDK_PACKAGES = listOf("java.", "javax.", "jdk.", "sun.", "com.sun.", "kotlin.")
 
         /** `java.packages` over library class files: every package prefix. */
         private object LibraryPackages : IndexExtension<String, String> {

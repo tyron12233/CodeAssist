@@ -3530,6 +3530,55 @@ class KotlinSymbolService(
     }
 
     /**
+     * The callables a bare name reaches only through an import of their container, by name: the members of every
+     * project `object` and `companion object`, and the statics of Java classes (the `java.staticMembers` index).
+     * Each comes with the FQN its import line spells. This is what IntelliJ's completion adds on a SECOND
+     * invocation (`K2CallableCompletionContributor.getAllTopLevelCallablesFromIndex`), which it runs by itself
+     * when the first one finds nothing; the caller asks only then, so it is off the per-keystroke path.
+     *
+     * [matches] filters by name BEFORE any symbol is made. A member that is `private`, or sits in a container
+     * that is (a file-private top-level class seen from another file), is left out, as is a local object.
+     */
+    fun staticCallablesByName(
+        prefix: String, currentPath: String?, currentPackage: String, matches: (String) -> Boolean,
+    ): List<Pair<KotlinSymbol, String>> {
+        if (prefix.isEmpty()) return emptyList()
+        val out = ArrayList<Pair<KotlinSymbol, String>>()
+        val classes = model().classByFqn
+        for (rc in classes.values) {
+            if (!rc.isObject || rc.isLocal) continue
+            var hidden = false
+            var fqn: String? = rc.fqn
+            while (fqn != null && !hidden) {
+                val c = classes[fqn]
+                if (c != null && c.isPrivate && c.ctx.path != currentPath) hidden = true
+                fqn = fqn.substringBeforeLast('.', "").ifEmpty { null }
+            }
+            if (hidden) continue
+            for (mem in rc.members) {
+                if (mem.receiverText != null || mem.visibility == "private" || !matches(mem.name)) continue
+                out += toSymbol(mem, rc.fqn, rc.typeParameterNames, declaringFqn = rc.fqn) to "${rc.fqn}.${mem.name}"
+            }
+        }
+        val idx = index ?: return out
+        // One hit per class: the index ranks its hits by value, and a value is the class.
+        for (hit in idx.prefix<String>(JAVA_STATIC_MEMBERS, prefix, limit = MAX_STATIC_HITS)) {
+            val owner = hit.value
+            if (excludedTypePrefixes.any { owner.startsWith(it) }) continue
+            // A Kotlin class's JVM statics (a file facade's functions, a companion's `const`s) are not Java statics.
+            if (hasKotlinMetadata(owner)) continue
+            val samePackage = owner.substringBeforeLast('.', "") == currentPackage
+            for (s in membersForCompletion(owner, emptyList(), prefix)) {
+                if (Modifier.STATIC !in s.modifiers || Modifier.PRIVATE in s.modifiers || !matches(s.name)) continue
+                // Package-private and protected statics are seen from their own package only.
+                if (Modifier.PUBLIC !in s.modifiers && !samePackage) continue
+                out += s to "$owner.${s.name}"
+            }
+        }
+        return out
+    }
+
+    /**
      * Whether the classpath carries a LIBRARY (binary) type with simple [name] — one a file could `import` but
      * may not have. Distinguishes a genuine missing-import reference (`FontWeight.Bold` with no
      * `import androidx.compose.ui.text.font.FontWeight`) from a package segment (`androidx.…` — no such type) or
@@ -5077,6 +5126,9 @@ class KotlinSymbolService(
 
         /** Past this many classes declaring a member of one name, [javaStaticImportCandidates] offers nothing. */
         private const val MAX_STATIC_OWNERS = 40
+
+        /** How many `java.staticMembers` entries [staticCallablesByName] reads for one prefix. */
+        private const val MAX_STATIC_HITS = 200
         private val SOURCE = SymbolOrigin(fromSource = true, file = null)
         private val BINARY = SymbolOrigin(fromSource = false, file = null)
 
