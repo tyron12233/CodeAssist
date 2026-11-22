@@ -32,6 +32,7 @@ import dev.ide.kotlin.syntax.psi.KtSuperTypeList
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.KtTypeParameterListOwner
 import dev.ide.kotlin.syntax.psi.KtUserType
+import dev.ide.kotlin.syntax.psi.containingClassOrObject
 import dev.ide.kotlin.syntax.psi.KtWhenExpression
 import dev.ide.kotlin.syntax.psi.getParentOfType
 import dev.ide.lang.completion.PrefixMatcher
@@ -976,7 +977,19 @@ private fun KotlinResolver.supertypesResolvable(cls: KtClassOrObject): Boolean =
         val userType = entry.typeReference?.typeElement as? KtUserType ?: return@all true
         val name = userType.referenceExpression?.getReferencedName() ?: return@all true
         if (isTypeParameterInScope(name, entry.textRange.startOffset)) return@all true
-        service.resolveTypeName(name, fileContext)?.let { service.isKnownType(it) } == true
+        // The whole qualified spelling (`O.B`, not just `B`), resolved in the scope the supertype list sees: the
+        // classes around [cls], whose nested types a supertype may name bare (`companion object : Beta()` inside
+        // `class O { class Beta; class A }`). Resolving only the last segment at file level read every
+        // `class C : O.B()` as having an unknown supertype, which turned the unresolved-reference check off for
+        // the whole class body.
+        val qualified = buildString {
+            var t: KtUserType? = userType
+            val parts = ArrayList<String>(2)
+            while (t != null) { parts += t.referenceExpression?.getReferencedName() ?: return@all false; t = t.qualifier }
+            for (i in parts.indices.reversed()) { append(parts[i]); if (i > 0) append('.') }
+        }
+        val outer = cls.containingClassOrObject?.fqName?.asString()
+        service.resolveTypeName(qualified, fileContext, outer)?.let { service.isKnownType(it) } == true
     }
 
 /** Named LOCAL types in scope at [offset] (simple name → the synthetic FQN they were registered under): a

@@ -206,6 +206,11 @@ internal fun KotlinSemanticChecks.valueMismatch(
             else -> emptyList()
         }
         for (alt in alternatives) {
+            // An empty block branch is `Unit`, which only `Unit`, `Any` and nullable types take
+            // (`fun f(): Int = if (c) {} else 2`).
+            if (e is KtIfExpression && alt is KtBlockExpression && alt.statements.isEmpty() && !declared.nullable &&
+                !declared.isTypeParameter && canonicalName(declared).let { it != UNIT && it != "kotlin.Any" && it != NOTHING && service.isKnownType(it) }
+            ) return error(e, "Type mismatch: inferred type is Unit but ${renderType(declared)} was expected", KotlinDiagnosticCodes.TYPE_MISMATCH)
             val leaf = branchValue(alt) ?: continue
             valueMismatch(declared, leaf, resolver, platformTarget, strictNumeric, depth + 1)?.let { return it }
         }
@@ -588,7 +593,21 @@ internal fun KotlinSemanticChecks.lambdaAgainstFunctionType(declared: KotlinType
     val result = declared.typeArguments.lastOrNull() as? KotlinType ?: return null
     if (result.isTypeParameter || result.projection == "*") return null
     val rn = canonicalName(result)
-    if (rn == UNIT) return null // Unit coerces any last statement
+    if (rn == UNIT) {
+        // Unit coerces the last statement, but not a value handed back by `return@label`, which K2 checks against
+        // the lambda's return type as it stands (RETURN_TYPE_MISMATCH on `return@l 4` in a `() -> Unit` lambda).
+        if (label != null && !result.nullable) {
+            for (ret in returnsTo(lambda, label)) {
+                val v = ret.returnedExpression ?: continue
+                val t = resolver.inferType(v) ?: continue
+                if (t.isTypeParameter || t.nullable) continue
+                val tn = canonicalName(t)
+                if (tn == UNIT || tn == NOTHING || !service.isKnownType(tn) || isFunctional(t)) continue
+                return error(v, "Type mismatch: inferred type is ${renderType(t)} but Unit was expected", KotlinDiagnosticCodes.TYPE_MISMATCH)
+            }
+        }
+        return null
+    }
     val concreteResult = !result.nullable && service.isKnownType(rn) && rn != NOTHING
     if (label != null) {
         for (ret in returnsTo(lambda, label)) {
@@ -600,6 +619,13 @@ internal fun KotlinSemanticChecks.lambdaAgainstFunctionType(declared: KotlinType
     }
     val last = lambda.bodyExpression?.statements?.lastOrNull()?.takeIf { it !is KtDeclaration } ?: return null
     if (last is KtReturnExpression) return null
+    // An `if` with no `else` is a statement whose value is `Unit` (K2 types it so), whatever its branch holds.
+    if (last is KtIfExpression && last.`else` == null) {
+        if (concreteResult && rn != "kotlin.Any") {
+            return error(last, "Type mismatch: inferred type is Unit but ${renderType(result)} was expected", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        }
+        return null
+    }
     if (last is KtBinaryExpression && last.operationToken in ASSIGNMENT_TOKENS) {
         if (concreteResult && rn != "kotlin.Any") {
             return error(last, "Type mismatch: inferred type is Unit but ${renderType(result)} was expected", KotlinDiagnosticCodes.TYPE_MISMATCH)

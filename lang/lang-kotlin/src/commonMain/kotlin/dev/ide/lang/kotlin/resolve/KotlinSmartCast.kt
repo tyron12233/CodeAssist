@@ -51,14 +51,65 @@ internal fun KotlinResolver.narrowedType(name: String): KotlinType? {
  */
 internal fun KotlinResolver.smartCastTypeAt(name: String, offset: Int): KotlinType? {
     var child: KtElement? = null
-    var node: KtElement? = elementAt(offset)
+    val start = elementAt(offset)
+    var node: KtElement? = start
     while (node != null) {
-        narrowingAtNode(node, child, offset, name)?.let { return keepDeclaredWhenNarrower(it, name, offset) }
+        narrowingAtNode(node, child, offset, name)?.let {
+            // Established OUTSIDE a loop (or a lambda called in place again and again) that writes the name: the
+            // back edge brings the written value round to this read, so K2's data flow merges the narrowing away
+            // at the loop's entry (FirDataFlowAnalyzer's loop-entry reset of reassigned variables).
+            if (rewrittenBetween(start, node, name)) return null
+            return keepDeclaredWhenNarrower(it, name, offset)
+        }
         child = node
         node = node.parent
     }
     return flowNarrowing(name, offset)
 }
+
+/** Whether a node strictly between [from] and its ancestor [to] runs again and writes [name] ([rewrittenOnBackEdge]). */
+private fun KotlinResolver.rewrittenBetween(from: KtElement?, to: KtElement, name: String): Boolean {
+    var n = from
+    while (n != null && n !== to) {
+        if (rewrittenOnBackEdge(n, name)) return true
+        n = n.parent
+    }
+    return false
+}
+
+/**
+ * Whether [node] runs its body again (a loop, or a lambda an `AT_LEAST_ONCE` contract or an inline library function
+ * calls in place) and that body assigns [name]. The written names of each such node are collected once per
+ * snapshot ([KotlinResolverCaches.backEdgeWrites]).
+ */
+internal fun KotlinResolver.rewrittenOnBackEdge(node: KtElement, name: String): Boolean {
+    if (node !is dev.ide.kotlin.syntax.psi.KtLoopExpression) {
+        val lambda = node as? dev.ide.kotlin.syntax.psi.KtLambdaExpression ?: return false
+        val kind = KotlinVarNullFlow(this).inPlaceKind(lambda) ?: return false
+        if (kind != InPlace.AT_LEAST_ONCE) return false
+    }
+    val names = caches.backEdgeWrites.getOrPut(node) {
+        val out = HashSet<String>()
+        fun visit(e: KtElement) {
+            when (e) {
+                is dev.ide.kotlin.syntax.psi.KtClassOrObject, is dev.ide.kotlin.syntax.psi.KtNamedFunction -> return
+                is KtBinaryExpression -> if (e.operationToken == KtTokens.EQ || e.operationToken in WRITE_OPS)
+                    (unwrapParens(e.left) as? KtNameReferenceExpression)?.let { out += it.getReferencedName() }
+                is dev.ide.kotlin.syntax.psi.KtUnaryExpression -> if (e.operationToken == KtTokens.PLUSPLUS || e.operationToken == KtTokens.MINUSMINUS)
+                    (unwrapParens(e.baseExpression) as? KtNameReferenceExpression)?.let { out += it.getReferencedName() }
+                // A name declared inside the body is another variable: its writes say nothing about the outer one.
+                is dev.ide.kotlin.syntax.psi.KtProperty -> e.name?.let { out += "<shadow>$it" }
+            }
+            var c = e.firstChild
+            while (c != null) { (c as? KtElement)?.let(::visit); c = c.nextSibling }
+        }
+        visit(node)
+        out
+    }
+    return name in names && "<shadow>$name" !in names
+}
+
+private val WRITE_OPS = setOf(KtTokens.PLUSEQ, KtTokens.MINUSEQ, KtTokens.MULTEQ, KtTokens.DIVEQ, KtTokens.PERCEQ)
 
 /**
  * A smart cast to a type the declaration already implies narrows nothing: the value is the intersection of the
@@ -256,6 +307,21 @@ internal fun KotlinResolver.earlyExitNarrowing(
     var result: KotlinType? = null
     for (st in block.statements) {
         if (st === fromChild) break
+        // A write after the narrowing replaces what it said: `x = 10` makes `x` an `Int` from there on (K2 records
+        // the assigned value's type), and a write nested in the statement leaves nothing known. Only looked at
+        // once something narrows, so the common block pays nothing.
+        if (result != null) {
+            val assign = st as? KtBinaryExpression
+            if (assign != null && assign.operationToken == KtTokens.EQ &&
+                (unwrapParens(assign.left) as? KtNameReferenceExpression)?.getReferencedName() == name
+            ) {
+                result = assign.right?.let { inferType(it) }
+                    ?.takeIf { !it.isTypeParameter && !it.nullable && service.isKnownType(it.qualifiedName) }
+                continue
+            }
+            val narrowed = result
+            if (!nestedWritesKeep(st, name, narrowed)) { result = null; continue }
+        }
         if (st is KtBinaryExpressionWithTypeRHS) {
             if (st.operationReference.getReferencedNameElementType() == KtTokens.AS_KEYWORD &&
                 smartCastSubjectKey(st.left) == name
@@ -281,6 +347,45 @@ internal fun KotlinResolver.earlyExitNarrowing(
         conditionNarrowing(guard.condition, name, whenTrue = false)?.let { result = it }
     }
     return result
+}
+
+/**
+ * Whether the narrowing to [narrowed] survives the writes of [name] nested in statement [e]: each must be a plain
+ * `=` of a value that is itself a [narrowed] (`if (n != null) c = n` keeps `c` a `String`, as K2's merge of the
+ * branches does). A compound assignment, `++`/`--`, or a value of another or unknown type leaves nothing known.
+ * Writes inside a lambda, local function or class are a question of the value's stability rather than of what it
+ * holds here, and a block that declares its own [name] hides the outer one from that declaration on.
+ */
+private fun KotlinResolver.nestedWritesKeep(e: KtElement, name: String, narrowed: KotlinType): Boolean {
+    when (e) {
+        is dev.ide.kotlin.syntax.psi.KtLambdaExpression, is dev.ide.kotlin.syntax.psi.KtNamedFunction,
+        is dev.ide.kotlin.syntax.psi.KtClassOrObject -> return true
+        is KtBlockExpression -> {
+            for (st in e.statements) {
+                if (st is dev.ide.kotlin.syntax.psi.KtProperty && st.name == name) return st.initializer?.let { nestedWritesKeep(it, name, narrowed) } ?: true
+                if (!nestedWritesKeep(st, name, narrowed)) return false
+            }
+            return true
+        }
+        is KtBinaryExpression -> if (e.operationToken == KtTokens.EQ || e.operationToken in WRITE_OPS) {
+            if ((unwrapParens(e.left) as? KtNameReferenceExpression)?.getReferencedName() == name) {
+                if (e.operationToken != KtTokens.EQ) return false
+                val t = e.right?.let { inferType(it) } ?: return false
+                if (t.isTypeParameter || t.nullable || !service.isKnownType(t.qualifiedName)) return false
+                if (!narrowed.isAssignableFrom(t)) return false
+                return e.right?.let { nestedWritesKeep(it, name, narrowed) } ?: true
+            }
+        }
+        is dev.ide.kotlin.syntax.psi.KtUnaryExpression -> if (e.operationToken == KtTokens.PLUSPLUS || e.operationToken == KtTokens.MINUSMINUS) {
+            if ((unwrapParens(e.baseExpression) as? KtNameReferenceExpression)?.getReferencedName() == name) return false
+        }
+    }
+    var c = e.firstChild
+    while (c != null) {
+        if (c is KtElement && !nestedWritesKeep(c, name, narrowed)) return false
+        c = c.nextSibling
+    }
+    return true
 }
 
 /** Whether [branch] unconditionally transfers control out of the enclosing block (so code after the guard

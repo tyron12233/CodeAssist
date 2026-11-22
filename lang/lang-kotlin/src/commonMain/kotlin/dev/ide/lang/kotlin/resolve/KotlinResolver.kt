@@ -87,6 +87,10 @@ class KotlinResolverCaches {
      *  keeps type inference from walking the flow for a name nothing checks. Keyed by the file. */
     val flowCheckedNames = HashMap<KtElement, Set<String>>()
 
+    /** Per loop (or repeatedly in-place lambda): the names its body assigns, which a narrowing established outside
+     *  it does not survive (see `rewrittenOnBackEdge`). */
+    internal val backEdgeWrites = HashMap<KtElement, Set<String>>()
+
     /**
      * Symbols for local `val`/`var` and value-parameter DECLARATIONS, keyed by the declaration.
      * [dev.ide.lang.kotlin.resolve.localsAt] runs once per name resolution and rebuilds a symbol for every

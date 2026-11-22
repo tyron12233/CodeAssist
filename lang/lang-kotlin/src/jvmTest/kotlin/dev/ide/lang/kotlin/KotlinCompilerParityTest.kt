@@ -1127,6 +1127,83 @@ class KotlinCompilerParityTest {
         clean(decls + "fun t() { id<(Int) -> Unit>(fun (x) {}); select<Any?>(fun (x: Int) {}) }")
     }
 
+    /** A class whose supertype is a NESTED class (`class C : O.B()`) still has its body checked: the qualified
+     *  supertype resolves in the scope around the class, and only superclasses' own nested types are in scope. */
+    @Test
+    fun aNestedSupertypeKeepsTheBodyChecked() {
+        val u = KotlinDiagnosticCodes.UNRESOLVED
+        val decls = "class O { open class A { class FromA; companion object { class FromCompanionA } }; open class B : A() }\n"
+        assertCodes(decls + "class C : O.B() { val c = FromA(); val a = A(); val e = FromCompanionA(); val z = Zzz() }", u, u, u)
+        clean(decls + "class D : O.B() { val c = FromA() }")
+    }
+
+    /** One inapplicable candidate reports all of its problems: a missing parameter and each mismatched argument,
+     *  vararg elements included (but not a positional argument placed after a named vararg). */
+    @Test
+    fun anInapplicableCallReportsEveryArgument() {
+        val m = KotlinDiagnosticCodes.TYPE_MISMATCH
+        val n = KotlinDiagnosticCodes.ARGUMENT_COUNT
+        val bar = "fun bar(first: Int, second: Double = 2.71, third: Boolean, fourth: String = \"\") {}\n"
+        assertEquals(listOf(n, m).sorted(), codes(bar + "fun t() { bar(1, true) }").map { it.orEmpty() }.sorted())
+        assertCodes("fun fv(x: Int, vararg y: String) {}\nfun t() { fv(1, 2); fv(1, \"a\", \"b\") }", m)
+        val afterNamed = codes("fun foo2(p1: Int, vararg p2: String, p3: Double) {}\nfun t() { foo2(1, p2 = arrayOf(\"2\", \"3\"), 4.0) }")
+        assertTrue(m !in afterNamed, "a positional argument after a named vararg is not a vararg element: $afterNamed")
+    }
+
+    /** A labeled lambda's `return@l value` is not coerced to `Unit`, and an `if` with no `else` ending a lambda is a
+     *  `Unit` statement, whatever its branch holds. */
+    @Test
+    fun lambdaResultsAgainstTheirFunctionType() {
+        val m = KotlinDiagnosticCodes.TYPE_MISMATCH
+        val decls = "val flag = true\n"
+        assertCodes(decls + "val b: () -> Unit = l@ { if (flag) return@l 4 }", m)
+        assertCodes(decls + "val e: () -> Int = l@ { if (flag) 4 }", m)
+        clean(decls + "val c: () -> Any = l@ { if (flag) return@l 4 }\nval d: () -> Int = l@ { if (flag) return@l 4; 5 }\nval u: () -> Unit = l@ { if (flag) return@l }")
+    }
+
+    /** A convention operator applied to a nullable receiver is an unsafe call unless an extension takes the
+     *  nullable receiver or a null check covers it. */
+    @Test
+    fun operatorsOnNullableReceivers() {
+        val u = KotlinDiagnosticCodes.UNSAFE_NULLABLE
+        val decls = "class A { operator infix fun plus(i: Int) {}; operator fun unaryMinus() {}; operator fun contains(a: Any?): Boolean = true }\n" +
+            "operator infix fun A?.times(i: Int) {}\n"
+        assertCodes(decls + "fun t(a: A?, b: Boolean?) { a + 1; a plus 1; 1 in a; -a; !b }", u, u, u, u, u)
+        clean(decls + "fun t(a: A?, b: Boolean?) { a * 1; if (a != null) { a + 1; -a }; if (b != null) !b }")
+    }
+
+    /** A narrowing made before a loop does not hold inside a loop that reassigns the variable, nor after a later
+     *  reassignment of another type; a branch that assigns a value of the narrowed type keeps it. */
+    @Test
+    fun reassignmentsEndANarrowing() {
+        val u = KotlinDiagnosticCodes.UNRESOLVED
+        assertCodes("fun t() { var x: Any? = \"\"; require(x is String); while (true) { x.length; x = 10 } }", u)
+        assertCodes("fun t() { var x: Any? = \"\"; require(x is String); x = 10; x.length }", u)
+        clean("fun foo(x: String) = x\nfun t() { var c: Any? = \"X\"; if (c !is String) return; val n: String? = \"Y\"; if (n != null) { c = n }; foo(c) }")
+        clean("fun t(b: Boolean) { var x: Any = \"\"; x as String; while (b) { x.length; var x: Any = \"h\"; x = 1 }; x.length }")
+    }
+
+    /** An annotation's arguments are checked against its parameters like a constructor call's. */
+    @Test
+    fun annotationArgumentsAreTyped() {
+        val m = KotlinDiagnosticCodes.TYPE_MISMATCH
+        assertCodes("annotation class Bad(val s: String)\n@Bad(1) object O", m)
+        assertCodes("enum class MyLevel { ERROR }\n@Deprecated(\"\", level = MyLevel.ERROR) fun f() {}", m)
+        clean("annotation class Arr(val xs: Array<String>, vararg val ys: Int)\n@Arr([\"a\"], 1, 2) class A\n@Arr(arrayOf(\"a\"), 1) class B\n" +
+            "@Suppress(\"x\", \"y\") class C\n@Deprecated(\"\", level = DeprecationLevel.ERROR) fun g() {}")
+    }
+
+    /** The type arguments on the left of `::` are held against their bounds; a value that is a function-typed
+     *  parameter with a receiver is still an unsafe implicit invoke on a nullable receiver. */
+    @Test
+    fun callableReferenceLhsBoundsAndNullableInvokes() {
+        val b = KotlinDiagnosticCodes.UPPER_BOUND_VIOLATED
+        val decls = "class Foo<T : Number> { val value: String = \"OK\" }\nclass Bar<T> { val v = 1 }\n"
+        assertCodes(decls + "val a = Foo<String>::value", b)
+        clean(decls + "val a = Foo<Int>::value\nval c = Bar<String?>::v")
+        assertCodes("fun bar(doIt: Int.() -> Int) { val i: Int? = 1; i.doIt() }", KotlinDiagnosticCodes.UNSAFE_NULLABLE)
+    }
+
     /** A getter of a `val` may read its backing field but not assign it, also from a local function inside. */
     @Test
     fun aValGetterCannotAssignItsBackingField() {

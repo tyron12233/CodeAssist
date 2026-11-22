@@ -366,9 +366,20 @@ internal class KotlinSemanticChecks(
                     // overload-aware applicability check (wrong-typed / too-many args for an overloaded, library,
                     // or member call); then the missing-required check (which the applicability check defers to).
                     val countBad = argumentCountMismatch(psi, resolver)
-                    val notApplicable = if (countBad == null) callNotApplicable(psi, resolver) else emptyList()
-                    if (notApplicable.isNotEmpty()) reportAll(notApplicable)
-                    else report(
+                    val firstBad = if (countBad == null) callNotApplicableFirst(psi, resolver) else null
+                    val notApplicable = if (countBad == null) callNotApplicable(firstBad) else callNotApplicable(psi, resolver)
+                    // K2 reports every resolution diagnostic of an inapplicable candidate (FirCallResolver's
+                    // InapplicableCandidate carries them all): a missing parameter or a surplus argument does not
+                    // hide the type mismatches of the arguments that did land on a parameter, nor the reverse.
+                    val mismatches = notApplicable.filter { it.code == KotlinDiagnosticCodes.TYPE_MISMATCH }
+                    if (countBad != null) {
+                        report(countBad)
+                        reportAll(mismatches)
+                    } else if (notApplicable.isNotEmpty()) {
+                        reportAll(notApplicable)
+                        // Only for the one candidate: with several, K2 reports the call as NONE_APPLICABLE instead.
+                        if (firstBad?.second != null && mismatches.size == notApplicable.size) report(missingRequiredArgument(psi, resolver))
+                    } else report(
                         countBad ?: missingRequiredArgument(psi, resolver) ?: nullArgumentForNonNull(psi, resolver)
                             ?: if (resolveReady) memberProjectedOut(psi, resolver) else null,
                     )
@@ -526,7 +537,7 @@ internal class KotlinSemanticChecks(
             KotlinPerf.span("sem.finalSuper") { reportAll(finalSupertype(psi, resolver)) }
             KotlinPerf.span("sem.superCtor") { if (resolveReady) reportAll(supertypeConstructorCall(psi, resolver)) }
         },
-    ) + declarationPortedCheckers() + expressionPortedCheckers() + round6PortedCheckers() + inheritanceClashCheckers() + delegationCallCheckers() + boundCheckers() + lambdaArgumentCheckers() + callableReferenceCheckers() + round7PortedCheckers() + round8PortedCheckers() + callableReferenceInferenceCheckers() + lambdaInputInferenceCheckers() + lambdaUnitReturnCheckers()
+    ) + declarationPortedCheckers() + expressionPortedCheckers() + round6PortedCheckers() + inheritanceClashCheckers() + delegationCallCheckers() + boundCheckers() + lambdaArgumentCheckers() + callableReferenceCheckers() + round7PortedCheckers() + round8PortedCheckers() + callableReferenceInferenceCheckers() + lambdaInputInferenceCheckers() + lambdaUnitReturnCheckers() + unsafeOperatorCheckers() + annotationArgumentTypeCheckers() + callableReferenceBoundCheckers()
 
     /**
      * A class-type supertype written WITHOUT its constructor call — Kotlin's SUPERTYPE_NOT_INITIALIZED
@@ -2612,8 +2623,11 @@ internal class KotlinSemanticChecks(
      * that matched the most leading arguments — so `Text("x", 1231)` blames the `1231`, not the `"x"`), else a
      * "too many arguments". Reused codes (`kt.typeMismatch` / `kt.argumentCount`) keep quick-fixes uniform.
      */
-    private fun callNotApplicable(call: KtCallExpression, resolver: KotlinResolver): List<Diagnostic> {
-        val (first, tb) = callNotApplicableFirst(call, resolver) ?: return emptyList()
+    private fun callNotApplicable(call: KtCallExpression, resolver: KotlinResolver): List<Diagnostic> =
+        callNotApplicable(callNotApplicableFirst(call, resolver))
+
+    private fun callNotApplicable(firstBad: Pair<Diagnostic, Applicability.TypeBad?>?): List<Diagnostic> {
+        val (first, tb) = firstBad ?: return emptyList()
         // A call with one candidate has each of its mismatched arguments reported, as the compiler does; with
         // several it is the call that fits none of them.
         if (tb == null) return listOf(first)
@@ -2914,7 +2928,13 @@ internal class KotlinSemanticChecks(
                 val at = expr?.let { resolver.inferType(it) }
                 val numericBad = expr != null && pt != null && plainNumericSourceParameter(c, vararg) != null &&
                     numericMismatch(pt, at, expr, resolver)
-                if (expr != null && pt != null && at != null && ((named == null && arrayForVarargElement(pt, at)) || (named != null && namedVarargArrayMismatch(pt, at)) || numericBad)) {
+                // One element of a SOURCE vararg (whose parameter type is the element type as written): it must fit
+                // that element type like any other argument (`foo(1, 2)` for `vararg y: String`).
+                // Not after a named argument: `foo2(1, p2 = arrayOf(..), 4.0)` puts `4.0` in its own position, past the vararg.
+                val elementBad = named == null && expr != null && pt != null && at != null && c.origin.fromSource &&
+                    (0 until i).none { call.valueArguments[it].getArgumentName() != null } &&
+                    !pt.isTypeParameter && !isFunctional(pt) && !isFunctional(at) && isMismatch(pt, at) && !flowFits(pt, expr, resolver)
+                if (expr != null && pt != null && at != null && ((named == null && arrayForVarargElement(pt, at)) || (named != null && namedVarargArrayMismatch(pt, at)) || numericBad || elementBad)) {
                     Applicability.TypeBad(expr, pt, at, prefix).let { tb -> typeBad?.more?.add(tb) ?: run { typeBad = tb } }
                 } else if (named != null && idx == vararg && expr != null && pt != null && at != null && singleElementForNamedVararg(pt, at)) {
                     // In named form a vararg takes an array, never a single element (K2's
@@ -3514,6 +3534,18 @@ internal class KotlinSemanticChecks(
         // `String?.equals(other: String?, ignoreCase)` is the one stdlib `equals` a nullable receiver may call.
         if (selectorName(expr) == "equals" && recvType.qualifiedName == "kotlin.String") return null
         if (callAcceptsNullableReceiver(expr, resolver)) return null
+        // A member the type does not have at all is an unresolved reference (K2 resolves the name before it asks
+        // whether the call is safe), which [unresolvedMember] reports on the selector.
+        selectorName(expr)?.let { sel ->
+            val nonNull = recvType.withNullable(false)
+            if (!recvType.isTypeParameter && service.isKnownType(nonNull.qualifiedName) &&
+                sel != "hashCode" && sel != "equals" && sel != "toString" &&
+                // A function-typed value with a receiver (`i.doIt()` for `doIt: Int.() -> Int`) is an invoke.
+                resolver.localsAt(expr.textRange.startOffset, sel).isEmpty() &&
+                service.membersNamedForCheck(nonNull.qualifiedName, nonNull.typeArguments, sel).none { it.name == sel } &&
+                resolver.scopeMemberExtensions(expr.textRange.startOffset, nonNull, sel, exactName = true).none { it.name == sel }
+            ) return null
+        }
         if (receiver is KtNameReferenceExpression) {
             // Flow is now the authority: `smartCastNonNull` precisely models the direct guards (if/else, early
             // exit, `&&`/`||`, elvis, `!!`, `require`, `is`, and — for a `var` — reassignment). Only forms it does
@@ -4258,7 +4290,7 @@ internal class KotlinSemanticChecks(
         }
     }
 
-    private fun checkArgsAgainstBounds(args: List<KtTypeProjection>, bounds: List<KotlinType?>, resolver: KotlinResolver): List<Diagnostic> {
+    internal fun checkArgsAgainstBounds(args: List<KtTypeProjection>, bounds: List<KotlinType?>, resolver: KotlinResolver): List<Diagnostic> {
         val out = ArrayList<Diagnostic>()
         args.forEachIndexed { i, proj ->
             if (proj.projectionKind == KtProjectionKind.STAR) return@forEachIndexed
