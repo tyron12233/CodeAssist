@@ -143,6 +143,9 @@ class CallableShape(
     val isDeprecated: Boolean = false,
     /** Sibling type-param upper bounds (`fun <R, T : R>` → `[null, "R"]`), for `T : R` constraint inference. */
     val typeParamBoundNames: List<String?> = emptyList(),
+    /** The function's `contract { }` in `KotlinContractCodec` text, or null. */
+    val contract: String? = null,
+    val receiverNullable: Boolean = false,
 ) {
     fun toSymbol(ctx: KotlinTypeContext?, origin: SymbolOrigin = BINARY): KotlinSymbol = KotlinSymbol(
         name = name,
@@ -166,6 +169,8 @@ class CallableShape(
         isDeprecated = isDeprecated,
         varargParamIndex = varargParamIndex,
         paramHasDefault = paramHasDefault,
+        contract = contract,
+        receiverNullable = receiverNullable,
     )
 
     companion object {
@@ -193,6 +198,8 @@ class CallableShape(
             s.paramHasDefault,
             s.isDeprecated,
             s.typeParamBoundNames,
+            s.contract,
+            s.receiverNullable,
         )
     }
 }
@@ -206,7 +213,7 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
      * no sharing index can be left reading a stale segment with the new format. Starts at 0 (each index's base
      * already encodes today's format; increment FORMAT for future changes, and only ever increase it).
      */
-    const val FORMAT = 0
+    const val FORMAT = 1 // 1: CallableShape.contract, receiverNullable
 
     override fun write(out: DataWriter, value: CallableShape) {
         out.writeUTF(value.name)
@@ -237,6 +244,8 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
         }
         out.writeBoolean(value.isDeprecated)
         out.writeInt(value.typeParamBoundNames.size); value.typeParamBoundNames.forEach { out.writeUTF(it ?: "") }
+        out.writeUTF(value.contract ?: "")
+        out.writeBoolean(value.receiverNullable)
     }
 
     override fun read(inp: DataReader): CallableShape {
@@ -260,6 +269,8 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
         val paramHasDefault = List(inp.readInt()) { inp.readBoolean() }
         val isDeprecated = inp.readBoolean()
         val boundNames = List(inp.readInt()) { inp.readUTF().ifEmpty { null } }
+        val contract = inp.readUTF().ifEmpty { null }
+        val receiverNullable = inp.readBoolean()
         return CallableShape(
             name,
             kind,
@@ -281,6 +292,8 @@ object CallableShapeExternalizer : Externalizer<CallableShape> {
             paramHasDefault,
             isDeprecated,
             boundNames,
+            contract,
+            receiverNullable,
         )
     }
 

@@ -98,7 +98,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
      * diligently, `kotlin.builtins` now corrected). Increment FORMAT (never a per-index base) for every future
      * wire-format change here, and only ever increase it.
      */
-    const val FORMAT = 5 // 1: TypeShape.typeParameterVariances; 2: KotlinType.projection (use-site variance); 3: TypeShape.isFinalClass; 4: KotlinSymbol.isSuspend; 5: TypeShape.isPublic
+    const val FORMAT = 6 // 6: KotlinSymbol.contract, receiverNullable; 1: TypeShape.typeParameterVariances; 2: KotlinType.projection (use-site variance); 3: TypeShape.isFinalClass; 4: KotlinSymbol.isSuspend; 5: TypeShape.isPublic
 
     private val BINARY = SymbolOrigin(fromSource = false, file = null)
 
@@ -173,6 +173,8 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         out.writeInt(s.varargParamIndex)
         out.writeInt(s.paramHasDefault.size); s.paramHasDefault.forEach { out.writeBoolean(it) }
         out.writeBoolean(s.isDeprecated)
+        out.writeUTF(s.contract ?: "")
+        out.writeBoolean(s.receiverNullable)
     }
 
     private fun readSymbol(inp: DataReader): KotlinSymbol {
@@ -198,6 +200,8 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         val varargIdx = inp.readInt()
         val paramHasDefault = List(inp.readInt()) { inp.readBoolean() }
         val isDeprecated = inp.readBoolean()
+        val contract = inp.readUTF().ifEmpty { null }
+        val receiverNullable = inp.readBoolean()
         return KotlinSymbol(
             name = name,
             kind = kind,
@@ -222,6 +226,8 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
             isDeprecated = isDeprecated,
             varargParamIndex = varargIdx,
             paramHasDefault = paramHasDefault,
+            contract = contract,
+            receiverNullable = receiverNullable,
         )
     }
 

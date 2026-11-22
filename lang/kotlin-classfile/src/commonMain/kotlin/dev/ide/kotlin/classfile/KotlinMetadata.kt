@@ -170,6 +170,8 @@ class KotlinDeclaration(
     val jvmSignature: JvmMemberSignature? = null,
     /** The JVM field and accessors this compiles to, for a property. */
     val propertySignatures: KotlinPropertySignatures? = null,
+    /** A function's `contract { }` effects, as compiled into its metadata. Empty for anything else. */
+    val contract: List<KotlinContractEffect> = emptyList(),
 ) {
     enum class Kind { FUNCTION, PROPERTY, CONSTRUCTOR, TYPE_ALIAS }
 
@@ -348,6 +350,21 @@ object KotlinMetadata {
     private const val PROPERTY_RETURN_TYPE_ID = 9
     private const val PROPERTY_RECEIVER_TYPE_ID = 10
     private const val TYPE_ALIAS_EXPANDED_TYPE_ID = 7
+
+    // `message Function`: `optional Contract contract = 32`, and the messages under it.
+    private const val FUNCTION_CONTRACT = 32
+    private const val CONTRACT_EFFECT = 1
+    private const val EFFECT_TYPE = 1
+    private const val EFFECT_CONSTRUCTOR_ARGUMENT = 2
+    private const val EFFECT_CONCLUSION = 3
+    private const val EFFECT_KIND = 4
+    private const val EXPRESSION_FLAGS = 1
+    private const val EXPRESSION_VALUE_PARAMETER = 2
+    private const val EXPRESSION_CONSTANT = 3
+    private const val EXPRESSION_IS_INSTANCE_TYPE = 4
+    private const val EXPRESSION_IS_INSTANCE_TYPE_ID = 5
+    private const val EXPRESSION_AND = 6
+    private const val EXPRESSION_OR = 7
 
     /**
      * A `TypeAlias` renumbers everything.
@@ -745,6 +762,8 @@ object KotlinMetadata {
         val parameters = ArrayList<KotlinParameter>()
         var methodSignature: JvmMemberSignature? = null
         var propertySignature: ProtoReader? = null
+        var contract: List<KotlinContractEffect> = emptyList()
+        val contractField = if (kind == KotlinDeclaration.Kind.FUNCTION) FUNCTION_CONTRACT else -1
 
         nested.forEachField { number, _ ->
             when (number) {
@@ -777,6 +796,11 @@ object KotlinMetadata {
                     }
 
                     else -> false
+                }
+
+                contractField -> {
+                    contract = runCatching { readContract(nested.readMessage(), names, scope, table) }.getOrDefault(emptyList())
+                    true
                 }
 
                 EXTENSION_SIGNATURE -> {
@@ -826,9 +850,129 @@ object KotlinMetadata {
                 expandedType = expandedType,
                 jvmSignature = jvmSignature,
                 propertySignatures = propertySignature?.let { readPropertySignatures(it, names, name, returnType) },
+                contract = contract,
             ),
         )
         return true
+    }
+
+    /**
+     * A function's `Contract` message: its effects, each read in full or dropped. An effect this reader does
+     * not understand (an unknown effect type, a condition it cannot represent) is left out rather than
+     * approximated, so what comes back is only ever what the contract says.
+     */
+    private fun readContract(
+        reader: ProtoReader,
+        names: NameResolver,
+        scope: Map<Int, String>,
+        table: TypeTable,
+    ): List<KotlinContractEffect> {
+        val effects = ArrayList<KotlinContractEffect>()
+        reader.forEachField { number, _ ->
+            if (number != CONTRACT_EFFECT) return@forEachField false
+            readEffect(reader.readMessage(), names, scope, table)?.let(effects::add)
+            true
+        }
+        return effects
+    }
+
+    private fun readEffect(
+        reader: ProtoReader,
+        names: NameResolver,
+        scope: Map<Int, String>,
+        table: TypeTable,
+    ): KotlinContractEffect? {
+        var type = -1
+        val arguments = ArrayList<KotlinContractExpression?>()
+        var conclusion: KotlinContractExpression? = null
+        var kind = -1
+        var unreadable = false
+        reader.forEachField { number, _ ->
+            when (number) {
+                EFFECT_TYPE -> { type = reader.readInt(); true }
+                EFFECT_CONSTRUCTOR_ARGUMENT -> { arguments += readExpression(reader.readMessage(), names, scope, table); true }
+                EFFECT_CONCLUSION -> {
+                    conclusion = readExpression(reader.readMessage(), names, scope, table)
+                    if (conclusion == null) unreadable = true
+                    true
+                }
+                EFFECT_KIND -> { kind = reader.readInt(); true }
+                else -> false
+            }
+        }
+        if (unreadable) return null
+        return when (type) {
+            // RETURNS_CONSTANT: no argument is `returns()`, one constant is `returns(value)`.
+            0 -> {
+                val value = when (arguments.size) {
+                    0 -> null
+                    1 -> (arguments[0] as? KotlinContractExpression.Constant)?.value ?: return null
+                    else -> return null
+                }
+                KotlinContractEffect(KotlinContractEffect.Kind.RETURNS, value, conclusion)
+            }
+            // CALLS: the one argument names the lambda parameter.
+            1 -> {
+                val parameter = (arguments.singleOrNull() as? KotlinContractExpression.BooleanParameter)
+                    ?.takeIf { !it.negated }?.parameter ?: return null
+                KotlinContractEffect(
+                    KotlinContractEffect.Kind.CALLS_IN_PLACE,
+                    parameter = parameter,
+                    invocation = KotlinContractEffect.Invocation.entries.getOrNull(kind),
+                )
+            }
+            2 -> KotlinContractEffect(KotlinContractEffect.Kind.RETURNS_NOT_NULL, conclusion = conclusion)
+            else -> null
+        }
+    }
+
+    /**
+     * One `Expression`. Its own fields make a primitive (a parameter, a null check or `is` on one, or a
+     * constant); `and_argument`/`or_argument`, when present, join that primitive (if any) with the operands
+     * listed, as the compiler's ContractDeserializer reads it. Null when the expression is empty or unreadable.
+     */
+    private fun readExpression(
+        reader: ProtoReader,
+        names: NameResolver,
+        scope: Map<Int, String>,
+        table: TypeTable,
+    ): KotlinContractExpression? {
+        var flags = 0
+        var parameter = -1
+        var constant = -1
+        var isType: KotlinType? = null
+        val and = ArrayList<KotlinContractExpression?>()
+        val or = ArrayList<KotlinContractExpression?>()
+        reader.forEachField { number, _ ->
+            when (number) {
+                EXPRESSION_FLAGS -> { flags = reader.readInt(); true }
+                EXPRESSION_VALUE_PARAMETER -> { parameter = reader.readInt(); true }
+                EXPRESSION_CONSTANT -> { constant = reader.readInt(); true }
+                EXPRESSION_IS_INSTANCE_TYPE -> { isType = readType(reader.readMessage(), names, scope, table); true }
+                EXPRESSION_IS_INSTANCE_TYPE_ID -> { isType = table.resolve(reader.readInt(), names, scope) ?: isType; true }
+                EXPRESSION_AND -> { and += readExpression(reader.readMessage(), names, scope, table); true }
+                EXPRESSION_OR -> { or += readExpression(reader.readMessage(), names, scope, table); true }
+                else -> false
+            }
+        }
+        val negated = flags and 1 != 0
+        val nullCheck = flags and 2 != 0
+        val type = isType
+        val primitive: KotlinContractExpression? = when {
+            parameter >= 0 && type != null -> KotlinContractExpression.IsInstance(
+                parameter, type.classifier, type.jvmName == null, type.isNullable, negated,
+            )
+            parameter >= 0 && nullCheck -> KotlinContractExpression.NullCheck(parameter, negated)
+            parameter >= 0 -> KotlinContractExpression.BooleanParameter(parameter, negated)
+            constant >= 0 -> KotlinContractExpression.Constant(KotlinContractConstant.entries.getOrNull(constant) ?: return null)
+            else -> null
+        }
+        if (and.isNotEmpty() && or.isNotEmpty()) return null
+        val operands = and.ifEmpty { or }
+        if (operands.isEmpty()) return primitive
+        if (operands.any { it == null }) return null
+        val all = listOfNotNull(primitive) + operands.filterNotNull()
+        return if (and.isNotEmpty()) KotlinContractExpression.And(all) else KotlinContractExpression.Or(all)
     }
 
     /**

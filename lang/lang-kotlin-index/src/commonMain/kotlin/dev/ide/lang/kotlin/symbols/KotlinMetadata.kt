@@ -2,6 +2,7 @@ package dev.ide.lang.kotlin.symbols
 
 import dev.ide.kotlin.classfile.ClassFile
 import dev.ide.kotlin.classfile.KotlinClassInfo
+import dev.ide.kotlin.classfile.KotlinContractCodec
 import dev.ide.kotlin.classfile.KotlinDeclaration
 import dev.ide.kotlin.classfile.KotlinModality
 import dev.ide.kotlin.classfile.KotlinTypeParameter
@@ -367,6 +368,7 @@ object KotlinMetadata {
                 argument.type?.let { typeRef(it, ctx, tp) } ?: KotlinType("kotlin.Any", context = ctx)
             },
             receiverTypeParam = recvParam,
+            receiverNullable = receiver?.isNullable == true,
             declaringClassFqn = declaringFqn,
             isComposable = declaration.name in composable,
             isInline = declaration.isInline,
@@ -374,6 +376,7 @@ object KotlinMetadata {
             isSuspend = declaration.isSuspend,
             varargParamIndex = declaration.parameters.indexOfFirst { it.varargElementType != null },
             paramHasDefault = declaration.parameters.map { it.declaresDefaultValue },
+            contract = declaration.contract.takeIf { it.isNotEmpty() }?.let(KotlinContractCodec::encode),
         )
     }
 
@@ -402,6 +405,7 @@ object KotlinMetadata {
                 argument.type?.let { typeRef(it, ctx, tp) } ?: KotlinType("kotlin.Any", context = ctx)
             },
             receiverTypeParam = recvParam,
+            receiverNullable = receiver?.isNullable == true,
             declaringClassFqn = declaringFqn,
         )
     }

@@ -1,5 +1,9 @@
 package dev.ide.lang.kotlin.resolve
 
+import dev.ide.kotlin.classfile.KotlinContractCodec
+import dev.ide.kotlin.classfile.KotlinContractConstant
+import dev.ide.kotlin.classfile.KotlinContractEffect
+import dev.ide.kotlin.classfile.KotlinContractExpression
 import dev.ide.kotlin.syntax.psi.KtAnnotatedExpression
 import dev.ide.kotlin.syntax.psi.KtArrayAccessExpression
 import dev.ide.kotlin.syntax.psi.KtBinaryExpression
@@ -494,6 +498,11 @@ private fun KotlinResolver.castTargetsByName(scope: KtElement): Map<String, List
                     p.subjectVariable?.name?.let { v -> out.getOrPut(v) { ArrayList() } += c.typeReference ?: return@let }
                 }
             }
+            // `assertIs<T>(x)`: a library contract can say `x is T` of a type argument. A candidate only; the
+            // flow walk decides whether the call's contract proves it.
+            is KtCallExpression -> if (p.typeArguments.isNotEmpty()) for (arg in p.valueArguments) {
+                for (t in p.typeArguments) add(arg.getArgumentExpression(), t.typeReference)
+            }
         }
         var c = p.firstChild
         while (c != null) { visit(c); c = c.nextSibling }
@@ -977,7 +986,7 @@ private fun KotlinResolver.callProves(call: KtCallExpression, receiver: KtExpres
     if (!g.deep) return false
     if (returnsLambdaResultThatNeverCompletes(call)) return true
     // Only a call the value is passed to (or called on) can carry a contract about it.
-    if ((receiver != null && carriesValue(receiver, g)) || args.any { carriesValue(it.getArgumentExpression(), g) }) {
+    if ((receiver != null && carriesValue(receiver, g)) || args.any { mentionsValue(it.getArgumentExpression(), g) }) {
         if (contractGuarantees(call, receiver, whenTrue = true, g, completion = true)) return true
     }
     return receiver == null && inferType(call)?.qualifiedName == "kotlin.Nothing"
@@ -1264,6 +1273,13 @@ internal fun localValInitializer(ref: KtNameReferenceExpression, typed: Boolean 
  *  side) conjunctions. */
 private fun KotlinResolver.condGuarantees(
     cond: KtExpression?, whenTrue: Boolean, g: Goal
+): Boolean = condGuaranteesByValue(cond, whenTrue, g) || completionProves(cond, g)
+
+/** [condGuarantees] from what the condition's VALUE says. That it has a value at all says the rest: it was
+ *  evaluated, so whatever completing it proves holds too, which is how `a && (x as T).y == null` being true
+ *  makes `x` a `T` (the right side ran). */
+private fun KotlinResolver.condGuaranteesByValue(
+    cond: KtExpression?, whenTrue: Boolean, g: Goal
 ): Boolean = when (val c = unwrapParens(cond)) {
     is KtBinaryExpression -> when (c.operationToken) {
         KtTokens.EXCLEQ, KtTokens.EXCLEQEQEQ ->
@@ -1366,7 +1382,7 @@ private fun KotlinResolver.contractGuarantees(
 ): Boolean {
     val callee = runCatching { resolveCalleeFunction(call) }.getOrNull() ?: return false
     val args = call.valueArguments
-    return contractGuaranteesOf(callee, receiver, whenTrue, g, completion) { params, name ->
+    return contractGuaranteesOf(callee, receiver, whenTrue, g, completion, call) { params, name ->
         val named = args.firstOrNull { it.getArgumentName()?.asName?.identifier == name }
         val i = params.indexOf(name)
         val arg = named ?: args.getOrNull(i)?.takeIf { it.getArgumentName() == null && i >= 0 }
@@ -1389,9 +1405,12 @@ private fun KotlinResolver.contractGuaranteesOf(
     whenTrue: Boolean,
     g: Goal,
     completion: Boolean,
+    call: KtCallExpression? = null,
     argumentFor: (params: List<String?>, name: String) -> KtExpression?,
 ): Boolean {
-    if (!callee.origin.fromSource) return false
+    if (!callee.origin.fromSource) {
+        return binaryContractGuarantees(callee, receiver, whenTrue, g, completion, call, argumentFor)
+    }
     val fn = (callee.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi
         as? dev.ide.kotlin.syntax.psi.KtNamedFunction ?: return false
     val first = fn.bodyBlockExpression?.statements?.firstOrNull() as? KtCallExpression ?: return false
@@ -1429,6 +1448,88 @@ private fun KotlinResolver.contractGuaranteesOf(
             ?.takeIf { it in params }
             ?.let { argumentFor(params, it) }
             ?.let { if (condGuarantees(it, true, g)) return true }
+    }
+    return false
+}
+
+/**
+ * [contractGuaranteesOf] for a LIBRARY function: its contract comes from @Metadata ([KotlinSymbol.contract]),
+ * already parsed into conditions on parameter positions (0 the receiver, i the i-th value parameter). The
+ * effects read are the ones a source contract's are: `returns()`, `returns(true|false)`, each implying a
+ * condition judged against the argument passed at that position. kotlin.test's `assertNotNull(x)`
+ * (`returns() implies (actual != null)`) and `assertTrue(x is T)` (`returns() implies actual`) are the shapes
+ * this exists for.
+ */
+private fun KotlinResolver.binaryContractGuarantees(
+    callee: dev.ide.lang.kotlin.symbols.KotlinSymbol,
+    receiver: KtExpression?,
+    whenTrue: Boolean,
+    g: Goal,
+    completion: Boolean,
+    call: KtCallExpression?,
+    argumentFor: (params: List<String?>, name: String) -> KtExpression?,
+): Boolean {
+    val text = callee.contract ?: return false
+    val params: List<String?> = callee.paramNames
+    fun arg(i: Int): KtExpression? =
+        if (i == 0) receiver else params.getOrNull(i - 1)?.let { argumentFor(params, it) }
+
+    fun proves(e: KotlinContractExpression): Boolean = when (e) {
+        is KotlinContractExpression.NullCheck ->
+            if (e.negated) g.nonNull && carriesValue(arg(e.parameter), g)
+            else g.provesNull && g.sameValue(arg(e.parameter))
+
+        is KotlinContractExpression.IsInstance -> !e.negated && carriesValue(arg(e.parameter), g) && run {
+            // A type parameter's target is what the call passes for it (`assertIs<String>(x)`); one left to
+            // inference is not known here.
+            val target = if (e.isTypeParameter) {
+                val i = callee.typeParameters.indexOf(e.typeName)
+                call?.typeArguments?.getOrNull(i)?.typeReference?.text ?: return@run false
+            } else {
+                e.typeName + if (e.nullable) "?" else ""
+            }
+            when {
+                g.provesNull -> false
+                g.type == null -> isNonNullIsTarget(target)
+                else -> {
+                    val erased = erasedTypeText(target)
+                    erased == g.type || (!e.isTypeParameter && erased.endsWith("." + g.type))
+                }
+            }
+        }
+
+        // `returns() implies value`: what the argument passed for the Boolean guarantees when it is true.
+        is KotlinContractExpression.BooleanParameter -> condGuarantees(arg(e.parameter), !e.negated, g)
+        is KotlinContractExpression.And -> e.operands.any(::proves)
+        is KotlinContractExpression.Or -> e.operands.all(::proves)
+        is KotlinContractExpression.Constant -> false
+    }
+
+    for (effect in KotlinContractCodec.decode(text)) {
+        if (effect.kind != KotlinContractEffect.Kind.RETURNS) continue
+        val holds = when (effect.returns) {
+            null -> true
+            KotlinContractConstant.TRUE -> whenTrue && !completion
+            KotlinContractConstant.FALSE -> !whenTrue && !completion
+            KotlinContractConstant.NULL -> false
+        }
+        if (holds && effect.conclusion?.let(::proves) == true) return true
+    }
+    return false
+}
+
+/** Whether [e], or any expression evaluated within it (lambda bodies aside), carries the matched value: the
+ *  gate a call's arguments pass before its contract is worth resolving (`assertTrue(x is T)` speaks for `x`). */
+private fun mentionsValue(e: KtElement?, g: Goal, depth: Int = 0): Boolean {
+    if (e == null || depth > 12) return false
+    if (e is KtExpression && carriesValue(e, g)) return true
+    if (e is dev.ide.kotlin.syntax.psi.KtLambdaExpression) return false
+    // A Boolean `val` holding a condition stands for it (`val ok = x is T; assertTrue(ok)`).
+    if (e is KtNameReferenceExpression) return localValInitializer(e, typed = true)?.let { mentionsValue(it, g, depth + 1) } == true
+    var c = e.firstChild
+    while (c != null) {
+        if (mentionsValue(c, g, depth + 1)) return true
+        c = c.nextSibling
     }
     return false
 }

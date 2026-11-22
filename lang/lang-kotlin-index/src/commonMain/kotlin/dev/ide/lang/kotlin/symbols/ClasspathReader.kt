@@ -311,6 +311,8 @@ class ClasspathReader(
         val isSuspend: Boolean,
         val varargParamIndex: Int,
         val paramHasDefault: List<Boolean>,
+        val contract: String? = null,
+        val receiverNullable: Boolean = false,
     ) {
         // Cached types are context-free; rebind the live context so members()/supertypes() work after reload.
         fun toSymbol(ctx: KotlinTypeContext?): KotlinSymbol = KotlinSymbol(
@@ -334,6 +336,8 @@ class ClasspathReader(
             isSuspend = isSuspend,
             varargParamIndex = varargParamIndex,
             paramHasDefault = paramHasDefault,
+            contract = contract,
+            receiverNullable = receiverNullable,
         )
 
         companion object {
@@ -359,6 +363,8 @@ class ClasspathReader(
                     s.isSuspend,
                     s.varargParamIndex,
                     s.paramHasDefault,
+                    s.contract,
+                    s.receiverNullable,
                 )
         }
     }
@@ -404,6 +410,8 @@ class ClasspathReader(
             out.writeBoolean(r.isSuspend)
             out.writeInt(r.varargParamIndex)
             out.writeInt(r.paramHasDefault.size); r.paramHasDefault.forEach { out.writeBoolean(it) }
+            out.writeUTF(r.contract ?: "")
+            out.writeBoolean(r.receiverNullable)
         }
     }
 
@@ -430,10 +438,12 @@ class ClasspathReader(
             val isSuspend = inp.readBoolean()
             val varargIdx = inp.readInt()
             val paramHasDefault = List(inp.readInt()) { inp.readBoolean() }
+            val contract = inp.readUTF().ifEmpty { null }
+            val receiverNullable = inp.readBoolean()
             out += RawCallableData(
                 name, kind, receiver, sig, pkg, recvParam, tps, boundNames, ret, params, recvArgs,
                 declaringFqn, paramNames, isComposable, isInline, isInfix, isSuspend, varargIdx,
-                paramHasDefault,
+                paramHasDefault, contract, receiverNullable,
             )
         }
         return out
@@ -470,7 +480,7 @@ class ClasspathReader(
 
     private companion object {
         const val FORMAT_VERSION =
-            17 // v14: + RawCallableData.isInfix (infix-function completion in the operator slot); v15: binary constructors carry paramHasDefault; v16: no regular-class member extensions; v17: a facade's callables carry its @JvmPackageName Kotlin package
+            18 // v18: RawCallableData.contract, receiverNullable; v14: + RawCallableData.isInfix (infix-function completion in the operator slot); v15: binary constructors carry paramHasDefault; v16: no regular-class member extensions; v17: a facade's callables carry its @JvmPackageName Kotlin package
 
         // Cap on simultaneously-open jar handles (file descriptors). Small: the hot working set during
         // completion is a handful of jars, and reopening an evicted one is cheap behind the decode caches.

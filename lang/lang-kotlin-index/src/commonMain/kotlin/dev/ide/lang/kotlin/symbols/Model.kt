@@ -94,6 +94,12 @@ class KotlinSymbol(
      *  may omit it. EMPTY means "unknown" (Java bytecode, an old cache): callers that validate required
      *  arguments must back off rather than guess. When non-empty its size matches [paramTypes]. */
     val paramHasDefault: List<Boolean> = emptyList(),
+    /** A LIBRARY function's `contract { }`, in `KotlinContractCodec` text, as its @Metadata records it (null
+     *  when it declares none). A source function's contract is read off its body instead. */
+    val contract: String? = null,
+    /** An extension declared on a NULLABLE receiver (`String?.plus`, `Any?.toString`): it takes a nullable value
+     *  where a member of the non-null type would not. Only binary symbols set it; a source one is read off PSI. */
+    val receiverNullable: Boolean = false,
     private val declarationNode: DomNode? = null,
     private val doc: String? = null,
 ) : Symbol {
@@ -112,7 +118,7 @@ class KotlinSymbol(
             declaringClassFqn = declaringClassFqn, isInternal = isInternal, isComposable = isComposable,
             isInline = isInline, isInfix = isInfix, isSuspend = isSuspend, isDeprecated = isDeprecated,
             annotationFqns = annotationFqns, varargParamIndex = varargParamIndex, paramHasDefault = paramHasDefault,
-            declarationNode = declarationNode, doc = doc,
+            contract = contract, receiverNullable = receiverNullable, declarationNode = declarationNode, doc = doc,
         )
 
     /** A copy with source-recovered facts spliced in (real parameter [names], rebuilt [sig], [docText]) — used
@@ -150,6 +156,8 @@ class KotlinSymbol(
             annotationFqns = annotationFqns,
             varargParamIndex = varargParamIndex,
             paramHasDefault = paramHasDefault,
+            contract = contract,
+            receiverNullable = receiverNullable,
             declarationNode = declarationNode,
             doc = docText,
         )
@@ -184,6 +192,8 @@ class KotlinSymbol(
             annotationFqns = annotationFqns,
             varargParamIndex = varargParamIndex,
             paramHasDefault = paramHasDefault,
+            contract = contract,
+            receiverNullable = receiverNullable,
             declarationNode = declarationNode,
             doc = doc,
         )

@@ -4,6 +4,7 @@ import dev.ide.platform.FileSource
 import dev.ide.kotlin.classfile.KotlinBuiltins
 import dev.ide.kotlin.classfile.KotlinClassInfo
 import dev.ide.kotlin.classfile.KotlinClassKind
+import dev.ide.kotlin.classfile.KotlinContractCodec
 import dev.ide.kotlin.classfile.KotlinDeclaration
 import dev.ide.kotlin.classfile.KotlinModality
 import dev.ide.kotlin.classfile.KotlinParameter
@@ -270,6 +271,7 @@ class BuiltinsReader(private val jars: List<String>) {
                 paramNames = f.parameters.map { it.name },
                 receiverTypeArgs = receiverArgs(receiver),
                 receiverTypeParam = receiver?.let(::receiverTypeParamOf),
+                receiverNullable = receiver?.isNullable == true,
                 packageName = pkg,
                 isInternal = f.visibility == KotlinVisibility.INTERNAL,
                 isInline = f.isInline,
@@ -277,6 +279,7 @@ class BuiltinsReader(private val jars: List<String>) {
                 isSuspend = f.isSuspend,
                 varargParamIndex = f.parameters.indexOfFirst { it.isVararg },
                 paramHasDefault = f.parameters.map { it.declaresDefaultValue },
+                contract = f.contract.takeIf { it.isNotEmpty() }?.let(KotlinContractCodec::encode),
             )
         }
 
@@ -293,6 +296,7 @@ class BuiltinsReader(private val jars: List<String>) {
                 typeParameters = p.typeParameters.map { it.name },
                 receiverTypeArgs = receiverArgs(receiver),
                 receiverTypeParam = receiver?.let(::receiverTypeParamOf),
+                receiverNullable = receiver?.isNullable == true,
                 packageName = pkg,
                 isInternal = p.visibility == KotlinVisibility.INTERNAL,
             )

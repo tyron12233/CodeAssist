@@ -3665,8 +3665,9 @@ internal class KotlinSemanticChecks(
         return extensionAcceptsNull(callee)
     }
 
-    private fun extensionAcceptsNull(sym: KotlinSymbol): Boolean {
+    internal fun extensionAcceptsNull(sym: KotlinSymbol): Boolean {
         if (!sym.isExtension) return false
+        if (sym.receiverNullable) return true
         val decl = (sym.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? KtCallableDeclaration
         if (decl != null && sym.origin.fromSource) {
             val recv = decl.receiverTypeReference?.text?.trim() ?: return false

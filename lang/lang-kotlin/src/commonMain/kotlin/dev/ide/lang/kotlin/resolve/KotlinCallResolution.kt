@@ -359,7 +359,9 @@ internal fun KotlinResolver.bestOverload(
 ): KotlinSymbol {
     if (candidates.size == 1) return candidates.first()
     val applicable = candidates.filter { isApplicable(it, call, receiverType) }
-    val pool = applicable.ifEmpty { candidates }
+    // None applies: the call is in error either way, and the candidates its arguments at least map onto are
+    // the ones K2 reports it against (`assertTrue(1)` is a mismatch on `actual: Boolean`).
+    val pool = applicable.ifEmpty { candidates.filter { !argumentsMissParameters(it, call) }.ifEmpty { candidates } }
     if (pool.size == 1) return pool.first()
     var best = pool.first()
     var bestKey = specificityKey(best, call, receiverType)
@@ -467,6 +469,7 @@ internal fun KotlinResolver.isApplicable(
     receiverType: KotlinType?
 ): Boolean {
     if (receiverType != null && receiverArgsContradict(sym, receiverType)) return false
+    if (argumentsMissParameters(sym, call)) return false
     // A SPREAD argument can only fill a vararg: `listOf(*arr)` is never `listOf(element: T)`, which otherwise
     // won with `T = Array<…>`. Kotlin metadata, Java bytecode (ACC_VARARGS) and source all record the vararg
     // index; a candidate with no parameter info at all is left alone.
@@ -482,6 +485,31 @@ internal fun KotlinResolver.isApplicable(
     val cs = newConstraintSystem(sym)
     addArgumentConstraints(sym, call, cs)
     return !cs.hasContradiction
+}
+
+/**
+ * Whether [call]'s arguments cannot be mapped onto [sym]'s parameters: a name it does not declare, more
+ * positional arguments than it has parameters (and no vararg), or a required parameter (no default, not the
+ * vararg) left without a value. K2 rejects such a candidate outright (NAMED_PARAMETER_NOT_FOUND, TOO_MANY_ARGUMENTS,
+ * NO_VALUE_FOR_PARAMETER), so `assertTrue(x)` is never `assertTrue(message: String? = null, block: () -> Boolean)`.
+ * Judged only when the candidate's parameter names and defaults are known (Kotlin metadata or source); a Java or
+ * synthetic candidate is never ruled out here.
+ */
+private fun KotlinResolver.argumentsMissParameters(sym: KotlinSymbol, call: KtCallExpression): Boolean {
+    val n = sym.paramTypes.size
+    if (sym.paramHasDefault.size != n || sym.paramNames.size != n) return false
+    val filled = BooleanArray(n)
+    call.valueArguments.forEachIndexed { i, arg ->
+        val name = arg.getArgumentName()?.asName?.identifier
+        val idx = when {
+            name != null -> sym.paramNames.indexOf(name).takeIf { it >= 0 } ?: return true
+            arg is KtLambdaArgument -> lambdaParamIndex(call, i, sym)
+            else -> argParamIndex(arg, i, sym)
+        }
+        if (idx !in 0..<n) return true
+        filled[idx] = true
+    }
+    return (0..<n).any { !filled[it] && !sym.paramHasDefault[it] && it != sym.varargParamIndex }
 }
 
 /**

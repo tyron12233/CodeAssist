@@ -1856,6 +1856,67 @@ class KotlinCompilerParityTest {
         a.analyze(doc.file).diagnostics.filter { it.severity == Severity.ERROR && it.code != KotlinDiagnosticCodes.SYNTAX }
     }
 
+    /**
+     * A library function's `contract { }` is read from its @Metadata: kotlin.test's `assertNotNull(x)` makes `x`
+     * non-null after it, `assertTrue(x is T)` and `assertIs<T>(x)` make `x` a `T`, while `assertNull(x)` and a
+     * call without a contract prove nothing.
+     */
+    @Test
+    fun libraryContractsNarrowTheirArguments() {
+        val clean = listOf(
+            "fun f(s: String?) { kotlin.test.assertNotNull(s); s.length }",
+            "fun f(s: String?) { kotlin.test.assertNotNull(s, \"msg\"); s.length }",
+            "fun f(a: Any?) { kotlin.test.assertTrue(a is String); a.length }",
+            "fun f(a: Any?) { kotlin.test.assertTrue(a is String, \"msg\"); a.length }",
+            "fun f(a: Any?) { kotlin.test.assertFalse(a !is String); a.length }",
+            "fun f(a: Any?) { kotlin.test.assertIs<String>(a); a.length }",
+            "fun f(s: String?) { if (!s.isNullOrEmpty()) s.length }",
+        )
+        for (code in clean) assertEquals(emptyList(), kotlinTestErrors(code).map { it.code }, "for `$code`")
+        val dirty = listOf(
+            "fun f(s: String?) { kotlin.test.assertNull(s); s.length }",
+            "fun f(s: String?) { println(s); s.length }",
+            "fun f(a: Any?) { kotlin.test.assertFalse(a is String); a.length }",
+        )
+        for (code in dirty) assertTrue(kotlinTestErrors(code).isNotEmpty(), "expected an error for `$code`")
+    }
+
+    /**
+     * False errors from the real-world sweep: a Java constructor overload is chosen by its arguments and a Kotlin
+     * `Map` fills a `java.util.Map` parameter (`HashMap(m)` is a `HashMap<String, Int>`), a private data class's
+     * `copy` is as visible as its constructor, a cast in the right side of a true `&&` narrows, `String? + x` is
+     * the stdlib's `String?.plus`, and a candidate that leaves a required parameter unfilled is not applicable.
+     */
+    @Test
+    fun realWorldSweepRound2() {
+        val jdkClean = listOf(
+            "fun f(m: Map<String, Int>, k: String) { val h = HashMap(m); val v: Int? = h[k] }",
+            "fun f(m: Map<String, Int>, k: String) { val h = java.util.TreeMap(m); val v: Int? = h[k] }",
+            "fun f(m: List<String>) { val a = ArrayList(m); val s: String = a[0] }",
+        )
+        for (code in jdkClean) assertEquals(emptyList(), jdkErrors(code).map { it.code }, "for `$code`")
+        val clean = listOf(
+            "class R { private data class S(val a: Int, val b: String); fun f(s: Any) { (s as S).copy(b = \"x\") } }",
+            "open class P; class Q : P() { val e = 1 }\nfun f(ready: Boolean, p: P) { if (ready && (p as Q).e == 1) p.e }",
+            "fun f(s: String?) = s + \"x\"",
+            "fun g(message: String? = null, block: () -> Boolean) {}\nfun g(actual: Boolean, message: String? = null) {}\n" +
+                "fun f(a: Any?) { g(a is String) }",
+        )
+        for (code in clean) assertEquals(emptyList(), errors(code).map { it.code }, "for `$code`")
+        assertTrue(errors("fun f(s: String?) = s.length").isNotEmpty(), "a member on a nullable receiver still errors")
+    }
+
+    /** [errors] with kotlin-test on the classpath too. */
+    private fun kotlinTestErrors(code: String): List<Diagnostic> = runBlocking {
+        val text = "package demo\n$code\n"
+        val src = tempProject(mapOf("Use.kt" to text))
+        val kotlinTest = java.nio.file.Path.of(kotlin.test.Asserter::class.java.protectionDomain.codeSource.location.toURI())
+        val a = KotlinSourceAnalyzer(fakeContext(src, listOf(stdlibJarPath(), kotlinTest)))
+        val doc = SnippetDoc(text, DiskFile(src.resolve("Use.kt")))
+        a.incrementalParser.parseFull(doc)
+        a.analyze(doc.file).diagnostics.filter { it.severity == Severity.ERROR && it.code != KotlinDiagnosticCodes.SYNTAX }
+    }
+
     /** The errors of [target], one of several [files] of one project (each taken as written, no package added). */
     private fun errorsIn(files: Map<String, String>, target: String): List<Diagnostic> = runBlocking {
         val src = tempProject(files)

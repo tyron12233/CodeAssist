@@ -2539,13 +2539,13 @@ class KotlinSymbolService(
             run {
                 // The stdlib's extensions (`Iterable.map`, `String.trim`) are in the index too — the host adds
                 // the bundled stdlib jar to the index scope — so a single prefix query per receiver covers them.
-                fun query(t: String) = idx.prefix<CallableShape>(
-                    KotlinCallableIndex.id,
-                    KotlinCallableIndex.extPrefix(t, m.indexPrefix),
-                    EXTENSION_QUERY_LIMIT
-                )
-                    .filter { matches(it.value.name) }
-                    .map { it.value.toSymbol(this) }.toList()
+                // The `.kotlin_builtins` extensions (`String?.plus`, `Any?.toString`) have no `.class` facade, so
+                // they are in their own index, keyed the same way.
+                fun query(t: String) = listOf(KotlinCallableIndex.id, KotlinBuiltinCallableIndex.id).flatMap { id ->
+                    idx.prefix<CallableShape>(id, KotlinCallableIndex.extPrefix(t, m.indexPrefix), EXTENSION_QUERY_LIMIT)
+                        .filter { matches(it.value.name) }
+                        .map { it.value.toSymbol(this) }.toList()
+                }
                 KotlinPerf.span("ext.index") {
                     targets.flatMap { t ->
                         // The mode rides the key: an exact probe's narrow result must never serve a lenient query.
@@ -2556,7 +2556,9 @@ class KotlinSymbolService(
             }
         } else {
             val scan = reader.scan(this)
-            targets.flatMap { scan.extensionsByReceiver[it].orEmpty() }.filter { matches(it.name) }
+            targets.flatMap { scan.extensionsByReceiver[it].orEmpty() }.filter { matches(it.name) } +
+                // `reader` scans only `.class`; the `.kotlin_builtins` extensions come from the live decode.
+                builtins.topLevelCallables().filter { it.receiverTypeFqn in targets && matches(it.name) }
         }
         val fromSource = sourceExtensionsOn(targets, ::matches)
         // Cross-file source extensions from the persistent `kotlin.callables.source` index — available as
@@ -3451,6 +3453,8 @@ class KotlinSymbolService(
             isDeprecated = s.isDeprecated,
             varargParamIndex = s.varargParamIndex,
             paramHasDefault = s.paramHasDefault,
+            contract = s.contract,
+            receiverNullable = s.receiverNullable,
             declarationNode = s.declaration(),
             doc = s.documentation(),
         )

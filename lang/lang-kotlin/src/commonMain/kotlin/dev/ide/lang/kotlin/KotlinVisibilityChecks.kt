@@ -261,8 +261,14 @@ internal fun KotlinSemanticChecks.memberAccessVisibility(ref: KtNameReferenceExp
     var first: Pair<Vis, KtClassOrObject>? = null
     for (m in members) {
         val decl = m.sourceDeclaration() ?: return null
-        val owner = decl.getStrictParentOfType<KtClassOrObject>() ?: return null
-        var vis = visibilityOf(decl)
+        // A member the compiler synthesizes (a data class's `copy`) is indexed against its class: it belongs to
+        // that class, and is as visible as the primary constructor, not as the class (whose own visibility the
+        // class's type reference already answers for).
+        val synthesizedIn = decl as? KtClassOrObject
+        val owner = synthesizedIn ?: decl.getStrictParentOfType<KtClassOrObject>() ?: return null
+        var vis = if (synthesizedIn != null) {
+            (synthesizedIn as? dev.ide.kotlin.syntax.psi.KtClass)?.primaryConstructor?.let(::visibilityOf) ?: Vis.PUBLIC
+        } else visibilityOf(decl)
         var hiddenIn = owner
         var verdict = canSee(vis, owner, ref, receiverFqn)
         // A companion's member is no more visible than the companion (`C.baz()` with `private companion object`).

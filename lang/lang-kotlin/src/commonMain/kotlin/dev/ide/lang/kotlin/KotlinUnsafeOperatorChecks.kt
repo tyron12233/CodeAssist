@@ -95,6 +95,12 @@ private fun KotlinSemanticChecks.unsafeMemberOperator(
     if (!service.isKnownType(nonNull.qualifiedName)) return false
     val found = service.membersNamedForCheck(nonNull.qualifiedName, nonNull.typeArguments, name).filter { it.name == name }
     if (found.isEmpty() || found.any { it.isExtension }) return false
+    // An extension declared on the nullable type takes the value as it is (`operator fun String?.plus(other:
+    // Any?)` makes `s + "x"` fine on a `String?`): a member is not applicable on a nullable receiver, so K2
+    // binds the extension instead.
+    if (service.extensionsFor(nonNull.qualifiedName, nonNull.typeArguments, name, exactName = true)
+            .any { it.name == name && extensionAcceptsNull(it) }
+    ) return false
     val at = r.textRange.startOffset
     if (resolver.scopeMemberExtensions(at, nonNull, name, exactName = true).any { it.name == name }) return false
     if (resolver.scopeMemberExtensions(at, type, name, exactName = true).any { it.name == name }) return false

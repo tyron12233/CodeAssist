@@ -123,6 +123,11 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
         if (a.qualifiedName == b.qualifiedName) {
             decompose(b.qualifiedName, a.typeArguments, b.typeArguments); return
         }
+        // A Java parameter's collection type is flexible in mutability (`(Mutable)Map<K, V>!`): a Kotlin `Map` or
+        // `MutableMap` is the `java.util.Map` it compiles to, so `HashMap(m)` takes a read-only `m`.
+        if (Builtins.javaTypeFor(a.qualifiedName) == b.qualifiedName) {
+            decompose(b.qualifiedName, a.typeArguments, b.typeArguments); return
+        }
         // Project A onto B's classifier (A's instantiation of the supertype B). Found → decompose those args.
         val proj = service.receiverSupertypeArgs(a.qualifiedName, a.typeArguments, b.qualifiedName)
         if (proj != null) {

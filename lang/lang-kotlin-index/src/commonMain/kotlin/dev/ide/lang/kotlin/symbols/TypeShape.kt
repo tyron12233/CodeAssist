@@ -129,4 +129,6 @@ fun KotlinSymbol.rebindTypes(ctx: KotlinTypeContext?): KotlinSymbol = KotlinSymb
     isDeprecated = isDeprecated,
     varargParamIndex = varargParamIndex,
     paramHasDefault = paramHasDefault,
+    contract = contract,
+    receiverNullable = receiverNullable,
 )

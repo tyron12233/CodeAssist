@@ -1093,7 +1093,16 @@ internal fun KotlinResolver.constructorResultType(fqn: String, call: KtCallExpre
         return service.typeByFqn(fqn, args)
     }
     samConstructorResultType(fqn, tps, call)?.let { return it }
-    val paramTypes = service.constructorParamTypes(fqn, call.valueArguments.size)
+    // A library class with several constructors of this arity (`HashMap(int)` and `HashMap(Map)`) binds its
+    // type parameters through the one the arguments fit, chosen as any overload is; the first of the arity
+    // left `HashMap(m)` a `HashMap<Any, Any>` whose `get` read as `Object`.
+    val paramTypes = (if (service.sourceClass(fqn) == null) {
+        service.constructorsOf(fqn)
+            .filter { Modifier.PRIVATE !in it.modifiers && !it.isInternal && it.paramTypes.size == call.valueArguments.size }
+            .takeIf { it.size > 1 }
+            ?.let { bestOverload(it, call, null).paramTypes }
+    } else null)
+        ?: service.constructorParamTypes(fqn, call.valueArguments.size)
         ?: return service.typeByFqn(fqn)
     val bindings = HashMap<String, TypeRef>()
     call.valueArguments.forEachIndexed { i, arg ->
