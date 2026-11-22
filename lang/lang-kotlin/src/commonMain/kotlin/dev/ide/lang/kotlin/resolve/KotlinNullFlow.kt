@@ -160,9 +160,12 @@ internal fun KotlinResolver.stableForSmartCast(
                 }?.let { return !(it as dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration).isVar }
             }
 
-            // A lambda's implicit `it` is its one value parameter, as stable as a named one.
+            // A lambda's implicit `it` is its one value parameter, as stable as a named one, and so is a component
+            // of a destructured one (`{ (k, v) -> }`).
             is dev.ide.kotlin.syntax.psi.KtFunctionLiteral -> if (name == "it" && !node.hasParameterSpecification) return true
-                else node.valueParameters.firstOrNull { it.name == name }?.let { return true }
+                else node.valueParameters.firstOrNull {
+                    it.name == name || it.destructuringDeclaration?.entries?.any { e -> e.name == name } == true
+                }?.let { return true }
             is KtFunction -> node.valueParameters.firstOrNull { it.name == name }?.let {
                 // A plain value parameter is immutable → stable; a primary-constructor `val`/`var` parameter is a
                 // member property, handled in the KtClassOrObject case below with the member-stability rules.
