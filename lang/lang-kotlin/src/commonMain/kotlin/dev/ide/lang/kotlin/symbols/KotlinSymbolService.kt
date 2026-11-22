@@ -2010,7 +2010,7 @@ class KotlinSymbolService(
             // `value: T` becomes `value: String`). toSymbol marks the class's `T` as a type parameter, then
             // substituteSymbol replaces it. No type arguments (a raw use) → members keep their `T` (unbound).
             val classBindings = rc.typeParameterNames.zip(typeArgs).toMap()
-            val readBindings = capturedReadBindings(classBindings, { rc.typeParameterNames }, { classTypeParameterBounds(fqn) })
+            val readBindings = capturedReadBindings(classBindings, { rc.typeParameterNames }, { capturedUpperBounds(rc) })
             val own = rc.members.map {
                 val sym = toSymbol(it, fqn, rc.typeParameterNames)
                 if (classBindings.isEmpty()) sym else substituteSymbol(sym, classBindings, readBindings)
@@ -3224,11 +3224,15 @@ class KotlinSymbolService(
     private fun capturedReadBindings(
         bindings: Map<String, TypeRef>, tps: () -> List<String>, boundsOf: () -> List<TypeRef?>,
     ): Map<String, TypeRef> {
-        if (bindings.values.none { (it as? KotlinType)?.projection == "in" }) return bindings
+        // A star (`Proxy<*>`, `Box<*>`) reads the same way: its captured type is bounded above by the declared bound
+        // only, so `x.t` with `class Proxy<T : I>(val t: T)` is an `I` and `box.t` an `Any?`.
+        // (A star reaches here two ways: a type named `*` from Kotlin source text, `Any` projected `*` from Java.)
+        fun captured(v: TypeRef) = (v as? KotlinType)?.let { it.projection == "in" || it.projection == "*" || it.qualifiedName == "*" } == true
+        if (bindings.values.none(::captured)) return bindings
         val tps = tps()
         val bounds = boundsOf()
         return bindings.mapValues { (name, v) ->
-            if ((v as? KotlinType)?.projection != "in") v
+            if (!captured(v)) v
             else ((bounds.getOrNull(tps.indexOf(name)) as? KotlinType) ?: KotlinType("kotlin.Any", nullable = true, context = this)).withProjection("out")
         }
     }
@@ -4586,6 +4590,23 @@ class KotlinSymbolService(
     /** Each type parameter's resolved upper bound (positional with [classTypeParameters]), or null where the bound
      *  is absent/unknown. Source classes parse the declared bound text; classpath classes use the type-shape's
      *  erased bounds (empty for a Kotlin-metadata class, whose decode doesn't carry them). */
+    /**
+     * Each of a source class's type parameters bounded by ALL its upper bounds, the inline one and every `where`
+     * constraint on it (`where T : A, T : B` is `A & B`): what a value of a captured type (`Inv<*>.value`) is known to
+     * be. [classTypeParameterBounds] keeps one bound each, which reads such a value as only one of them.
+     */
+    private fun capturedUpperBounds(rc: RawClass): List<KotlinType?> {
+        val cls = (rc.node as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? dev.ide.kotlin.syntax.psi.KtClass
+            ?: return classTypeParameterBounds(rc.fqn)
+        return cls.typeParameters.map { tp ->
+            val texts = listOfNotNull(tp.extendsBound?.text) + cls.typeConstraints
+                .filter { it.subjectTypeParameterName?.getReferencedName() == tp.name }
+                .mapNotNull { it.boundTypeReference?.text }
+            val types = texts.mapNotNull { typeFromText(it, rc.ctx) }
+            types.firstOrNull()?.withIntersection(types.drop(1))
+        }
+    }
+
     fun classTypeParameterBounds(fqn: String): List<KotlinType?> {
         model().classByFqn[fqn]?.let { rc ->
             return rc.typeParameterBounds.map { b ->

@@ -2035,6 +2035,16 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), errors(clean).map { it.code }, "for `$clean`")
     }
 
+    /** A member read through a star projection is its parameter's upper bound (`Proxy<*>.t` with `T : I` is an `I`,
+     *  an unbounded one `Any?`), so a `when` on it is judged for exhaustiveness and a mismatch is reported. */
+    @Test
+    fun starProjectedReadsTakeTheBound() {
+        val code = "sealed interface I\nclass A : I\nclass B : I\ndata class Proxy<T : I>(val t: T)\nclass Box<T>(val t: T)\n" +
+            "fun f(x: Proxy<*>, b: Box<*>) { val y: Int = x.t; val z: Int = b.t\n when (x.t) { is A -> 1 }\n when (x.t) { is A -> 1; is B -> 2 } }"
+        assertEquals(listOf(KotlinDiagnosticCodes.TYPE_MISMATCH, KotlinDiagnosticCodes.TYPE_MISMATCH, KotlinDiagnosticCodes.WHEN_EXHAUSTIVE),
+            errors(code).map { it.code }, "for `$code`")
+    }
+
     /** A builder lambda's receiver takes the call's explicit type arguments: inside `buildMap<String, MutableList<C>> { }`
      *  `this` is a `MutableMap<String, MutableList<C>>`, so `getOrPut(k) { ArrayList() }` is a `MutableList<C>`. */
     @Test
