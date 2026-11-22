@@ -4448,7 +4448,9 @@ class KotlinSymbolService(
      *  for validating a constructor call's arguments. Served from the `kotlin.typeShape` index when built.
      *  [enrich]ed like members, so signature help and hints show `NotificationChannel(id: String, …)`. */
     fun constructorsOf(fqn: String): List<KotlinSymbol> =
-        typeShape(fqn)?.members?.filter { it.kind == SymbolKind.CONSTRUCTOR }?.map(::enrich) ?: emptyList()
+        // A built-in declared only in `.kotlin_builtins` (`kotlin.Array`, `kotlin.concurrent.atomics.AtomicArray`)
+        // has no class file, so its constructors come from its built-in shape.
+        (typeShape(fqn) ?: builtinShape(fqn))?.members?.filter { it.kind == SymbolKind.CONSTRUCTOR }?.map(::enrich) ?: emptyList()
 
     /** A class's own type-parameter names (`Box<T>` → `["T"]`), from the project source model or a classpath
      *  binary's shape. Empty for a non-generic or unknown type. Drives constructor type-argument inference. */

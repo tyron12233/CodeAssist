@@ -203,7 +203,6 @@ file Members.kt
 
 file Shapes.kt
   diagnostics
-    ERROR kt.cannotInferType [1152..1160] Not enough information to infer type variable T
   references
     [8] parity -> <unresolved>
     [23] kotlin -> <unresolved>

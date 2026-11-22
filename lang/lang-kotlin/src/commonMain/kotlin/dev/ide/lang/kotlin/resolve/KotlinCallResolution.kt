@@ -108,6 +108,13 @@ internal fun KotlinResolver.reentrantCalleeFallback(call: KtCallExpression): Kot
     return byName.singleOrNull { it.paramTypes.size == argCount } ?: byName.singleOrNull()
 }
 
+/** Whether an implicit receiver at [offset] has a member FUNCTION [name] that can take [argCount] arguments. */
+private fun KotlinResolver.implicitReceiverHasMethod(offset: Int, name: String, argCount: Int): Boolean =
+    implicitReceiversAt(offset).any { recv ->
+        service.membersNamed(recv.qualifiedName, recv.typeArguments, name)
+            .any { it.name == name && it.kind == SymbolKind.METHOD && !it.isExtension && !needsMoreArguments(it, argCount) }
+    }
+
 internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol? {
     val name =
         (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
@@ -198,11 +205,21 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
                 // Dropped only when the name really is declared nearer. Filtering every out-of-scope
                 // top-level instead regressed seven tests: a bare `Text`/`Column` and a bare scope member
                 // resolve here without their import, and that leniency is load-bearing elsewhere.
-                val shadowed = localFunctionsInScope(call.textRange.startOffset, name).isNotEmpty() ||
-                    enclosingClassMembersContain(call.textRange.startOffset, name)
-                if (it.isNotEmpty() && shadowed) emptyList() else it
+                // So does a member of any implicit receiver, an extension function's own receiver included: K2's
+                // tower visits implicit receiver scopes before the package and import scopes (`iterator()` inside
+                // `fun Iterable<T>.f()` is `Iterable.iterator()`, not `kotlin.sequences.iterator(block)`).
+                val shadowed = it.isNotEmpty() && (localFunctionsInScope(call.textRange.startOffset, name).isNotEmpty() ||
+                    enclosingClassMembersContain(call.textRange.startOffset, name) ||
+                    implicitReceiverHasMethod(call.textRange.startOffset, name, argCount))
+                if (shadowed) emptyList() else it
             }
             .let { tops ->
+                // A class and a same-named factory function at one level (`AtomicArray(array)` beside
+                // `fun AtomicArray(size, init)`): K2 weighs the constructors with the functions, so when every
+                // function is short of arguments and a constructor can take the call, the call constructs.
+                if (typeInScope && tops.isNotEmpty() && tops.all { needsMoreArguments(it, argCount) } &&
+                    service.resolveTypeName(name, fileContext)?.let { t -> service.constructorsOf(t).any { !needsMoreArguments(it, argCount) && it.paramTypes.size >= argCount - (if (it.varargParamIndex >= 0) 99 else 0) } } == true
+                ) return null
                 // A top-level function that cannot take this many arguments is not the callee when the implicit
                 // receiver has one that can: inside `fun String.pad(n: Int) = repeat(n)`, `repeat(n)` is
                 // `CharSequence.repeat(n)`, not `kotlin.repeat(times, action)` with its action missing. The

@@ -151,6 +151,9 @@ internal fun KotlinResolver.stableForSmartCast(
                 if (local != null) return (!local.isVar || neverReassigned(local, node)) && !local.hasDelegate()
             }
 
+            // A lambda's implicit `it` is its one value parameter, as stable as a named one.
+            is dev.ide.kotlin.syntax.psi.KtFunctionLiteral -> if (name == "it" && !node.hasParameterSpecification) return true
+                else node.valueParameters.firstOrNull { it.name == name }?.let { return true }
             is KtFunction -> node.valueParameters.firstOrNull { it.name == name }?.let {
                 // A plain value parameter is immutable → stable; a primary-constructor `val`/`var` parameter is a
                 // member property, handled in the KtClassOrObject case below with the member-stability rules.

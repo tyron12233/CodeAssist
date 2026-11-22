@@ -2057,6 +2057,20 @@ class KotlinCompilerParityTest {
         assertTrue(KotlinDiagnosticCodes.EXPECTED_PARAMETER_TYPE_MISMATCH !in codes("fun <T> select(vararg x: T) = x[0]\nfun t() { select({ x: Int -> }, { x: String -> }) }"))
     }
 
+    /** A cast of a lambda's implicit `it` narrows the later reads of `it`, as it does a named parameter. */
+    @Test
+    fun aCastOfImplicitItNarrowsLaterReads() {
+        clean("interface A<F> { val a: F }\ninterface B<G> : A<G> { val b: G }\nfun <X> withCallback(x: X, p: (X) -> Unit) {}\n" +
+            "fun main(a: A<String>) { withCallback(a) { (it as B).b; it.b; it.a } }")
+    }
+
+    /** A member of the extension receiver is nearer than a same-named top-level function (`kotlin.sequences.iterator`). */
+    @Test
+    fun anImplicitReceiverMemberShadowsATopLevelFunction() {
+        clean("fun <T> Iterable<T>.second(): T? { val i = iterator(); if (!i.hasNext()) return null; i.next(); return if (i.hasNext()) i.next() else null }")
+        assertCodes("fun Iterable<String>.g() { val i: Int = iterator() }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {
