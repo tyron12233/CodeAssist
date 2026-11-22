@@ -1212,11 +1212,25 @@ private val PRIMITIVE_ARRAYS = mapOf(
 
 /** A known, non-array value given BY NAME to a vararg of [elementType]: the named form takes the whole array. */
 internal fun KotlinSemanticChecks.singleElementForNamedVararg(elementType: KotlinType, actual: KotlinType): Boolean {
-    if (elementType.isTypeParameter || actual.isTypeParameter) return false
+    // The element type does not matter, a type parameter included: the named form takes an `Array<out E>`, which a
+    // known non-array value never is.
+    if (actual.isTypeParameter) return false
     fun isArray(n: String) = n == "kotlin.Array" || (n.startsWith("kotlin.") && n.endsWith("Array"))
-    if (isArray(canonicalName(elementType))) return false
+    if (!elementType.isTypeParameter && isArray(canonicalName(elementType))) return false
     val a = canonicalName(actual)
     if (a == NOTHING || isArray(a) || !service.isKnownType(a)) return false
+    return true
+}
+
+/** `*value` where [actual] is a known type that is no array at all (`*"2"`): only an array can be spread. */
+internal fun KotlinSemanticChecks.spreadOfNonArray(actual: KotlinType): Boolean {
+    if (actual.isTypeParameter) return false
+    val a = canonicalName(actual)
+    if (a == NOTHING || a == "kotlin.Any" || !service.isKnownType(a)) return false
+    if (a == "kotlin.Array" || (a.startsWith("kotlin.") && a.endsWith("Array"))) return false
+    // A Java array or a collection-like platform type may surface under its JVM name.
+    if (a.startsWith("java.") || a.endsWith("[]") || a == "kotlin.Cloneable") return false
+    // `Array` is final and implements nothing else a value could be declared as, so any other known type is no array.
     return true
 }
 
@@ -1356,7 +1370,10 @@ internal fun KotlinSemanticChecks.typeReadOffTheTree(e: KtExpression, resolver: 
     if ((decl as? KtParameter)?.typeReference?.text?.trim()?.endsWith("?") == true) return false
     if ('<' in text) return false
     val fqn = service.resolveTypeName(text, resolver.fileContext) ?: return false
-    return service.isFinalType(fqn) == true
+    if (service.isFinalType(fqn) == true) return true
+    // An open declared type is read off the tree too where no check written before the use narrows the value: the
+    // flow walk proves no `is`/`as` target for it there (`when (x) { is Int -> … }` does not reach past the `when`).
+    return service.isKnownType(fqn) && resolver.flowProvenTypes(u, deep = true).isEmpty()
 }
 
 /** A literal, or a local/parameter with a written type: an expression whose type is read, not inferred. */

@@ -757,13 +757,34 @@ internal fun KotlinResolver.approximateEscapingLocalType(
     t: KotlinType,
     decl: KtDeclaration
 ): KotlinType {
-    if (!isSyntheticLocalTypeFqn(t.qualifiedName)) return t
-    if (isLocalDeclaration(decl) || decl.hasModifier(KtTokens.PRIVATE_KEYWORD)) return t
-    val supers = service.supertypesOf(t.qualifiedName).filterIsInstance<KotlinType>()
-        .filter { it.qualifiedName != t.qualifiedName }
-    return supers.firstOrNull { it.qualifiedName != "kotlin.Any" && it.qualifiedName != "java.lang.Object" }
-        ?: service.typeByFqn("kotlin.Any")
+    if (isLocalDeclaration(decl)) return t
+    // A private declaration keeps the anonymous type, unless it is `inline`: its body is copied into callers that
+    // cannot name the type (K2's `FirDeclarationUtil.isLocalOrPrivateAndNotInline`, KT-33917).
+    if (decl.hasModifier(KtTokens.PRIVATE_KEYWORD) && !decl.hasModifier(KtTokens.INLINE_KEYWORD)) return t
+    return approximateLocalTypeDeep(t, 0)
 }
+
+/** [t] with every local/anonymous type in it, nested type arguments included (`Inv<anonymous>` becomes `Inv<Any>`),
+ *  replaced by its denotable supertype. */
+private fun KotlinResolver.approximateLocalTypeDeep(t: KotlinType, depth: Int): KotlinType {
+    if (isSyntheticLocalTypeFqn(t.qualifiedName)) {
+        val supers = service.supertypesOf(t.qualifiedName).filterIsInstance<KotlinType>()
+            .filter { it.qualifiedName != t.qualifiedName }
+        val approx = supers.firstOrNull { it.qualifiedName != "kotlin.Any" && it.qualifiedName != "java.lang.Object" }
+            ?: service.typeByFqn("kotlin.Any")
+        return if (t.nullable) approx.withNullable(true) else approx
+    }
+    if (depth > 4 || t.typeArguments.none { a -> (a as? KotlinType)?.let { mentionsLocalType(it, 0) } == true }) return t
+    if (t.isTypeParameter || t.isExtensionFunctionType || t.isComposable) return t
+    val args = t.typeArguments.map { a ->
+        (a as? KotlinType)?.let { approximateLocalTypeDeep(it, depth + 1).withProjection(it.projection) } ?: a
+    }
+    return service.typeByFqn(t.qualifiedName, args).withNullable(t.nullable).withProjection(t.projection)
+}
+
+private fun mentionsLocalType(t: KotlinType, depth: Int): Boolean =
+    isSyntheticLocalTypeFqn(t.qualifiedName) ||
+        (depth < 5 && t.typeArguments.any { a -> (a as? KotlinType)?.let { mentionsLocalType(it, depth + 1) } == true })
 
 /** Whether [fqn] is the synthetic key a local/anonymous type is registered under ([SourceIndexBuilder.
  *  localTypeFqn] appends a `$L<ordinal>` last segment). */

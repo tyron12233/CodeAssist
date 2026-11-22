@@ -1324,7 +1324,9 @@ private fun KotlinResolver.inferredSameFilePropertyType(p: KtProperty): KotlinTy
         return null
     }
     return try {
-        inferType(p.initializer) ?: p.delegateExpression?.let(::delegatedValueType)
+        (inferType(p.initializer) ?: p.delegateExpression?.let(::delegatedValueType))
+            // The anonymous-object escape rule, as for a member read through the symbol service.
+            ?.let { approximateEscapingLocalType(it, p) }
     } finally {
         guard.remove(p)
     }

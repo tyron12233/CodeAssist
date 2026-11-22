@@ -31,7 +31,7 @@ internal fun KotlinSemanticChecks.callableReferenceCheckers(): List<KotlinChecke
     },
 )
 
-private fun KotlinSemanticChecks.extensionReferenceWithoutReceiver(ref: KtCallableReferenceExpression, resolver: KotlinResolver): Diagnostic? {
+internal fun KotlinSemanticChecks.extensionReferenceWithoutReceiver(ref: KtCallableReferenceExpression, resolver: KotlinResolver): Diagnostic? {
     if (ref.receiverExpression != null) return null
     val callee = ref.callableReference as? KtNameReferenceExpression ?: return null
     val name = callee.getReferencedName()

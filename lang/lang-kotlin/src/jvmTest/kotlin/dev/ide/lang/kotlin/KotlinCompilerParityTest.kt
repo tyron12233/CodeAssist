@@ -1031,6 +1031,102 @@ class KotlinCompilerParityTest {
         assertTrue(n !in codes("fun test1() = run { if (true) return@run 1; throw Exception() }"))
     }
 
+    /** A reference to a generic callable that nothing gives an expected type cannot infer its type arguments, and a
+     *  local holding a join of only failed references has an error type that cannot be invoked. */
+    @Test
+    fun genericCallableReferencesNeedAnExpectedType() {
+        val c = KotlinDiagnosticCodes.CANNOT_INFER_TYPE
+        val decls = "fun <K> bar4(): K = null!!\nfun <K> foo4(): K = null!!\nfun bar2(): Int = 1\nclass Foo7<T>\nfun foo7(): Foo7<Int> = Foo7()\n"
+        assertCodes(decls + "fun t() { val inv = ::bar4; inv }", c)
+        assertCodes(decls + "fun t() { val inv = ::Foo7; inv }", c)
+        assertCodes(decls + "fun t(f: Boolean) { val inv = if (f) { foo7() } else { ::Foo7 }; inv }", c)
+        assertCodes(decls + "fun t(f: Boolean) { val inv = if (f) { ::bar4 } else { ::foo4 }; inv() }", c, c, KotlinDiagnosticCodes.UNRESOLVED)
+        clean(decls + "fun t(f: Boolean) { val inv = if (f) { ::bar2 } else { ::foo4 }; inv() }")
+        clean(decls + "fun t() { val inv: () -> Int = ::bar4; val f: () -> Foo7<Int> = ::Foo7; inv(); f() }")
+        clean(decls + "fun take(f: () -> Int) {}\nfun t() { take(::bar4) }")
+    }
+
+    /** A lambda whose input type is a bare type variable nothing constrains (no other argument, no explicit type, no
+     *  other lambda's result) cannot be analyzed: K2 reports the callee and the lambda or its untyped parameter. */
+    @Test
+    fun lambdaInputsNeedAProperConstraint() {
+        val c = KotlinDiagnosticCodes.CANNOT_INFER_TYPE
+        val decls = "fun <T, R> bar(f: (T) -> R): R = null!!\nfun <T, R> inter(x: (T) -> R, y: (R) -> T) {}\n"
+        assertCodes(decls + "fun t() { bar { true } }", c, c)
+        assertCodes(decls + "fun t() { bar { x -> x + 1 } }", c, c)
+        assertCodes(decls + "fun t() { inter({ 10 }, { x -> x }) }", c, c, c)
+        clean(decls + "fun t() { bar { x: Int -> x + 1 } }")
+        clean(decls + "fun take(i: Int) {}\nfun t() { bar { x -> take(x) } }".replace("bar { x -> take(x) }", "bar<Int, Unit> { x -> take(x) }"))
+        clean("fun <T> dep(x: (T) -> Int, y: (Int) -> T) {}\nfun t() { dep({ it }, { it }) }")
+    }
+
+    /** Only an array can be spread into a vararg, and its elements must fit; in named form a single element never
+     *  fills a vararg, whatever its element type. */
+    @Test
+    fun spreadArgumentsMustBeFittingArrays() {
+        val m = KotlinDiagnosticCodes.TYPE_MISMATCH
+        val decls = "fun join(x: Int, vararg a: String): String = \"\"\nfun <T> joinG(x: Int, vararg a: T): String = \"\"\n"
+        assertCodes(decls + "fun t() { join(1, *\"2\") }", m)
+        assertCodes(decls + "fun t(b: Array<Int>) { join(1, *b) }", m)
+        assertCodes(decls + "fun t() { joinG<String>(x = 1, a = \"2\") }", m)
+        clean(decls + "fun t(a: Array<String>) { join(1, *a, \"3\"); joinG(1, *a); join(x = 1, a = a) }")
+    }
+
+    /** A value of an open declared type that no check narrows at the use is what it is declared: `checkSubtype<Int>(x)`
+     *  with `x: Number` after a `when` whose `is Int` branch does not reach past it. A `when` condition that casts
+     *  narrows for good, since the first condition always runs. */
+    @Test
+    fun anOpenDeclaredTypeIsReadOffTheTreeWhenNothingNarrowsIt() {
+        val m = KotlinDiagnosticCodes.TYPE_MISMATCH
+        val helper = "fun <T> checkSubtype(t: T) = t\n"
+        assertCodes(helper + "fun f(x: Number) { when (x) { is Int -> checkSubtype<Int>(x); else -> {} }\n checkSubtype<Int>(x) }", m)
+        clean(helper + "fun f(x: Number) { when (x) { x as Int -> checkSubtype<Int>(x); else -> {} }\n checkSubtype<Int>(x) }")
+        clean(helper + "fun f(x: Number) { if (x !is Int) return\n checkSubtype<Int>(x) }")
+    }
+
+    /** An anonymous object escaping through a non-private declaration, or a private `inline` one, is seen as its
+     *  supertype, also nested in a type argument; a private non-inline declaration keeps it. */
+    @Test
+    fun escapingAnonymousObjectsAreApproximated() {
+        val u = KotlinDiagnosticCodes.UNRESOLVED
+        val decls = "class Inv<T>(val value: T)\nopen class MyClass\n"
+        assertCodes(decls + "private inline fun foo(crossinline f: () -> Int) = object { fun bar(): Int = f() }\nfun t() { foo { 1 }.bar() }", u)
+        assertCodes(decls + "fun foo() = Inv(object { fun bar() = 1 })\nfun t() { foo().value.bar() }", u)
+        assertCodes(decls + "class Foo { val p = object : MyClass() { fun only() {} }\n init { p.only() } }", u)
+        clean(decls + "private fun foo() = object { fun bar() = 1 }\nfun t() { foo().bar() }")
+        clean(decls + "class Foo { private val p = object : MyClass() { fun only() {} }\n init { p.only() } }")
+    }
+
+    /** A lambda with a bare `return@label` and no expected result type returns `Unit`, so returning a value from it
+     *  elsewhere is a mismatch; a function type that fixes the result keeps its own rule. */
+    @Test
+    fun aBareLabeledReturnMakesALambdaUnit() {
+        val m = KotlinDiagnosticCodes.TYPE_MISMATCH
+        assertCodes("fun test(a: Int) {\n run f@{\n if (a > 0) return@f\n else return@f 1\n }\n}", m)
+        assertCodes("val flag = true\nval a = b@ {\n if (flag) return@b 4\n return@b\n}", m)
+        clean("fun test(a: Int) {\n run f@{\n if (a > 0) return@f\n 5\n }\n}")
+        clean("fun test(a: Int): Int = run f@{\n if (a > 0) return@f 2\n 5\n}")
+    }
+
+    /** `::f` naming two overloads with nothing to choose between them is ambiguous; an expected function type picks. */
+    @Test
+    fun anOverloadedReferenceNeedsAnExpectedType() {
+        val decls = "fun foo(x: Int, y: Any) = x\nfun foo(x: Any, y: Int) = y\n"
+        assertCodes(decls + "fun main() {\n ::foo\n}", KotlinDiagnosticCodes.OVERLOAD_AMBIGUITY)
+        clean(decls + "fun main() {\n val f: (Int, Any) -> Int = ::foo\n f(1, 2)\n}")
+    }
+
+    /** A function literal whose expected type is a written non-function type argument gives its untyped parameters no
+     *  type: every one of an anonymous function, the last of a lambda. */
+    @Test
+    fun untypedParametersNeedAFunctionTypeExpected() {
+        val c = KotlinDiagnosticCodes.CANNOT_INFER_TYPE
+        val decls = "fun <T> select(vararg x: T) = x[0]\nfun <K> id(x: K) = x\n"
+        assertCodes(decls + "fun t() { id<Any?>(fun (x) {}) }", c)
+        assertCodes(decls + "fun t() { select<Any?>(id { x, y -> }, fun (x: Int, y) {}) }", c, c)
+        clean(decls + "fun t() { id<(Int) -> Unit>(fun (x) {}); select<Any?>(fun (x: Int) {}) }")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

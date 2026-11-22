@@ -521,7 +521,7 @@ internal class KotlinSemanticChecks(
             KotlinPerf.span("sem.finalSuper") { reportAll(finalSupertype(psi, resolver)) }
             KotlinPerf.span("sem.superCtor") { if (resolveReady) reportAll(supertypeConstructorCall(psi, resolver)) }
         },
-    ) + declarationPortedCheckers() + expressionPortedCheckers() + round6PortedCheckers() + inheritanceClashCheckers() + delegationCallCheckers() + boundCheckers() + lambdaArgumentCheckers() + callableReferenceCheckers() + round7PortedCheckers()
+    ) + declarationPortedCheckers() + expressionPortedCheckers() + round6PortedCheckers() + inheritanceClashCheckers() + delegationCallCheckers() + boundCheckers() + lambdaArgumentCheckers() + callableReferenceCheckers() + round7PortedCheckers() + callableReferenceInferenceCheckers() + lambdaInputInferenceCheckers() + lambdaUnitReturnCheckers()
 
     /**
      * A class-type supertype written WITHOUT its constructor call — Kotlin's SUPERTYPE_NOT_INITIALIZED
@@ -2612,13 +2612,24 @@ internal class KotlinSemanticChecks(
 
     /** The call's first applicability error, with the type mismatch behind it when the call has one candidate. */
     private fun callNotApplicableFirst(call: KtCallExpression, resolver: KotlinResolver): Pair<Diagnostic, Applicability.TypeBad?>? {
-        if (call.valueArguments.any { it.getSpreadElement() != null }) return null
+        val spread = call.valueArguments.any { it.getSpreadElement() != null }
+        // A spread is judged only against one source candidate with a vararg, each spread landing in it by position
+        // or by its name: the spread argument must then be an array of fitting elements.
+        if (spread && call.valueArguments.withIndex().any { (i, a) ->
+                a.getSpreadElement() != null && a.getArgumentName() == null && call.valueArguments.take(i).any { it.getArgumentName() != null }
+            }) return null
         val targets = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
         // A same-named constructor overload might accept the call even when no function does — the method-only
         // judgment below is unsound then, so defer to the constructor checks (see kdoc).
         if (targets.any { it.kind == SymbolKind.CONSTRUCTOR }) return null
         val candidates = targets.filter { it.kind == SymbolKind.METHOD }
         if (candidates.isEmpty()) return null
+        if (spread) {
+            val c = candidates.distinctBy { it.paramTypes.size to it.varargParamIndex }.singleOrNull() ?: return null
+            if (!c.origin.fromSource || c.varargParamIndex < 0) return null
+            val firstSpread = call.valueArguments.indexOfFirst { it.getSpreadElement() != null && it.getArgumentName() == null }
+            if (firstSpread in 0 until c.varargParamIndex) return null
+        }
         val verdicts = ArrayList<Applicability>(candidates.size)
         for (c in candidates) verdicts += applicability(c, call, resolver) ?: return null // unjudgeable → back off
         if (verdicts.any { it is Applicability.Ok }) return null // some overload accepts the call
@@ -2895,6 +2906,16 @@ internal class KotlinSemanticChecks(
                 } else if (named != null && idx == vararg && expr != null && pt != null && at != null && singleElementForNamedVararg(pt, at)) {
                     // In named form a vararg takes an array, never a single element (K2's
                     // ASSIGNING_SINGLE_ELEMENT_TO_VARARG_IN_NAMED_FORM_FUNCTION_ERROR, reported with ARGUMENT_TYPE_MISMATCH).
+                    val arrayType = KotlinType("kotlin.Array", listOf(pt.withProjection("out")))
+                    Applicability.TypeBad(expr, arrayType, at, prefix).let { tb -> typeBad?.more?.add(tb) ?: run { typeBad = tb } }
+                }
+            } else if (arg !is KtLambdaArgument && vararg >= 0 && idx >= vararg && arg.getSpreadElement() != null && (named == null || idx == vararg)) {
+                // `*value` in a vararg slot spreads an array: the value must be one, of elements that fit (K2 checks
+                // the spread argument against `Array<out E>`, the vararg parameter's own type).
+                val expr = arg.getArgumentExpression()
+                val pt = c.paramTypes.getOrNull(vararg) as? KotlinType
+                val at = expr?.let { resolver.inferType(it) }
+                if (expr != null && pt != null && at != null && (spreadOfNonArray(at) || namedVarargArrayMismatch(pt, at))) {
                     val arrayType = KotlinType("kotlin.Array", listOf(pt.withProjection("out")))
                     Applicability.TypeBad(expr, arrayType, at, prefix).let { tb -> typeBad?.more?.add(tb) ?: run { typeBad = tb } }
                 }

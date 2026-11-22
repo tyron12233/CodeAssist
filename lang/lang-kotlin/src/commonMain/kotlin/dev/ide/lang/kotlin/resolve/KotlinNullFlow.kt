@@ -809,8 +809,10 @@ private fun KotlinResolver.nodeProves(
             // A condition of a later branch runs only once the earlier ones failed (`s == null -> …; s.foo() -> …`).
             val c = if (i >= 0) -1 else node.entries.indexOfFirst { e -> e.conditions.any { it.holds() } || e.guard.holds() }
             when {
-                i >= 0 -> completionProves(whenSubjectValue(node), g) || whenEntryReachedProves(node, i, g)
-                c >= 0 -> completionProves(whenSubjectValue(node), g) || whenPrefixFalseProves(node, c, g)
+                i >= 0 -> completionProves(whenSubjectValue(node), g) || whenEntryReachedProves(node, i, g) ||
+                    firstConditionCompletes(node, 0, g) || firstConditionCompletes(node, i, g)
+                c >= 0 -> completionProves(whenSubjectValue(node), g) || whenPrefixFalseProves(node, c, g) ||
+                    (c > 0 && firstConditionCompletes(node, 0, g))
                 else -> false
             }
         }
@@ -1021,11 +1023,21 @@ private fun whenSubjectValue(w: KtWhenExpression): KtExpression? = w.subjectVari
 /** A `when` completes through one of its branches, or (without an `else`) by matching none of them. */
 private fun KotlinResolver.whenCompletionProves(w: KtWhenExpression, g: Goal, depth: Int): Boolean {
     if (completionProves(whenSubjectValue(w), g, depth)) return true
+    if (firstConditionCompletes(w, 0, g, depth)) return true
     val entries = w.entries
     if (entries.none { it.isElse } && !whenPrefixFalseProves(w, entries.size, g)) return false
     return entries.indices.all { i ->
         completionProves(entries[i].expression, g, depth) || whenEntryReachedProves(w, i, g)
     }
+}
+
+/** Whether the first condition of entry [i] of [w], which runs whenever that entry is reached (the first entry's
+ *  always), completes only with the value proven: `when (x) { x as Int -> … }` leaves `x` an `Int` after the `when`. */
+private fun KotlinResolver.firstConditionCompletes(w: KtWhenExpression, i: Int, g: Goal, depth: Int = 0): Boolean {
+    val entry = w.entries.getOrNull(i) ?: return false
+    if (entry.isElse) return false
+    val c = entry.conditions.firstOrNull() as? KtWhenConditionWithExpression ?: return false
+    return completionProves(c.expression, g, depth)
 }
 
 /** Whether reaching the body of entry [i] proves the value: its own conditions hold, or an earlier one failed. */
