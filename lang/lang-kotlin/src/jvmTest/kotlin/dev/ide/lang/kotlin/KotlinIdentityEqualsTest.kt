@@ -41,8 +41,9 @@ class KotlinIdentityEqualsTest {
             analyzer.dispose()
             dir.toFile().deleteRecursively()
         }
-        // `c is I` can hold for a subclass of C implementing I; `a is I` cannot, A being final.
-        assertEquals(listOf("a is B", "a !is B", "a is I", "s is A"), got, "got $got")
+        // `c is I` can hold for a subclass of C implementing I; `a is I` cannot, A being final. `c is A?` is
+        // impossible too: `c` is never null, so the `?` buys nothing (K2's classVsClassIsCheckNullable.kt).
+        assertEquals(listOf("a is B", "a !is B", "a is I", "s is A", "c is A?"), got, "got $got")
     }
 
     @Test

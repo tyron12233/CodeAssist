@@ -67,7 +67,7 @@ class KotlinCompilerTestDataSweepTest {
         val skipped = HashMap<String, Int>()
         val cases = tests.walkTopDown().filter { it.isFile && it.name.endsWith(".kt") }
             .sortedBy { it.path }
-            .filter { only == null || it.path.contains(only) }
+            .filter { f -> only == null || only.split('|').any { f.path.contains(it) } }
             .mapNotNull { f -> toCase(tests, f)?.let { (c, why) -> if (why != null) { skipped.merge(why, 1, Int::plus); null } else c } }
             .take(limit).toList()
 
@@ -365,7 +365,7 @@ class KotlinCompilerTestDataSweepTest {
             "kt.expressionExpected" to setOf("EXPRESSION_EXPECTED"),
             "kt.argumentMapping" to setOf("MIXING_NAMED_AND_POSITIONAL_ARGUMENTS", "ARGUMENT_PASSED_TWICE", "NON_VARARG_SPREAD", "VARARG_OUTSIDE_PARENTHESES", "MANY_LAMBDA_EXPRESSION_ARGUMENTS", "NAMED_ARGUMENTS_NOT_ALLOWED"),
             "kt.constMisuse" to setOf("CONST_VAL_WITH_NON_CONST_INITIALIZER", "NON_CONST_VAL_USED_IN_CONSTANT_EXPRESSION", "CONST_VAL_NOT_TOP_LEVEL_OR_OBJECT", "CONST_VAL_WITH_GETTER", "CONST_VAL_WITH_DELEGATE", "CONST_VAL_WITHOUT_INITIALIZER", "TYPE_CANT_BE_USED_FOR_CONST_VAL", "WRONG_MODIFIER_TARGET"),
-        ) + PORTED_DECLARATION_K2_NAMES + ROUND6_K2_NAMES + INHERITANCE_CLASH_K2_NAMES + ROUND7_K2_NAMES
+        ) + PORTED_DECLARATION_K2_NAMES + ROUND6_K2_NAMES + INHERITANCE_CLASH_K2_NAMES + ROUND7_K2_NAMES + ROUND8_K2_NAMES
         val SKIP_DIRECTIVE = Regex(
             """^// ?(MODULE|LANGUAGE|API_VERSION|ALLOW_KOTLIN_PACKAGE|WITH_REFLECT|TARGET_PLATFORM|TARGET_BACKEND|JDK_KIND|""" +
                 """LANGUAGE_VERSION|OPT_IN|WITH_COROUTINES|FULL_JDK|LANGUAGE_FEATURE_TOGGLED|EXPLICIT_API_MODE|JVM_TARGET|""" +

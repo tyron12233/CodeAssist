@@ -29,16 +29,32 @@ import dev.ide.lang.resolve.SymbolKind
  * A receiver's markers are the `@DslMarker` annotations on its class (or any supertype), and those written on the
  * receiver type of the function type the lambda fills (`(@L1 A).() -> Unit`). Only markers this file's project
  * declares are recognised, since a library annotation's own `@DslMarker` meta-annotation is not modelled; a
- * library DSL is left alone. Plain members only: a member EXTENSION binds two receivers at once and is skipped.
+ * library DSL is left alone. A member EXTENSION binds two receivers at once; its dispatch receiver is judged
+ * the same way, also when the extension receiver is explicit (`D().extA()`).
  */
 internal fun KotlinSemanticChecks.dslScopeViolation(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
     val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
     val parent = call.parent
-    if (parent is KtQualifiedExpression && parent.selectorExpression === call) return null
+    val qualified = parent is KtQualifiedExpression && parent.selectorExpression === call
     val name = callee.getReferencedName()
     if (resolver.localsAt(callee.textRange.startOffset, name).isNotEmpty()) return null
     val scopes = receiverScopes(call, resolver)
     if (scopes.size < 2) return null
+    memberExtensionReceivers(scopes, name, qualified, resolver)?.let { used ->
+        // Each implicit receiver the call uses must be the closest one carrying its markers.
+        val violated = used.any { bound ->
+            val boundMarkers = scopes[bound].markers
+            boundMarkers.isNotEmpty() && scopes.subList(0, bound).any { inner -> inner.markers.any { it in boundMarkers } }
+        }
+        if (!violated) return null
+        val r = callee.textRange
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "'$name' can't be called in this context by implicit receiver. Use the explicit one if necessary",
+            KotlinDiagnosticCodes.DSL_SCOPE_VIOLATION,
+        )
+    }
+    if (qualified) return null
     val bound = scopes.indexOfFirst { s ->
         resolver.memberNamed(s.type, name)?.let { it.kind == SymbolKind.METHOD && !it.isExtension } == true
     }
@@ -52,6 +68,29 @@ internal fun KotlinSemanticChecks.dslScopeViolation(call: KtCallExpression, reso
         "'$name' can't be called in this context by implicit receiver. Use the explicit one if necessary",
         KotlinDiagnosticCodes.DSL_SCOPE_VIOLATION,
     )
+}
+
+/**
+ * The indexes of the receiver scopes a MEMBER EXTENSION call `name()` takes implicitly: the dispatch one, the
+ * innermost scope whose class declares `name` as an extension of its own (no closer scope declaring any member
+ * of that name), and for a bare call also the extension one, the innermost scope of the receiver's class. With
+ * an explicit extension receiver ([qualified]) only the dispatch one. Null when the call is not one, or the
+ * scopes do not settle it. K2 judges each implicit receiver a call uses by the rule of a plain member's.
+ */
+private fun memberExtensionReceivers(scopes: List<ReceiverScope>, name: String, qualified: Boolean, resolver: KotlinResolver): List<Int>? {
+    for ((i, s) in scopes.withIndex()) {
+        val m = resolver.memberNamed(s.type, name) ?: continue
+        if (m.kind != SymbolKind.METHOD || !m.isExtension || !m.origin.fromSource) return null
+        // A member extension of the scope's own class (declared in it), not a top-level extension on it.
+        val owner = (m.declaration() as? KotlinDomNode)?.psi?.parent?.parent as? KtClassOrObject ?: return null
+        if (owner.fqName?.asString() != s.type.qualifiedName) return null
+        if (qualified) return listOf(i)
+        // The extension receiver: the innermost scope of exactly the receiver's class.
+        val ext = scopes.indexOfFirst { it.type.qualifiedName == m.receiverTypeFqn }
+        if (ext < 0) return null
+        return listOf(i, ext)
+    }
+    return null
 }
 
 private class ReceiverScope(val type: KotlinType, val markers: Set<String>)

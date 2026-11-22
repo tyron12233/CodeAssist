@@ -102,6 +102,8 @@ import dev.ide.lang.kotlin.analysis.KotlinChecker
 import dev.ide.lang.kotlin.parse.hasAncestor
 import dev.ide.lang.kotlin.parse.inTypeReference
 import dev.ide.lang.kotlin.parse.unwrapParen
+import dev.ide.lang.kotlin.parse.KotlinDomNode
+import dev.ide.lang.kotlin.resolve.calleeFunctionOf
 import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.resolve.enclosingClassFqnOf
 import dev.ide.lang.kotlin.symbols.Builtins
@@ -155,6 +157,9 @@ internal class KotlinSemanticChecks(
         out += unresolvedImports(ktFile)
         out += allUnderImportFromSingleton(ktFile)
         out += privateTopLevelImports(ktFile)
+        ktFile.packageDirective?.let { pd -> packageConflictsWithClassifier(pd)?.let { out += it } }
+        out += membersCannotBeImported(ktFile)
+        invalidPackageCharacters(ktFile)?.let { out += it }
         unusedPrivateDeclarations(ktFile, refNames, out)
         return out
     }
@@ -521,7 +526,7 @@ internal class KotlinSemanticChecks(
             KotlinPerf.span("sem.finalSuper") { reportAll(finalSupertype(psi, resolver)) }
             KotlinPerf.span("sem.superCtor") { if (resolveReady) reportAll(supertypeConstructorCall(psi, resolver)) }
         },
-    ) + declarationPortedCheckers() + expressionPortedCheckers() + round6PortedCheckers() + inheritanceClashCheckers() + delegationCallCheckers() + boundCheckers() + lambdaArgumentCheckers() + callableReferenceCheckers() + round7PortedCheckers() + callableReferenceInferenceCheckers() + lambdaInputInferenceCheckers() + lambdaUnitReturnCheckers()
+    ) + declarationPortedCheckers() + expressionPortedCheckers() + round6PortedCheckers() + inheritanceClashCheckers() + delegationCallCheckers() + boundCheckers() + lambdaArgumentCheckers() + callableReferenceCheckers() + round7PortedCheckers() + round8PortedCheckers() + callableReferenceInferenceCheckers() + lambdaInputInferenceCheckers() + lambdaUnitReturnCheckers()
 
     /**
      * A class-type supertype written WITHOUT its constructor call — Kotlin's SUPERTYPE_NOT_INITIALIZED
@@ -1384,10 +1389,15 @@ internal class KotlinSemanticChecks(
             // Literal text and escapes are constant; `$x` / `${...}` only if the interpolated expression is.
             entry !is KtStringTemplateEntryWithExpression || entry.expression?.let { isCompileTimeConstant(it) } == true
         }
-        is KtNameReferenceExpression, is KtQualifiedExpression -> true // possibly a const val / enum — conservative
-        // Identity is not something the compiler evaluates: `1 === 2` is never a constant.
+        is KtNameReferenceExpression -> true // possibly a const val or an enum: conservative
+        // `0.div(0)`, `5.mod(2)`: K2's evaluator folds neither (a division by zero, an extension function).
+        is KtQualifiedExpression -> !KotlinRound8Const.nonConstLiteralCall(u)
+        // Identity is not something the compiler evaluates: `1 === 2` is never a constant, nor is an elvis, an
+        // integer division by a literal zero, or a `null` operand.
         is KtBinaryExpression -> u.operationToken != KtTokens.EQEQEQ && u.operationToken != KtTokens.EXCLEQEQEQ &&
-            u.left?.let { isCompileTimeConstant(it) } == true && u.right?.let { isCompileTimeConstant(it) } == true
+            u.operationToken != KtTokens.ELVIS && !KotlinRound8Const.integerDivisionByZero(u) &&
+            u.left?.let { !KotlinRound8Const.isNullLiteral(it) && isCompileTimeConstant(it) } == true &&
+            u.right?.let { !KotlinRound8Const.isNullLiteral(it) && isCompileTimeConstant(it) } == true
         is KtPrefixExpression -> u.baseExpression?.let { isCompileTimeConstant(it) } == true
         else -> false
     }
@@ -1606,10 +1616,13 @@ internal class KotlinSemanticChecks(
 
     /** Reset the per-pass caches (PSI-keyed, so they must not survive a reparse). Called at the start of each
      *  analyze pass by [IncrementalSemanticAnalysis.diagnostics]. */
-    fun resetPassCaches() { blockUsageMemo.clear(); redeclaredMemo = null; round7Memo.clear() }
+    fun resetPassCaches() { blockUsageMemo.clear(); redeclaredMemo = null; round7Memo.clear(); round8Memo.clear() }
 
     /** The per-pass tables of the seventh round of ported rules ([Round7Memo]). */
     internal val round7Memo = Round7Memo()
+
+    /** The per-pass tables of the eighth round of ported rules ([Round8Memo]). */
+    internal val round8Memo = Round8Memo()
 
     /** The file [redeclaredClassifiers] last answered for, and its answer; dropped with the pass caches. */
     internal var redeclaredMemo: Pair<KtFile, Set<String>>? = null
@@ -4382,16 +4395,27 @@ internal class KotlinSemanticChecks(
             if (member.hasModifier(KtTokens.PRIVATE_KEYWORD)) continue
             val scoped = shadowedRemoved(params, member)
             if (scoped.isEmpty()) continue
+            // A member's own type parameters' bounds are consumed (`in`), as K2's FirClassVarianceChecker reads them.
+            if (member is KtNamedFunction || member is KtProperty) {
+                typeParameterBounds(member as KtTypeParameterListOwner).forEach { walkVariance(it, VPos.IN, scoped, resolver, out) }
+            }
             when (member) {
                 is KtNamedFunction -> {
                     walkVariance(member.receiverTypeReference, VPos.IN, scoped, resolver, out)
                     member.valueParameters.forEach { walkVariance(it.typeReference, VPos.IN, scoped, resolver, out) }
-                    walkVariance(member.typeReference, VPos.OUT, scoped, resolver, out)
+                    walkVariance(member.typeReference ?: implicitTypeOfGenericCall(member.bodyExpression.takeIf { !member.hasBlockBody() }, resolver), VPos.OUT, scoped, resolver, out)
                 }
-                is KtProperty -> walkVariance(member.typeReference, if (member.isVar) VPos.INV else VPos.OUT, scoped, resolver, out)
+                is KtProperty -> {
+                    walkVariance(member.receiverTypeReference, VPos.IN, scoped, resolver, out)
+                    val invariant = member.isVar || member.hasModifier(KtTokens.LATEINIT_KEYWORD)
+                    val type = member.typeReference ?: implicitTypeOfGenericCall(member.initializer.takeIf { !member.hasDelegate() }, resolver)
+                    walkVariance(type, if (invariant) VPos.INV else VPos.OUT, scoped, resolver, out)
+                }
                 else -> {}
             }
         }
+        // The class's own type parameters' bounds are produced (`out` position).
+        typeParameterBounds(cls).forEach { walkVariance(it, VPos.OUT, params, resolver, out) }
         // Primary-constructor `val`/`var` parameters are properties; plain params are private (exempt).
         cls.primaryConstructor?.valueParameters?.forEach { p ->
             if (!p.hasValOrVar() || p.hasModifier(KtTokens.PRIVATE_KEYWORD)) return@forEach
@@ -4399,6 +4423,29 @@ internal class KotlinSemanticChecks(
         }
         // Supertype type arguments are produced (`out` position).
         cls.superTypeListEntries.forEach { walkVariance(it.typeReference, VPos.OUT, params, resolver, out) }
+        return out
+    }
+
+    /** The implicit type of a member initialized by `f<A>()`, a call of a project function `fun <T> f(): T` with an
+     *  explicit type argument: that written argument, whose type the member then has. Null for anything else. */
+    private fun implicitTypeOfGenericCall(e: KtExpression?, resolver: KotlinResolver): KtTypeReference? {
+        val call = unwrapParen(e ?: return null) as? KtCallExpression ?: return null
+        val args = call.typeArguments
+        if (args.isEmpty()) return null
+        val fn = (resolver.calleeFunctionOf(call)?.takeIf { it.origin.fromSource }?.declaration() as? KotlinDomNode)?.psi as? KtNamedFunction ?: return null
+        if (fn.typeParameters.size != args.size) return null
+        val ret = fn.typeReference?.typeElement as? KtUserType ?: return null
+        if (ret.qualifier != null || ret.typeArgumentList != null) return null
+        val idx = fn.typeParameters.indexOfFirst { it.name == ret.referencedName }
+        if (idx < 0) return null
+        return args[idx].takeIf { it.projectionKind == KtProjectionKind.NONE }?.typeReference
+    }
+
+    /** The bounds written for [owner]'s type parameters, inline (`<X : B>`) and in its `where` clause. */
+    private fun typeParameterBounds(owner: KtTypeParameterListOwner): List<KtTypeReference> {
+        val out = ArrayList<KtTypeReference>()
+        owner.typeParameters.forEach { tp -> tp.extendsBound?.let { out += it } }
+        owner.typeConstraints.forEach { c -> c.boundTypeReference?.let { out += it } }
         return out
     }
 
@@ -4434,6 +4481,11 @@ internal class KotlinSemanticChecks(
                 }
                 val args = el.typeArgumentList?.arguments ?: return
                 if (args.isEmpty()) return
+                // A type alias of this file is read through its expansion, as K2 checks the fully expanded type.
+                if (el.qualifier == null && name != null) sameFileTypeAlias(el, name, args.size)?.let { alias ->
+                    walkAliasVariance(el, alias, pos, params, resolver, out)
+                    return
+                }
                 val declared = name?.let { declaredVarianceOf(el, it, resolver) } // null → classifier variance unknown
                 args.forEachIndexed { i, proj ->
                     val slotPos = when (proj.projectionKind) {
@@ -4447,6 +4499,114 @@ internal class KotlinSemanticChecks(
             }
             else -> {}
         }
+    }
+
+    /** The top-level type alias of [el]'s file named [name] with [arity] type parameters, when the name means it
+     *  (no class of the file shares it). */
+    private fun sameFileTypeAlias(el: KtUserType, name: String, arity: Int): KtTypeAlias? {
+        val file = el.containingFile as? KtFile ?: return null
+        var alias: KtTypeAlias? = null
+        for (d in file.declarations) {
+            if (d is KtClassOrObject && d.name == name) return null
+            if (d is KtTypeAlias && d.name == name) alias = d
+        }
+        return alias?.takeIf { it.typeParameters.size == arity }
+    }
+
+    /**
+     * The variance walk over a use of the type alias [alias] at [pos] (`A<S>` with `typealias A<T> = Inv<T>`), the
+     * way FirClassVarianceChecker walks the fully expanded type: each argument of the expanded class type sits at
+     * that class's slot variance, and a conflict there is TYPE_VARIANCE_CONFLICT_IN_EXPANDED_TYPE, reported on the
+     * use's argument of the same index (K2 pairs the expansion's arguments with the written ones by position).
+     * Deeper in the expansion a conflict is the plain TYPE_VARIANCE_CONFLICT_ERROR. Aliases of aliases are
+     * followed when they pass their parameters on unchanged; anything else backs off.
+     */
+    private fun walkAliasVariance(
+        use: KtUserType, alias: KtTypeAlias, pos: VPos, params: Map<String, Variance>, resolver: KotlinResolver, out: MutableList<Diagnostic>,
+    ) {
+        if (use.typeArguments.any { it.projectionKind != KtProjectionKind.NONE }) return
+        var env = HashMap<String, KtTypeReference>()
+        for ((i, p) in alias.typeParameters.withIndex()) env[p.name ?: return] = use.typeArguments[i].typeReference ?: return
+        var rhs = alias.typeReference?.typeElement as? KtUserType ?: return
+        var depth = 0
+        // Through an alias of an alias whose arguments are the outer alias's own parameters.
+        while (true) {
+            val n = rhs.referenceExpression?.getReferencedName() ?: return
+            if (rhs.qualifier != null || n in env) break
+            val next = sameFileTypeAlias(rhs, n, rhs.typeArguments.size) ?: break
+            if (++depth > 4) return
+            val nextEnv = HashMap<String, KtTypeReference>()
+            for ((i, p) in next.typeParameters.withIndex()) {
+                val argRef = rhs.typeArguments[i].takeIf { it.projectionKind == KtProjectionKind.NONE }?.typeReference ?: return
+                val argName = (argRef.typeElement as? KtUserType)?.takeIf { it.qualifier == null && it.typeArgumentList == null }?.referencedName
+                nextEnv[p.name ?: return] = env[argName] ?: return
+            }
+            env = nextEnv
+            rhs = next.typeReference?.typeElement as? KtUserType ?: return
+        }
+        val name = rhs.referenceExpression?.getReferencedName() ?: return
+        val declared = declaredVarianceOf(rhs, name, resolver) ?: return
+        rhs.typeArguments.forEachIndexed { j, proj ->
+            val slotPos = when (proj.projectionKind) {
+                KtProjectionKind.STAR -> return@forEachIndexed
+                KtProjectionKind.OUT -> composeVariance(pos, "out")
+                KtProjectionKind.IN -> composeVariance(pos, "in")
+                KtProjectionKind.NONE -> composeVariance(pos, declared.getOrNull(j))
+            }
+            val source = use.typeArguments.getOrNull(j)?.typeReference ?: use
+            walkExpandedArgument(proj.typeReference?.typeElement, slotPos, env, source, inAbbreviation = true, params, resolver, out, 0)
+        }
+    }
+
+    /** One argument of an expanded alias: a parameter of the alias stands for the written argument it was given. */
+    private fun walkExpandedArgument(
+        el: KtTypeElement?, pos: VPos, env: Map<String, KtTypeReference>, source: KtElement, inAbbreviation: Boolean,
+        params: Map<String, Variance>, resolver: KotlinResolver, out: MutableList<Diagnostic>, depth: Int,
+    ) {
+        if (pos == VPos.UNKNOWN || depth > 6) return
+        var t = el
+        while (t is KtNullableType) t = t.innerType
+        val user = t as? KtUserType ?: return
+        val name = user.referenceExpression?.getReferencedName() ?: return
+        if (user.qualifier == null && user.typeArgumentList == null) {
+            val written = env[name] ?: return
+            val w = written.typeElement as? KtUserType
+            val wName = w?.referencedName
+            if (w != null && w.qualifier == null && w.typeArgumentList == null && wName != null && params.containsKey(wName)) {
+                recordVarianceConflict(source, wName, params.getValue(wName), pos, out,
+                    if (inAbbreviation) KotlinDiagnosticCodes.TYPE_VARIANCE_CONFLICT_IN_EXPANDED_TYPE else KotlinDiagnosticCodes.VARIANCE_CONFLICT)
+            } else {
+                walkVariance(written, pos, params, resolver, out)
+            }
+            return
+        }
+        if (user.qualifier != null) return
+        val declared = declaredVarianceOf(user, name, resolver) ?: return
+        user.typeArguments.forEachIndexed { k, proj ->
+            val slotPos = when (proj.projectionKind) {
+                KtProjectionKind.STAR -> return@forEachIndexed
+                KtProjectionKind.OUT -> composeVariance(pos, "out")
+                KtProjectionKind.IN -> composeVariance(pos, "in")
+                KtProjectionKind.NONE -> composeVariance(pos, declared.getOrNull(k))
+            }
+            walkExpandedArgument(proj.typeReference?.typeElement, slotPos, env, source, inAbbreviation = false, params, resolver, out, depth + 1)
+        }
+    }
+
+    private fun recordVarianceConflict(at: KtElement, name: String, declared: Variance, pos: VPos, out: MutableList<Diagnostic>, code: String) {
+        val conflict = when (declared) {
+            Variance.OUT_VARIANCE -> pos == VPos.IN || pos == VPos.INV
+            Variance.IN_VARIANCE -> pos == VPos.OUT || pos == VPos.INV
+            else -> false
+        }
+        if (!conflict) return
+        val declStr = if (declared == Variance.OUT_VARIANCE) "out" else "in"
+        val occStr = when (pos) { VPos.OUT -> "out"; VPos.IN -> "in"; else -> "invariant" }
+        val r = at.textRange
+        out += Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Type parameter '$name' is declared as '$declStr' but occurs in '$occStr' position", code,
+        )
     }
 
     private fun recordVarianceUse(el: KtUserType, name: String, declared: Variance, pos: VPos, out: MutableList<Diagnostic>) {

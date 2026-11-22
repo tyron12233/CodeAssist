@@ -1127,6 +1127,327 @@ class KotlinCompilerParityTest {
         clean(decls + "fun t() { id<(Int) -> Unit>(fun (x) {}); select<Any?>(fun (x: Int) {}) }")
     }
 
+    /** A getter of a `val` may read its backing field but not assign it, also from a local function inside. */
+    @Test
+    fun aValGetterCannotAssignItsBackingField() {
+        val c = KotlinDiagnosticCodes.VAL_REASSIGNMENT_VIA_BACKING_FIELD
+        assertCodes("val my: Int = 1\n get() {\n  field++\n  return field\n }", c)
+        assertCodes("class A {\n val j: Int = 4\n  get() {\n   fun local() { field = 2 }\n   local()\n   return field\n  }\n}", c)
+        clean("class A {\n var i: Int = 1\n  get() {\n   field++\n   return field\n  }\n}")
+    }
+
+    /** `@Foo` must name an annotation class; `@T` with a type parameter names no class at all. */
+    @Test
+    fun annotationsMustNameAnnotationClasses() {
+        assertCodes("class Foo\n@Foo class Bar", KotlinDiagnosticCodes.NOT_AN_ANNOTATION_CLASS)
+        assertCodes("class Foo<T> {\n @T\n fun foo() = 0\n}", KotlinDiagnosticCodes.NOT_A_CLASS)
+        clean("annotation class Ann\n@Ann class Bar")
+    }
+
+    /** An `else` branch is the last one of a `when`; `else if` is a guard, not that branch. */
+    @Test
+    fun elseIsTheLastBranchOfAWhen() {
+        assertCodes("fun f(x: Int) = when (x) {\n else -> 1\n 2 -> 2\n}", KotlinDiagnosticCodes.ELSE_MISPLACED_IN_WHEN)
+        clean("fun f(x: Int) = when (x) {\n 2 -> 2\n else -> 1\n}")
+    }
+
+    /** A `data object` generates `equals` and `hashCode` and may not override them. */
+    @Test
+    fun aDataObjectKeepsItsEqualsAndHashCode() {
+        val c = KotlinDiagnosticCodes.DATA_OBJECT_CUSTOM_EQUALS_OR_HASH_CODE
+        assertCodes("data object O {\n override fun equals(other: Any?): Boolean = true\n override fun hashCode(): Int = 1\n}", c, c)
+        clean("data object O {\n fun equals(other: Any?, tag: Int): Boolean = true\n override fun toString() = \"O\"\n}")
+    }
+
+    /** Accessor shapes: no private bodiless interface function, no setter on a `val`, a setter returns `Unit`, a
+     *  getter returns the property's type, and type parameters go before a function's name. */
+    @Test
+    fun accessorAndFunctionShapes() {
+        assertCodes("interface I {\n private fun foo(): Int\n}", KotlinDiagnosticCodes.PRIVATE_FUNCTION_WITH_NO_BODY)
+        assertCodes("val x: Int = 1\n set", KotlinDiagnosticCodes.VAL_WITH_SETTER)
+        assertCodes("var v: String = \"\"\n set(value): String { field = value }", KotlinDiagnosticCodes.WRONG_SETTER_RETURN_TYPE)
+        assertCodes("val y: Int\n get(): String = \"s\"", KotlinDiagnosticCodes.WRONG_GETTER_RETURN_TYPE)
+        assertCodes("fun foo<T>() {}", KotlinDiagnosticCodes.DEPRECATED_TYPE_PARAMETER_SYNTAX)
+        clean("var u: String = \"\"\n set(value): Unit { field = value }\nval z: Int\n get(): Int = 1")
+    }
+
+    /** A type parameter is no class: not a supertype, not the left side of `::` or of a dot, not a catch type. */
+    @Test
+    fun typeParametersAreNotClasses() {
+        assertCodes("class A<T> : T", KotlinDiagnosticCodes.SUPERTYPE_NOT_A_CLASS_OR_INTERFACE)
+        assertCodes("fun <T> foo() = T::toString", KotlinDiagnosticCodes.CALLABLE_REFERENCE_LHS_NOT_A_CLASS)
+        assertCodes("class A<T> {\n fun f() { T.toString() }\n}", KotlinDiagnosticCodes.TYPE_PARAMETER_ON_LHS_OF_DOT)
+        assertCodes("fun <T : Throwable> f() {\n try { } catch (e: T) { }\n}", KotlinDiagnosticCodes.TYPE_PARAMETER_IN_CATCH_CLAUSE)
+        // A nested class of that name is what the name means inside the class.
+        clean("class Outer<P> {\n class P { fun foo() {} }\n val l = P::foo\n}")
+    }
+
+    /** A catch parameter has a `Throwable` type and no default value. */
+    @Test
+    fun catchParameterShapes() {
+        assertCodes("fun f() {\n try { } catch (x: Nothing) { }\n}", KotlinDiagnosticCodes.THROWABLE_TYPE_MISMATCH)
+        assertCodes("class MyEx : Throwable()\nfun f() {\n try { } catch (e: MyEx = MyEx()) { }\n}", KotlinDiagnosticCodes.CATCH_PARAMETER_WITH_DEFAULT_VALUE)
+        clean("class MyEx : Throwable()\nfun f() {\n try { } catch (e: MyEx) { }\n}")
+    }
+
+    /** Modifier shapes K2 rejects outright. */
+    @Test
+    fun rejectedModifierShapes() {
+        assertCodes("sealed fun interface A {\n fun f()\n}", KotlinDiagnosticCodes.UNSUPPORTED_SEALED_FUN_INTERFACE)
+        assertCodes("class A(abstract val i: Int)", KotlinDiagnosticCodes.ABSTRACT_PROPERTY_IN_PRIMARY_CONSTRUCTOR_PARAMETERS)
+        assertCodes("open class A { open fun f() {} }\nclass B : A() {\n override fun f() { super?.f() }\n}", KotlinDiagnosticCodes.UNEXPECTED_SAFE_CALL)
+        assertCodes("fun <F> bar4(x: (F & Any)?) {}", KotlinDiagnosticCodes.NULLABLE_ON_DEFINITELY_NOT_NULLABLE)
+    }
+
+    /** Annotation arguments: no `if`/`when`, no class literal of a type parameter. */
+    @Test
+    fun annotationArgumentsAreFoldedConstants() {
+        assertCodes("annotation class Ann(val a: String)\n@Ann(if (true) \"A\" else \"B\") fun test1() {}", KotlinDiagnosticCodes.ANNOTATION_ARGUMENT_WITH_CONTROL_FLOW_NOT_SUPPORTED)
+        assertCodes(
+            "import kotlin.reflect.KClass\nannotation class Ann(val k: KClass<*>)\ninline fun <reified T> t() = @Ann(T::class) object {}",
+            KotlinDiagnosticCodes.ANNOTATION_ARGUMENT_KCLASS_LITERAL_OF_TYPE_PARAMETER_ERROR,
+        )
+    }
+
+    /** A reified type argument is no array of a type parameter and no `T & Any`. */
+    @Test
+    fun reifiedArgumentsAreRuntimeClasses() {
+        val decls = "inline fun <reified T> foo() {}\n"
+        assertCodes(decls + "fun <T> bar() { foo<Array<T>>() }", KotlinDiagnosticCodes.TYPE_PARAMETER_AS_REIFIED_ARRAY_ERROR)
+        assertCodes(decls + "inline fun <reified F> baz() { foo<F & Any>() }", KotlinDiagnosticCodes.DEFINITELY_NON_NULLABLE_AS_REIFIED)
+        clean(decls + "fun bar() { foo<Array<Int>>() }")
+    }
+
+    /** An expression annotation is SOURCE-retained, and `::Ann` constructs no annotation (nor `::Runnable` a Java
+     *  SAM interface, which the sweep covers: this analyzer has no JDK). */
+    @Test
+    fun annotationClassRestrictions() {
+        assertCodes(
+            "@Target(AnnotationTarget.EXPRESSION)\n@Retention(AnnotationRetention.BINARY)\nannotation class A",
+            KotlinDiagnosticCodes.RESTRICTED_RETENTION_FOR_EXPRESSION_ANNOTATION_ERROR,
+        )
+        clean("@Target(AnnotationTarget.EXPRESSION)\n@Retention(AnnotationRetention.SOURCE)\nannotation class A")
+        assertCodes("annotation class Ann(val prop: String)\nval r = ::Ann", KotlinDiagnosticCodes.CALLABLE_REFERENCE_TO_ANNOTATION_CONSTRUCTOR)
+    }
+
+    /** A type alias of `Nothing` hides that a declaration never returns. */
+    @Test
+    fun nothingIsWrittenAsNothing() {
+        assertCodes("typealias N = Nothing\nfun testFun(): N = null!!", KotlinDiagnosticCodes.ABBREVIATED_NOTHING_RETURN_TYPE)
+        assertCodes("typealias N = Nothing\nval testVal: N = null!!", KotlinDiagnosticCodes.ABBREVIATED_NOTHING_PROPERTY_TYPE)
+        clean("fun testFun(): Nothing = null!!")
+    }
+
+    /** Delegation cannot override a final member, nor a `var` with a `val`. */
+    @Test
+    fun delegationMeetsSupertypeMembers() {
+        val decls = "open class Final { fun foo() {}; var qux: Int = 0 }\ninterface IFoo { fun foo() }\nclass CFoo : IFoo { override fun foo() {} }\n" +
+            "interface IQux { val qux: Int }\nclass CQux : IQux { override val qux: Int get() = 0 }\n"
+        assertCodes(decls + "class Test1 : Final(), IFoo by CFoo()", KotlinDiagnosticCodes.OVERRIDING_FINAL_MEMBER_BY_DELEGATION)
+        assertCodes(
+            decls + "class Test3 : Final(), IQux by CQux()",
+            KotlinDiagnosticCodes.OVERRIDING_FINAL_MEMBER_BY_DELEGATION, KotlinDiagnosticCodes.VAR_OVERRIDDEN_BY_VAL_BY_DELEGATION,
+        )
+        clean(decls + "class Test2 : IFoo by CFoo()")
+    }
+
+    /** A parameter cannot inherit default values from two supertypes. */
+    @Test
+    fun oneDefaultPerInheritedParameter() {
+        val decls = "interface X { fun foo(a: Int = 1) }\ninterface Y { fun foo(a: Int = 1) }\n"
+        assertCodes(decls + "class Z : X, Y {\n override fun foo(a: Int) {}\n}", KotlinDiagnosticCodes.MULTIPLE_DEFAULTS_INHERITED_FROM_SUPERTYPES)
+        clean("interface X { fun foo(a: Int = 1) }\ninterface Y { fun foo(a: Int) }\nclass Z : X, Y {\n override fun foo(a: Int) {}\n}")
+    }
+
+    /** `x?::foo` is reserved syntax, and a nullable `x` cannot be the receiver of `Int.foo`. */
+    @Test
+    fun safeCallableReferencesAreReserved() {
+        assertCodes(
+            "fun nullableFun(): Int? = null\nfun Int.foo() {}\nval test1 = nullableFun()?::foo",
+            KotlinDiagnosticCodes.SAFE_CALLABLE_REFERENCE_CALL, KotlinDiagnosticCodes.UNSAFE_CALLABLE_REFERENCE,
+        )
+        clean("fun String?.ext() = 1\nval r = String?::ext")
+    }
+
+    /** A sealed class's inheritors live in its package; a package may not share a class's name. */
+    @Test
+    fun sealedInheritorsAndPackagesStayApart() {
+        val c = KotlinDiagnosticCodes.SEALED_INHERITOR_IN_DIFFERENT_PACKAGE
+        assertEquals(listOf(c), errorsIn(mapOf("a.kt" to "package foo\nsealed class Base", "b.kt" to "package bar\nimport foo.Base\nclass E : Base()"), "b.kt").map { it.code })
+        val p = KotlinDiagnosticCodes.PACKAGE_CONFLICTS_WITH_CLASSIFIER
+        assertEquals(listOf(p), errorsIn(mapOf("a.kt" to "package a\nclass b", "b.kt" to "package a.b\nfun f() {}"), "b.kt").map { it.code })
+    }
+
+    /** Inline functional parameters: a default value is a lambda or a reference, and never names another inlined
+     *  parameter. */
+    @Test
+    fun inlineParameterDefaults() {
+        assertCodes("fun justCall(): () -> Unit = {}\ninline fun f(block: () -> Unit = justCall()) { block() }", KotlinDiagnosticCodes.INVALID_DEFAULT_FUNCTIONAL_PARAMETER_FOR_INLINE)
+        clean("fun justCall(): () -> Unit = {}\ninline fun f(noinline block: () -> Unit = justCall()) { block() }")
+        assertCodes(
+            "inline fun f(lambda: () -> String, dlambda: () -> String = { lambda() }) { lambda() + dlambda() }",
+            KotlinDiagnosticCodes.NOT_SUPPORTED_INLINE_PARAMETER_IN_INLINE_PARAMETER_DEFAULT_VALUE,
+        )
+    }
+
+    /** A nested type alias of a generic class cannot expand to its inner class, which needs the outer arguments. */
+    @Test
+    fun nestedAliasesCannotCaptureOuterTypeParameters() {
+        assertCodes("class C<T> {\n inner class Inner\n typealias TA = Inner\n}", KotlinDiagnosticCodes.TYPEALIAS_EXPANSION_CAPTURES_OUTER_TYPE_PARAMETERS)
+        clean("class C<T> {\n class Nested\n typealias TA = Nested\n}")
+    }
+
+    /** One delegate instance serves every receiver of an extension property, so it cannot use its type parameters. */
+    @Test
+    fun extensionDelegatesCannotUseTheirTypeParameters() {
+        assertCodes(
+            "class Wrapper<T>(val v: T? = null)\noperator fun <T> Wrapper<T>.getValue(thisRef: Any?, kp: Any?): T = v!!\nval <T : Any> List<T>.bar by Wrapper<T>()",
+            KotlinDiagnosticCodes.DELEGATE_USES_EXTENSION_PROPERTY_TYPE_PARAMETER_ERROR,
+        )
+    }
+
+    /** Labels, super calls from interfaces, fun-interface member names and member imports. */
+    @Test
+    fun labelsSupersAndImports() {
+        assertCodes("class Dup {\n fun String.Dup(): Unit {\n  this@Dup\n }\n}", KotlinDiagnosticCodes.AMBIGUOUS_LABEL)
+        assertCodes("open class A { open fun foo() {} }\ninterface I {\n fun foo() { super<A>.foo() }\n}", KotlinDiagnosticCodes.SUPERCLASS_NOT_ACCESSIBLE_FROM_INTERFACE)
+        assertCodes("fun interface F1 {\n val functionDelegate: Function<*>? get() = null\n fun invoke()\n}", KotlinDiagnosticCodes.FUNCTION_DELEGATE_MEMBER_NAME_CLASH)
+        val c = KotlinDiagnosticCodes.CANNOT_BE_IMPORTED
+        assertEquals(listOf(c), errorsIn(mapOf("a.kt" to "package a\nclass B { fun bar() {} }", "c.kt" to "import a.B.bar\nfun f() {}"), "c.kt").map { it.code })
+    }
+
+    /** Bounds that name each other in a loop, and supertypes that lead back to the class. */
+    @Test
+    fun cyclicBoundsAndHierarchies() {
+        val b = KotlinDiagnosticCodes.CYCLIC_GENERIC_UPPER_BOUND
+        assertCodes("fun <T : F?, F : T?> foo1() {}", b, b)
+        assertCodes("class A1<T : F?, F : T?>", b, b)
+        clean("fun <T : Comparable<T>> foo() {}")
+        val h = KotlinDiagnosticCodes.CYCLIC_INHERITANCE_HIERARCHY
+        assertCodes("open class Your : His()\nopen class His : Your()", h, h)
+        assertCodes("open class E : E.EE() {\n open class EE\n}", h)
+        clean("sealed class S {\n class A : S()\n}")
+    }
+
+    /** What a `const val` initializer may not be: an elvis, a division by zero, an extension call. */
+    @Test
+    fun constInitializersTheEvaluatorRejects() {
+        val c = KotlinDiagnosticCodes.CONST_MISUSE
+        assertCodes("const val a = 1 / 0", c)
+        assertCodes("const val b = \"a\" ?: \"b\"", c)
+        assertCodes("const val m = 5.mod(2)", c)
+        clean("const val d = 1.0 / 0\nconst val e = 7 / 2")
+    }
+
+    /** Declaration-site variance also binds the bounds of type parameters and extension receivers of properties. */
+    @Test
+    fun varianceCoversBoundsAndReceivers() {
+        val v = KotlinDiagnosticCodes.VARIANCE_CONFLICT
+        assertCodes("interface TypeBounds1<in I, X : I>", v)
+        assertCodes("abstract class C<out O> {\n fun <X : O> typeParameter2() {}\n}", v)
+        assertCodes("abstract class C<out O> {\n abstract val O.receiver2: Int\n}", v)
+        clean("abstract class C<in I, out O> {\n fun <X : I> ok() {}\n abstract val I.r: Int\n}")
+    }
+
+    /** A member extension uses two implicit receivers, and each must be the closest one carrying its DSL marker. */
+    @Test
+    fun dslMarkersJudgeBothReceiversOfAMemberExtension() {
+        val decls = "@DslMarker @Target(AnnotationTarget.TYPE) annotation class Ann1\n@DslMarker @Target(AnnotationTarget.TYPE) annotation class Ann2\n" +
+            "class A { fun D.extA() {} }\nclass B { fun D.extB() {} }\nclass D\n" +
+            "fun foo(x: (@Ann1 A).() -> Unit) {}\nfun bar(x: (@Ann2 B).() -> Unit) {}\nfun baz(x: (@Ann1 D).() -> Unit) {}\n"
+        val v = KotlinDiagnosticCodes.DSL_SCOPE_VIOLATION
+        assertCodes(decls + "fun t() { foo { baz { extA() } } }", v)
+        assertCodes(decls + "fun t() { foo { baz { D().extA() } } }", v)
+        assertCodes(decls + "fun t() { baz { foo { extA() } } }", v)
+        clean(decls + "fun t() { foo { bar { baz { extB(); D().extB() } } }; baz { foo { D().extA() } } }")
+    }
+
+    /** An inherited `internal`/`protected` implementation of a public interface member would narrow it; a `var`
+     *  implementing a `var` narrows its setter too. */
+    @Test
+    fun inheritedImplementationsCannotWeakenAccess() {
+        val w = KotlinDiagnosticCodes.CANNOT_WEAKEN_ACCESS
+        assertCodes("interface T { fun foo() }\nopen class C { protected fun foo() {} }\nclass E : C(), T", w)
+        assertCodes("abstract class W { internal var y: Int = 42 }\ninterface IVar { var y: Int }\nabstract class C2 : W(), IVar", w, w)
+        clean("abstract class W { internal abstract var x: Int }\ninterface IVal { val x: Int }\nabstract class C1 : W(), IVal")
+    }
+
+    /** The `for` loop conventions over a project class: a non-null range, `hasNext(): Boolean` and `next()`. */
+    @Test
+    fun forLoopConventionsOverProjectClasses() {
+        assertCodes(
+            "class It { operator fun next() = 1; operator fun hasNext() = false }\nclass Coll { operator fun iterator(): It = It() }\nfun t(c: Coll?) { for (x in c) {} }",
+            KotlinDiagnosticCodes.ITERATOR_ON_NULLABLE,
+        )
+        clean("class It { operator fun next() = 1; operator fun hasNext() = false }\nclass Coll { operator fun iterator(): It = It() }\nfun t(c: Coll?) { if (c != null) for (x in c) {} }")
+        assertCodes(
+            "abstract class I1 { abstract operator fun hasNext(): Boolean }\nabstract class R { abstract operator fun iterator(): I1 }\nfun t(r: R) { for (i in r); }",
+            KotlinDiagnosticCodes.NEXT_MISSING,
+        )
+        assertCodes(
+            "abstract class R { abstract operator fun iterator(): Unit }\nfun t(r: R) { for (i in r); }",
+            KotlinDiagnosticCodes.HAS_NEXT_MISSING, KotlinDiagnosticCodes.NEXT_MISSING,
+        )
+    }
+
+    /** `a is B?` with unrelated classes and a nullable `a` holds for `null` only. */
+    @Test
+    fun anImpossibleNullableIsCheckReliesOnNull() {
+        val decls = "open class A\nopen class B\n"
+        assertCodes(decls + "fun test2(a: A?) = a is B?", KotlinDiagnosticCodes.IMPOSSIBLE_IS_CHECK_RELYING_ON_NULL)
+        assertCodes(decls + "fun test3(a: A) = a is B?", KotlinDiagnosticCodes.IMPOSSIBLE_IS_CHECK)
+    }
+
+    /** Variance is checked on the expansion of a type alias, and on an implicit type given by `f<A>()`. */
+    @Test
+    fun varianceThroughAliasesAndExplicitTypeArguments() {
+        assertCodes("interface I1<S>\ntypealias A1<S> = I1<S>\nclass Test1<out S> : A1<S>", KotlinDiagnosticCodes.TYPE_VARIANCE_CONFLICT_IN_EXPANDED_TYPE)
+        clean("interface Out<out T>\ntypealias AOut<T> = Out<T>\nclass Test3<out S> : AOut<S>")
+        assertCodes("fun <T> getT(): T = null!!\nabstract class C<in I> {\n fun implicit() = getT<I>()\n}", KotlinDiagnosticCodes.VARIANCE_CONFLICT)
+    }
+
+    /** An annotation argument is no delegated property, no integer division by zero, no class-literal equality. */
+    @Test
+    fun annotationArgumentsTheEvaluatorRejects() {
+        val c = KotlinDiagnosticCodes.NOT_CONSTANT
+        assertCodes("annotation class Ann(val i: Int)\n@Ann(1 / 0) val b2 = 1", c)
+        assertCodes(
+            "import kotlin.reflect.KProperty\nannotation class Anno(val s: Int)\nclass D { operator fun getValue(t: Any?, p: KProperty<*>) = 42 }\n@get:Anno(foo)\nval foo: Int by D()",
+            c,
+        )
+        clean("annotation class Ann(val i: Int)\n@Ann(1 / 2) val b2 = 1")
+    }
+
+    /** `external` and `expect` declaration shapes, and an expect/actual pair seen in one module. */
+    @Test
+    fun externalAndExpectShapes() {
+        assertCodes("abstract class A {\n abstract val x: Int\n  external get\n}", KotlinDiagnosticCodes.EXTERNAL_DECLARATION_CANNOT_BE_ABSTRACT)
+        assertCodes("interface B {\n val x: Int\n  external get\n}", KotlinDiagnosticCodes.EXTERNAL_DECLARATION_IN_INTERFACE)
+        clean("external fun nativeCall(): Int")
+    }
+
+    /** `Box<_>::property` leaves `_` with nothing to infer it from. */
+    @Test
+    fun placeholdersAreNotQualifiers() {
+        assertCodes("interface Box<V> { val property: V }\nfun main() { Box<_>::property }", KotlinDiagnosticCodes.PLACEHOLDER_PROJECTION_IN_QUALIFIER)
+        clean("interface Box<V> { val property: V }\nfun main() { Box<Int>::property }")
+    }
+
+    /** `@DeprecatedSinceKotlin` belongs to the standard library's own packages. */
+    @Test
+    fun deprecatedSinceKotlinOnlyInKotlin() {
+        assertCodes("@Deprecated(\"\")\n@DeprecatedSinceKotlin(\"1.3\")\nfun test() {}", KotlinDiagnosticCodes.DEPRECATED_SINCE_KOTLIN_OUTSIDE_KOTLIN_SUBPACKAGE)
+    }
+
+    /** The errors of [target], one of several [files] of one project (each taken as written, no package added). */
+    private fun errorsIn(files: Map<String, String>, target: String): List<Diagnostic> = runBlocking {
+        val src = tempProject(files)
+        val a = KotlinSourceAnalyzer(fakeContext(src, listOf(stdlibJarPath())))
+        val doc = SnippetDoc(files.getValue(target), DiskFile(src.resolve(target)))
+        a.incrementalParser.parseFull(doc)
+        a.analyze(doc.file).diagnostics.filter { it.severity == Severity.ERROR && it.code != KotlinDiagnosticCodes.SYNTAX }
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

@@ -23,12 +23,15 @@ import dev.ide.lang.kotlin.symbols.KotlinType
  * compiler's IMPOSSIBLE_IS_CHECK_ERROR. Judged only on the operand's DECLARED type (a literal, or a name written
  * with its type and not smart-cast since: the compiler reports a smart-cast type's impossibility as a warning
  * only), and only where both hierarchies are completely known (project source or the compiled-in builtins).
- * A nullable target (`a is B?`) can hold for `null` and is left alone.
+ * A nullable target (`a is B?`) holds for `null`: with a nullable operand the check then relies on `null` alone
+ * (IMPOSSIBLE_IS_CHECK_RELYING_ON_NULL_ERROR, FirCastOperatorsChecker), with a non-null one it is impossible still.
  */
 internal fun KotlinSemanticChecks.impossibleIsCheck(e: KtIsExpression, resolver: KotlinResolver): Diagnostic? {
     val typeRef = e.typeReference ?: return null
-    val text = typeRef.text.trim()
-    if (text.endsWith("?") || '<' in text) return null
+    val written = typeRef.text.trim()
+    val targetNullable = written.endsWith("?")
+    val text = written.removeSuffix("?").trim()
+    if (text.endsWith("?") || '<' in text || text.startsWith("(")) return null
     val left = e.leftHandSide ?: return null
     if (!plainlyTyped(left)) return null
     (unwrapParen(left) as? KtNameReferenceExpression)?.let { if (resolver.flowProvenTypes(it, deep = true).isNotEmpty()) return null }
@@ -42,6 +45,11 @@ internal fun KotlinSemanticChecks.impossibleIsCheck(e: KtIsExpression, resolver:
     if (inheritsFrom(target.qualifiedName, operand.qualifiedName) != false) return null
     if (!(o.isFinal || t.isFinal || (o.isClass && t.isClass))) return null
     val r = e.textRange
+    if (targetNullable && operand.nullable) return Diagnostic(
+        TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+        "Incompatible types '${renderType(operand)}' and '${renderType(target)}?': the check is '${!e.isNegated}' only for null",
+        KotlinDiagnosticCodes.IMPOSSIBLE_IS_CHECK_RELYING_ON_NULL,
+    )
     return Diagnostic(
         TextRange(r.startOffset, r.endOffset), Severity.ERROR,
         "Incompatible types '${renderType(operand)}' and '${renderType(target)}': the check is always '${e.isNegated}'",

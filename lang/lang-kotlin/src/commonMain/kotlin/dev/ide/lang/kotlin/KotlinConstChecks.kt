@@ -72,6 +72,14 @@ internal object KotlinConstChecks {
             is KtParenthesizedExpression -> e.expression?.let { walk(it, inAnnotation, out, self) }
             is KtPrefixExpression -> e.baseExpression?.let { walk(it, inAnnotation, out, self) }
             is KtBinaryExpression -> {
+                // K2's evaluator folds neither an integer division by zero nor an equality of class literals.
+                if (inAnnotation && (KotlinRound8Const.integerDivisionByZero(e) ||
+                        (e.operationToken == KtTokens.EQEQ || e.operationToken == KtTokens.EXCLEQ) &&
+                        (e.left is KtClassLiteralExpression || e.right is KtClassLiteralExpression))
+                ) {
+                    out += diag(e, "An annotation argument must be a compile-time constant")
+                    return
+                }
                 if (e.operationToken !in CONSTANT_OPERATORS) return
                 e.left?.let { walk(it, inAnnotation, out, self) }
                 e.right?.let { walk(it, inAnnotation, out, self) }
@@ -193,7 +201,8 @@ internal object KotlinConstChecks {
 
     private fun declares(d: KtElement, name: String, wantFunction: Boolean): Boolean =
         if (wantFunction) d is KtNamedFunction && d.name == name && d.receiverTypeReference == null
-        else d is KtProperty && d.name == name && d.receiverTypeReference == null && !d.hasDelegate()
+        // A delegated property is never a constant either: `@get:Anno(foo)` on `var foo by D()` reads it too.
+        else d is KtProperty && d.name == name && d.receiverTypeReference == null
 
     private fun diag(at: KtElement, msg: String): Diagnostic {
         val r = at.textRange
