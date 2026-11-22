@@ -152,7 +152,7 @@ class IosBackend(
 
     /** Called by the app before the UI is created, with the JVM it started. */
     fun attachEmbeddedJvm(jvm: EmbeddedJvm) {
-        embedded = EmbeddedBackend(jvm) { active?.rootPath?.takeIf { it.isNotEmpty() } }
+        embedded = EmbeddedBackend(jvm) { followedRoot ?: active?.rootPath?.takeIf { it.isNotEmpty() } }
     }
 
     override fun uiPlugins(): List<dev.ide.ui.ext.UiPlugin> = embedded?.uiPlugins ?: emptyList()
@@ -184,6 +184,7 @@ class IosBackend(
         appBuild = IosBundle.buildNumber(),
         projectsRoot = { projectsRoot },
         mediaBaseUrl = StoreConfig.STORE_MEDIA_URL,
+        aiProxyUrl = StoreConfig.AI_PROXY_URL,
         cacheRoot = IosFiles.supportDir(),
         preferences = preferences,
         adopt = { dir ->
@@ -502,6 +503,19 @@ class IosBackend(
     /** The declarations the preview libraries were last resolved for, and the jars they resolved to. */
     private var previewLibraries: Pair<List<Coordinate>, List<String>>? = null
 
+    /**
+     * The project an engine has open (see [EngineBackend]), which this backend opens for itself only when a
+     * preview is first asked for: its own index and its own copy of the libraries serve nothing else there,
+     * and most projects are opened and closed without a preview being drawn.
+     */
+    @kotlin.concurrent.Volatile
+    internal var followedRoot: String? = null
+
+    private suspend fun follow() {
+        val root = followedRoot ?: return
+        if (active?.rootPath != root) previewStage("Preparing the preview") { openProject(root) }
+    }
+
     override suspend fun composePreviews(path: String, text: String): List<UiComposePreview> =
         if (!path.endsWith(".kt", ignoreCase = true)) emptyList()
         else withAnalysis(emptyList()) { analysis -> analysis.previews(path, text).map(::toUiPreview) }
@@ -524,6 +538,7 @@ class IosBackend(
     ): IosPreviewFrame {
         val runtime = previewRuntimeJars()
         if (runtime.isEmpty()) return IosPreviewFrame(null, listOf("This build of the app does not carry the preview runtime."))
+        follow()
         val blob = withAnalysis(null) { it.lowerPreview(path, text, functionName) }
             ?: return IosPreviewFrame(null, listOf("`$functionName` could not be lowered for preview."))
         val classpath = runtime + previewLibraryJars()
@@ -554,6 +569,7 @@ class IosBackend(
         val runtime = previewRuntimeJars()
         if (runtime.isEmpty()) return IosPreviewSession(null, IosPreviewFrame(null, listOf("This build of the app does not carry the preview runtime.")))
         try {
+            follow()
             val blob = previewStage("Lowering $functionName") {
                 withAnalysis(null) { it.lowerPreview(path, text, functionName) }
             } ?: return IosPreviewSession(null, IosPreviewFrame(null, listOf("`$functionName` could not be lowered for preview.")))

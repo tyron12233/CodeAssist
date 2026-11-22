@@ -508,11 +508,18 @@ class CodeAssistAppState(
             val last = resumeProject
             if (!reopenLast || last == null) return@launch
             if (backend.projects.projectEpoch.value > 0) return@launch // already in a project
-            val exists = withContext(ioDispatcher) { backend.projects.projects().any { it.rootPath == last } }
+            // The path as it was remembered, or the same folder where the projects are now: an iOS app's
+            // container is somewhere else after every update, and the project went with it.
+            val folder = last.replace('\\', '/').trimEnd('/').substringAfterLast('/')
+            val root = withContext(ioDispatcher) {
+                val known = backend.projects.projects().map { it.rootPath }
+                known.firstOrNull { it == last }
+                    ?: known.firstOrNull { it.replace('\\', '/').trimEnd('/').substringAfterLast('/') == folder }
+            }
             // A link, a tapped notification or the user got somewhere first: that wins over resuming.
-            if (!exists || resumeSuperseded || screen != Screen.Projects) return@launch
+            if (root == null || resumeSuperseded || screen != Screen.Projects) return@launch
             resumePending = true
-            if (!backend.projects.openProject(last)) resumePending = false
+            if (!backend.projects.openProject(root)) resumePending = false
         }
         // Track which project (if any) the user has open, for the resume above. Entering the editor (or its Run
         // screen, which only an open project has) records the project; the picker, where closing a project

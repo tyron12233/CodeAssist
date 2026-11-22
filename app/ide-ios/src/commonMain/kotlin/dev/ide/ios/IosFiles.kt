@@ -135,7 +135,8 @@ internal fun NSData.toByteArray(): ByteArray {
 
 /** `ByteArray` to `NSData`, the inverse of the read above. */
 @OptIn(ExperimentalForeignApi::class)
-internal fun ByteArray.toNSData(): NSData = memScoped {
+internal fun ByteArray.toNSData(): NSData {
     if (isEmpty()) return NSData()
-    NSData.create(bytes = allocArrayOf(this@toNSData), length = size.toULong())
+    // Copied once, straight out of the array: every call to the engine goes through here.
+    return usePinned { pinned -> NSData.create(bytes = pinned.addressOf(0), length = size.toULong()) }
 }

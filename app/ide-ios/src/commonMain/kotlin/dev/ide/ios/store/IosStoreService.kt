@@ -67,6 +67,11 @@ class IosStoreService(
     private val preferences: IosPreferences,
     /** Adopt an unpacked directory as a project; null when it succeeded, else why it did not. */
     private val adopt: (String) -> String?,
+    /**
+     * CodeAssist Free AI over this store's session. The agent runs in the engine, which has no session of its
+     * own: it asks this for the access token (see `EngineSession`).
+     */
+    val aiCredits: dev.ide.store.AiCreditsService = dev.ide.store.AiCreditsService.Unsupported,
 ) : StoreService {
 
     companion object {
@@ -89,6 +94,8 @@ class IosStoreService(
             appBuild: Int?,
             projectsRoot: () -> String,
             mediaBaseUrl: String = "",
+            /** CodeAssist Free AI's primary proxy; blank uses the Supabase `ai-proxy` function alone. */
+            aiProxyUrl: String = "",
             cacheRoot: String,
             preferences: IosPreferences,
             adopt: (String) -> String?,
@@ -115,6 +122,7 @@ class IosStoreService(
                 cacheRoot = cacheRoot,
                 preferences = preferences,
                 adopt = adopt,
+                aiCredits = dev.ide.store.impl.SupabaseAiCreditsService(url, apiKey, accounts, proxyUrl = aiProxyUrl),
             )
         }
     }

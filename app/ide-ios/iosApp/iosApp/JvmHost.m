@@ -115,7 +115,9 @@ static AotEntry aotD8, aotKotlinc;
 static void (*aotEngineProperty)(void *, const char *, const char *);
 static void (*aotEngineAapt2)(void *, int (*)(int, char **, const char *));
 static int (*aotEngineOpen)(void *, const char *, char *, int);
+static int (*aotEngineStart)(void *, const char *, char *, int);
 static char *(*aotEngineCall)(void *, const char *, int, int *);
+static void (*aotEngineSession)(void *, char *(*)(int, const char *));
 
 /// Starts the image's runtime, once. Without it everything still runs, in the VM as before.
 static BOOL loadAotTools(void) {
@@ -143,7 +145,9 @@ static BOOL loadAotTools(void) {
     aotEngineProperty = dlsym(library, "aot_engine_property");
     aotEngineAapt2 = dlsym(library, "aot_engine_aapt2");
     aotEngineOpen = dlsym(library, "aot_engine_open");
+    aotEngineStart = dlsym(library, "aot_engine_start");
     aotEngineCall = dlsym(library, "aot_engine_call");
+    aotEngineSession = dlsym(library, "aot_engine_session");
     aotIsolate = isolate;
     return YES;
 }
@@ -192,6 +196,28 @@ static BOOL startAotEngine(void) {
         fprintf(stderr, "the engine compiled ahead of time is in this process\n");
     });
     return started;
+}
+
+/// The app's store session, which the engine asks for CodeAssist Free AI's access token (see EngineSession in
+/// the framework). Set once, before the engine's backend starts.
+static id<CAUEngineSession> engineSession;
+
+/// The engine's question about the session, answered by the framework on whichever engine thread asked: 0 is
+/// there a session ("1", or NULL for none), 1 a current access token, 2 one to retry with after `arg` was
+/// refused. The answer is malloc'd, for the engine to free; NULL for none. A token is never logged.
+static char *askEngineSession(int question, const char *arg) {
+    @autoreleasepool {
+        id<CAUEngineSession> session = engineSession;
+        if (!session) return NULL;
+        NSString *answer = nil;
+        switch (question) {
+            case 0: answer = [session signedIn] ? @"1" : nil; break;
+            case 1: answer = [session accessToken]; break;
+            case 2: answer = [session refreshAccessTokenStale:arg ? [NSString stringWithUTF8String:arg] : nil]; break;
+            default: break;
+        }
+        return answer.length ? strdup(answer.UTF8String) : NULL;
+    }
 }
 
 /// One request answered by the engine compiled ahead of time, on the calling thread.
@@ -345,6 +371,12 @@ _Static_assert(sizeof(DigestContext) <= 256, "NativeDigests.STATE_BYTES is too s
     // VM's own engine has open, which it only opens for a layout.
     NSString *_engineRoot;
     NSString *_vmRoot;
+    // The engine compiled ahead of time hosting a whole backend (see startBackend): its calls come from any
+    // thread of the app's, and are carried to threads with a stack deep enough for the engine's parsers.
+    BOOL _wholeBackend;
+    NSCondition *_callsPending;
+    NSMutableArray<dispatch_block_t> *_callJobs;
+    int _callThreads, _callIdle;
     JavaVM *_vm;
     JNIEnv *_env;
     jclass _host;
@@ -366,8 +398,75 @@ _Static_assert(sizeof(DigestContext) <= 256, "NativeDigests.STATE_BYTES is too s
         _editorJobs = [NSMutableArray array];
         pthread_create(&thread, &attributes, runEditorJobs, (__bridge_retained void *)self);
         pthread_attr_destroy(&attributes);
+        _callsPending = [NSCondition new];
+        _callJobs = [NSMutableArray array];
     }
     return self;
+}
+
+static void *runCallJobs(void *context) {
+    JvmChannel *channel = (__bridge_transfer JvmChannel *)context;
+    pthread_setname_np("codeassist-engine-call");
+    for (;;) {
+        dispatch_block_t job;
+        [channel->_callsPending lock];
+        channel->_callIdle++;
+        while (channel->_callJobs.count == 0) [channel->_callsPending wait];
+        channel->_callIdle--;
+        job = channel->_callJobs.firstObject;
+        [channel->_callJobs removeObjectAtIndex:0];
+        [channel->_callsPending unlock];
+        @autoreleasepool { job(); }
+    }
+    return NULL;
+}
+
+/// One request of the whole backend's protocol, answered by the engine on a thread of the call pool. The pool
+/// grows while every thread is busy (one always is: the standing question about the flows), up to a bound.
+- (NSData *)callWholeBackend:(NSData *)request {
+    __block NSData *answer = [NSData data];
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    [_callsPending lock];
+    [_callJobs addObject:^{ answer = callAotEngine(request); dispatch_semaphore_signal(done); }];
+    if (_callIdle < (int)_callJobs.count && _callThreads < 24) {
+        _callThreads++;
+        pthread_attr_t attributes;
+        pthread_attr_init(&attributes);
+        pthread_attr_setstacksize(&attributes, 16 * 1024 * 1024);
+        pthread_t thread;
+        pthread_create(&thread, &attributes, runCallJobs, (__bridge_retained void *)self);
+        pthread_attr_destroy(&attributes);
+    }
+    [_callsPending signal];
+    [_callsPending unlock];
+    dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
+    return answer;
+}
+
+- (NSString *)startBackendProjectsRoot:(NSString *)projectsRoot session:(id<CAUEngineSession>)session {
+    __block NSString *answer = @"This build has no engine compiled in.";
+    [self onJavaThread:^{
+        if (!startAotEngine() || !aotEngineStart) return;
+        void *thread = NULL;
+        char why[512] = { 0 };
+        CFAbsoluteTime started = CFAbsoluteTimeGetCurrent();
+        if (aotAttach(aotIsolate, &thread) != 0) { answer = @"The engine's runtime would not take a thread."; return; }
+        // CodeAssist Free AI: the Supabase project as properties, the session as a function to ask. Both before
+        // the backend starts, because its agent looks for the credits service once, as it is made.
+        if (aotEngineSession && [session supabaseUrl].length && [session supabaseKey].length) {
+            engineSession = session;
+            aotEngineProperty(thread, "codeassist.supabase.url", [session supabaseUrl].UTF8String);
+            aotEngineProperty(thread, "codeassist.supabase.key", [session supabaseKey].UTF8String);
+            aotEngineProperty(thread, "codeassist.ai.proxy.url", [session aiProxyUrl].UTF8String);
+            aotEngineSession(thread, askEngineSession);
+        }
+        int failed = aotEngineStart(thread, projectsRoot.fileSystemRepresentation, why, (int)sizeof(why));
+        aotDetach(thread);
+        fprintf(stderr, "engine backend over %s -> %s in %.0f ms\n", projectsRoot.UTF8String, failed ? why : "started", (CFAbsoluteTimeGetCurrent() - started) * 1000);
+        answer = failed ? ([NSString stringWithUTF8String:why] ?: @"The engine's backend did not start.") : @"";
+        self->_wholeBackend = !failed;
+    }];
+    return answer;
 }
 
 static void *runJobs(void *context) {
@@ -633,6 +732,7 @@ static void *runEditorJobs(void *context) {
 }
 
 - (NSData *)callRequest:(NSData *)request {
+    if (_wholeBackend && request.length >= 4 && memcmp(request.bytes, "IDE1", 4) == 0) return [self callWholeBackend:request];
     BOOL editor = request.length >= 4 && memcmp(request.bytes, "EDT1", 4) == 0;
     BOOL engine = editor || (request.length >= 4 && (memcmp(request.bytes, "BLD1", 4) == 0 || memcmp(request.bytes, "FTRE", 4) == 0));
     NSString *engineRoot = _engineRoot;

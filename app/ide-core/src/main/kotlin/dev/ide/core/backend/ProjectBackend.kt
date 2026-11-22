@@ -129,7 +129,22 @@ internal class ProjectBackend(
         }
     }
 
-    override suspend fun openProject(rootPath: String): Boolean {
+    override suspend fun openProject(rootPath: String): Boolean = openProjectAt(movedProject(rootPath))
+
+    /**
+     * [rootPath], or where that project is now when the folder that held every project has moved since the
+     * path was remembered: an iOS app's container is at a new path after every update, so the "last project"
+     * it kept names a folder that no longer exists while the project sits, untouched, under the new one.
+     */
+    private fun movedProject(rootPath: String): String {
+        val mgr = ctx.manager ?: return rootPath
+        if (ModelPersistence.exists(rootPath)) return rootPath
+        val name = Paths.get(rootPath).fileName?.toString() ?: return rootPath
+        val moved = mgr.projectsRoot.resolve(name).toString()
+        return if (moved != rootPath && ModelPersistence.exists(moved)) moved else rootPath
+    }
+
+    private suspend fun openProjectAt(rootPath: String): Boolean {
         val mgr = ctx.manager ?: return false
         return withContext(Dispatchers.IO) {
             runCatching {
@@ -507,16 +522,33 @@ internal class ProjectBackend(
             } else {
                 // Legacy v1: active index + bare paths.
                 val active = lines.firstOrNull()?.trim()?.toIntOrNull() ?: -1
-                val paths = lines.drop(1).map { it.trim() }.filter { it.isNotEmpty() }
+                val paths = lines.drop(1).map { it.trim() }.filter { it.isNotEmpty() }.map(::movedTab)
                 UiOpenTabs.ofPaths(paths, active)
             }
         }.getOrDefault(UiOpenTabs())
     }
 
+    /**
+     * A remembered tab's path, or where that file is now when the project has moved since: the part of the
+     * path after the project's folder, under the folder as it is today. Tabs are kept as absolute paths, and
+     * a project is not always where it was (an iOS app's container moves on every update; a folder is renamed
+     * or restored from a backup), which opened every remembered tab on a file that is not there.
+     */
+    private fun movedTab(path: String): String {
+        val root = ctx.servicesOrNull?.workspaceRoot ?: return path
+        val file = runCatching { Paths.get(path) }.getOrNull() ?: return path
+        if (file.startsWith(root) || Files.exists(file)) return path
+        val folder = root.fileName ?: return path
+        // A package is often named after its project, so the folder's name can come up more than once.
+        return (0..file.nameCount - 2).asSequence().filter { file.getName(it) == folder }
+            .map { root.resolve(file.subpath(it + 1, file.nameCount)) }
+            .firstOrNull { Files.exists(it) }?.toString() ?: path
+    }
+
     /** Parse one v2 tab line (`path\tcaret\tscrollLine\tviewMode`); null for a blank/pathless line. */
     private fun parseTabLine(line: String): UiOpenTab? {
         val fields = line.split('\t')
-        val path = fields.getOrNull(0)?.trim().orEmpty()
+        val path = fields.getOrNull(0)?.trim().orEmpty().let { if (it.isEmpty()) it else movedTab(it) }
         if (path.isEmpty()) return null
         return UiOpenTab(
             path = path,

@@ -6503,7 +6503,16 @@ class IdeServices private constructor(
 
         private fun ensureSdks(store: ProjectModelStore, primary: SdkData?, baseDir: Path) {
             val current = store.data.sdks.toMutableList()
-            if (current.isEmpty()) primary?.let { current.add(it) }
+            // A table written where the app no longer is names jars that are gone: an iOS app's bundle and
+            // container move on every update, a desktop JDK is uninstalled. Kept, every file of the project
+            // would resolve nothing ("Cannot resolve symbol 'String'"). The two SDKs this function installs are
+            // installed again; the per-platform ones are syncPlatformSdks' to look after.
+            val gone = current.filter { sdk ->
+                (sdk.name == primary?.name || sdk.name == CorePlatformProvider.SDK_NAME) &&
+                    sdk.bootClasspath.firstOrNull()?.let { Files.isRegularFile(Paths.get(it)) } != true
+            }
+            current.removeAll(gone)
+            if (current.isEmpty() || gone.any { it.name == primary?.name }) primary?.let { current.add(0, it) }
             if (current.none { it.kind == PlatformKind.JVM }) {
                 val androidLike = current.firstOrNull { it.kind == PlatformKind.ANDROID } ?: primary
                 coreJavaSdkFor(androidLike, baseDir)?.let { core ->

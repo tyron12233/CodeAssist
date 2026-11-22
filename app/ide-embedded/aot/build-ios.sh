@@ -40,8 +40,11 @@ object=$(find "$work/tmp" -name "aottools.o" | head -1)
 # Every function the entry points export, by the name its annotation gives it.
 { grep -rho '@CEntryPoint(name = "[a-z0-9_]*")' "$here/src" | sed 's/.*"\(.*\)".*/_\1/'
   printf '_%s\n' graal_create_isolate graal_attach_thread graal_detach_thread graal_tear_down_isolate; } > "$work/exports.txt"
+# The image's runtime names compiler-rt's cache flush, which the iOS SDK's link does not bring: the system's own.
+printf '#include <libkern/OSCacheControl.h>\nvoid __clear_cache(void *start, void *end) { sys_icache_invalidate(start, (char *)end - (char *)start); }\n' > "$work/clear_cache.c"
+xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 -c "$work/clear_cache.c" -o "$work/clear_cache.o"
 # CFNetwork: the engine downloads (libraries, platforms), and the JDK's networking asks the system for its proxies.
 # shellcheck disable=SC2046
 xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 -dynamiclib -install_name "@rpath/libaottools.dylib" \
-  -o "$out/libaottools.dylib" "$object" -L"$kit/lib" $(prop link.flags) -framework CFNetwork -framework SystemConfiguration -Wl,-exported_symbols_list,"$work/exports.txt"
+  -o "$out/libaottools.dylib" "$object" "$work/clear_cache.o" -L"$kit/lib" $(prop link.flags) -framework CFNetwork -framework SystemConfiguration -Wl,-exported_symbols_list,"$work/exports.txt"
 echo "$out/libaottools.dylib"

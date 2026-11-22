@@ -49,6 +49,28 @@ class OpenTabsPersistenceTest {
     }
 
     @Test
+    fun aTabRememberedBeforeTheProjectMovedOpensTheFileWhereItIsNow() {
+        withTempDir("ide-tabs-moved") { dir ->
+            IdeServices.bootstrapJavaDemo(dir).use { ide ->
+                val backend = IdeServicesBackend(ide)
+                val root = ide.workspaceRoot
+                // A package named after the project, as a template makes it: the folder's name comes up twice.
+                val source = Files.createDirectories(root.resolve("src/${root.fileName}")).resolve("Moved.java")
+                Files.writeString(source, "class Moved {}")
+                // Where an iOS app's container was before an update: same project folder, another parent.
+                val before = "/gone/Containers/OLD-UUID/Documents/Projects/${root.fileName}/src/${root.fileName}/Moved.java"
+                backend.projects.saveOpenTabs(UiOpenTabs(listOf(UiOpenTab(before, caret = 5), UiOpenTab("/gone/elsewhere/Other.java")), 0))
+
+                val restored = backend.projects.openTabs()
+                assertEquals(source.toString(), restored.tabs[0].path, "the tab follows the project")
+                assertEquals(5, restored.tabs[0].caret)
+                assertEquals("/gone/elsewhere/Other.java", restored.tabs[1].path, "a path outside the project is left alone")
+            }
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun toleratesAMissingOrEmptyActiveIndex() {
         withTempDir("ide-tabs-empty") { dir ->
             IdeServices.bootstrapJavaDemo(dir).use { ide ->

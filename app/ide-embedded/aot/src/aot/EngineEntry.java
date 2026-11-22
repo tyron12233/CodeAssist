@@ -51,6 +51,60 @@ public final class EngineEntry {
         }
     }
 
+    /**
+     * The app's store session, asked by what the engine is told it means: 0 whether there is one ("1", or null
+     * for none), 1 a current access token, 2 a token to retry with after `arg` (the refused one) was refused.
+     * The answer is a string the engine frees, or null.
+     */
+    interface Session extends CFunctionPointer {
+        @InvokeCFunctionPointer
+        CCharPointer ask(int question, CCharPointer arg);
+    }
+
+    /** The app's session, as the address it was given at (see aapt2Address). */
+    private static long sessionAddress;
+
+    @CEntryPoint(name = "aot_engine_session")
+    static void session(IsolateThread thread, Session function) {
+        sessionAddress = function.rawValue();
+        EmbeddedEngineHost.installSession(EngineEntry::askSession);
+    }
+
+    private static String askSession(Integer question, String arg) {
+        Session function = WordFactory.pointer(sessionAddress);
+        CCharPointer answer;
+        if (arg == null) {
+            answer = function.ask(question, WordFactory.nullPointer());
+        } else {
+            try (CTypeConversion.CCharPointerHolder held = CTypeConversion.toCString(arg)) {
+                answer = function.ask(question, held.get());
+            }
+        }
+        if (answer.isNull()) return null;
+        try {
+            return CTypeConversion.toJavaString(answer);
+        } finally {
+            UnmanagedMemory.free(answer);
+        }
+    }
+
+    /**
+     * Starts the whole backend over the folder projects are kept in (see EmbeddedEngineHost.start). Zero, or
+     * non-zero with why in `error`.
+     */
+    @CEntryPoint(name = "aot_engine_start")
+    static int start(IsolateThread thread, CCharPointer projectsRoot, CCharPointer error, int capacity) {
+        String failure;
+        try {
+            failure = EmbeddedEngineHost.start(CTypeConversion.toJavaString(projectsRoot));
+        } catch (Throwable t) {
+            failure = t.toString();
+        }
+        if (failure.isEmpty()) return 0;
+        if (capacity > 0) CTypeConversion.toCString(failure, error, WordFactory.unsigned(capacity));
+        return 1;
+    }
+
     /** Opens the project. Zero, or non-zero with why in `error` (at most `capacity` bytes, ended by a zero). */
     @CEntryPoint(name = "aot_engine_open")
     static int open(IsolateThread thread, CCharPointer root, CCharPointer error, int capacity) {

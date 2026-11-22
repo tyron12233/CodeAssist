@@ -11,15 +11,37 @@ import dev.ide.store.StoreResult
 import dev.ide.store.impl.platform.StoreHttp
 
 /**
+ * Whoever owns the Supabase session the free tier rides on: the proxy needs the live access token, and only
+ * the session's owner can hand one out (and refresh it before it lapses).
+ *
+ * Usually that is the [SupabaseAccountService] in the same process. On iOS the engine runs in a native image
+ * beside the app, and the session stays in the app (its keychain, its sign-in sheet): the engine asks the app
+ * through this rather than keeping a second copy of a refresh token that rotates on every use.
+ */
+interface AiCreditsSession {
+    /** Whether this build can sign in at all. */
+    fun authAvailable(): Boolean
+
+    /** A live session, or a stored one to restore. Never the network. */
+    fun hasStoredSession(): Boolean
+
+    /** A current access token, refreshed first if the one in hand is spent; null when signed out. */
+    fun bearer(): String?
+
+    /** A token to retry with after [stale] was refused; null when there is nothing left to try. */
+    fun reauthorize(stale: String?): String?
+}
+
+/**
  * [AiCreditsService] over the `ai_my_wallet` RPC and the `ai-proxy` edge function.
  *
- * Takes the concrete account service, as the daily challenges do, because the proxy needs the live access
- * token and only the session owner can hand one out (and refresh it before it lapses).
+ * Takes the session's owner ([AiCreditsSession]), as the daily challenges take the account service, because
+ * the proxy needs the live access token.
  */
 class SupabaseAiCreditsService(
     url: String,
     private val apiKey: String,
-    private val accounts: SupabaseAccountService,
+    private val accounts: AiCreditsSession,
     /**
      * The primary proxy (the Cloudflare Worker), or blank to use the Supabase `ai-proxy` function alone. When set,
      * the Supabase function is the fallback.
@@ -28,6 +50,16 @@ class SupabaseAiCreditsService(
     connectTimeoutMs: Int = 10_000,
     readTimeoutMs: Int = 20_000,
 ) : AiCreditsService {
+
+    /** Over the account service in this process, which owns the session. */
+    constructor(
+        url: String,
+        apiKey: String,
+        accounts: SupabaseAccountService,
+        proxyUrl: String = "",
+        connectTimeoutMs: Int = 10_000,
+        readTimeoutMs: Int = 20_000,
+    ) : this(url, apiKey, accounts.aiCreditsSession(), proxyUrl, connectTimeoutMs, readTimeoutMs)
 
     private val http = StoreHttp(connectTimeoutMs, readTimeoutMs)
     private val base = url.trimEnd('/')
@@ -84,6 +116,16 @@ class SupabaseAiCreditsService(
     }
 
     internal companion object {
+        private fun SupabaseAccountService.aiCreditsSession(): AiCreditsSession {
+            val owner = this
+            return object : AiCreditsSession {
+                override fun authAvailable(): Boolean = owner.authAvailable()
+                override fun hasStoredSession(): Boolean = owner.hasStoredSession()
+                override fun bearer(): String? = owner.bearer()
+                override fun reauthorize(stale: String?): String? = owner.reauthorize(stale)
+            }
+        }
+
         private fun dbl(v: Any?, key: String): Double = JsonReader.float(v, key)?.toDouble() ?: 0.0
 
         fun parseUsage(root: Any?): AiUsage = AiUsage(

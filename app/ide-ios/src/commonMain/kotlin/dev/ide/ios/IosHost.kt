@@ -20,6 +20,27 @@ class IosHost {
 
     val backend: IosBackend = IosBackend()
 
+    /**
+     * What the UI is given: [backend] itself, or the engine's backend once the app has handed over a JVM
+     * whose engine can host one (see [EngineBackend]).
+     */
+    var ideBackend: dev.ide.ui.backend.IdeBackend = backend
+        private set
+
+    /** Called by the app before the UI is created, with the JVM it started. */
+    fun attach(jvm: EmbeddedJvm) {
+        backend.attachEmbeddedJvm(jvm)
+        EngineBackend.start(jvm, backend, backend.projectsRootPath())?.let { ideBackend = it }
+    }
+
+    /** Called as the UI is first asked for: a simulator's scripted walk through the backend, when one was asked for. */
+    internal fun started() {
+        if (checked) return
+        checked = true
+        IosSelfCheck.start(ideBackend, backend.projectsRootPath(), kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + dev.ide.ui.platform.ioDispatcher))
+    }
+    private var checked = false
+
     /** Compose previews, rendered by [backend] in the VM. */
     val composePreviewHost: dev.ide.ui.ComposePreviewHost = IosComposePreviewHost(backend)
 

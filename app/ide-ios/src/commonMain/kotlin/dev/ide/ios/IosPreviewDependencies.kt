@@ -103,6 +103,10 @@ internal class IosPreviewDependencies(
                     val present = inGraph[JETBRAINS_COMPOSE + c.group.removePrefix(ANDROIDX_COMPOSE) + ":" + c.name]
                     (present ?: desktopEquivalent(c))?.let { c to it }
                 }
+                // Compose Multiplatform no longer has a runtime of its own: its desktop `runtime` is a shell
+                // over androidx's, which is where the classes are. Swapping that one away leaves a preview
+                // with no `Composer` at all.
+                .filterNot { (c, equivalent) -> desktopIsAndroidx(equivalent, c) }
             if (fresh.isEmpty()) {
                 val jars = result.resolved.flatMap { a -> listOf(a.classesRoot.path) + a.extraClassesRoots.map { it.path } }.distinct()
                 log.info("preview classpath: ${jars.size} jar(s): ${result.resolved.joinToString { it.coordinate.toString() }}")
@@ -232,14 +236,7 @@ internal class IosPreviewDependencies(
      * `org.jetbrains.compose.material3:material3:1.9.0` is `androidx.compose.material3:material3:1.4.0`).
      */
     private fun androidAliasOf(group: String, name: String, version: String): Pair<String, String>? {
-        val coordinate = Coordinate(group, name, version)
-        val relative = cache.relativePath(coordinate, "module")
-        val path = cache.fileFor(relative)
-        val bytes = IosFiles.readBytes(path) ?: run {
-            val url = IosDependencies.REPOSITORIES.first().url.removeSuffix("/") + "/" + relative
-            fetcher.fetch(url)?.also { IosFiles.mkdirs(IosFiles.parentOf(path)!!); IosFiles.writeBytes(path, it) }
-        } ?: return null
-        val module = GradleModuleParser.parse(bytes) ?: return null
+        val module = moduleOf(Coordinate(group, name, version)) ?: return null
         val androidxGroup = ANDROIDX_COMPOSE + group.removePrefix(JETBRAINS_COMPOSE)
         // Whichever variant names the same-named androidx artifact is the Android one: the desktop variant IS
         // the implementation and never does. (Variant names vary by release: `android…`, `release…`.)
@@ -250,6 +247,28 @@ internal class IosPreviewDependencies(
             }
         }
         return null
+    }
+
+    /** [coordinate]'s Gradle module metadata, from the cache or from Central; null when it publishes none. */
+    private fun moduleOf(coordinate: Coordinate) = cache.relativePath(coordinate, "module").let { relative ->
+        val path = cache.fileFor(relative)
+        val bytes = IosFiles.readBytes(path) ?: run {
+            val url = IosDependencies.REPOSITORIES.first().url.removeSuffix("/") + "/" + relative
+            fetcher.fetch(url)?.also { IosFiles.mkdirs(IosFiles.parentOf(path)!!); IosFiles.writeBytes(path, it) }
+        }
+        bytes?.let { GradleModuleParser.parse(it) }
+    }
+
+    /**
+     * Whether the desktop build of the Compose Multiplatform module [equivalent] is itself the androidx
+     * artifact [androidx]: a shell with no classes that depends on it, as `runtime` has been since Compose
+     * Multiplatform took androidx's runtime for every target.
+     */
+    private fun desktopIsAndroidx(equivalent: Coordinate, androidx: Coordinate): Boolean {
+        val desktop = moduleOf(Coordinate(equivalent.group, equivalent.name + "-desktop", equivalent.version)) ?: return false
+        return desktop.variants.any { variant ->
+            variant.dependencies.any { it.group == androidx.group && rootName(it.name) == androidx.name }
+        }
     }
 
     private companion object {

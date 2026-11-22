@@ -54,6 +54,43 @@ interface EmbeddedJvm {
      * it takes seconds to complete in a Kotlin file, and this host's own analysis answers Kotlin instead.
      */
     fun compiledEngine(): Boolean
+
+    /**
+     * Start the engine as a whole backend over [projectsRoot], the folder projects are kept in: every service
+     * of `IdeBackend` is then answered by [call] (see `RemoteBackendWire`). Empty when it started, else why it
+     * did not; a build with no engine compiled in has none to start. [session] is what the engine asks for the
+     * signed-in user's access token (CodeAssist Free AI), the session being this app's.
+     */
+    fun startBackend(projectsRoot: String, session: EngineSession): String
+}
+
+/**
+ * The app's store session, as the engine sees it.
+ *
+ * The agent runs in the engine and CodeAssist Free AI pays for its calls with the user's Supabase access token,
+ * but the session is this app's: signed in through the system's sheet, its refresh token in the keychain. So
+ * the engine keeps no session of its own and asks this instead, from whichever of its threads needs a token
+ * (never the main thread's, since a token may take a network call to refresh). The engine does the wallet's
+ * and the proxy's HTTP itself, with the project config it is given here when it starts.
+ */
+interface EngineSession {
+    /** The Supabase project the store and the free tier use; blank when this build has none. */
+    fun supabaseUrl(): String
+
+    /** That project's publishable key. */
+    fun supabaseKey(): String
+
+    /** The free tier's primary proxy; blank for the Supabase `ai-proxy` function alone. */
+    fun aiProxyUrl(): String
+
+    /** Whether there is a session, live or stored. Never the network. */
+    fun signedIn(): Boolean
+
+    /** A current access token, refreshed first if spent; null when signed out. */
+    fun accessToken(): String?
+
+    /** A token to retry with after [stale] was refused (a 401); null when there is nothing left to try. */
+    fun refreshAccessToken(stale: String?): String?
 }
 
 /**

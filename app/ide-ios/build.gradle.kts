@@ -26,12 +26,17 @@ val supabaseKey = (findProperty("SUPABASE_KEY") as String?) ?: System.getenv("SU
 val storeMediaUrl = (findProperty("STORE_MEDIA_URL") as String?) ?: System.getenv("STORE_MEDIA_URL")
     ?: "https://pub-a5be92b9c0b14a86ae36e09cb86f0ffa.r2.dev"
 
+// CodeAssist Free AI's primary proxy (a Cloudflare Worker); blank uses the Supabase `ai-proxy` function alone.
+val aiProxyUrl = (findProperty("AI_PROXY_URL") as String?) ?: System.getenv("AI_PROXY_URL")
+    ?: "https://codeassist-ai-proxy.lucena-tyronscott.workers.dev"
+
 val generateStoreConfig by tasks.registering {
     val outputDir = layout.buildDirectory.dir("generated/storeConfig/kotlin")
     // Declared as inputs so a changed endpoint regenerates rather than being served from the build cache.
     inputs.property("url", supabaseUrl)
     inputs.property("key", supabaseKey)
     inputs.property("media", storeMediaUrl)
+    inputs.property("aiProxy", aiProxyUrl)
     inputs.property("build", project.version.toString())
     outputs.dir(outputDir)
     doLast {
@@ -46,6 +51,7 @@ val generateStoreConfig by tasks.registering {
                 const val SUPABASE_URL: String = "$supabaseUrl"
                 const val SUPABASE_KEY: String = "$supabaseKey"
                 const val STORE_MEDIA_URL: String = "$storeMediaUrl"
+                const val AI_PROXY_URL: String = "$aiProxyUrl"
                 const val APP_VERSION: String = "${project.version}"
             }
 
@@ -177,6 +183,9 @@ kotlin {
             implementation(project(":layout-editor"))
             implementation(project(":android-layout-api"))
             implementation(project(":plugin-api"))
+            // The AI agent's chat UI. Its engine half runs in the embedded JVM and is reached through the
+            // remote backend; the Compose half has to live here, so EngineBackend registers AgentUiPlugin.
+            implementation(project(":agent-ui"))
 
             // The Projects Store. The transport (:store-impl) and its translation onto the UI contract
             // (:store-bridge) are the same code the Android and desktop hosts run; what this host supplies

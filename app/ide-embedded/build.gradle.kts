@@ -21,6 +21,7 @@ dependencies {
     implementation(project(":build-api"))           // where a host's native file hash plugs in
     implementation(project(":lang-kotlin"))         // where a host's linked-in Kotlin compiler plugs in
     implementation(project(":ide-ui-api"))          // the project tree's types and its byte form
+    implementation(project(":store-impl"))          // CodeAssist Free AI's wallet and proxy, over the app's session
     implementation(libs.kotlinx.coroutines.core)
 
     // layoutlib and its loader, which :realview-layoutlib compiles against but does not carry.
@@ -29,6 +30,42 @@ dependencies {
     testImplementation(libs.android.tools.sdk.common)
     testImplementation(libs.kxml2)
     testRuntimeOnly(libs.android.tools.ninepatch)
+    // The generator of the whole backend's byte protocol reads `IdeBackend` as it is compiled.
+    testImplementation(kotlin("reflect"))
+    testImplementation(libs.kotlin.test)
+}
+
+/**
+ * Rewrites the two ends of the whole backend across a byte channel (`RemoteIdeBackend`, `RemoteBackendServer`
+ * in :ide-ui-api) from `IdeBackend`. Run it after changing a backend interface or one of its value classes.
+ */
+val generateRemoteBackend by tasks.registering(JavaExec::class) {
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.ide.embedded.gen.RemoteBackendGenerator")
+    args(rootDir.absolutePath)
+}
+
+/**
+ * Walks the engine as the iOS app does (see `RemoteBackendSweep`) under native-image's tracing agent, adding
+ * what it reached by reflection to `aot/config-engine`, which the image compiled ahead of time is built with.
+ * `-Pgraalvm.home=<GraalVM>` names the JDK with the agent; `-Pandroid.toolchain=<folder>` the app's Android
+ * toolchain folder, so Android projects are walked as they are on the phone.
+ *
+ * The projects it makes go under the system's temporary folder and never under this repository: the engine's
+ * version control looks upward from a project for a repository, and would find this one.
+ */
+val traceRemoteBackend by tasks.registering(JavaExec::class) {
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.ide.embedded.gen.RemoteBackendSweep")
+    val work = File(System.getProperty("java.io.tmpdir"), "codeassist-remote-backend-sweep")
+    doFirst { work.deleteRecursively(); work.mkdirs() }
+    args(work.absolutePath)
+    providers.gradleProperty("graalvm.home").orNull?.let { executable("$it/bin/java") }
+    providers.gradleProperty("android.toolchain").orNull?.let { systemProperty("codeassist.android.toolchain", it) }
+    systemProperty("user.home", File(work, "home").absolutePath)
+    environment.remove("ANDROID_HOME"); environment.remove("ANDROID_SDK_ROOT")
+    jvmArgs("-agentlib:native-image-agent=config-merge-dir=${layout.projectDirectory.dir("aot/config-engine").asFile.absolutePath}", "-Xss16m")
+    maxHeapSize = "4g"
 }
 
 tasks.named<Test>("test") {

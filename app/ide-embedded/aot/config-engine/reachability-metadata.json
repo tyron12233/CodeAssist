@@ -214,6 +214,114 @@
       ]
     },
     {
+      "type": "com.apple.laf.AquaButtonBorder$Dynamic",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.apple.laf.AquaButtonUI",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "createUI",
+          "parameterTypes": [
+            "javax.swing.JComponent"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "com.apple.laf.AquaButtonUI$AquaHierarchyButtonListener",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.apple.laf.AquaKeyBindings",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.apple.laf.AquaLabelUI",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "createUI",
+          "parameterTypes": [
+            "javax.swing.JComponent"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "com.apple.laf.AquaLookAndFeel",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.apple.laf.AquaPanelUI",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "createUI",
+          "parameterTypes": [
+            "javax.swing.JComponent"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "com.apple.laf.AquaRootPaneUI",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "createUI",
+          "parameterTypes": [
+            "javax.swing.JComponent"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "com.apple.laf.AquaUtilControlSize$PropertySizeListener",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.apple.laf.resources.aqua"
+    },
+    {
       "type": "com.intellij.codeInsight.ContainerProvider"
     },
     {
@@ -221,6 +329,18 @@
     },
     {
       "type": "com.intellij.codeInsight.multiverse.MultiverseEnabler"
+    },
+    {
+      "type": "com.intellij.lang.jvm.facade.JvmElementProvider"
+    },
+    {
+      "type": "com.intellij.openapi.application.TransactionGuardImpl",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
     },
     {
       "type": "com.intellij.openapi.application.impl.ModalityStateEx",
@@ -267,6 +387,12 @@
       ]
     },
     {
+      "type": "com.intellij.psi.JavaModuleSystem"
+    },
+    {
+      "type": "com.intellij.psi.JavaResolveResult[]"
+    },
+    {
       "type": "com.intellij.psi.LanguageSubstitutors",
       "methods": [
         {
@@ -276,10 +402,28 @@
       ]
     },
     {
+      "type": "com.intellij.psi.PsiClass[]"
+    },
+    {
       "type": "com.intellij.psi.PsiElementFinder"
     },
     {
+      "type": "com.intellij.psi.PsiJavaCodeReferenceElement[]"
+    },
+    {
+      "type": "com.intellij.psi.PsiMember[]"
+    },
+    {
+      "type": "com.intellij.psi.PsiMethod[]"
+    },
+    {
+      "type": "com.intellij.psi.PsiRecordComponent[]"
+    },
+    {
       "type": "com.intellij.psi.SingleRootFileViewProvider"
+    },
+    {
+      "type": "com.intellij.psi.augment.PsiAugmentProvider"
     },
     {
       "type": "com.intellij.psi.compiled.ClassFileDecompilers",
@@ -294,10 +438,59 @@
       "type": "com.intellij.psi.compiled.ClassFileDecompilers$Decompiler"
     },
     {
+      "type": "com.intellij.psi.impl.AnyPsiChangeListener",
+      "methods": [
+        {
+          "name": "beforePsiChanged",
+          "parameterTypes": [
+            "boolean"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "com.intellij.psi.impl.JavaClassSupersImpl",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.intellij.psi.impl.cache.TypeInfo[]"
+    },
+    {
       "type": "com.intellij.psi.impl.source.JavaFileElementType"
     },
     {
       "type": "com.intellij.psi.impl.source.tree.CompositeElement"
+    },
+    {
+      "type": "com.intellij.psi.impl.source.xml.XmlDocumentImpl",
+      "fields": [
+        {
+          "name": "myProlog"
+        },
+        {
+          "name": "myRootTag"
+        }
+      ]
+    },
+    {
+      "type": "com.intellij.psi.stubs.StubBase"
+    },
+    {
+      "type": "com.intellij.psi.util.PsiModificationTracker$Listener",
+      "methods": [
+        {
+          "name": "modificationCountChanged",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.intellij.psi.xml.HtmlFileElementType"
     },
     {
       "type": "com.intellij.util.ConcurrentLongObjectHashMap"
@@ -310,6 +503,12 @@
     },
     {
       "type": "com.intellij.util.QueryExecutor"
+    },
+    {
+      "type": "com.intellij.util.containers.ConcurrentIntObjectHashMap"
+    },
+    {
+      "type": "com.intellij.util.containers.ConcurrentIntObjectHashMap$CounterCell"
     },
     {
       "type": "com.sun.crypto.provider.AESCipher$General",
@@ -357,6 +556,15 @@
       ]
     },
     {
+      "type": "com.sun.crypto.provider.DHParameters",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "com.sun.crypto.provider.GaloisCounterMode$AESGCM",
       "methods": [
         {
@@ -366,7 +574,83 @@
       ]
     },
     {
+      "type": "com.sun.crypto.provider.HKDFKeyDerivation$HKDFSHA256",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "javax.crypto.KDFParameters"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.HKDFKeyDerivation$HKDFSHA384",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "javax.crypto.KDFParameters"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.HmacCore$HmacSHA256",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.HmacCore$HmacSHA384",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "com.sun.crypto.provider.HmacPKCS12PBECore$HmacPKCS12PBE_SHA1",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.ML_KEM_Impls$K",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.ML_KEM_Impls$KF3",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.ML_KEM_Impls$KF5",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.ML_KEM_Impls$KPG3",
       "methods": [
         {
           "name": "<init>",
@@ -411,6 +695,15 @@
       ]
     },
     {
+      "type": "com.sun.crypto.provider.TlsMasterSecretGenerator",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl",
       "methods": [
         {
@@ -429,7 +722,1992 @@
       ]
     },
     {
+      "type": "com.sun.swing.internal.plaf.basic.resources.basic"
+    },
+    {
+      "type": "dev.ide.jvm.InterpretedHandles$Target",
+      "methods": [
+        {
+          "name": "call",
+          "parameterTypes": [
+            "java.lang.Object[]"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.jvm.VmPeer"
+    },
+    {
+      "type": "dev.ide.jvm.peers.com_example_tswingcanvas_DrawingWindow_Canvas_Peer1",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Object",
+            "dev.ide.jvm.PeerDispatch"
+          ]
+        },
+        {
+          "name": "super$paintComponent",
+          "parameterTypes": [
+            "java.awt.Graphics"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.jvm.peers.weather_DayForecast_Peer1",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Object",
+            "dev.ide.jvm.PeerDispatch"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.ActionService"
+    },
+    {
+      "type": "dev.ide.ui.backend.AgentService",
+      "methods": [
+        {
+          "name": "beginOpenRouterSignIn",
+          "parameterTypes": []
+        },
+        {
+          "name": "commands",
+          "parameterTypes": []
+        },
+        {
+          "name": "config",
+          "parameterTypes": []
+        },
+        {
+          "name": "favoriteModels",
+          "parameterTypes": []
+        },
+        {
+          "name": "fetchGatewayModels",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "ftpServerEnabled",
+          "parameterTypes": []
+        },
+        {
+          "name": "ftpServerSupported",
+          "parameterTypes": []
+        },
+        {
+          "name": "getChatState",
+          "parameterTypes": []
+        },
+        {
+          "name": "getConnections",
+          "parameterTypes": []
+        },
+        {
+          "name": "getFreeAi",
+          "parameterTypes": []
+        },
+        {
+          "name": "getMcpHost",
+          "parameterTypes": []
+        },
+        {
+          "name": "getMcpRelay",
+          "parameterTypes": []
+        },
+        {
+          "name": "getModels",
+          "parameterTypes": []
+        },
+        {
+          "name": "getOpenRouterSignIn",
+          "parameterTypes": []
+        },
+        {
+          "name": "getPermissionRequest",
+          "parameterTypes": []
+        },
+        {
+          "name": "getQuestionRequest",
+          "parameterTypes": []
+        },
+        {
+          "name": "getUsageLimits",
+          "parameterTypes": []
+        },
+        {
+          "name": "newSession",
+          "parameterTypes": []
+        },
+        {
+          "name": "openRouterSignInSupported",
+          "parameterTypes": []
+        },
+        {
+          "name": "recentChats",
+          "parameterTypes": []
+        },
+        {
+          "name": "recentModels",
+          "parameterTypes": []
+        },
+        {
+          "name": "refreshConnections",
+          "parameterTypes": []
+        },
+        {
+          "name": "refreshFreeAi",
+          "parameterTypes": []
+        },
+        {
+          "name": "refreshFreeAiUsage",
+          "parameterTypes": []
+        },
+        {
+          "name": "refreshModels",
+          "parameterTypes": []
+        },
+        {
+          "name": "refreshUsageLimits",
+          "parameterTypes": []
+        },
+        {
+          "name": "retry",
+          "parameterTypes": []
+        },
+        {
+          "name": "sessions",
+          "parameterTypes": []
+        },
+        {
+          "name": "startNewApp",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.AgentService$Unsupported"
+    },
+    {
+      "type": "dev.ide.ui.backend.AppLogUi"
+    },
+    {
+      "type": "dev.ide.ui.backend.BlockService",
+      "methods": [
+        {
+          "name": "blocksEnabled",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.BuildService",
+      "methods": [
+        {
+          "name": "getAppLog",
+          "parameterTypes": []
+        },
+        {
+          "name": "getBuildState",
+          "parameterTypes": []
+        },
+        {
+          "name": "getPermissionRequest",
+          "parameterTypes": []
+        },
+        {
+          "name": "getRunConsole",
+          "parameterTypes": []
+        },
+        {
+          "name": "runBuild",
+          "parameterTypes": []
+        },
+        {
+          "name": "runTasks",
+          "parameterTypes": []
+        },
+        {
+          "name": "supported",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.BuildState"
+    },
+    {
+      "type": "dev.ide.ui.backend.ChallengeService",
+      "methods": [
+        {
+          "name": "challengesAvailable",
+          "parameterTypes": []
+        },
+        {
+          "name": "profile",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.ChallengeService$Unsupported"
+    },
+    {
+      "type": "dev.ide.ui.backend.CustomizationService",
+      "methods": [
+        {
+          "name": "defaultMacros",
+          "parameterTypes": []
+        },
+        {
+          "name": "defaultSymbols",
+          "parameterTypes": []
+        },
+        {
+          "name": "macroVariables",
+          "parameterTypes": []
+        },
+        {
+          "name": "symbolKeys",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.CustomizationService$Companion"
+    },
+    {
+      "type": "dev.ide.ui.backend.CustomizationService$Unsupported"
+    },
+    {
+      "type": "dev.ide.ui.backend.DependencyService",
+      "methods": [
+        {
+          "name": "dependencyModules",
+          "parameterTypes": []
+        },
+        {
+          "name": "getDepsState",
+          "parameterTypes": []
+        },
+        {
+          "name": "getMissingLibraryLookups",
+          "parameterTypes": []
+        },
+        {
+          "name": "getMissingLibraryOutcome",
+          "parameterTypes": []
+        },
+        {
+          "name": "repositories",
+          "parameterTypes": []
+        },
+        {
+          "name": "retryDependencyResolution",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "startPendingDependencyResolution",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.DepsResolveState"
+    },
+    {
+      "type": "dev.ide.ui.backend.DiagnosticsService",
+      "methods": [
+        {
+          "name": "analyticsAvailable",
+          "parameterTypes": []
+        },
+        {
+          "name": "analyticsConsent",
+          "parameterTypes": []
+        },
+        {
+          "name": "analyticsNeedsAsking",
+          "parameterTypes": []
+        },
+        {
+          "name": "getErrorEvents",
+          "parameterTypes": []
+        },
+        {
+          "name": "recentLogs",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.EditorService",
+      "methods": [
+        {
+          "name": "getDiagnosticsInvalidated",
+          "parameterTypes": []
+        },
+        {
+          "name": "getExternalEdits",
+          "parameterTypes": []
+        },
+        {
+          "name": "getReanalysisRequests",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.FileService",
+      "methods": [
+        {
+          "name": "getFileSystemEpoch",
+          "parameterTypes": []
+        },
+        {
+          "name": "getSupportsUndo",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.IconService",
+      "methods": [
+        {
+          "name": "iconRepositories",
+          "parameterTypes": []
+        },
+        {
+          "name": "importTargets",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.IconService$Companion"
+    },
+    {
+      "type": "dev.ide.ui.backend.IdeBackend",
+      "methods": [
+        {
+          "name": "getActions",
+          "parameterTypes": []
+        },
+        {
+          "name": "getAgent",
+          "parameterTypes": []
+        },
+        {
+          "name": "getBlocks",
+          "parameterTypes": []
+        },
+        {
+          "name": "getBuild",
+          "parameterTypes": []
+        },
+        {
+          "name": "getChallenges",
+          "parameterTypes": []
+        },
+        {
+          "name": "getCustomize",
+          "parameterTypes": []
+        },
+        {
+          "name": "getDeps",
+          "parameterTypes": []
+        },
+        {
+          "name": "getDiagnostics",
+          "parameterTypes": []
+        },
+        {
+          "name": "getEditor",
+          "parameterTypes": []
+        },
+        {
+          "name": "getFiles",
+          "parameterTypes": []
+        },
+        {
+          "name": "getIcons",
+          "parameterTypes": []
+        },
+        {
+          "name": "getLearn",
+          "parameterTypes": []
+        },
+        {
+          "name": "getModules",
+          "parameterTypes": []
+        },
+        {
+          "name": "getNotifications",
+          "parameterTypes": []
+        },
+        {
+          "name": "getPreview",
+          "parameterTypes": []
+        },
+        {
+          "name": "getProject",
+          "parameterTypes": []
+        },
+        {
+          "name": "getProjects",
+          "parameterTypes": []
+        },
+        {
+          "name": "getSdk",
+          "parameterTypes": []
+        },
+        {
+          "name": "getSearch",
+          "parameterTypes": []
+        },
+        {
+          "name": "getSettings",
+          "parameterTypes": []
+        },
+        {
+          "name": "getSigning",
+          "parameterTypes": []
+        },
+        {
+          "name": "getStore",
+          "parameterTypes": []
+        },
+        {
+          "name": "getVcs",
+          "parameterTypes": []
+        },
+        {
+          "name": "uiPlugins",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.IndexUiStatus"
+    },
+    {
+      "type": "dev.ide.ui.backend.LearnService",
+      "methods": [
+        {
+          "name": "account",
+          "parameterTypes": []
+        },
+        {
+          "name": "catalog",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "communityAvailable",
+          "parameterTypes": []
+        },
+        {
+          "name": "learnAvailable",
+          "parameterTypes": []
+        },
+        {
+          "name": "progress",
+          "parameterTypes": []
+        },
+        {
+          "name": "refreshCatalog",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "reportQueue",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "resume",
+          "parameterTypes": []
+        },
+        {
+          "name": "shareSolutions",
+          "parameterTypes": []
+        },
+        {
+          "name": "syncProgress",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.LearnService$Companion"
+    },
+    {
+      "type": "dev.ide.ui.backend.ModuleService",
+      "methods": [
+        {
+          "name": "availableModuleTypes",
+          "parameterTypes": []
+        },
+        {
+          "name": "configurableModules",
+          "parameterTypes": []
+        },
+        {
+          "name": "toolchainWarnings",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.NotificationService",
+      "methods": [
+        {
+          "name": "markAllRead",
+          "parameterTypes": []
+        },
+        {
+          "name": "notifications",
+          "parameterTypes": []
+        },
+        {
+          "name": "unreadCount",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.NotificationService$Companion"
+    },
+    {
+      "type": "dev.ide.ui.backend.PreviewProgress"
+    },
+    {
+      "type": "dev.ide.ui.backend.PreviewService",
+      "methods": [
+        {
+          "name": "getPreviewProgress",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.ProjectInfo"
+    },
+    {
+      "type": "dev.ide.ui.backend.ProjectService",
+      "methods": [
+        {
+          "name": "compatibilityInfo",
+          "parameterTypes": []
+        },
+        {
+          "name": "convertToNative",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "discardProjectArchive",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "getProjectEpoch",
+          "parameterTypes": []
+        },
+        {
+          "name": "getProjectRenameSupported",
+          "parameterTypes": []
+        },
+        {
+          "name": "hasLegacyData",
+          "parameterTypes": []
+        },
+        {
+          "name": "hasSavedSession",
+          "parameterTypes": []
+        },
+        {
+          "name": "openTabs",
+          "parameterTypes": []
+        },
+        {
+          "name": "projectTemplates",
+          "parameterTypes": []
+        },
+        {
+          "name": "projects",
+          "parameterTypes": []
+        },
+        {
+          "name": "projectsRootPath",
+          "parameterTypes": []
+        },
+        {
+          "name": "revertToGradle",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "storageReport",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "storageRootPath",
+          "parameterTypes": []
+        },
+        {
+          "name": "syncProject",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "unrecognizedProjectInfo",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.RunConsoleUi"
+    },
+    {
+      "type": "dev.ide.ui.backend.RunTaskOption"
+    },
+    {
+      "type": "dev.ide.ui.backend.SdkService",
+      "methods": [
+        {
+          "name": "androidSourcesInfo",
+          "parameterTypes": []
+        },
+        {
+          "name": "downloadAndroidSources",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "getSdkManagerState",
+          "parameterTypes": []
+        },
+        {
+          "name": "jdkInfo",
+          "parameterTypes": []
+        },
+        {
+          "name": "sdkPackages",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "sdkProjectPlatformLevels",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.SearchService",
+      "methods": [
+        {
+          "name": "getIndexStatus",
+          "parameterTypes": []
+        },
+        {
+          "name": "reindex",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.SettingsService",
+      "methods": [
+        {
+          "name": "canRestartApplication",
+          "parameterTypes": []
+        },
+        {
+          "name": "getAutoDisabledInspections",
+          "parameterTypes": []
+        },
+        {
+          "name": "inspections",
+          "parameterTypes": []
+        },
+        {
+          "name": "languageServers",
+          "parameterTypes": []
+        },
+        {
+          "name": "languageServersSupported",
+          "parameterTypes": []
+        },
+        {
+          "name": "pendingPluginChanges",
+          "parameterTypes": []
+        },
+        {
+          "name": "pluginCatalog",
+          "parameterTypes": []
+        },
+        {
+          "name": "pluginDownloads",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "pluginLeftovers",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "restartApplication",
+          "parameterTypes": []
+        },
+        {
+          "name": "settings",
+          "parameterTypes": []
+        },
+        {
+          "name": "settingsPages",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.SigningService",
+      "methods": [
+        {
+          "name": "keystores",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "signableModules",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.StoreService",
+      "methods": [
+        {
+          "name": "accountDeletionAvailable",
+          "parameterTypes": []
+        },
+        {
+          "name": "authProviders",
+          "parameterTypes": []
+        },
+        {
+          "name": "authState",
+          "parameterTypes": []
+        },
+        {
+          "name": "availableUpdates",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "catalog",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "installProgress",
+          "parameterTypes": []
+        },
+        {
+          "name": "isModerator",
+          "parameterTypes": []
+        },
+        {
+          "name": "launchNotificationEnabled",
+          "parameterTypes": []
+        },
+        {
+          "name": "likedItems",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "moderationAvailable",
+          "parameterTypes": []
+        },
+        {
+          "name": "myProfile",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "myPublishedItems",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "mySubmissions",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "openReports",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "refreshAuthProviders",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "reviewQueue",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "reviewsAvailable",
+          "parameterTypes": []
+        },
+        {
+          "name": "searchCategories",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "storeAvailable",
+          "parameterTypes": []
+        },
+        {
+          "name": "submissionsAvailable",
+          "parameterTypes": []
+        },
+        {
+          "name": "submitCategories",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "translationAvailable",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.StoreService$Companion"
+    },
+    {
+      "type": "dev.ide.ui.backend.SymbolHit"
+    },
+    {
+      "type": "dev.ide.ui.backend.TreeNode"
+    },
+    {
+      "type": "dev.ide.ui.backend.TreeViewMode"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAction"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiActionContext"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiActionEdits"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiActionItem"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiActionResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAddResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAgentAttachment"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAgentChatState"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAgentCommand"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAgentConfig"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAgentConnections"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAgentMention"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAgentModel"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAgentPermissionDecision"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAgentPermissionMode"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAgentPermissionRequest"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAgentQuestionRequest"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAgentRecentChat"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAgentSessionSummary"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAgentUsageLimits"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAndroidSourcesInfo"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAppIconPlan"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAppIconPreview"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAppIconSpec"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAppIconState"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAppIdentity"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAppRenamePreview"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAppRenameRequest"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAppRenameResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiArtifactHit"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiArtifactSearch"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiAutoDisabledInspection"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiBlameLine"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiBlockEdit"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiBlockNode"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiBuildFeatures"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiCachedVersion"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiCaretContext"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiChallengeBoard"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiChallengeDay"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiChallengeLanguage"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiChallengeProblem"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiChallengeProfile"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiChallengeVerdict"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiCodeStyle"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiColorEntry"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiCommandCheck"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiCompatibilityInfo"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiCompilerPlugins"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiCompletionResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiComposePreview"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiConfigResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiConvertResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiDefinition"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiDeleteResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiDepModule"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiDiagnostic"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiDirEntry"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiDrawable"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiEditorDecorations"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiError"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiExerciseResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiExportOptions"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiExportPlan"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiFileSymbol"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiFoldRegion"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiForgePullRequest"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiForgeRepo"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiFreeAiState"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiGradleExport"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiHistoryVersion"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiIconArtwork"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiIconEntry"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiIconImport"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiIconImportResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiIconLoadResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiIconRef"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiIconRepo"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiIconTarget"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiIconVariant"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiImportPreview"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiInheritorMarker"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiInlayHint"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiInspection"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiInstallProgress"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiJdkInfo"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiKeystore"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiKeystoreResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiKeystoreSpec"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiKeystoreValidation"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLanguageServer"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLearnAccount"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLearnCatalog"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLearnProgress"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLearnPublicProfile"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLearnReport"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLearnSolutionPage"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLearnThread"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLearnThreadSummary"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLearnWrite"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLesson"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLibraryContent"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLocalChanges"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLocalRun"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiLogEntry"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiMacro"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiMcpHost"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiMcpRelay"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiMcpScope"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiMcpServerConfig"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiMenuGroup"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiMissingLibrary"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiMissingProguardFile"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiModerationQueue"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiModuleConfig"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiModuleConfigEdit"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiModuleDeps"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiModuleRef"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiModuleTypeOption"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiMyProfile"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiNavKind"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiNavOption"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiNavTarget"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiNewFileTemplate"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiNotification"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiOpenRouterSignIn"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiOpenTabs"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiPackagedProject"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiPackagingOptions"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiPackagingRules"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiPermissionDecision"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiPermissionRequest"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiPluginChange"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiPluginDownloads"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiPluginInfo"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiPluginLeftover"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiPreviewResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiProjectArchive"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiProjectFolderKind"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiProjectIcon"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiProjectResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiProjectTemplate"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiPublishedItem"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiPublisherProfile"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiQuickDoc"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiRasterFile"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiRenameResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiRenameTarget"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiReportReason"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiReportedContent"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiRepository"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiResourceIcon"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiResourceSwatch"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiResumePoint"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiReviewPage"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiReviewSort"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSdkManagerState"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSdkPackage"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSearchOptions"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSemanticToken"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSettings"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSettingsPage"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSeverity"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSignatureHelp"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSigningAssignments"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSourceRootRole"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSourceSetScope"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiStorageReport"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiStoreAuthState"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiStoreCatalog"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiStoreCategory"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiStoreFeed"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiStoreInstallResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiStoreItem"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiStoreMergeResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiStoreSearchPage"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiStoreSubmission"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiStoreUpdate"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSubmissionDraft"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSubmitResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSymbolKey"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiSyncResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiTextEdit"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiTextMatch"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiTextRange"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiToolchainWarning"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiTransferItem"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiTransferKind"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiTransferResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiTranslation"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiUndoResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiUnrecognizedProject"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiUsageHighlight"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiVcsAccount"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiVcsActivity"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiVcsBranch"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiVcsCommit"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiVcsCommitDetail"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiVcsDiff"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiVcsIdentity"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiVcsRemote"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiVcsResult"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiVcsSignIn"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiVcsStash"
+    },
+    {
+      "type": "dev.ide.ui.backend.UiVcsStatus"
+    },
+    {
+      "type": "dev.ide.ui.backend.VcsService",
+      "methods": [
+        {
+          "name": "abortMerge",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "addDefaultIgnores",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "credentialHosts",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "defaultBranch",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "deviceAuthSupported",
+          "parameterTypes": []
+        },
+        {
+          "name": "fetch",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "getAccounts",
+          "parameterTypes": []
+        },
+        {
+          "name": "getActivity",
+          "parameterTypes": []
+        },
+        {
+          "name": "getSignIn",
+          "parameterTypes": []
+        },
+        {
+          "name": "getStatus",
+          "parameterTypes": []
+        },
+        {
+          "name": "identity",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "initRepository",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "pull",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "pullRequests",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "refresh",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "remotes",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "startSignIn",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "stashes",
+          "parameterTypes": [
+            "kotlin.coroutines.Continuation"
+          ]
+        },
+        {
+          "name": "supported",
+          "parameterTypes": []
+        },
+        {
+          "name": "underVersionControl",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "dev.ide.ui.backend.VcsService$Companion"
+    },
+    {
+      "type": "dev.ide.ui.backend.VcsService$Unsupported"
+    },
+    {
+      "type": "dev.ide.ui.ext.UiPlugin"
+    },
+    {
       "type": "gnu.trove.TObjectHashingStrategy"
+    },
+    {
+      "type": "java.awt.AlphaComposite",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "extraAlpha"
+        },
+        {
+          "name": "rule"
+        }
+      ]
+    },
+    {
+      "type": "java.awt.BorderLayout",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.awt.Color",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "DARK_GRAY"
+        },
+        {
+          "name": "WHITE"
+        }
+      ],
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int"
+          ]
+        },
+        {
+          "name": "getRGB",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.awt.Component",
+      "methods": [
+        {
+          "name": "isDisplayable",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.awt.Container",
+      "methods": [
+        {
+          "name": "add",
+          "parameterTypes": [
+            "java.awt.Component",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.Dimension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "int",
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.DisplayMode",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int",
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.Font",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.String",
+            "int",
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.Frame"
+    },
+    {
+      "type": "java.awt.Graphics",
+      "methods": [
+        {
+          "name": "fillOval",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int",
+            "int"
+          ]
+        },
+        {
+          "name": "fillRoundRect",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int",
+            "int",
+            "int",
+            "int"
+          ]
+        },
+        {
+          "name": "setColor",
+          "parameterTypes": [
+            "java.awt.Color"
+          ]
+        },
+        {
+          "name": "setFont",
+          "parameterTypes": [
+            "java.awt.Font"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.Graphics2D",
+      "methods": [
+        {
+          "name": "drawString",
+          "parameterTypes": [
+            "java.lang.String",
+            "int",
+            "int"
+          ]
+        },
+        {
+          "name": "setRenderingHint",
+          "parameterTypes": [
+            "java.awt.RenderingHints$Key",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.Insets",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int",
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.LayoutManager"
+    },
+    {
+      "type": "java.awt.MenuContainer"
+    },
+    {
+      "type": "java.awt.RenderingHints",
+      "fields": [
+        {
+          "name": "KEY_ANTIALIASING"
+        },
+        {
+          "name": "VALUE_ANTIALIAS_ON"
+        }
+      ]
+    },
+    {
+      "type": "java.awt.RenderingHints$Key"
+    },
+    {
+      "type": "java.awt.SequencedEvent"
+    },
+    {
+      "type": "java.awt.SystemColor",
+      "fields": [
+        {
+          "name": "activeCaption"
+        },
+        {
+          "name": "activeCaptionBorder"
+        },
+        {
+          "name": "activeCaptionText"
+        },
+        {
+          "name": "control"
+        },
+        {
+          "name": "controlDkShadow"
+        },
+        {
+          "name": "controlHighlight"
+        },
+        {
+          "name": "controlLtHighlight"
+        },
+        {
+          "name": "controlShadow"
+        },
+        {
+          "name": "controlText"
+        },
+        {
+          "name": "desktop"
+        },
+        {
+          "name": "inactiveCaption"
+        },
+        {
+          "name": "inactiveCaptionBorder"
+        },
+        {
+          "name": "inactiveCaptionText"
+        },
+        {
+          "name": "info"
+        },
+        {
+          "name": "infoText"
+        },
+        {
+          "name": "menu"
+        },
+        {
+          "name": "menuText"
+        },
+        {
+          "name": "scrollbar"
+        },
+        {
+          "name": "text"
+        },
+        {
+          "name": "textHighlight"
+        },
+        {
+          "name": "textHighlightText"
+        },
+        {
+          "name": "textInactiveText"
+        },
+        {
+          "name": "textText"
+        },
+        {
+          "name": "window"
+        },
+        {
+          "name": "windowBorder"
+        },
+        {
+          "name": "windowText"
+        }
+      ]
+    },
+    {
+      "type": "java.awt.Toolkit",
+      "fields": [
+        {
+          "name": "eventListener"
+        }
+      ]
+    },
+    {
+      "type": "java.awt.Window",
+      "methods": [
+        {
+          "name": "dispose",
+          "parameterTypes": []
+        },
+        {
+          "name": "pack",
+          "parameterTypes": []
+        },
+        {
+          "name": "setSize",
+          "parameterTypes": [
+            "int",
+            "int"
+          ]
+        },
+        {
+          "name": "setVisible",
+          "parameterTypes": [
+            "boolean"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.event.ActionListener"
     },
     {
       "type": "java.awt.event.InputEvent",
@@ -440,6 +2718,440 @@
           "parameterTypes": []
         }
       ]
+    },
+    {
+      "type": "java.awt.event.KeyEvent",
+      "fields": [
+        {
+          "name": "VK_CONTEXT_MENU"
+        },
+        {
+          "name": "VK_F10"
+        },
+        {
+          "name": "VK_SPACE"
+        }
+      ]
+    },
+    {
+      "type": "java.awt.event.MouseMotionListener[]"
+    },
+    {
+      "type": "java.awt.geom.AffineTransform",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "m00"
+        },
+        {
+          "name": "m01"
+        },
+        {
+          "name": "m02"
+        },
+        {
+          "name": "m10"
+        },
+        {
+          "name": "m11"
+        },
+        {
+          "name": "m12"
+        }
+      ]
+    },
+    {
+      "type": "java.awt.geom.GeneralPath",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "int",
+            "byte[]",
+            "int",
+            "float[]",
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.geom.Path2D",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "numTypes"
+        },
+        {
+          "name": "pointTypes"
+        },
+        {
+          "name": "windingRule"
+        }
+      ]
+    },
+    {
+      "type": "java.awt.geom.Path2D$Float",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "floatCoords"
+        }
+      ]
+    },
+    {
+      "type": "java.awt.geom.Point2D$Double",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "double",
+            "double"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.geom.Point2D$Float",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "x"
+        },
+        {
+          "name": "y"
+        }
+      ],
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "float",
+            "float"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.geom.Rectangle2D$Double",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "double",
+            "double",
+            "double",
+            "double"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.geom.Rectangle2D$Float",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "height"
+        },
+        {
+          "name": "width"
+        },
+        {
+          "name": "x"
+        },
+        {
+          "name": "y"
+        }
+      ],
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "float",
+            "float",
+            "float",
+            "float"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.image.BufferedImage",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "colorModel"
+        },
+        {
+          "name": "imageType"
+        },
+        {
+          "name": "raster"
+        }
+      ],
+      "methods": [
+        {
+          "name": "getRGB",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int",
+            "int",
+            "int[]",
+            "int",
+            "int"
+          ]
+        },
+        {
+          "name": "setRGB",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int",
+            "int",
+            "int[]",
+            "int",
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.image.ColorModel",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "colorSpace"
+        },
+        {
+          "name": "colorSpaceType"
+        },
+        {
+          "name": "isAlphaPremultiplied"
+        },
+        {
+          "name": "is_sRGB"
+        },
+        {
+          "name": "nBits"
+        },
+        {
+          "name": "numComponents"
+        },
+        {
+          "name": "supportsAlpha"
+        },
+        {
+          "name": "transparency"
+        }
+      ],
+      "methods": [
+        {
+          "name": "getRGBdefault",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.awt.image.ImageObserver"
+    },
+    {
+      "type": "java.awt.image.IndexColorModel",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "allgrayopaque"
+        },
+        {
+          "name": "colorData"
+        },
+        {
+          "name": "map_size"
+        },
+        {
+          "name": "rgb"
+        },
+        {
+          "name": "transparent_index"
+        }
+      ]
+    },
+    {
+      "type": "java.awt.image.Raster",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "dataBuffer"
+        },
+        {
+          "name": "height"
+        },
+        {
+          "name": "minX"
+        },
+        {
+          "name": "minY"
+        },
+        {
+          "name": "numBands"
+        },
+        {
+          "name": "numDataElements"
+        },
+        {
+          "name": "sampleModel"
+        },
+        {
+          "name": "sampleModelTranslateX"
+        },
+        {
+          "name": "sampleModelTranslateY"
+        },
+        {
+          "name": "width"
+        }
+      ]
+    },
+    {
+      "type": "java.awt.image.SampleModel",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "height"
+        },
+        {
+          "name": "width"
+        }
+      ],
+      "methods": [
+        {
+          "name": "getPixels",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int",
+            "int",
+            "int[]",
+            "java.awt.image.DataBuffer"
+          ]
+        },
+        {
+          "name": "setPixels",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int",
+            "int",
+            "int[]",
+            "java.awt.image.DataBuffer"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.image.SinglePixelPackedSampleModel",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "bitMasks"
+        },
+        {
+          "name": "bitOffsets"
+        },
+        {
+          "name": "bitSizes"
+        },
+        {
+          "name": "maxBitSize"
+        }
+      ]
+    },
+    {
+      "type": "java.io.BufferedReader",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.io.Reader"
+          ]
+        },
+        {
+          "name": "readLine",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.io.FileNotFoundException",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.io.InputStream"
+    },
+    {
+      "type": "java.io.InputStreamReader",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.io.InputStream"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.io.PrintStream",
+      "methods": [
+        {
+          "name": "flush",
+          "parameterTypes": []
+        },
+        {
+          "name": "print",
+          "parameterTypes": [
+            "java.lang.Object"
+          ]
+        },
+        {
+          "name": "print",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "println",
+          "parameterTypes": [
+            "java.lang.Object"
+          ]
+        },
+        {
+          "name": "println",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.io.Reader"
     },
     {
       "type": "java.io.Serializable"
@@ -479,6 +3191,9 @@
       ]
     },
     {
+      "type": "java.lang.ClassValue"
+    },
+    {
       "type": "java.lang.Cloneable"
     },
     {
@@ -503,6 +3218,9 @@
       "type": "java.lang.Long"
     },
     {
+      "type": "java.lang.MatchException"
+    },
+    {
       "type": "java.lang.Number"
     },
     {
@@ -510,6 +3228,9 @@
     },
     {
       "type": "java.lang.Object[]"
+    },
+    {
+      "type": "java.lang.Record"
     },
     {
       "type": "java.lang.Runtime",
@@ -546,14 +3267,28 @@
       ]
     },
     {
+      "type": "java.lang.ScopedValue"
+    },
+    {
       "type": "java.lang.Short"
     },
     {
       "type": "java.lang.String"
     },
     {
+      "type": "java.lang.String[]"
+    },
+    {
       "type": "java.lang.System",
       "jniAccessible": true,
+      "fields": [
+        {
+          "name": "in"
+        },
+        {
+          "name": "out"
+        }
+      ],
       "methods": [
         {
           "name": "getProperty",
@@ -591,10 +3326,38 @@
       "type": "java.security.MessageDigestSpi"
     },
     {
+      "type": "java.security.interfaces.ECPrivateKey"
+    },
+    {
+      "type": "java.security.interfaces.ECPublicKey"
+    },
+    {
       "type": "java.security.interfaces.RSAPrivateKey"
     },
     {
       "type": "java.security.interfaces.RSAPublicKey"
+    },
+    {
+      "type": "java.util.ArrayList",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "add",
+          "parameterTypes": [
+            "java.lang.Object"
+          ]
+        },
+        {
+          "name": "contains",
+          "parameterTypes": [
+            "java.lang.Object"
+          ]
+        }
+      ]
     },
     {
       "type": "java.util.Collection"
@@ -603,10 +3366,33 @@
       "type": "java.util.Iterator"
     },
     {
+      "type": "java.util.LinkedHashMap",
+      "methods": [
+        {
+          "name": "keySet",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "java.util.List"
     },
     {
       "type": "java.util.ListIterator"
+    },
+    {
+      "type": "java.util.Locale",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.String",
+            "java.lang.String",
+            "java.lang.String"
+          ]
+        }
+      ]
     },
     {
       "type": "java.util.Map"
@@ -630,10 +3416,16 @@
       ]
     },
     {
+      "type": "java.util.ResourceBundle"
+    },
+    {
       "type": "java.util.Set"
     },
     {
       "type": "java.util.concurrent.ScheduledThreadPoolExecutor"
+    },
+    {
+      "type": "java.util.concurrent.StructuredTaskScope"
     },
     {
       "type": "java.util.zip.Inflater",
@@ -645,6 +3437,116 @@
           ]
         }
       ]
+    },
+    {
+      "type": "javax.accessibility.Accessible"
+    },
+    {
+      "type": "javax.swing.AbstractButton",
+      "methods": [
+        {
+          "name": "addActionListener",
+          "parameterTypes": [
+            "java.awt.event.ActionListener"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "javax.swing.JButton",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "javax.swing.JComponent",
+      "methods": [
+        {
+          "name": "getWidth",
+          "parameterTypes": []
+        },
+        {
+          "name": "setBackground",
+          "parameterTypes": [
+            "java.awt.Color"
+          ]
+        },
+        {
+          "name": "setFont",
+          "parameterTypes": [
+            "java.awt.Font"
+          ]
+        },
+        {
+          "name": "setForeground",
+          "parameterTypes": [
+            "java.awt.Color"
+          ]
+        },
+        {
+          "name": "setPreferredSize",
+          "parameterTypes": [
+            "java.awt.Dimension"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "javax.swing.JFrame",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "getContentPane",
+          "parameterTypes": []
+        },
+        {
+          "name": "setDefaultCloseOperation",
+          "parameterTypes": [
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "javax.swing.JLabel",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "javax.swing.JPanel",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.awt.LayoutManager"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "javax.swing.RootPaneContainer"
+    },
+    {
+      "type": "javax.swing.TransferHandler$HasGetTransferHandler"
+    },
+    {
+      "type": "javax.swing.WindowConstants"
     },
     {
       "type": "jdk.internal.jrtfs.JrtFileSystemProvider"
@@ -663,6 +3565,24 @@
     },
     {
       "type": "kotlin.Array"
+    },
+    {
+      "type": "kotlin.Boolean"
+    },
+    {
+      "type": "kotlin.ByteArray"
+    },
+    {
+      "type": "kotlin.Char"
+    },
+    {
+      "type": "kotlin.Float"
+    },
+    {
+      "type": "kotlin.Int"
+    },
+    {
+      "type": "kotlin.Long"
     },
     {
       "type": "kotlin.Metadata",
@@ -702,10 +3622,135 @@
       ]
     },
     {
+      "type": "kotlin.Pair"
+    },
+    {
+      "type": "kotlin.Pair[]"
+    },
+    {
       "type": "kotlin.SafePublicationLazyImpl"
     },
     {
       "type": "kotlin.String"
+    },
+    {
+      "type": "kotlin.TuplesKt",
+      "methods": [
+        {
+          "name": "to",
+          "parameterTypes": [
+            "java.lang.Object",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "kotlin.Unit"
+    },
+    {
+      "type": "kotlin.collections.CollectionsKt"
+    },
+    {
+      "type": "kotlin.collections.CollectionsKt__CollectionsKt",
+      "methods": [
+        {
+          "name": "listOf",
+          "parameterTypes": [
+            "java.lang.Object[]"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "kotlin.collections.CollectionsKt__IterablesKt"
+    },
+    {
+      "type": "kotlin.collections.CollectionsKt__IteratorsJVMKt"
+    },
+    {
+      "type": "kotlin.collections.CollectionsKt__IteratorsKt"
+    },
+    {
+      "type": "kotlin.collections.CollectionsKt__MutableCollectionsJVMKt"
+    },
+    {
+      "type": "kotlin.collections.CollectionsKt__MutableCollectionsKt"
+    },
+    {
+      "type": "kotlin.collections.CollectionsKt__ReversedViewsKt"
+    },
+    {
+      "type": "kotlin.collections.CollectionsKt___CollectionsJvmKt"
+    },
+    {
+      "type": "kotlin.collections.CollectionsKt___CollectionsKt",
+      "methods": [
+        {
+          "name": "joinToString$default",
+          "parameterTypes": [
+            "java.lang.Iterable",
+            "java.lang.CharSequence",
+            "java.lang.CharSequence",
+            "java.lang.CharSequence",
+            "int",
+            "java.lang.CharSequence",
+            "kotlin.jvm.functions.Function1",
+            "int",
+            "java.lang.Object"
+          ]
+        },
+        {
+          "name": "toList",
+          "parameterTypes": [
+            "java.lang.Iterable"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "kotlin.collections.List"
+    },
+    {
+      "type": "kotlin.collections.Map"
+    },
+    {
+      "type": "kotlin.collections.MapsKt"
+    },
+    {
+      "type": "kotlin.collections.MapsKt__MapsKt",
+      "methods": [
+        {
+          "name": "mapOf",
+          "parameterTypes": [
+            "kotlin.Pair[]"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "kotlin.collections.MapsKt___MapsJvmKt"
+    },
+    {
+      "type": "kotlin.collections.MapsKt___MapsKt"
+    },
+    {
+      "type": "kotlin.collections.Set"
+    },
+    {
+      "type": "kotlin.coroutines.Continuation"
+    },
+    {
+      "type": "kotlin.io.ConsoleKt",
+      "methods": [
+        {
+          "name": "readLine",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "kotlin.jvm.functions.Function1"
     },
     {
       "type": "kotlin.jvm.internal.BooleanCompanionObject"
@@ -732,6 +3777,18 @@
       "type": "kotlin.jvm.internal.IntCompanionObject"
     },
     {
+      "type": "kotlin.jvm.internal.Intrinsics",
+      "methods": [
+        {
+          "name": "checkNotNullParameter",
+          "parameterTypes": [
+            "java.lang.Object",
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
       "type": "kotlin.jvm.internal.LongCompanionObject"
     },
     {
@@ -751,6 +3808,9 @@
           "parameterTypes": []
         }
       ]
+    },
+    {
+      "type": "kotlin.reflect.jvm.internal.impl.km.jvm.internal.JvmMetadataExtensions"
     },
     {
       "type": "kotlin.reflect.jvm.internal.impl.load.java.ErasedOverridabilityCondition"
@@ -836,7 +3896,46 @@
       "type": "kotlinx.coroutines.channels.BufferedChannel"
     },
     {
+      "type": "kotlinx.coroutines.flow.CancellableFlow"
+    },
+    {
+      "type": "kotlinx.coroutines.flow.Flow"
+    },
+    {
+      "type": "kotlinx.coroutines.flow.FlowCollector"
+    },
+    {
+      "type": "kotlinx.coroutines.flow.MutableSharedFlow"
+    },
+    {
+      "type": "kotlinx.coroutines.flow.MutableStateFlow"
+    },
+    {
+      "type": "kotlinx.coroutines.flow.SharedFlow"
+    },
+    {
+      "type": "kotlinx.coroutines.flow.SharedFlowImpl"
+    },
+    {
+      "type": "kotlinx.coroutines.flow.SharedFlowSlot"
+    },
+    {
+      "type": "kotlinx.coroutines.flow.StateFlow"
+    },
+    {
       "type": "kotlinx.coroutines.flow.StateFlowImpl"
+    },
+    {
+      "type": "kotlinx.coroutines.flow.StateFlowSlot"
+    },
+    {
+      "type": "kotlinx.coroutines.flow.internal.AbstractSharedFlow"
+    },
+    {
+      "type": "kotlinx.coroutines.flow.internal.AbstractSharedFlowSlot"
+    },
+    {
+      "type": "kotlinx.coroutines.flow.internal.FusibleFlow"
     },
     {
       "type": "kotlinx.coroutines.internal.ConcurrentLinkedListNode"
@@ -876,6 +3975,161 @@
     },
     {
       "type": "kotlinx.coroutines.sync.SemaphoreAndMutexImpl"
+    },
+    {
+      "type": "org.eclipse.core.internal.runtime.Messages",
+      "fields": [
+        {
+          "name": "auth_alreadySpecified"
+        },
+        {
+          "name": "auth_notAvailable"
+        },
+        {
+          "name": "line_separator_platform_unix"
+        },
+        {
+          "name": "line_separator_platform_windows"
+        },
+        {
+          "name": "meta_appNotInit"
+        },
+        {
+          "name": "meta_exceptionParsingLog"
+        },
+        {
+          "name": "parse_badPrereqOnFrag"
+        },
+        {
+          "name": "parse_duplicateFragment"
+        },
+        {
+          "name": "parse_duplicateLib"
+        },
+        {
+          "name": "parse_duplicatePlugin"
+        },
+        {
+          "name": "parse_error"
+        },
+        {
+          "name": "parse_errorNameLineColumn"
+        },
+        {
+          "name": "parse_errorProcessing"
+        },
+        {
+          "name": "parse_extPointDisabled"
+        },
+        {
+          "name": "parse_extPointUnknown"
+        },
+        {
+          "name": "parse_fragmentMissingAttr"
+        },
+        {
+          "name": "parse_fragmentMissingIdName"
+        },
+        {
+          "name": "parse_internalStack"
+        },
+        {
+          "name": "parse_missingFPName"
+        },
+        {
+          "name": "parse_missingFPVersion"
+        },
+        {
+          "name": "parse_missingFragmentPd"
+        },
+        {
+          "name": "parse_missingPluginId"
+        },
+        {
+          "name": "parse_missingPluginName"
+        },
+        {
+          "name": "parse_missingPluginVersion"
+        },
+        {
+          "name": "parse_nullFragmentIdentifier"
+        },
+        {
+          "name": "parse_nullPluginIdentifier"
+        },
+        {
+          "name": "parse_pluginMissingAttr"
+        },
+        {
+          "name": "parse_pluginMissingIdName"
+        },
+        {
+          "name": "parse_prereqDisabled"
+        },
+        {
+          "name": "parse_prereqLoop"
+        },
+        {
+          "name": "parse_prereqOptLoop"
+        },
+        {
+          "name": "parse_unknownAttribute"
+        },
+        {
+          "name": "parse_unknownElement"
+        },
+        {
+          "name": "parse_unknownEntry"
+        },
+        {
+          "name": "parse_unknownLibraryType"
+        },
+        {
+          "name": "parse_unknownTopElement"
+        },
+        {
+          "name": "parse_unsatisfiedOptPrereq"
+        },
+        {
+          "name": "parse_unsatisfiedPrereq"
+        },
+        {
+          "name": "parse_validExport"
+        },
+        {
+          "name": "parse_validMatch"
+        },
+        {
+          "name": "plugin_deactivatedLoad"
+        },
+        {
+          "name": "plugin_instantiateClassError"
+        },
+        {
+          "name": "plugin_loadClassError"
+        },
+        {
+          "name": "plugin_notPluginClass"
+        },
+        {
+          "name": "plugin_pluginDisabled"
+        },
+        {
+          "name": "plugin_shutdownProblems"
+        },
+        {
+          "name": "plugin_startupProblems"
+        },
+        {
+          "name": "plugin_unableToGetActivator"
+        },
+        {
+          "name": "plugin_unableToResolve"
+        },
+        {
+          "name": "preferences_saveProblems"
+        }
+      ]
     },
     {
       "type": "org.eclipse.jdt.core.compiler.IProblem",
@@ -4149,6 +7403,2819 @@
       ]
     },
     {
+      "type": "org.eclipse.jgit.internal.JGitText",
+      "fields": [
+        {
+          "name": "DIRCChecksumMismatch"
+        },
+        {
+          "name": "DIRCCorruptLength"
+        },
+        {
+          "name": "DIRCCorruptLengthFirst"
+        },
+        {
+          "name": "DIRCExtensionIsTooLargeAt"
+        },
+        {
+          "name": "DIRCExtensionNotSupportedByThisVersion"
+        },
+        {
+          "name": "DIRCHasTooManyEntries"
+        },
+        {
+          "name": "DIRCUnrecognizedExtendedFlags"
+        },
+        {
+          "name": "JRELacksMD5Implementation"
+        },
+        {
+          "name": "URINotSupported"
+        },
+        {
+          "name": "aNewObjectIdIsRequired"
+        },
+        {
+          "name": "abbreviationLengthMustBeNonNegative"
+        },
+        {
+          "name": "abortingRebase"
+        },
+        {
+          "name": "abortingRebaseFailed"
+        },
+        {
+          "name": "abortingRebaseFailedNoOrigHead"
+        },
+        {
+          "name": "advertisementCameBefore"
+        },
+        {
+          "name": "advertisementOfCameBefore"
+        },
+        {
+          "name": "amazonS3ActionFailed"
+        },
+        {
+          "name": "amazonS3ActionFailedGivingUp"
+        },
+        {
+          "name": "ambiguousObjectAbbreviation"
+        },
+        {
+          "name": "anExceptionOccurredWhileTryingToAddTheIdOfHEAD"
+        },
+        {
+          "name": "anSSHSessionHasBeenAlreadyCreated"
+        },
+        {
+          "name": "applyBinaryBaseOidWrong"
+        },
+        {
+          "name": "applyBinaryForInCoreNotSupported"
+        },
+        {
+          "name": "applyBinaryOidTooShort"
+        },
+        {
+          "name": "applyBinaryPatchTypeNotSupported"
+        },
+        {
+          "name": "applyBinaryResultOidWrong"
+        },
+        {
+          "name": "applyPatchDestInvalid"
+        },
+        {
+          "name": "applyPatchSourceInvalid"
+        },
+        {
+          "name": "applyPatchWithCreationOverAlreadyExistingDestination"
+        },
+        {
+          "name": "applyPatchWithSourceOnNonExistentSource"
+        },
+        {
+          "name": "applyPatchWithoutSourceOnAlreadyExistingSource"
+        },
+        {
+          "name": "applyTextPatchCannotApplyHunk"
+        },
+        {
+          "name": "applyTextPatchSingleClearingHunk"
+        },
+        {
+          "name": "applyTextPatchUnorderedHunkApplications"
+        },
+        {
+          "name": "applyTextPatchUnorderedHunks"
+        },
+        {
+          "name": "applyingCommit"
+        },
+        {
+          "name": "archiveFormatAlreadyAbsent"
+        },
+        {
+          "name": "archiveFormatAlreadyRegistered"
+        },
+        {
+          "name": "argumentIsNotAValidCommentString"
+        },
+        {
+          "name": "assumeAtomicCreateNewFile"
+        },
+        {
+          "name": "atLeastOnePathIsRequired"
+        },
+        {
+          "name": "atLeastOnePatternIsRequired"
+        },
+        {
+          "name": "atLeastTwoFiltersNeeded"
+        },
+        {
+          "name": "atomicPushNotSupported"
+        },
+        {
+          "name": "atomicRefUpdatesNotSupported"
+        },
+        {
+          "name": "atomicSymRefNotSupported"
+        },
+        {
+          "name": "authenticationNotSupported"
+        },
+        {
+          "name": "badBase64InputCharacterAt"
+        },
+        {
+          "name": "badEntryDelimiter"
+        },
+        {
+          "name": "badEntryName"
+        },
+        {
+          "name": "badEscape"
+        },
+        {
+          "name": "badGroupHeader"
+        },
+        {
+          "name": "badIgnorePattern"
+        },
+        {
+          "name": "badIgnorePatternFull"
+        },
+        {
+          "name": "badObjectType"
+        },
+        {
+          "name": "badRef"
+        },
+        {
+          "name": "badSectionEntry"
+        },
+        {
+          "name": "badShallowLine"
+        },
+        {
+          "name": "bareRepositoryNoWorkdirAndIndex"
+        },
+        {
+          "name": "base85invalidChar"
+        },
+        {
+          "name": "base85length"
+        },
+        {
+          "name": "base85overflow"
+        },
+        {
+          "name": "base85tooLong"
+        },
+        {
+          "name": "base85tooShort"
+        },
+        {
+          "name": "baseLengthIncorrect"
+        },
+        {
+          "name": "binaryDeltaBaseLengthMismatch"
+        },
+        {
+          "name": "binaryDeltaInvalidOffset"
+        },
+        {
+          "name": "binaryDeltaInvalidResultLength"
+        },
+        {
+          "name": "binaryHunkDecodeError"
+        },
+        {
+          "name": "binaryHunkInvalidLength"
+        },
+        {
+          "name": "binaryHunkLineTooShort"
+        },
+        {
+          "name": "binaryHunkMissingNewline"
+        },
+        {
+          "name": "bitmapMissingObject"
+        },
+        {
+          "name": "bitmapUseNoopNoListener"
+        },
+        {
+          "name": "bitmapsMustBePrepared"
+        },
+        {
+          "name": "blameNotCommittedYet"
+        },
+        {
+          "name": "blockLimitNotMultipleOfBlockSize"
+        },
+        {
+          "name": "blockLimitNotPositive"
+        },
+        {
+          "name": "blockSizeNotPowerOf2"
+        },
+        {
+          "name": "bothRefTargetsMustNotBeNull"
+        },
+        {
+          "name": "branchNameInvalid"
+        },
+        {
+          "name": "buildingBitmaps"
+        },
+        {
+          "name": "cachedPacksPreventsIndexCreation"
+        },
+        {
+          "name": "cachedPacksPreventsListingObjects"
+        },
+        {
+          "name": "canOnlyCherryPickCommitsWithOneParent"
+        },
+        {
+          "name": "canOnlyRevertCommitsWithOneParent"
+        },
+        {
+          "name": "cannotAccessLastModifiedForSafeDeletion"
+        },
+        {
+          "name": "cannotBeCombined"
+        },
+        {
+          "name": "cannotBeRecursiveWhenTreesAreIncluded"
+        },
+        {
+          "name": "cannotChangeActionOnComment"
+        },
+        {
+          "name": "cannotCheckoutFromUnbornBranch"
+        },
+        {
+          "name": "cannotCheckoutOursSwitchBranch"
+        },
+        {
+          "name": "cannotCombineSquashWithNoff"
+        },
+        {
+          "name": "cannotCombineTopoSortWithTopoKeepBranchTogetherSort"
+        },
+        {
+          "name": "cannotCombineTreeFilterWithRevFilter"
+        },
+        {
+          "name": "cannotCommitOnARepoWithState"
+        },
+        {
+          "name": "cannotCommitWriteTo"
+        },
+        {
+          "name": "cannotConnectPipes"
+        },
+        {
+          "name": "cannotConvertScriptToText"
+        },
+        {
+          "name": "cannotCreateConfig"
+        },
+        {
+          "name": "cannotCreateDirectory"
+        },
+        {
+          "name": "cannotCreateHEAD"
+        },
+        {
+          "name": "cannotCreateIndexfile"
+        },
+        {
+          "name": "cannotCreateTempDir"
+        },
+        {
+          "name": "cannotDeleteCheckedOutBranch"
+        },
+        {
+          "name": "cannotDeleteFile"
+        },
+        {
+          "name": "cannotDeleteObjectsPath"
+        },
+        {
+          "name": "cannotDetermineProxyFor"
+        },
+        {
+          "name": "cannotDownload"
+        },
+        {
+          "name": "cannotEnterObjectsPath"
+        },
+        {
+          "name": "cannotEnterPathFromParent"
+        },
+        {
+          "name": "cannotExecute"
+        },
+        {
+          "name": "cannotFindMergeBaseUsingFirstParent"
+        },
+        {
+          "name": "cannotGet"
+        },
+        {
+          "name": "cannotGetObjectsPath"
+        },
+        {
+          "name": "cannotListObjectsPath"
+        },
+        {
+          "name": "cannotListPackPath"
+        },
+        {
+          "name": "cannotListRefs"
+        },
+        {
+          "name": "cannotLock"
+        },
+        {
+          "name": "cannotLockPackIn"
+        },
+        {
+          "name": "cannotMatchOnEmptyString"
+        },
+        {
+          "name": "cannotMkdirObjectPath"
+        },
+        {
+          "name": "cannotMoveIndexTo"
+        },
+        {
+          "name": "cannotMovePackTo"
+        },
+        {
+          "name": "cannotOpenService"
+        },
+        {
+          "name": "cannotParseDate"
+        },
+        {
+          "name": "cannotParseGitURIish"
+        },
+        {
+          "name": "cannotPullOnARepoWithState"
+        },
+        {
+          "name": "cannotRead"
+        },
+        {
+          "name": "cannotReadBackDelta"
+        },
+        {
+          "name": "cannotReadBlob"
+        },
+        {
+          "name": "cannotReadByte"
+        },
+        {
+          "name": "cannotReadCommit"
+        },
+        {
+          "name": "cannotReadFile"
+        },
+        {
+          "name": "cannotReadHEAD"
+        },
+        {
+          "name": "cannotReadIndex"
+        },
+        {
+          "name": "cannotReadObject"
+        },
+        {
+          "name": "cannotReadObjectsPath"
+        },
+        {
+          "name": "cannotReadTree"
+        },
+        {
+          "name": "cannotRebaseWithoutCurrentHead"
+        },
+        {
+          "name": "cannotResolveUniquelyAbbrevObjectId"
+        },
+        {
+          "name": "cannotSaveConfig"
+        },
+        {
+          "name": "cannotSquashFixupWithoutPreviousCommit"
+        },
+        {
+          "name": "cannotStoreObjects"
+        },
+        {
+          "name": "cannotUpdateUnbornBranch"
+        },
+        {
+          "name": "cannotWriteObjectsPath"
+        },
+        {
+          "name": "cantFindObjectInReversePackIndexForTheSpecifiedOffset"
+        },
+        {
+          "name": "channelMustBeInRange1_255"
+        },
+        {
+          "name": "characterClassIsNotSupported"
+        },
+        {
+          "name": "checkingOutFiles"
+        },
+        {
+          "name": "checkoutConflictWithFile"
+        },
+        {
+          "name": "checkoutConflictWithFiles"
+        },
+        {
+          "name": "checkoutUnexpectedResult"
+        },
+        {
+          "name": "classCastNotA"
+        },
+        {
+          "name": "cloneNonEmptyDirectory"
+        },
+        {
+          "name": "closeLockTokenFailed"
+        },
+        {
+          "name": "closePidLockFailed"
+        },
+        {
+          "name": "closed"
+        },
+        {
+          "name": "collisionOn"
+        },
+        {
+          "name": "commandClosedStderrButDidntExit"
+        },
+        {
+          "name": "commandRejectedByHook"
+        },
+        {
+          "name": "commandWasCalledInTheWrongState"
+        },
+        {
+          "name": "commitAmendOnInitialNotPossible"
+        },
+        {
+          "name": "commitDoesNotHaveGivenParent"
+        },
+        {
+          "name": "commitGraphChunkNeeded"
+        },
+        {
+          "name": "commitGraphChunkRepeated"
+        },
+        {
+          "name": "commitGraphChunkUnknown"
+        },
+        {
+          "name": "commitGraphFileIsTooLargeForJgit"
+        },
+        {
+          "name": "commitGraphUnexpectedSize"
+        },
+        {
+          "name": "commitGraphWritingCancelled"
+        },
+        {
+          "name": "commitMessageNotSpecified"
+        },
+        {
+          "name": "commitOnRepoWithoutHEADCurrentlyNotSupported"
+        },
+        {
+          "name": "commitsHaveAlreadyBeenMarkedAsStart"
+        },
+        {
+          "name": "compressingObjects"
+        },
+        {
+          "name": "computingCommitGeneration"
+        },
+        {
+          "name": "computingPathBloomFilters"
+        },
+        {
+          "name": "configHandleIsStale"
+        },
+        {
+          "name": "configHandleMayBeLocked"
+        },
+        {
+          "name": "configSubsectionContainsNewline"
+        },
+        {
+          "name": "configSubsectionContainsNullByte"
+        },
+        {
+          "name": "configValueContainsNullByte"
+        },
+        {
+          "name": "connectionFailed"
+        },
+        {
+          "name": "connectionTimeOut"
+        },
+        {
+          "name": "contextMustBeNonNegative"
+        },
+        {
+          "name": "cookieFilePathRelative"
+        },
+        {
+          "name": "copyFileFailedNullFiles"
+        },
+        {
+          "name": "corruptCommitGraph"
+        },
+        {
+          "name": "corruptObjectBadDate"
+        },
+        {
+          "name": "corruptObjectBadEmail"
+        },
+        {
+          "name": "corruptObjectBadStream"
+        },
+        {
+          "name": "corruptObjectBadTimezone"
+        },
+        {
+          "name": "corruptObjectDuplicateEntryNames"
+        },
+        {
+          "name": "corruptObjectGarbageAfterSize"
+        },
+        {
+          "name": "corruptObjectIncorrectLength"
+        },
+        {
+          "name": "corruptObjectIncorrectSorting"
+        },
+        {
+          "name": "corruptObjectInvalidMode2"
+        },
+        {
+          "name": "corruptObjectInvalidMode3"
+        },
+        {
+          "name": "corruptObjectInvalidModeChar"
+        },
+        {
+          "name": "corruptObjectInvalidModeStartsZero"
+        },
+        {
+          "name": "corruptObjectInvalidName"
+        },
+        {
+          "name": "corruptObjectInvalidNameAux"
+        },
+        {
+          "name": "corruptObjectInvalidNameCom"
+        },
+        {
+          "name": "corruptObjectInvalidNameCon"
+        },
+        {
+          "name": "corruptObjectInvalidNameEnd"
+        },
+        {
+          "name": "corruptObjectInvalidNameIgnorableUnicode"
+        },
+        {
+          "name": "corruptObjectInvalidNameInvalidUtf8"
+        },
+        {
+          "name": "corruptObjectInvalidNameLpt"
+        },
+        {
+          "name": "corruptObjectInvalidNameNul"
+        },
+        {
+          "name": "corruptObjectInvalidNamePrn"
+        },
+        {
+          "name": "corruptObjectInvalidObject"
+        },
+        {
+          "name": "corruptObjectInvalidParent"
+        },
+        {
+          "name": "corruptObjectInvalidTree"
+        },
+        {
+          "name": "corruptObjectInvalidType"
+        },
+        {
+          "name": "corruptObjectInvalidType2"
+        },
+        {
+          "name": "corruptObjectMissingEmail"
+        },
+        {
+          "name": "corruptObjectNameContainsByte"
+        },
+        {
+          "name": "corruptObjectNameContainsChar"
+        },
+        {
+          "name": "corruptObjectNameContainsNullByte"
+        },
+        {
+          "name": "corruptObjectNameContainsSlash"
+        },
+        {
+          "name": "corruptObjectNameDot"
+        },
+        {
+          "name": "corruptObjectNameDotDot"
+        },
+        {
+          "name": "corruptObjectNameZeroLength"
+        },
+        {
+          "name": "corruptObjectNegativeSize"
+        },
+        {
+          "name": "corruptObjectNoAuthor"
+        },
+        {
+          "name": "corruptObjectNoCommitter"
+        },
+        {
+          "name": "corruptObjectNoHeader"
+        },
+        {
+          "name": "corruptObjectNoObjectHeader"
+        },
+        {
+          "name": "corruptObjectNoTagHeader"
+        },
+        {
+          "name": "corruptObjectNoTypeHeader"
+        },
+        {
+          "name": "corruptObjectNotreeHeader"
+        },
+        {
+          "name": "corruptObjectPackfileChecksumIncorrect"
+        },
+        {
+          "name": "corruptObjectTruncatedInMode"
+        },
+        {
+          "name": "corruptObjectTruncatedInName"
+        },
+        {
+          "name": "corruptObjectTruncatedInObjectId"
+        },
+        {
+          "name": "corruptObjectZeroId"
+        },
+        {
+          "name": "corruptPack"
+        },
+        {
+          "name": "corruptReverseIndexChecksumIncorrect"
+        },
+        {
+          "name": "corruptUseCnt"
+        },
+        {
+          "name": "corruptionDetectedReReadingAt"
+        },
+        {
+          "name": "couldNotFindSixTabsInLine"
+        },
+        {
+          "name": "couldNotFindTabInLine"
+        },
+        {
+          "name": "couldNotGetAdvertisedRef"
+        },
+        {
+          "name": "couldNotGetRepoStatistics"
+        },
+        {
+          "name": "couldNotHashByteArrayWithSha256"
+        },
+        {
+          "name": "couldNotLockHEAD"
+        },
+        {
+          "name": "couldNotPersistCookies"
+        },
+        {
+          "name": "couldNotReadCookieFile"
+        },
+        {
+          "name": "couldNotReadIndexInOneGo"
+        },
+        {
+          "name": "couldNotReadObjectWhileParsingCommit"
+        },
+        {
+          "name": "couldNotRewindToUpstreamCommit"
+        },
+        {
+          "name": "couldNotSignStringWithKey"
+        },
+        {
+          "name": "couldNotURLEncodeToUTF8"
+        },
+        {
+          "name": "countingObjects"
+        },
+        {
+          "name": "createBranchFailedUnknownReason"
+        },
+        {
+          "name": "createBranchUnexpectedResult"
+        },
+        {
+          "name": "createNewFileFailed"
+        },
+        {
+          "name": "createRequiresZeroOldId"
+        },
+        {
+          "name": "credentialPassphrase"
+        },
+        {
+          "name": "credentialPassword"
+        },
+        {
+          "name": "credentialUsername"
+        },
+        {
+          "name": "daemonAlreadyRunning"
+        },
+        {
+          "name": "daysAgo"
+        },
+        {
+          "name": "deepenNotWithDeepen"
+        },
+        {
+          "name": "deepenSinceWithDeepen"
+        },
+        {
+          "name": "deleteBranchUnexpectedResult"
+        },
+        {
+          "name": "deleteFileFailed"
+        },
+        {
+          "name": "deleteRequiresZeroNewId"
+        },
+        {
+          "name": "deleteTagUnexpectedResult"
+        },
+        {
+          "name": "deletedOrphanInPackDir"
+        },
+        {
+          "name": "deletingBranches"
+        },
+        {
+          "name": "deletingNotSupported"
+        },
+        {
+          "name": "depthMustBeAt1"
+        },
+        {
+          "name": "depthWithUnshallow"
+        },
+        {
+          "name": "destinationIsNotAWildcard"
+        },
+        {
+          "name": "detachedHeadDetected"
+        },
+        {
+          "name": "diffToolNotGivenError"
+        },
+        {
+          "name": "diffToolNotSpecifiedInGitAttributesError"
+        },
+        {
+          "name": "diffToolNullError"
+        },
+        {
+          "name": "dirCacheDoesNotHaveABackingFile"
+        },
+        {
+          "name": "dirCacheFileIsNotLocked"
+        },
+        {
+          "name": "dirCacheIsNotLocked"
+        },
+        {
+          "name": "downloadCancelled"
+        },
+        {
+          "name": "downloadCancelledDuringIndexing"
+        },
+        {
+          "name": "duplicateAdvertisementsOf"
+        },
+        {
+          "name": "duplicateRef"
+        },
+        {
+          "name": "duplicateRefAttribute"
+        },
+        {
+          "name": "duplicateRemoteRefUpdateIsIllegal"
+        },
+        {
+          "name": "duplicateStagesNotAllowed"
+        },
+        {
+          "name": "eitherGitDirOrWorkTreeRequired"
+        },
+        {
+          "name": "emptyCommit"
+        },
+        {
+          "name": "emptyPathNotPermitted"
+        },
+        {
+          "name": "emptyRef"
+        },
+        {
+          "name": "encryptionError"
+        },
+        {
+          "name": "encryptionOnlyPBE"
+        },
+        {
+          "name": "endOfFileInEscape"
+        },
+        {
+          "name": "entryNotFoundByPath"
+        },
+        {
+          "name": "enumValueNotSupported0"
+        },
+        {
+          "name": "enumValueNotSupported2"
+        },
+        {
+          "name": "enumValueNotSupported3"
+        },
+        {
+          "name": "enumValuesNotAvailable"
+        },
+        {
+          "name": "errorInPackedRefs"
+        },
+        {
+          "name": "errorInvalidProtocolWantedOldNewRef"
+        },
+        {
+          "name": "errorListing"
+        },
+        {
+          "name": "errorOccurredDuringUnpackingOnTheRemoteEnd"
+        },
+        {
+          "name": "errorReadingInfoRefs"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfAddCommand"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfArchiveCommand"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfCherryPickCommand"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfCommand"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfCommitCommand"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfFetchCommand"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfHook"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfLsRemoteCommand"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfMergeCommand"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfPullCommand"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfPushCommand"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfResetCommand"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfRevertCommand"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfRmCommand"
+        },
+        {
+          "name": "exceptionCaughtDuringExecutionOfTagCommand"
+        },
+        {
+          "name": "exceptionHookExecutionInterrupted"
+        },
+        {
+          "name": "exceptionOccurredDuringAddingOfOptionToALogCommand"
+        },
+        {
+          "name": "exceptionOccurredDuringReadingOfGIT_DIR"
+        },
+        {
+          "name": "exceptionWhileFindingUserHome"
+        },
+        {
+          "name": "exceptionWhileLoadingCommitGraph"
+        },
+        {
+          "name": "exceptionWhileReadingPack"
+        },
+        {
+          "name": "expectedACKNAKFoundEOF"
+        },
+        {
+          "name": "expectedACKNAKGot"
+        },
+        {
+          "name": "expectedBooleanStringValue"
+        },
+        {
+          "name": "expectedCharacterEncodingGuesses"
+        },
+        {
+          "name": "expectedDirectoryNotSubmodule"
+        },
+        {
+          "name": "expectedEOFReceived"
+        },
+        {
+          "name": "expectedGot"
+        },
+        {
+          "name": "expectedLessThanGot"
+        },
+        {
+          "name": "expectedPktLineWithService"
+        },
+        {
+          "name": "expectedReceivedContentType"
+        },
+        {
+          "name": "expectedReportForRefNotReceived"
+        },
+        {
+          "name": "failedAtomicFileCreation"
+        },
+        {
+          "name": "failedCreateLockFile"
+        },
+        {
+          "name": "failedPidLock"
+        },
+        {
+          "name": "failedReadHttpsProtocols"
+        },
+        {
+          "name": "failedToConvert"
+        },
+        {
+          "name": "failedToDetermineFilterDefinition"
+        },
+        {
+          "name": "failedUpdatingRefs"
+        },
+        {
+          "name": "failureDueToOneOfTheFollowing"
+        },
+        {
+          "name": "failureUpdatingFETCH_HEAD"
+        },
+        {
+          "name": "failureUpdatingTrackingRef"
+        },
+        {
+          "name": "fileAlreadyExists"
+        },
+        {
+          "name": "fileCannotBeDeleted"
+        },
+        {
+          "name": "fileIsTooLarge"
+        },
+        {
+          "name": "fileModeNotSetForPath"
+        },
+        {
+          "name": "filterExecutionFailed"
+        },
+        {
+          "name": "filterExecutionFailedRc"
+        },
+        {
+          "name": "filterRequiresCapability"
+        },
+        {
+          "name": "findingCommitsForCommitGraph"
+        },
+        {
+          "name": "findingGarbage"
+        },
+        {
+          "name": "flagIsDisposed"
+        },
+        {
+          "name": "flagNotFromThis"
+        },
+        {
+          "name": "flagsAlreadyCreated"
+        },
+        {
+          "name": "funnyRefname"
+        },
+        {
+          "name": "gcAlreadyRunning"
+        },
+        {
+          "name": "gcFailed"
+        },
+        {
+          "name": "gcTooManyUnpruned"
+        },
+        {
+          "name": "headRequiredToStash"
+        },
+        {
+          "name": "hoursAgo"
+        },
+        {
+          "name": "httpConfigCannotNormalizeURL"
+        },
+        {
+          "name": "httpConfigInvalidURL"
+        },
+        {
+          "name": "httpFactoryInUse"
+        },
+        {
+          "name": "httpPreAuthTooLate"
+        },
+        {
+          "name": "httpUserInfoDecodeError"
+        },
+        {
+          "name": "httpWrongConnectionType"
+        },
+        {
+          "name": "hugeIndexesAreNotSupportedByJgitYet"
+        },
+        {
+          "name": "hunkBelongsToAnotherFile"
+        },
+        {
+          "name": "hunkDisconnectedFromFile"
+        },
+        {
+          "name": "hunkHeaderDoesNotMatchBodyLineCountOf"
+        },
+        {
+          "name": "illegalArgumentNotA"
+        },
+        {
+          "name": "illegalCombinationOfArguments"
+        },
+        {
+          "name": "illegalHookName"
+        },
+        {
+          "name": "illegalPackingPhase"
+        },
+        {
+          "name": "illegalTernarySearchTreeKey"
+        },
+        {
+          "name": "illegalTernarySearchTreeValue"
+        },
+        {
+          "name": "inMemoryBufferLimitExceeded"
+        },
+        {
+          "name": "inTheFuture"
+        },
+        {
+          "name": "incorrectHashFor"
+        },
+        {
+          "name": "incorrectOBJECT_ID_LENGTH"
+        },
+        {
+          "name": "indexFileCorruptedNegativeBucketCount"
+        },
+        {
+          "name": "indexFileIsTooLargeForJgit"
+        },
+        {
+          "name": "indexNumbersNotIncreasing"
+        },
+        {
+          "name": "indexWriteException"
+        },
+        {
+          "name": "initFailedBareRepoDifferentDirs"
+        },
+        {
+          "name": "initFailedDirIsNoDirectory"
+        },
+        {
+          "name": "initFailedGitDirIsNoDirectory"
+        },
+        {
+          "name": "initFailedNonBareRepoSameDirs"
+        },
+        {
+          "name": "inputDidntMatchLength"
+        },
+        {
+          "name": "inputStreamClosed"
+        },
+        {
+          "name": "inputStreamMustSupportMark"
+        },
+        {
+          "name": "integerValueNotInRange"
+        },
+        {
+          "name": "integerValueNotInRangeSubSection"
+        },
+        {
+          "name": "integerValueOutOfRange"
+        },
+        {
+          "name": "internalRevisionError"
+        },
+        {
+          "name": "internalServerError"
+        },
+        {
+          "name": "interruptedWriting"
+        },
+        {
+          "name": "invalidAdvertisementOf"
+        },
+        {
+          "name": "invalidAncestryLength"
+        },
+        {
+          "name": "invalidAwsApiSignatureVersion"
+        },
+        {
+          "name": "invalidBooleanValue"
+        },
+        {
+          "name": "invalidChannel"
+        },
+        {
+          "name": "invalidCommitParentNumber"
+        },
+        {
+          "name": "invalidCoreAbbrev"
+        },
+        {
+          "name": "invalidDepth"
+        },
+        {
+          "name": "invalidEncoding"
+        },
+        {
+          "name": "invalidEncryption"
+        },
+        {
+          "name": "invalidExpandWildcard"
+        },
+        {
+          "name": "invalidExtraEdgeListPosition"
+        },
+        {
+          "name": "invalidFilter"
+        },
+        {
+          "name": "invalidGitModules"
+        },
+        {
+          "name": "invalidGitType"
+        },
+        {
+          "name": "invalidGitdirRef"
+        },
+        {
+          "name": "invalidHeaderFormat"
+        },
+        {
+          "name": "invalidHeaderKey"
+        },
+        {
+          "name": "invalidHeaderValue"
+        },
+        {
+          "name": "invalidHexString"
+        },
+        {
+          "name": "invalidHomeDirectory"
+        },
+        {
+          "name": "invalidHooksPath"
+        },
+        {
+          "name": "invalidId"
+        },
+        {
+          "name": "invalidId0"
+        },
+        {
+          "name": "invalidIdLength"
+        },
+        {
+          "name": "invalidIgnoreParamSubmodule"
+        },
+        {
+          "name": "invalidIgnoreRule"
+        },
+        {
+          "name": "invalidIntegerValue"
+        },
+        {
+          "name": "invalidKey"
+        },
+        {
+          "name": "invalidLineInConfigFile"
+        },
+        {
+          "name": "invalidLineInConfigFileWithParam"
+        },
+        {
+          "name": "invalidModeFor"
+        },
+        {
+          "name": "invalidModeForPath"
+        },
+        {
+          "name": "invalidNameContainsDotDot"
+        },
+        {
+          "name": "invalidNegativeAndForce"
+        },
+        {
+          "name": "invalidObject"
+        },
+        {
+          "name": "invalidOldIdSent"
+        },
+        {
+          "name": "invalidPacketLineHeader"
+        },
+        {
+          "name": "invalidPath"
+        },
+        {
+          "name": "invalidPurgeFactor"
+        },
+        {
+          "name": "invalidRedirectLocation"
+        },
+        {
+          "name": "invalidRefAdvertisementLine"
+        },
+        {
+          "name": "invalidRefName"
+        },
+        {
+          "name": "invalidRefSpec"
+        },
+        {
+          "name": "invalidReflogRevision"
+        },
+        {
+          "name": "invalidReftableBlock"
+        },
+        {
+          "name": "invalidReftableCRC"
+        },
+        {
+          "name": "invalidReftableFile"
+        },
+        {
+          "name": "invalidRemote"
+        },
+        {
+          "name": "invalidRepositoryStateNoHead"
+        },
+        {
+          "name": "invalidShallowObject"
+        },
+        {
+          "name": "invalidStageForPath"
+        },
+        {
+          "name": "invalidSystemProperty"
+        },
+        {
+          "name": "invalidTagOption"
+        },
+        {
+          "name": "invalidTimeUnitValue2"
+        },
+        {
+          "name": "invalidTimeUnitValue3"
+        },
+        {
+          "name": "invalidTimeout"
+        },
+        {
+          "name": "invalidTimestamp"
+        },
+        {
+          "name": "invalidTreeZeroLengthName"
+        },
+        {
+          "name": "invalidURL"
+        },
+        {
+          "name": "invalidWildcards"
+        },
+        {
+          "name": "invalidWindowSize"
+        },
+        {
+          "name": "isAStaticFlagAndHasNorevWalkInstance"
+        },
+        {
+          "name": "kNotInRange"
+        },
+        {
+          "name": "largeObjectExceedsByteArray"
+        },
+        {
+          "name": "largeObjectExceedsLimit"
+        },
+        {
+          "name": "largeObjectException"
+        },
+        {
+          "name": "largeObjectOutOfMemory"
+        },
+        {
+          "name": "lengthExceedsMaximumArraySize"
+        },
+        {
+          "name": "lfsHookConflict"
+        },
+        {
+          "name": "listingAlternates"
+        },
+        {
+          "name": "listingPacks"
+        },
+        {
+          "name": "localObjectsIncomplete"
+        },
+        {
+          "name": "localRefIsMissingObjects"
+        },
+        {
+          "name": "localRepository"
+        },
+        {
+          "name": "lockAlreadyHeld"
+        },
+        {
+          "name": "lockCountMustBeGreaterOrEqual1"
+        },
+        {
+          "name": "lockError"
+        },
+        {
+          "name": "lockFailedRetry"
+        },
+        {
+          "name": "lockOnNotClosed"
+        },
+        {
+          "name": "lockOnNotHeld"
+        },
+        {
+          "name": "lockStreamClosed"
+        },
+        {
+          "name": "lockStreamMultiple"
+        },
+        {
+          "name": "logInconsistentFiletimeDiff"
+        },
+        {
+          "name": "logInvalidDefaultCharset"
+        },
+        {
+          "name": "logLargerFiletimeDiff"
+        },
+        {
+          "name": "logSmallerFiletime"
+        },
+        {
+          "name": "logXDGConfigHomeInvalid"
+        },
+        {
+          "name": "looseObjectHandleIsStale"
+        },
+        {
+          "name": "maxCountMustBeNonNegative"
+        },
+        {
+          "name": "mergeConflictOnNonNoteEntries"
+        },
+        {
+          "name": "mergeConflictOnNotes"
+        },
+        {
+          "name": "mergeRecursiveConflictsWhenMergingCommonAncestors"
+        },
+        {
+          "name": "mergeRecursiveTooManyMergeBasesFor"
+        },
+        {
+          "name": "mergeStrategyAlreadyExistsAsDefault"
+        },
+        {
+          "name": "mergeStrategyDoesNotSupportHeads"
+        },
+        {
+          "name": "mergeToolNotGivenError"
+        },
+        {
+          "name": "mergeToolNullError"
+        },
+        {
+          "name": "mergeUsingStrategyResultedInDescription"
+        },
+        {
+          "name": "messageAndTaggerNotAllowedInUnannotatedTags"
+        },
+        {
+          "name": "minutesAgo"
+        },
+        {
+          "name": "mismatchCRC"
+        },
+        {
+          "name": "mismatchOffset"
+        },
+        {
+          "name": "missingAccesskey"
+        },
+        {
+          "name": "missingAwsRegion"
+        },
+        {
+          "name": "missingCRC"
+        },
+        {
+          "name": "missingConfigurationForKey"
+        },
+        {
+          "name": "missingCookieFile"
+        },
+        {
+          "name": "missingDeltaBase"
+        },
+        {
+          "name": "missingForwardImageInGITBinaryPatch"
+        },
+        {
+          "name": "missingObject"
+        },
+        {
+          "name": "missingPrerequisiteCommits"
+        },
+        {
+          "name": "missingRequiredParameter"
+        },
+        {
+          "name": "missingSecretkey"
+        },
+        {
+          "name": "mixedStagesNotAllowed"
+        },
+        {
+          "name": "mkDirFailed"
+        },
+        {
+          "name": "mkDirsFailed"
+        },
+        {
+          "name": "month"
+        },
+        {
+          "name": "months"
+        },
+        {
+          "name": "monthsAgo"
+        },
+        {
+          "name": "multipleMergeBasesFor"
+        },
+        {
+          "name": "nameMustNotBeNullOrEmpty"
+        },
+        {
+          "name": "need2Arguments"
+        },
+        {
+          "name": "newIdMustNotBeNull"
+        },
+        {
+          "name": "newlineInQuotesNotAllowed"
+        },
+        {
+          "name": "noApplyInDelete"
+        },
+        {
+          "name": "noClosingBracket"
+        },
+        {
+          "name": "noCommitsSelectedForShallow"
+        },
+        {
+          "name": "noCredentialsProvider"
+        },
+        {
+          "name": "noHEADExistsAndNoExplicitStartingRevisionWasSpecified"
+        },
+        {
+          "name": "noHMACsupport"
+        },
+        {
+          "name": "noMergeBase"
+        },
+        {
+          "name": "noMergeHeadSpecified"
+        },
+        {
+          "name": "noPathAttributesFound"
+        },
+        {
+          "name": "noSuchRef"
+        },
+        {
+          "name": "noSuchRefKnown"
+        },
+        {
+          "name": "noSuchSubmodule"
+        },
+        {
+          "name": "noXMLParserAvailable"
+        },
+        {
+          "name": "nonBareLinkFilesNotSupported"
+        },
+        {
+          "name": "nonCommitToHeads"
+        },
+        {
+          "name": "notABoolean"
+        },
+        {
+          "name": "notABundle"
+        },
+        {
+          "name": "notACommitGraph"
+        },
+        {
+          "name": "notADIRCFile"
+        },
+        {
+          "name": "notAGitDirectory"
+        },
+        {
+          "name": "notAPACKFile"
+        },
+        {
+          "name": "notARef"
+        },
+        {
+          "name": "notASCIIString"
+        },
+        {
+          "name": "notAValidPack"
+        },
+        {
+          "name": "notAuthorized"
+        },
+        {
+          "name": "notFound"
+        },
+        {
+          "name": "notMergedExceptionMessage"
+        },
+        {
+          "name": "notShallowedUnshallow"
+        },
+        {
+          "name": "nothingToFetch"
+        },
+        {
+          "name": "nothingToPush"
+        },
+        {
+          "name": "nullRevCommit"
+        },
+        {
+          "name": "numberDoesntFit"
+        },
+        {
+          "name": "objectAtHasBadZlibStream"
+        },
+        {
+          "name": "objectIsCorrupt"
+        },
+        {
+          "name": "objectIsCorrupt3"
+        },
+        {
+          "name": "objectIsNotA"
+        },
+        {
+          "name": "objectNotFound"
+        },
+        {
+          "name": "objectNotFoundIn"
+        },
+        {
+          "name": "obtainingCommitsForCherryPick"
+        },
+        {
+          "name": "oldIdMustNotBeNull"
+        },
+        {
+          "name": "onlyOneFetchSupported"
+        },
+        {
+          "name": "onlyOneOperationCallPerConnectionIsSupported"
+        },
+        {
+          "name": "onlyOpenPgpSupportedForSigning"
+        },
+        {
+          "name": "openFilesMustBeAtLeast1"
+        },
+        {
+          "name": "openingConnection"
+        },
+        {
+          "name": "operationCanceled"
+        },
+        {
+          "name": "outputHasAlreadyBeenStarted"
+        },
+        {
+          "name": "overflowedReftableBlock"
+        },
+        {
+          "name": "packChecksumMismatch"
+        },
+        {
+          "name": "packCorruptedWhileWritingToFilesystem"
+        },
+        {
+          "name": "packFileInvalid"
+        },
+        {
+          "name": "packHandleIsStale"
+        },
+        {
+          "name": "packHasUnresolvedDeltas"
+        },
+        {
+          "name": "packInaccessible"
+        },
+        {
+          "name": "packObjectCountMismatch"
+        },
+        {
+          "name": "packRefs"
+        },
+        {
+          "name": "packSizeNotSetYet"
+        },
+        {
+          "name": "packTooLargeForIndexVersion1"
+        },
+        {
+          "name": "packWasDeleted"
+        },
+        {
+          "name": "packWriterStatistics"
+        },
+        {
+          "name": "packedRefsCorruptionDetected"
+        },
+        {
+          "name": "packedRefsHandleIsStale"
+        },
+        {
+          "name": "packetSizeMustBeAtLeast"
+        },
+        {
+          "name": "packetSizeMustBeAtMost"
+        },
+        {
+          "name": "packfileCorruptionDetected"
+        },
+        {
+          "name": "packfileIsTruncated"
+        },
+        {
+          "name": "packfileIsTruncatedNoParam"
+        },
+        {
+          "name": "packingCancelledDuringObjectsWriting"
+        },
+        {
+          "name": "panicCantRenameIndexFile"
+        },
+        {
+          "name": "patchApplyErrorWithHunk"
+        },
+        {
+          "name": "patchApplyErrorWithoutHunk"
+        },
+        {
+          "name": "patchApplyException"
+        },
+        {
+          "name": "patchFormatException"
+        },
+        {
+          "name": "pathNotConfigured"
+        },
+        {
+          "name": "peeledLineBeforeRef"
+        },
+        {
+          "name": "peeledRefIsRequired"
+        },
+        {
+          "name": "peerDidNotSupplyACompleteObjectGraph"
+        },
+        {
+          "name": "personIdentEmailNonNull"
+        },
+        {
+          "name": "personIdentNameNonNull"
+        },
+        {
+          "name": "postCommitHookFailed"
+        },
+        {
+          "name": "prefixRemote"
+        },
+        {
+          "name": "problemWithResolvingPushRefSpecsLocally"
+        },
+        {
+          "name": "progressMonUploading"
+        },
+        {
+          "name": "propertyIsAlreadyNonNull"
+        },
+        {
+          "name": "pruneLoosePackedObjects"
+        },
+        {
+          "name": "pruneLooseUnreferencedObjects"
+        },
+        {
+          "name": "pullTaskName"
+        },
+        {
+          "name": "pushCancelled"
+        },
+        {
+          "name": "pushCertificateInvalidField"
+        },
+        {
+          "name": "pushCertificateInvalidFieldValue"
+        },
+        {
+          "name": "pushCertificateInvalidHeader"
+        },
+        {
+          "name": "pushCertificateInvalidSignature"
+        },
+        {
+          "name": "pushDefaultNoUpstream"
+        },
+        {
+          "name": "pushDefaultNothing"
+        },
+        {
+          "name": "pushDefaultSimple"
+        },
+        {
+          "name": "pushDefaultTriangularUpstream"
+        },
+        {
+          "name": "pushDefaultUnknown"
+        },
+        {
+          "name": "pushIsNotSupportedForBundleTransport"
+        },
+        {
+          "name": "pushNotPermitted"
+        },
+        {
+          "name": "pushOptionsNotSupported"
+        },
+        {
+          "name": "rawLogMessageDoesNotParseAsLogEntry"
+        },
+        {
+          "name": "readConfigFailed"
+        },
+        {
+          "name": "readFileStoreAttributesFailed"
+        },
+        {
+          "name": "readLastModifiedFailed"
+        },
+        {
+          "name": "readPipeIsNotAllowed"
+        },
+        {
+          "name": "readPipeIsNotAllowedRequiredPermission"
+        },
+        {
+          "name": "readShallowFailed"
+        },
+        {
+          "name": "readTimedOut"
+        },
+        {
+          "name": "readerIsRequired"
+        },
+        {
+          "name": "readingObjectsFromLocalRepositoryFailed"
+        },
+        {
+          "name": "receivePackInvalidLimit"
+        },
+        {
+          "name": "receivePackObjectTooLarge1"
+        },
+        {
+          "name": "receivePackObjectTooLarge2"
+        },
+        {
+          "name": "receivePackTooLarge"
+        },
+        {
+          "name": "receivingObjects"
+        },
+        {
+          "name": "redirectBlocked"
+        },
+        {
+          "name": "redirectHttp"
+        },
+        {
+          "name": "redirectLimitExceeded"
+        },
+        {
+          "name": "redirectLocationMissing"
+        },
+        {
+          "name": "redirectsOff"
+        },
+        {
+          "name": "refAlreadyExists"
+        },
+        {
+          "name": "refAlreadyExists1"
+        },
+        {
+          "name": "refNotResolved"
+        },
+        {
+          "name": "refUpdateReturnCodeWas"
+        },
+        {
+          "name": "reflogEntryNotFound"
+        },
+        {
+          "name": "reftableDirExists"
+        },
+        {
+          "name": "reftableRecordsMustIncrease"
+        },
+        {
+          "name": "remoteBranchNotFound"
+        },
+        {
+          "name": "remoteConfigHasNoURIAssociated"
+        },
+        {
+          "name": "remoteDoesNotHaveSpec"
+        },
+        {
+          "name": "remoteDoesNotSupportSmartHTTPPush"
+        },
+        {
+          "name": "remoteHungUpUnexpectedly"
+        },
+        {
+          "name": "remoteNameCannotBeNull"
+        },
+        {
+          "name": "renameBranchFailedAmbiguous"
+        },
+        {
+          "name": "renameBranchFailedNotABranch"
+        },
+        {
+          "name": "renameBranchFailedUnknownReason"
+        },
+        {
+          "name": "renameBranchUnexpectedResult"
+        },
+        {
+          "name": "renameCancelled"
+        },
+        {
+          "name": "renameFileFailed"
+        },
+        {
+          "name": "renameFileFailedNullFiles"
+        },
+        {
+          "name": "renamesAlreadyFound"
+        },
+        {
+          "name": "renamesBreakingModifies"
+        },
+        {
+          "name": "renamesFindingByContent"
+        },
+        {
+          "name": "renamesFindingExact"
+        },
+        {
+          "name": "renamesRejoiningModifies"
+        },
+        {
+          "name": "repositoryAlreadyExists"
+        },
+        {
+          "name": "repositoryConfigFileInvalid"
+        },
+        {
+          "name": "repositoryIsRequired"
+        },
+        {
+          "name": "repositoryNotFound"
+        },
+        {
+          "name": "repositoryState_applyMailbox"
+        },
+        {
+          "name": "repositoryState_bare"
+        },
+        {
+          "name": "repositoryState_bisecting"
+        },
+        {
+          "name": "repositoryState_conflicts"
+        },
+        {
+          "name": "repositoryState_merged"
+        },
+        {
+          "name": "repositoryState_normal"
+        },
+        {
+          "name": "repositoryState_rebase"
+        },
+        {
+          "name": "repositoryState_rebaseInteractive"
+        },
+        {
+          "name": "repositoryState_rebaseOrApplyMailbox"
+        },
+        {
+          "name": "repositoryState_rebaseWithMerge"
+        },
+        {
+          "name": "requiredHashFunctionNotAvailable"
+        },
+        {
+          "name": "resettingHead"
+        },
+        {
+          "name": "resolvingDeltas"
+        },
+        {
+          "name": "resultLengthIncorrect"
+        },
+        {
+          "name": "rewinding"
+        },
+        {
+          "name": "s3ActionDeletion"
+        },
+        {
+          "name": "s3ActionReading"
+        },
+        {
+          "name": "s3ActionWriting"
+        },
+        {
+          "name": "saveFileStoreAttributesFailed"
+        },
+        {
+          "name": "searchForReachableBranches"
+        },
+        {
+          "name": "searchForReuse"
+        },
+        {
+          "name": "searchForReuseTimeout"
+        },
+        {
+          "name": "searchForSizes"
+        },
+        {
+          "name": "secondsAgo"
+        },
+        {
+          "name": "selectingCommits"
+        },
+        {
+          "name": "sequenceTooLargeForDiffAlgorithm"
+        },
+        {
+          "name": "serviceNotEnabledNoName"
+        },
+        {
+          "name": "serviceNotPermitted"
+        },
+        {
+          "name": "sha1CollisionDetected"
+        },
+        {
+          "name": "shallowCommitsAlreadyInitialized"
+        },
+        {
+          "name": "shallowNotSupported"
+        },
+        {
+          "name": "shallowPacksRequireDepthWalk"
+        },
+        {
+          "name": "shortCompressedStreamAt"
+        },
+        {
+          "name": "shortReadOfBlock"
+        },
+        {
+          "name": "shortReadOfOptionalDIRCExtensionExpectedAnotherBytes"
+        },
+        {
+          "name": "shortSkipOfBlock"
+        },
+        {
+          "name": "shutdownCleanup"
+        },
+        {
+          "name": "shutdownCleanupFailed"
+        },
+        {
+          "name": "shutdownCleanupListenerFailed"
+        },
+        {
+          "name": "signatureVerificationError"
+        },
+        {
+          "name": "signatureVerificationUnavailable"
+        },
+        {
+          "name": "signedTagMessageNoLf"
+        },
+        {
+          "name": "signingServiceUnavailable"
+        },
+        {
+          "name": "similarityScoreMustBeWithinBounds"
+        },
+        {
+          "name": "skipMustBeNonNegative"
+        },
+        {
+          "name": "skipNotAccessiblePath"
+        },
+        {
+          "name": "smartHTTPPushDisabled"
+        },
+        {
+          "name": "sourceDestinationMustMatch"
+        },
+        {
+          "name": "sourceIsNotAWildcard"
+        },
+        {
+          "name": "sourceRefDoesntResolveToAnyObject"
+        },
+        {
+          "name": "sourceRefNotSpecifiedForRefspec"
+        },
+        {
+          "name": "squashCommitNotUpdatingHEAD"
+        },
+        {
+          "name": "sshCommandFailed"
+        },
+        {
+          "name": "sshCommandTimeout"
+        },
+        {
+          "name": "sslFailureCause"
+        },
+        {
+          "name": "sslFailureExceptionMessage"
+        },
+        {
+          "name": "sslFailureInfo"
+        },
+        {
+          "name": "sslFailureTrustExplanation"
+        },
+        {
+          "name": "sslTrustAlways"
+        },
+        {
+          "name": "sslTrustForRepo"
+        },
+        {
+          "name": "sslTrustNow"
+        },
+        {
+          "name": "sslVerifyCannotSave"
+        },
+        {
+          "name": "stalePidLock"
+        },
+        {
+          "name": "staleRevFlagsOn"
+        },
+        {
+          "name": "startingReadStageWithoutWrittenRequestDataPendingIsNotSupported"
+        },
+        {
+          "name": "stashApplyConflict"
+        },
+        {
+          "name": "stashApplyFailed"
+        },
+        {
+          "name": "stashApplyOnUnsafeRepository"
+        },
+        {
+          "name": "stashApplyWithoutHead"
+        },
+        {
+          "name": "stashCommitIncorrectNumberOfParents"
+        },
+        {
+          "name": "stashDropDeleteRefFailed"
+        },
+        {
+          "name": "stashDropFailed"
+        },
+        {
+          "name": "stashDropMissingReflog"
+        },
+        {
+          "name": "stashDropNotSupported"
+        },
+        {
+          "name": "stashFailed"
+        },
+        {
+          "name": "stashResolveFailed"
+        },
+        {
+          "name": "statelessRPCRequiresOptionToBeEnabled"
+        },
+        {
+          "name": "storePushCertMultipleRefs"
+        },
+        {
+          "name": "storePushCertOneRef"
+        },
+        {
+          "name": "storePushCertReflog"
+        },
+        {
+          "name": "submoduleExists"
+        },
+        {
+          "name": "submoduleNameInvalid"
+        },
+        {
+          "name": "submoduleParentRemoteUrlInvalid"
+        },
+        {
+          "name": "submodulePathInvalid"
+        },
+        {
+          "name": "submoduleUrlInvalid"
+        },
+        {
+          "name": "supportOnlyPackIndexVersion2"
+        },
+        {
+          "name": "systemConfigFileInvalid"
+        },
+        {
+          "name": "tSizeMustBeGreaterOrEqual1"
+        },
+        {
+          "name": "tagAlreadyExists"
+        },
+        {
+          "name": "tagNameInvalid"
+        },
+        {
+          "name": "tagOnRepoWithoutHEADCurrentlyNotSupported"
+        },
+        {
+          "name": "theFactoryMustNotBeNull"
+        },
+        {
+          "name": "threadInterruptedWhileRunning"
+        },
+        {
+          "name": "timeIsUncertain"
+        },
+        {
+          "name": "timeoutMeasureFsTimestampResolution"
+        },
+        {
+          "name": "timerAlreadyTerminated"
+        },
+        {
+          "name": "tooManyCommands"
+        },
+        {
+          "name": "tooManyFilters"
+        },
+        {
+          "name": "tooManyIncludeRecursions"
+        },
+        {
+          "name": "topologicalSortRequired"
+        },
+        {
+          "name": "transactionAborted"
+        },
+        {
+          "name": "transportExceptionBadRef"
+        },
+        {
+          "name": "transportExceptionEmptyRef"
+        },
+        {
+          "name": "transportExceptionInvalid"
+        },
+        {
+          "name": "transportExceptionMissingAssumed"
+        },
+        {
+          "name": "transportExceptionReadRef"
+        },
+        {
+          "name": "transportNeedsRepository"
+        },
+        {
+          "name": "transportProtoBundleFile"
+        },
+        {
+          "name": "transportProtoFTP"
+        },
+        {
+          "name": "transportProtoGitAnon"
+        },
+        {
+          "name": "transportProtoHTTP"
+        },
+        {
+          "name": "transportProtoLocal"
+        },
+        {
+          "name": "transportProtoSFTP"
+        },
+        {
+          "name": "transportProtoSSH"
+        },
+        {
+          "name": "transportProtoTest"
+        },
+        {
+          "name": "transportProvidedRefWithNoObjectId"
+        },
+        {
+          "name": "treeEntryAlreadyExists"
+        },
+        {
+          "name": "treeFilterMarkerTooManyFilters"
+        },
+        {
+          "name": "treeWalkMustHaveExactlyTwoTrees"
+        },
+        {
+          "name": "truncatedHunkLinesMissingForAncestor"
+        },
+        {
+          "name": "truncatedHunkNewLinesMissing"
+        },
+        {
+          "name": "truncatedHunkOldLinesMissing"
+        },
+        {
+          "name": "unableToCheckConnectivity"
+        },
+        {
+          "name": "unableToCreateNewObject"
+        },
+        {
+          "name": "unableToReadFullInt"
+        },
+        {
+          "name": "unableToReadPackfile"
+        },
+        {
+          "name": "unableToRemovePath"
+        },
+        {
+          "name": "unableToSignCommitNoSecretKey"
+        },
+        {
+          "name": "unableToWrite"
+        },
+        {
+          "name": "unauthorized"
+        },
+        {
+          "name": "unencodeableFile"
+        },
+        {
+          "name": "unexpectedAwsApiSignatureVersion"
+        },
+        {
+          "name": "unexpectedCompareResult"
+        },
+        {
+          "name": "unexpectedEndOfConfigFile"
+        },
+        {
+          "name": "unexpectedEndOfInput"
+        },
+        {
+          "name": "unexpectedEofInPack"
+        },
+        {
+          "name": "unexpectedHunkTrailer"
+        },
+        {
+          "name": "unexpectedOddResult"
+        },
+        {
+          "name": "unexpectedPacketLine"
+        },
+        {
+          "name": "unexpectedRefReport"
+        },
+        {
+          "name": "unexpectedReportLine"
+        },
+        {
+          "name": "unexpectedReportLine2"
+        },
+        {
+          "name": "unexpectedSubmoduleStatus"
+        },
+        {
+          "name": "unknownDIRCVersion"
+        },
+        {
+          "name": "unknownHost"
+        },
+        {
+          "name": "unknownObject"
+        },
+        {
+          "name": "unknownObjectInIndex"
+        },
+        {
+          "name": "unknownObjectType"
+        },
+        {
+          "name": "unknownObjectType2"
+        },
+        {
+          "name": "unknownOrUnsupportedCommand"
+        },
+        {
+          "name": "unknownPositionEncoding"
+        },
+        {
+          "name": "unknownRefStorageFormat"
+        },
+        {
+          "name": "unknownRepositoryFormat"
+        },
+        {
+          "name": "unknownRepositoryFormat2"
+        },
+        {
+          "name": "unknownTransportCommand"
+        },
+        {
+          "name": "unknownZlibError"
+        },
+        {
+          "name": "unlockLockFileFailed"
+        },
+        {
+          "name": "unmergedPath"
+        },
+        {
+          "name": "unmergedPaths"
+        },
+        {
+          "name": "unpackException"
+        },
+        {
+          "name": "unreadableCommitGraph"
+        },
+        {
+          "name": "unreadableObjectSizeIndex"
+        },
+        {
+          "name": "unreadablePackIndex"
+        },
+        {
+          "name": "unrecognizedPackExtension"
+        },
+        {
+          "name": "unrecognizedRef"
+        },
+        {
+          "name": "unsetMark"
+        },
+        {
+          "name": "unsupportedAlternates"
+        },
+        {
+          "name": "unsupportedArchiveFormat"
+        },
+        {
+          "name": "unsupportedCommand0"
+        },
+        {
+          "name": "unsupportedCommitGraphVersion"
+        },
+        {
+          "name": "unsupportedEncryptionAlgorithm"
+        },
+        {
+          "name": "unsupportedEncryptionVersion"
+        },
+        {
+          "name": "unsupportedGC"
+        },
+        {
+          "name": "unsupportedMark"
+        },
+        {
+          "name": "unsupportedObjectIdVersion"
+        },
+        {
+          "name": "unsupportedObjectSizeIndexVersion"
+        },
+        {
+          "name": "unsupportedOperationNotAddAtEnd"
+        },
+        {
+          "name": "unsupportedPackIndexVersion"
+        },
+        {
+          "name": "unsupportedPackReverseIndexVersion"
+        },
+        {
+          "name": "unsupportedPackVersion"
+        },
+        {
+          "name": "unsupportedReftableVersion"
+        },
+        {
+          "name": "unsupportedRepositoryDescription"
+        },
+        {
+          "name": "unsupportedSizesObjSizeIndex"
+        },
+        {
+          "name": "updateRequiresOldIdAndNewId"
+        },
+        {
+          "name": "updatingConfig"
+        },
+        {
+          "name": "updatingHeadFailed"
+        },
+        {
+          "name": "updatingRefFailed"
+        },
+        {
+          "name": "updatingReferences"
+        },
+        {
+          "name": "upstreamBranchName"
+        },
+        {
+          "name": "uriNotConfigured"
+        },
+        {
+          "name": "uriNotFound"
+        },
+        {
+          "name": "uriNotFoundWithMessage"
+        },
+        {
+          "name": "userConfigInvalid"
+        },
+        {
+          "name": "validatingGitModules"
+        },
+        {
+          "name": "valueExceedsRange"
+        },
+        {
+          "name": "verifySignatureBad"
+        },
+        {
+          "name": "verifySignatureExpired"
+        },
+        {
+          "name": "verifySignatureGood"
+        },
+        {
+          "name": "verifySignatureIssuer"
+        },
+        {
+          "name": "verifySignatureKey"
+        },
+        {
+          "name": "verifySignatureMade"
+        },
+        {
+          "name": "verifySignatureTrust"
+        },
+        {
+          "name": "walkFailure"
+        },
+        {
+          "name": "wantNoSpaceWithCapabilities"
+        },
+        {
+          "name": "wantNotValid"
+        },
+        {
+          "name": "weeksAgo"
+        },
+        {
+          "name": "windowSizeMustBeLesserThanLimit"
+        },
+        {
+          "name": "windowSizeMustBePowerOf2"
+        },
+        {
+          "name": "writeTimedOut"
+        },
+        {
+          "name": "writerAlreadyInitialized"
+        },
+        {
+          "name": "writingNotPermitted"
+        },
+        {
+          "name": "writingNotSupported"
+        },
+        {
+          "name": "writingObjects"
+        },
+        {
+          "name": "writingOutCommitGraph"
+        },
+        {
+          "name": "wrongDecompressedLength"
+        },
+        {
+          "name": "wrongRepositoryState"
+        },
+        {
+          "name": "year"
+        },
+        {
+          "name": "years"
+        },
+        {
+          "name": "years0MonthsAgo"
+        },
+        {
+          "name": "yearsAgo"
+        },
+        {
+          "name": "yearsMonthsAgo"
+        }
+      ],
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.jgit.lib.CoreConfig$AutoCRLF",
+      "methods": [
+        {
+          "name": "values",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.jgit.lib.CoreConfig$CheckStat",
+      "methods": [
+        {
+          "name": "values",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.jgit.lib.CoreConfig$EOL",
+      "methods": [
+        {
+          "name": "values",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.jgit.lib.CoreConfig$HideDotFiles",
+      "methods": [
+        {
+          "name": "values",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.jgit.lib.CoreConfig$LogRefUpdates",
+      "methods": [
+        {
+          "name": "values",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.jgit.lib.CoreConfig$SymLinks",
+      "methods": [
+        {
+          "name": "values",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.jgit.lib.CoreConfig$TrustLooseRefStat",
+      "methods": [
+        {
+          "name": "values",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.jgit.lib.CoreConfig$TrustPackedRefsStat",
+      "methods": [
+        {
+          "name": "values",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.jgit.util.sha1.SHA1$Sha1Implementation",
+      "methods": [
+        {
+          "name": "values",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.compose.resources.JvmResourceReader",
+      "fields": [
+        {
+          "name": "Default"
+        },
+        {
+          "name": "classLoader"
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.compose.resources.ResourceCaches",
+      "fields": [
+        {
+          "name": "INSTANCE"
+        }
+      ]
+    },
+    {
+      "type": "org.jetbrains.compose.resources.ResourceCaches_desktopKt",
+      "methods": [
+        {
+          "name": "clearBlocking",
+          "parameterTypes": [
+            "org.jetbrains.compose.resources.ResourceCaches"
+          ]
+        }
+      ]
+    },
+    {
       "type": "org.jetbrains.kotlin.KtPsiSourceElement"
     },
     {
@@ -4297,7 +10364,15 @@
       "type": "org.jetbrains.kotlin.psi.KtBackingField[]"
     },
     {
-      "type": "org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry"
+      "type": "org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
     },
     {
       "type": "org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry[]"
@@ -4479,7 +10554,15 @@
       "type": "org.jetbrains.kotlin.psi.KtEnumEntry[]"
     },
     {
-      "type": "org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry"
+      "type": "org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
     },
     {
       "type": "org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry[]"
@@ -4689,7 +10772,15 @@
       "type": "org.jetbrains.kotlin.psi.KtParameter[]"
     },
     {
-      "type": "org.jetbrains.kotlin.psi.KtPrimaryConstructor"
+      "type": "org.jetbrains.kotlin.psi.KtPrimaryConstructor",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.intellij.lang.ASTNode"
+          ]
+        }
+      ]
     },
     {
       "type": "org.jetbrains.kotlin.psi.KtPrimaryConstructor[]"
@@ -5286,6 +11377,890 @@
       ]
     },
     {
+      "type": "sun.awt.ConstrainableGraphics"
+    },
+    {
+      "type": "sun.awt.SunHints",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "INTVAL_STROKE_PURE"
+        }
+      ]
+    },
+    {
+      "type": "sun.awt.image.BufImgSurfaceData$ICMColorData",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "pData"
+        }
+      ],
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.awt.image.IntegerComponentRaster",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "data"
+        },
+        {
+          "name": "dataOffsets"
+        },
+        {
+          "name": "pixelStride"
+        },
+        {
+          "name": "scanlineStride"
+        },
+        {
+          "name": "type"
+        }
+      ]
+    },
+    {
+      "type": "sun.font.CFontManager",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "registerFont",
+          "parameterTypes": [
+            "java.lang.String",
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.font.CharToGlyphMapper",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "charToGlyph",
+          "parameterTypes": [
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.font.Font2D",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "canDisplay",
+          "parameterTypes": [
+            "char"
+          ]
+        },
+        {
+          "name": "charToGlyphRaw",
+          "parameterTypes": [
+            "int"
+          ]
+        },
+        {
+          "name": "charToVariationGlyphRaw",
+          "parameterTypes": [
+            "int",
+            "int"
+          ]
+        },
+        {
+          "name": "getMapper",
+          "parameterTypes": []
+        },
+        {
+          "name": "getTableBytes",
+          "parameterTypes": [
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.font.FontStrike",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "getGlyphMetrics",
+          "parameterTypes": [
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.font.GlyphList",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "gposx"
+        },
+        {
+          "name": "gposy"
+        },
+        {
+          "name": "images"
+        },
+        {
+          "name": "lcdRGBOrder"
+        },
+        {
+          "name": "lcdSubPixPos"
+        },
+        {
+          "name": "len"
+        },
+        {
+          "name": "positions"
+        },
+        {
+          "name": "usePositions"
+        }
+      ]
+    },
+    {
+      "type": "sun.font.PhysicalStrike",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "pScalerContext"
+        }
+      ],
+      "methods": [
+        {
+          "name": "adjustPoint",
+          "parameterTypes": [
+            "java.awt.geom.Point2D$Float"
+          ]
+        },
+        {
+          "name": "getGlyphPoint",
+          "parameterTypes": [
+            "int",
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.font.StrikeMetrics",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "float",
+            "float",
+            "float",
+            "float",
+            "float",
+            "float",
+            "float",
+            "float",
+            "float",
+            "float"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.font.TrueTypeFont",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "readBlock",
+          "parameterTypes": [
+            "java.nio.ByteBuffer",
+            "int",
+            "int"
+          ]
+        },
+        {
+          "name": "readBytes",
+          "parameterTypes": [
+            "int",
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.font.Type1Font",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "readFile",
+          "parameterTypes": [
+            "java.nio.ByteBuffer"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.DestSurfaceProvider"
+    },
+    {
+      "type": "sun.java2d.Disposer",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "addRecord",
+          "parameterTypes": [
+            "java.lang.Object",
+            "long",
+            "long"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.InvalidPipeException",
+      "jniAccessible": true
+    },
+    {
+      "type": "sun.java2d.NullSurfaceData",
+      "jniAccessible": true
+    },
+    {
+      "type": "sun.java2d.SunGraphics2D",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "clipRegion"
+        },
+        {
+          "name": "composite"
+        },
+        {
+          "name": "eargb"
+        },
+        {
+          "name": "lcdTextContrast"
+        },
+        {
+          "name": "pixel"
+        },
+        {
+          "name": "strokeHint"
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.SurfaceData",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "pData"
+        },
+        {
+          "name": "valid"
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.Blit",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.BlitBg",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.CompositeType",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "AnyAlpha"
+        },
+        {
+          "name": "Src"
+        },
+        {
+          "name": "SrcNoEa"
+        },
+        {
+          "name": "SrcOver"
+        },
+        {
+          "name": "SrcOverNoEa"
+        },
+        {
+          "name": "Xor"
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.DrawGlyphList",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.DrawGlyphListAA",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.DrawGlyphListLCD",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.DrawLine",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.DrawParallelogram",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.DrawPath",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.DrawPolygons",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.DrawRect",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.FillParallelogram",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.FillPath",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.FillRect",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.FillSpans",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.GraphicsPrimitive",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "pNativePrim"
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.GraphicsPrimitiveMgr",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "register",
+          "parameterTypes": [
+            "sun.java2d.loops.GraphicsPrimitive[]"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.GraphicsPrimitive[]"
+    },
+    {
+      "type": "sun.java2d.loops.MaskBlit",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.MaskFill",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.ScaledBlit",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.SetDrawLineANY",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.SetDrawPathANY",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.SetDrawPolygonsANY",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.SetDrawRectANY",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.SetFillPathANY",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.SetFillRectANY",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.SetFillSpansANY",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.SurfaceType",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "Any3Byte"
+        },
+        {
+          "name": "Any4Byte"
+        },
+        {
+          "name": "AnyByte"
+        },
+        {
+          "name": "AnyColor"
+        },
+        {
+          "name": "AnyInt"
+        },
+        {
+          "name": "AnyShort"
+        },
+        {
+          "name": "ByteBinary1Bit"
+        },
+        {
+          "name": "ByteBinary2Bit"
+        },
+        {
+          "name": "ByteBinary4Bit"
+        },
+        {
+          "name": "ByteGray"
+        },
+        {
+          "name": "ByteIndexed"
+        },
+        {
+          "name": "ByteIndexedBm"
+        },
+        {
+          "name": "FourByteAbgr"
+        },
+        {
+          "name": "FourByteAbgrPre"
+        },
+        {
+          "name": "Index12Gray"
+        },
+        {
+          "name": "Index8Gray"
+        },
+        {
+          "name": "IntArgb"
+        },
+        {
+          "name": "IntArgbBm"
+        },
+        {
+          "name": "IntArgbPre"
+        },
+        {
+          "name": "IntBgr"
+        },
+        {
+          "name": "IntRgb"
+        },
+        {
+          "name": "IntRgbx"
+        },
+        {
+          "name": "OpaqueColor"
+        },
+        {
+          "name": "ThreeByteBgr"
+        },
+        {
+          "name": "Ushort4444Argb"
+        },
+        {
+          "name": "Ushort555Rgb"
+        },
+        {
+          "name": "Ushort555Rgbx"
+        },
+        {
+          "name": "Ushort565Rgb"
+        },
+        {
+          "name": "UshortGray"
+        },
+        {
+          "name": "UshortIndexed"
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.TransformHelper",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.loops.SurfaceType",
+            "sun.java2d.loops.CompositeType",
+            "sun.java2d.loops.SurfaceType"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.loops.XORComposite",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "alphaMask"
+        },
+        {
+          "name": "xorColor"
+        },
+        {
+          "name": "xorPixel"
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.marlin.DMarlinRenderingEngine",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.metal.MTLLayer",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "drawInMTLContext",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.metal.MTLSurfaceData",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "nativeHeight"
+        },
+        {
+          "name": "nativeWidth"
+        }
+      ],
+      "methods": [
+        {
+          "name": "dispose",
+          "parameterTypes": [
+            "long",
+            "sun.java2d.metal.MTLGraphicsConfig"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.metal.MTLSurfaceData$MTLLayerSurfaceData"
+    },
+    {
+      "type": "sun.java2d.metal.MTLSurfaceData$MTLOffScreenSurfaceData"
+    },
+    {
+      "type": "sun.java2d.pipe.Region",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "bands"
+        },
+        {
+          "name": "endIndex"
+        },
+        {
+          "name": "hix"
+        },
+        {
+          "name": "hiy"
+        },
+        {
+          "name": "lox"
+        },
+        {
+          "name": "loy"
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.pipe.RegionIterator",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "curIndex"
+        },
+        {
+          "name": "numXbands"
+        },
+        {
+          "name": "region"
+        }
+      ]
+    },
+    {
+      "type": "sun.lwawt.macosx.CPlatformWindow",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "deliverMoveResizeEvent",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int",
+            "int",
+            "boolean"
+          ]
+        }
+      ]
+    },
+    {
       "type": "sun.lwawt.macosx.LWCToolkit",
       "jniAccessible": true,
       "methods": [
@@ -5429,6 +12404,15 @@
       ]
     },
     {
+      "type": "sun.net.www.protocol.https.Handler",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "sun.net.www.protocol.jar.Handler",
       "methods": [
         {
@@ -5451,6 +12435,42 @@
     },
     {
       "type": "sun.security.pkcs12.PKCS12KeyStore$DualFormatPKCS12",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.DSA$SHA224withDSA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.DSA$SHA256withDSA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.JavaKeyStore$DualFormatJKS",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.JavaKeyStore$JKS",
       "methods": [
         {
           "name": "<init>",
@@ -5488,7 +12508,34 @@
       ]
     },
     {
+      "type": "sun.security.provider.SHA2$SHA224",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "sun.security.provider.SHA2$SHA256",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA3$SHA256",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA3$SHA512",
       "methods": [
         {
           "name": "<init>",
@@ -5506,6 +12553,15 @@
       ]
     },
     {
+      "type": "sun.security.provider.SHA5$SHA512",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "sun.security.provider.X509Factory",
       "methods": [
         {
@@ -5515,7 +12571,43 @@
       ]
     },
     {
+      "type": "sun.security.provider.certpath.PKIXCertPathValidator",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.PSSParameters",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "sun.security.rsa.RSAKeyFactory$Legacy",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.RSAPSSSignature",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.RSASignature$SHA224withRSA",
       "methods": [
         {
           "name": "<init>",
@@ -5534,6 +12626,33 @@
     },
     {
       "type": "sun.security.rsa.RSASignature$SHA384withRSA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.ssl.DHasKEM",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.ssl.KeyManagerFactoryImpl$SunX509",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.ssl.SSLContextImpl$DefaultSSLContext",
       "methods": [
         {
           "name": "<init>",
@@ -5668,6 +12787,18 @@
       ]
     },
     {
+      "type": "sun.security.x509.SubjectAlternativeNameExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
       "type": "sun.security.x509.SubjectKeyIdentifierExtension",
       "methods": [
         {
@@ -5686,6 +12817,15 @@
       "type": "sun.text.resources.cldr.FormatData_en"
     },
     {
+      "type": "sun.util.resources.cldr.TimeZoneNames"
+    },
+    {
+      "type": "sun.util.resources.cldr.TimeZoneNames_en"
+    },
+    {
+      "type": "sun.util.resources.cldr.TimeZoneNames_en_US"
+    },
+    {
       "type": {
         "proxy": [
           "com.intellij.openapi.command.CommandListener"
@@ -5702,7 +12842,182 @@
     {
       "type": {
         "proxy": [
+          "com.intellij.psi.impl.AnyPsiChangeListener"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
           "com.intellij.psi.util.PsiModificationTracker$Listener"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.ActionService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.AgentService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.BlockService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.BuildService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.ChallengeService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.CustomizationService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.DependencyService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.DiagnosticsService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.EditorService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.FileService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.IconService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.IdeBackend"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.LearnService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.ModuleService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.NotificationService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.PreviewService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.ProjectService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.SdkService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.SearchService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.SettingsService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.SigningService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.StoreService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "dev.ide.ui.backend.VcsService"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
+          "java.awt.event.ActionListener"
         ]
       }
     }
@@ -5716,6 +13031,12 @@
     },
     {
       "glob": "META-INF/services/com.intellij.platform.diagnostic.telemetry.TelemetryManager"
+    },
+    {
+      "glob": "META-INF/services/java.awt.im.spi.InputMethodDescriptor"
+    },
+    {
+      "glob": "META-INF/services/java.net.spi.InetAddressResolverProvider"
     },
     {
       "glob": "META-INF/services/java.net.spi.URLStreamHandlerProvider"
@@ -5739,10 +13060,16 @@
       "glob": "META-INF/services/kotlin.metadata.internal.extensions.MetadataExtensions"
     },
     {
+      "glob": "META-INF/services/kotlin.reflect.jvm.internal.impl.km.internal.extensions.MetadataExtensions"
+    },
+    {
       "glob": "META-INF/services/kotlin.reflect.jvm.internal.impl.resolve.ExternalOverridabilityCondition"
     },
     {
       "glob": "META-INF/services/kotlin.reflect.jvm.internal.impl.util.ModuleVisibilityHelper"
+    },
+    {
+      "glob": "META-INF/services/org.eclipse.jgit.transport.Transport"
     },
     {
       "glob": "META-INF/services/org.jetbrains.kotlin.builtins.BuiltInsLoader"
@@ -5764,6 +13091,18 @@
     },
     {
       "glob": "android-permissions.txt"
+    },
+    {
+      "glob": "android-sdk-metadata.txt"
+    },
+    {
+      "glob": "dev/ide/android/support/icons/material-symbols.tsv"
+    },
+    {
+      "glob": "jdk-api-levels.bin"
+    },
+    {
+      "glob": "kotlin-stdlib.jar"
     },
     {
       "glob": "kotlin/annotation/annotation.kotlin_builtins"
@@ -5791,6 +13130,27 @@
     },
     {
       "glob": "ksp-thin.jar"
+    },
+    {
+      "glob": "localization/messages/JavaPsiBundle.properties"
+    },
+    {
+      "glob": "localization/messages/JavaPsiBundle_en.properties"
+    },
+    {
+      "glob": "localization/messages/JavaPsiBundle_en_PH.properties"
+    },
+    {
+      "glob": "messages/JavaPsiBundle.properties"
+    },
+    {
+      "glob": "org/eclipse/core/internal/runtime/messages.properties"
+    },
+    {
+      "glob": "org/eclipse/core/internal/runtime/messages_en.properties"
+    },
+    {
+      "glob": "org/eclipse/core/internal/runtime/messages_en_PH.properties"
     },
     {
       "glob": "org/eclipse/jdt/internal/compiler/batch/messages.properties"
@@ -5895,6 +13255,15 @@
       "glob": "org/eclipse/jdt/internal/compiler/problem/messages_en_PH.properties"
     },
     {
+      "glob": "org/eclipse/jgit/internal/JGitText.properties"
+    },
+    {
+      "glob": "org/eclipse/jgit/internal/JGitText_en.properties"
+    },
+    {
+      "glob": "org/eclipse/jgit/internal/JGitText_en_PH.properties"
+    },
+    {
       "glob": "org/jetbrains/kotlin/utils/PathUtil.class"
     },
     {
@@ -5902,6 +13271,72 @@
     },
     {
       "glob": "r8-version.properties"
+    },
+    {
+      "glob": "samples/calculator/README.md"
+    },
+    {
+      "glob": "samples/calculator/app/src/main/java/calculator/Calculator.java"
+    },
+    {
+      "glob": "samples/calculator/app/src/main/java/calculator/Main.java"
+    },
+    {
+      "glob": "samples/game2048/README.md"
+    },
+    {
+      "glob": "samples/game2048/app/src/main/kotlin/com/example/game2048/Game2048.kt"
+    },
+    {
+      "glob": "samples/game2048/app/src/main/kotlin/com/example/game2048/MainActivity.kt"
+    },
+    {
+      "glob": "samples/memory/README.md"
+    },
+    {
+      "glob": "samples/memory/app/src/main/kotlin/com/example/memory/MainActivity.kt"
+    },
+    {
+      "glob": "samples/memory/app/src/main/kotlin/com/example/memory/MemoryGame.kt"
+    },
+    {
+      "glob": "samples/notes/README.md"
+    },
+    {
+      "glob": "samples/notes/app/src/main/kotlin/notes/Main.kt"
+    },
+    {
+      "glob": "samples/notes/app/src/main/kotlin/notes/Notebook.kt"
+    },
+    {
+      "glob": "samples/snake/README.md"
+    },
+    {
+      "glob": "samples/snake/app/src/main/kotlin/com/example/snake/MainActivity.kt"
+    },
+    {
+      "glob": "samples/snake/app/src/main/kotlin/com/example/snake/SnakeGame.kt"
+    },
+    {
+      "glob": "samples/tictactoe/README.md"
+    },
+    {
+      "glob": "samples/tictactoe/app/src/main/kotlin/com/example/tictactoe/MainActivity.kt"
+    },
+    {
+      "glob": "samples/tictactoe/app/src/main/kotlin/com/example/tictactoe/TicTacToeGame.kt"
+    },
+    {
+      "glob": "samples/weather/README.md"
+    },
+    {
+      "glob": "samples/weather/app/src/main/kotlin/weather/Forecast.kt"
+    },
+    {
+      "glob": "samples/weather/app/src/main/kotlin/weather/Main.kt"
+    },
+    {
+      "glob": "standin-classes/index.txt"
     },
     {
       "glob": "swing/swing-api-stubs.jar"
@@ -5913,6 +13348,30 @@
     {
       "module": "java.base",
       "glob": "jdk/internal/icu/impl/data/icudt76b/nfkc.nrm"
+    },
+    {
+      "module": "java.base",
+      "glob": "jdk/internal/icu/impl/data/icudt76b/uprops.icu"
+    },
+    {
+      "module": "java.base",
+      "glob": "sun/net/idn/uidna.spp"
+    },
+    {
+      "module": "java.desktop",
+      "glob": "com/apple/laf/resources/aqua_en.properties"
+    },
+    {
+      "module": "java.desktop",
+      "glob": "com/apple/laf/resources/aqua_en_PH.properties"
+    },
+    {
+      "module": "java.desktop",
+      "glob": "com/sun/swing/internal/plaf/basic/resources/basic_en.properties"
+    },
+    {
+      "module": "java.desktop",
+      "glob": "com/sun/swing/internal/plaf/basic/resources/basic_en_PH.properties"
     },
     {
       "module": "java.desktop",
@@ -5931,10 +13390,25 @@
       "glob": "sun/awt/resources/awtosx_en_PH.properties"
     },
     {
+      "bundle": "com.apple.laf.resources.aqua"
+    },
+    {
+      "bundle": "com.sun.swing.internal.plaf.basic.resources.basic"
+    },
+    {
+      "bundle": "localization//messages/JavaPsiBundle"
+    },
+    {
+      "bundle": "messages.JavaPsiBundle"
+    },
+    {
       "bundle": "org.eclipse.jdt.internal.compiler.batch.messages"
     },
     {
       "bundle": "org.eclipse.jdt.internal.compiler.problem.messages"
+    },
+    {
+      "bundle": "org.eclipse.jgit.internal.JGitText"
     },
     {
       "bundle": "sun.awt.resources.awt"
