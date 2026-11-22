@@ -41,13 +41,15 @@ internal fun KotlinSemanticChecks.lambdaUnitReturnCheckers(): List<KotlinChecker
 )
 
 private fun KotlinSemanticChecks.valueReturnsInUnitLambda(lambda: KtLambdaExpression, resolver: KotlinResolver): List<Diagnostic> {
-    // Cheap gate: a labeled return in the body at all.
-    val body = lambda.bodyExpression ?: return emptyList()
-    if (!body.text.contains("return@")) return emptyList()
     var holder: KtElement = lambda
     val explicitLabel = (lambda.parent as? KtLabeledExpression)?.also { holder = it }?.getLabelName()
     val call = callOf(holder)
+    // Cheap gates first: the lambda has a label, it is not the body of a call the check cannot apply to, and the
+    // text it spans names a `return@` at all (scanned in place, with no copy of the text).
     val label = explicitLabel ?: (call?.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return emptyList()
+    if (explicitLabel == null && (call == null || call.typeArgumentList != null)) return emptyList()
+    val range = lambda.textRange
+    if (!resolver.ktFile.sourceText.regionContains(range.startOffset, range.endOffset, "return@$label")) return emptyList()
     val returns = returnsTargeting(lambda, label)
     if (returns.none { it.returnedExpression == null }) return emptyList()
     val valued = returns.filter { it.returnedExpression != null }
@@ -65,6 +67,16 @@ private fun KotlinSemanticChecks.valueReturnsInUnitLambda(lambda: KtLambdaExpres
             KotlinDiagnosticCodes.TYPE_MISMATCH)
     }
     return out
+}
+
+private fun CharSequence.regionContains(start: Int, end: Int, needle: String): Boolean {
+    val last = minOf(end, length) - needle.length
+    var i = maxOf(start, 0)
+    while (i <= last) {
+        if (this[i] == needle[0] && regionMatches(i, needle, 0, needle.length)) return true
+        i++
+    }
+    return false
 }
 
 /** The call [holder] (a lambda, maybe labeled) is an argument of: trailing or inside the parentheses. */

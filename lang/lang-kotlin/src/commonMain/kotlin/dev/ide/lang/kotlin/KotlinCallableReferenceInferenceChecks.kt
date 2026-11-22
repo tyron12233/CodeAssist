@@ -38,6 +38,7 @@ import dev.ide.lang.kotlin.resolve.isTypeParameterInScope
 import dev.ide.lang.kotlin.resolve.localFunctionsInScope
 import dev.ide.lang.kotlin.resolve.localTypesInScope
 import dev.ide.lang.kotlin.resolve.localsAt
+import dev.ide.lang.kotlin.resolve.resolveCalleeFunction
 import dev.ide.lang.kotlin.resolve.topLevelInScope
 import dev.ide.lang.resolve.SymbolKind
 
@@ -339,7 +340,9 @@ private fun KotlinSemanticChecks.invokeOnErrorTypedLocal(call: KtCallExpression,
     if (parent is KtQualifiedExpression && parent.selectorExpression === call) return null
     val name = callee.getReferencedName()
     if (name.isEmpty()) return null
-    // Cheap syntactic gate first: a local `val name = <if/when/try/::ref>` declared earlier in an enclosing block.
+    // Cheap gates first: no function of that name resolves (the memoized callee lookup every call gets anyway), and
+    // a local `val name = <if/when/try/::ref>` is declared earlier in an enclosing block.
+    if (resolver.resolveCalleeFunction(call) != null) return null
     val decl = precedingLocal(call, name) ?: return null
     val init = decl.initializer ?: return null
     if (decl.typeReference != null || !init.text.contains("::")) return null
