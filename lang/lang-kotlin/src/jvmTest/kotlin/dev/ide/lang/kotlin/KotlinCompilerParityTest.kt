@@ -2090,6 +2090,21 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), errors(open).map { it.code }, "for `$open`")
     }
 
+    /** A member inherited from two supertypes that name a parameter differently has no name for it of its own. */
+    @Test
+    fun nameForAmbiguousParameter() {
+        val decls = "interface A { fun foo(a1: Int, a2: Double) }\ninterface B { fun foo(b1: Int, a2: Double) }\ninterface C : A, B\n"
+        val bad = decls + "fun t(c: C) { c.foo(a1 = 1, a2 = 1.0) }"
+        assertEquals(listOf(KotlinDiagnosticCodes.NAME_FOR_AMBIGUOUS_PARAMETER), errors(bad).map { it.code }, "for `$bad`")
+        val generic = "interface G<T> { fun foo(a: T) }\ninterface H { fun foo(b: Int) }\ninterface I : G<Int>, H\nfun t(i: I) { i.foo(b = 1) }"
+        assertEquals(listOf(KotlinDiagnosticCodes.NAME_FOR_AMBIGUOUS_PARAMETER), errors(generic).map { it.code }, "for `$generic`")
+        // Its own override names them; and different parameter types are overloads, each with its own names.
+        val ok = decls + "interface D : C { override fun foo(d1: Int, d2: Double) }\n" +
+            "interface E { fun bar(x: Int) }\ninterface F { fun bar(y: String) }\ninterface EF : E, F\n" +
+            "fun t(d: D, ef: EF) { d.foo(d1 = 1, d2 = 1.0); ef.bar(x = 1); ef.bar(y = \"\") }"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** A component of a destructured lambda parameter is a `val` like any parameter: a null check smart casts it. */
     @Test
     fun destructuredLambdaComponentSmartCasts() {

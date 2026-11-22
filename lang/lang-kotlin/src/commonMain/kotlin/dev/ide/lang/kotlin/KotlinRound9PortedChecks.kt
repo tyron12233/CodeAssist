@@ -49,6 +49,7 @@ internal fun KotlinSemanticChecks.round9PortedCheckers(): List<KotlinChecker> = 
     },
     KotlinChecker(KtCallExpression::class) { psi ->
         if (resolveReady) report(functionValueMissingArguments(psi as KtCallExpression, resolver))
+        if (resolveReady) reportAll(nameForAmbiguousParameter(psi as KtCallExpression, resolver))
     },
     KotlinChecker(dev.ide.kotlin.syntax.psi.KtCallableReferenceExpression::class) { psi ->
         if (resolveReady) reportAll(qualifiedLhsTypeArgumentCounts(psi as dev.ide.kotlin.syntax.psi.KtDoubleColonExpression, resolver))
@@ -382,4 +383,104 @@ internal fun KotlinSemanticChecks.nameInConstraintNotATypeParameter(c: dev.ide.k
     return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR,
         "$name does not refer to a type parameter of ${(owner as? dev.ide.kotlin.syntax.psi.KtNamedDeclaration)?.name ?: "the declaration"}",
         KotlinDiagnosticCodes.NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER)
+}
+
+/**
+ * NAME_FOR_AMBIGUOUS_PARAMETER (FirNamedArgumentsChecker): a member the receiver's class does not declare but
+ * inherits from two or more supertypes at once (an intersection override) has no parameter names of its own where
+ * those supertypes name a parameter differently, so a named argument for that parameter is an error:
+ * `c.foo(x = 0)` on `interface C : A, B` with `A.foo(x: Int)` and `B.foo(y: Int)`.
+ *
+ * Read from source: the receiver's written class must not declare the function, and each of its direct supertypes
+ * must reach one declaration of it (its own or the nearest inherited) with the same parameter types, written alike.
+ * A generic declaration is left to the compiler.
+ */
+private fun KotlinSemanticChecks.nameForAmbiguousParameter(call: KtCallExpression, resolver: KotlinResolver): List<Diagnostic> {
+    val named = call.valueArguments.filter { it.getArgumentName() != null }
+    if (named.isEmpty()) return emptyList()
+    val dot = call.parent as? KtQualifiedExpression ?: return emptyList()
+    if (dot.selectorExpression !== call) return emptyList()
+    val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return emptyList()
+    val receiver = resolver.inferType(dot.receiverExpression) ?: return emptyList()
+    if (receiver.isTypeParameter) return emptyList()
+    val cls = sourceClassPsi(receiver.qualifiedName) ?: return emptyList()
+    if (declaresFunction(cls, name)) return emptyList()
+    // Each direct supertype's declaration, with the type arguments that supertype is written with.
+    val found = LinkedHashMap<KtNamedFunction, Map<String, dev.ide.lang.kotlin.symbols.KotlinType>>()
+    for (ref in service.sourceSupertypeRefs(receiver.qualifiedName)) {
+        val st = ref as? dev.ide.lang.kotlin.symbols.KotlinType ?: return emptyList()
+        val (fn, owner) = nearestDeclaration(st.qualifiedName, name, HashSet()) ?: continue
+        val ownerTps = owner.typeParameters.mapNotNull { it.name }
+        val bindings = when {
+            ownerTps.isEmpty() -> emptyMap()
+            // Arguments are only substituted one level down: the declaration must be the supertype's own.
+            owner === sourceClassPsi(st.qualifiedName) && st.typeArguments.size == ownerTps.size ->
+                ownerTps.zip(st.typeArguments).associate { (n, a) -> n to (a as? dev.ide.lang.kotlin.symbols.KotlinType ?: return emptyList()) }
+            else -> return emptyList()
+        }
+        found[fn] = bindings
+    }
+    if (found.size < 2) return emptyList()
+    val fns = found.keys.toList()
+    // Parameter types are compared as this file reads them, so every declaration must be in it.
+    if (fns.any { it.containingFile !== call.containingFile }) return emptyList()
+    if (fns.any { it.receiverTypeReference != null || it.valueParameters.any { p -> p.isVarArg } }) return emptyList()
+    val arity = fns.first().valueParameters.size
+    val typeArity = fns.first().typeParameters.size
+    if (fns.any { it.valueParameters.size != arity || it.typeParameters.size != typeArity }) return emptyList()
+    // One signature: every parameter's type the same once the supertypes' arguments are in and the functions' own
+    // type parameters are matched by position, so the declarations are one member, not overloads.
+    for (i in 0 until arity) {
+        val texts = fns.map { f ->
+            val owner = f.parent?.parent as? KtClassOrObject ?: return emptyList()
+            val own = f.typeParameters.mapNotNull { it.name }
+            val names = owner.typeParameters.mapNotNull { it.name }.toSet() + own
+            val text = f.valueParameters[i].typeReference?.text ?: return emptyList()
+            val t = service.markTypeParameters(service.typeFromText(text, resolver.fileContext), names) ?: return emptyList()
+            val bindings = found.getValue(f) + own.withIndex().associate { (k, n) -> n to dev.ide.lang.kotlin.symbols.KotlinType("#$k", isTypeParameter = true) }
+            renderType(substituteKeepingNullability(t, bindings))
+        }
+        if (texts.toSet().size != 1) return emptyList()
+    }
+    val out = ArrayList<Diagnostic>()
+    for (arg in named) {
+        val n = arg.getArgumentName()?.asName?.identifier ?: continue
+        val index = fns.firstNotNullOfOrNull { f -> f.valueParameters.indexOfFirst { it.name == n }.takeIf { it >= 0 } } ?: continue
+        val names = fns.map { it.valueParameters[index].name }
+        if (names.toSet().size < 2) continue
+        val r = arg.getArgumentName()!!.textRange
+        out += Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Named argument '$n' is ambiguous: the supertypes of '${cls.name}' name this parameter differently (${names.joinToString(", ")})",
+            KotlinDiagnosticCodes.NAME_FOR_AMBIGUOUS_PARAMETER,
+        )
+    }
+    return out
+}
+
+private fun KotlinSemanticChecks.sourceClassPsi(fqn: String): KtClassOrObject? =
+    (service.sourceClass(fqn)?.node as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? KtClassOrObject
+
+/** The direct supertypes of the source class [fqn] as resolved where it is declared, or null when one is generic. */
+private fun KotlinSemanticChecks.directSupertypes(fqn: String): List<String>? =
+    service.sourceSupertypeRefs(fqn).map { t ->
+        val k = t as? dev.ide.lang.kotlin.symbols.KotlinType ?: return null
+        if (k.typeArguments.isNotEmpty()) return null
+        k.qualifiedName
+    }
+
+private fun declaresFunction(cls: KtClassOrObject, name: String): Boolean =
+    cls.declarations.any { it is KtNamedFunction && it.name == name } ||
+        cls.primaryConstructor?.valueParameters?.any { it.hasValOrVar() && it.name == name } == true
+
+/** The declaration of [name] that a value of class [fqn] gets: its own, else the one of its single supertype path. */
+private fun KotlinSemanticChecks.nearestDeclaration(fqn: String, name: String, seen: HashSet<String>): Pair<KtNamedFunction, KtClassOrObject>? {
+    if (!seen.add(fqn)) return null
+    val cls = sourceClassPsi(fqn) ?: return null
+    cls.declarations.filterIsInstance<KtNamedFunction>().filter { it.name == name }.let { own ->
+        if (own.size > 1) return null
+        own.singleOrNull()?.let { return it to cls }
+    }
+    val inherited = (directSupertypes(fqn) ?: return null).mapNotNull { s -> nearestDeclaration(s, name, seen) }.distinctBy { it.first }
+    return inherited.singleOrNull()
 }

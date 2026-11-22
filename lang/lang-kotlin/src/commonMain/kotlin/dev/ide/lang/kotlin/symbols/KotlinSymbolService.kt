@@ -3484,7 +3484,7 @@ class KotlinSymbolService(
      *  text only, so there is no constructor-argument list to strip. An argument naming one of the class's OWN
      *  type parameters is marked as such (`interface MutableStateFlow<T> : Flow<T>` → `Flow<T-as-parameter>`),
      *  which is what lets the walk substitute the receiver's arguments through it. */
-    private fun sourceSupertypeRefs(fqn: String): List<TypeRef> {
+    internal fun sourceSupertypeRefs(fqn: String): List<TypeRef> {
         val rc = model().classByFqn[fqn] ?: return emptyList()
         val tps = rc.typeParameterNames.toHashSet()
         return rc.superTypeTexts.mapNotNull { markTypeParameters(typeFromText(it, rc.ctx, headerScopeOwner(fqn)), tps) }
