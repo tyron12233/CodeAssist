@@ -38,6 +38,12 @@ internal fun KotlinSemanticChecks.round9PortedCheckers(): List<KotlinChecker> = 
     KotlinChecker(dev.ide.kotlin.syntax.psi.KtBinaryExpression::class) { psi ->
         if (resolveReady) report(infixModifierRequired(psi as dev.ide.kotlin.syntax.psi.KtBinaryExpression, resolver))
     },
+    KotlinChecker(dev.ide.kotlin.syntax.psi.KtWhenConditionWithExpression::class) { psi ->
+        report(confusingBranchCondition((psi as dev.ide.kotlin.syntax.psi.KtWhenConditionWithExpression).expression, psi))
+    },
+    KotlinChecker(dev.ide.kotlin.syntax.psi.KtWhenConditionInRange::class) { psi ->
+        report(confusingBranchCondition((psi as dev.ide.kotlin.syntax.psi.KtWhenConditionInRange).rangeExpression, psi))
+    },
     KotlinChecker(dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration::class) { psi ->
         report(nonLocalDestructuring(psi as dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration))
     },
@@ -484,3 +490,31 @@ private fun KotlinSemanticChecks.nearestDeclaration(fqn: String, name: String, s
     val inherited = (directSupertypes(fqn) ?: return null).mapNotNull { s -> nearestDeclaration(s, name, seen) }.distinctBy { it.first }
     return inherited.singleOrNull()
 }
+
+/**
+ * CONFUSING_BRANCH_CONDITION_ERROR (FirConfusingWhenBranchSyntaxChecker): in a `when` with a subject, a branch
+ * condition written as an unparenthesized `in`, `is`, comparison, equality or `&&`/`||` expression reads as if it
+ * tested the subject (`when (x) { x in r -> }`) but is a value compared with it. The same for the range of an
+ * `in` condition. Parenthesized, it is what it says and allowed.
+ */
+private fun confusingBranchCondition(e: dev.ide.kotlin.syntax.psi.KtExpression?, condition: KtElement): Diagnostic? {
+    val w = condition.parent?.parent as? dev.ide.kotlin.syntax.psi.KtWhenExpression ?: return null
+    if (w.subjectExpression == null && w.subjectVariable == null) return null
+    val confusing = when (e) {
+        is dev.ide.kotlin.syntax.psi.KtIsExpression -> true
+        is dev.ide.kotlin.syntax.psi.KtBinaryExpression -> e.operationToken in CONFUSING_CONDITION_OPERATORS
+        else -> false
+    }
+    if (!confusing) return null
+    val r = e!!.textRange
+    return Diagnostic(
+        TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+        "This condition is compared with the 'when' subject, not tested on it: wrap it in parentheses if that is meant",
+        KotlinDiagnosticCodes.CONFUSING_BRANCH_CONDITION,
+    )
+}
+
+private val CONFUSING_CONDITION_OPERATORS = setOf(
+    KtTokens.IN_KEYWORD, KtTokens.NOT_IN, KtTokens.LT, KtTokens.GT, KtTokens.LTEQ, KtTokens.GTEQ,
+    KtTokens.EQEQ, KtTokens.EXCLEQ, KtTokens.EQEQEQ, KtTokens.EXCLEQEQEQ, KtTokens.ANDAND, KtTokens.OROR,
+)

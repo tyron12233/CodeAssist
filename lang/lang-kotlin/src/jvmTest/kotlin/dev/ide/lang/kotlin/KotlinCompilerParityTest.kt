@@ -2090,6 +2090,24 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), errors(open).map { it.code }, "for `$open`")
     }
 
+    /** In a `when` with a subject, an unparenthesized `in`/`is`/comparison/equality/`&&` condition reads as a test of
+     *  the subject but is a value compared with it; an assignment there is no value at all. */
+    @Test
+    fun confusingWhenBranchConditions() {
+        val bad = "fun t(x: Int, b: Boolean, r: IntRange) { var y = 0\n when (x) { x in r -> {}; x < 1 -> {}; else -> {} }\n" +
+            " when (b) { b && b -> {}; else -> {} }\n when (x) { in x == 1 -> {}; else -> {} }\n when (x) { y = 1 -> {}; else -> {} } }"
+        assertEquals(
+            List(4) { KotlinDiagnosticCodes.CONFUSING_BRANCH_CONDITION } + KotlinDiagnosticCodes.ASSIGNMENT_IN_EXPRESSION,
+            // (`x in r` against an `Int` subject is also an incomparable equality, as K2 says too.)
+            errors(bad).map { it.code }.filter { it != KotlinDiagnosticCodes.INCOMPARABLE_EQUALITY }
+                .sortedBy { it != KotlinDiagnosticCodes.CONFUSING_BRANCH_CONDITION }, "for `$bad`",
+        )
+        val ok = "fun t(x: Int, b: Boolean, r: IntRange) {\n when (b) { (x in r) -> {}; (x < 1) -> {}; else -> {} }\n" +
+            " when (x) { x + 1 -> {}; in r -> {}; else -> {} }\n" +
+            " when { x in r -> {}; x < 1 && b -> {}; else -> {} } }"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** A member inherited from two supertypes that name a parameter differently has no name for it of its own. */
     @Test
     fun nameForAmbiguousParameter() {

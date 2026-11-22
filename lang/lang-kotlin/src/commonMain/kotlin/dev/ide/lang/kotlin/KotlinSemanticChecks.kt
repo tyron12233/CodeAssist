@@ -1518,6 +1518,8 @@ internal class KotlinSemanticChecks(
             is KtValueArgument -> parent.getArgumentExpression() === child
             is KtBinaryExpression -> parent.operationToken !in ASSIGN_OPS && parent.operationToken != KtTokens.EQ // an operand of a non-assignment binary
             is KtBinaryExpressionWithTypeRHS -> true
+            // A `when` branch condition is a value compared with the subject (or a range it must be in).
+            is dev.ide.kotlin.syntax.psi.KtWhenConditionWithExpression, is dev.ide.kotlin.syntax.psi.KtWhenConditionInRange -> true
             else -> false
         }
         if (!inExprContext) return null
