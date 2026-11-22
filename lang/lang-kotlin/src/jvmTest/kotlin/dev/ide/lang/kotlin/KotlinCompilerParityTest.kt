@@ -2671,6 +2671,49 @@ class KotlinCompilerParityTest {
         clean("class Gen<T> { val anon = object { fun g(t: T): T = t } }")
     }
 
+    /** A `return@label value` must fit the lambda's return type where that type is fixed before the lambda is analyzed
+     *  (written in the declared context or the callee's parameter, or by the call's type arguments); an inferred `R`
+     *  takes the lambda's returns into account, so nothing returned mismatches it. */
+    @Test
+    fun labeledReturnAgainstTheLambdasFixedReturnType() {
+        val bad = "fun t(a: Int) {\n    run<Int> f@{ if (a > 0) return@f \"\"; return@f 1 }\n}\n" +
+            "val bar: (Int) -> String = l@{ a -> if (a == 1) return@l \"4\"; if (a == 2) return@l 2; return@l \"\" }"
+        assertEquals(List(2) { KotlinDiagnosticCodes.TYPE_MISMATCH }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = "fun t(a: Int, l: List<Int>) {\n    val x = run { if (a > 0) return@run \"\"; 1 }\n" +
+            "    l.map { if (it > 0) return@map \"s\"; 2 }\n    run<Any> f@{ if (a > 0) return@f \"\"; 1 }\n}"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
+    /** A non-local `return` out of a function with an expression body and no written type must fit the body's own
+     *  type, in which the `return` is `Nothing`; out of a getter through an inline lambda, the property's type. */
+    @Test
+    fun nonLocalReturnAgainstAnImplicitExpressionBodyType() {
+        val bad = "fun t(a: List<String>) = a.map {\n    if (it.length == 4) return \"\"\n    1\n}\n" +
+            "val foo: Int\n    get() = run {\n        if (true) return \"\"\n        1\n    }"
+        assertEquals(
+            listOf(KotlinDiagnosticCodes.TYPE_MISMATCH, KotlinDiagnosticCodes.TYPE_MISMATCH),
+            errors(bad).map { it.code }.filter { it != KotlinDiagnosticCodes.RETURN_IN_FUNCTION_WITH_EXPRESSION_BODY_AND_IMPLICIT_TYPE },
+            "for `$bad`",
+        )
+        val ok = "fun t(a: List<String>, b: List<Int>): List<Int> = a.map {\n    if (it.length == 4) return b\n    1\n}\n" +
+            "val foo: Int\n    get() = run {\n        if (true) return 2\n        1\n    }"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
+    /** `a?.b` is null whenever `a` is: its type is nullable, and a label on an expression does not change its type. */
+    @Test
+    fun safeCallResultIsNullable() {
+        val bad = "val String.copy: String get() = this\nfun f(s: String?) {\n    val a = s?.copy\n    a.length\n" +
+            "    val b: Int = s?.length\n    val c: String = foo@ true\n}"
+        assertEquals(
+            listOf(KotlinDiagnosticCodes.UNSAFE_NULLABLE, KotlinDiagnosticCodes.TYPE_MISMATCH, KotlinDiagnosticCodes.TYPE_MISMATCH),
+            errors(bad).map { it.code }, "for `$bad`",
+        )
+        val ok = "fun f(s: String?, t: String): Int {\n    val a = s?.length\n    if (a != null) a.inc()\n" +
+            "    val b: Int = s?.length ?: 0\n    val c = s?.length.toString()\n    val d = t?.length\n    return d + b + c.length\n}"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

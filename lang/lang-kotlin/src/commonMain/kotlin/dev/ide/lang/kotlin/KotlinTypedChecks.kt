@@ -653,28 +653,14 @@ internal fun KotlinSemanticChecks.lambdaAgainstFunctionType(declared: KotlinType
     val result = declared.typeArguments.lastOrNull() as? KotlinType ?: return null
     if (result.isTypeParameter || result.projection == "*") return null
     val rn = canonicalName(result)
-    if (rn == UNIT) {
-        // Unit coerces the last statement, but not a value handed back by `return@label`, which K2 checks against
-        // the lambda's return type as it stands (RETURN_TYPE_MISMATCH on `return@l 4` in a `() -> Unit` lambda).
-        if (label != null && !result.nullable) {
-            for (ret in returnsTo(lambda, label)) {
-                val v = ret.returnedExpression ?: continue
-                val t = resolver.inferType(v) ?: continue
-                if (t.isTypeParameter || t.nullable) continue
-                val tn = canonicalName(t)
-                if (tn == UNIT || tn == NOTHING || !service.isKnownType(tn) || isFunctional(t)) continue
-                return error(v, "Type mismatch: inferred type is ${renderType(t)} but Unit was expected", KotlinDiagnosticCodes.TYPE_MISMATCH)
-            }
-        }
-        return null
-    }
+    // Unit coerces the last statement. A value handed back by `return@label` is checked against the lambda's return
+    // type as it stands, each one on its own ([labeledReturnMismatch]).
+    if (rn == UNIT) return null
     val concreteResult = !result.nullable && service.isKnownType(rn) && rn != NOTHING
-    if (label != null) {
-        for (ret in returnsTo(lambda, label)) {
-            val v = ret.returnedExpression
-            if (v == null) {
-                if (concreteResult) return error(ret, "Type mismatch: inferred type is Unit but ${renderType(result)} was expected", KotlinDiagnosticCodes.TYPE_MISMATCH)
-            } else valueMismatch(result.withProjection(""), v, resolver)?.let { return it }
+    // A bare `return@label` gives `Unit`, which no other result type takes.
+    if (label != null && concreteResult) {
+        returnsTo(lambda, label).firstOrNull { it.returnedExpression == null }?.let { ret ->
+            return error(ret, "Type mismatch: inferred type is Unit but ${renderType(result)} was expected", KotlinDiagnosticCodes.TYPE_MISMATCH)
         }
     }
     val last = lambda.bodyExpression?.statements?.lastOrNull()?.takeIf { it !is KtDeclaration } ?: return null

@@ -3857,7 +3857,7 @@ internal class KotlinSemanticChecks(
      *  `Unit` — explicitly (`fun f(): Unit`) or implicitly (a block body with no declared type) — which is
      *  Kotlin's RETURN_TYPE_MISMATCH (`fun f() { return 5 }`). Skips labeled returns (they target a lambda). */
     private fun returnTypeMismatch(ret: KtReturnExpression, resolver: KotlinResolver): Diagnostic? {
-        if (ret.getTargetLabel() != null) return null
+        if (ret.getTargetLabel() != null) return labeledReturnMismatch(ret, resolver)
         val value = ret.returnedExpression ?: return returnWithoutValue(ret, resolver)
         // An unlabeled `return` leaves the nearest named function, accessor, constructor or initializer, lambdas
         // in between included (a non-local return): its value is judged against what that one returns.
@@ -3877,8 +3877,9 @@ internal class KotlinSemanticChecks(
             is dev.ide.kotlin.syntax.psi.KtClassInitializer -> return null
             is KtSecondaryConstructor -> return if (throughLambda) null else unitReturnMismatch(value, resolver.inferType(value))
             is KtPropertyAccessor -> {
-                if (throughLambda) return null
-                if (!target.isGetter) return unitReturnMismatch(value, resolver.inferType(value))
+                // A getter is left by a non-local return through an inline lambda (`get() = run { return x }`) as by
+                // its own return; a setter's `Unit` is judged only for a return of its own.
+                if (!target.isGetter) return if (throughLambda) null else unitReturnMismatch(value, resolver.inferType(value))
                 if (target.returnTypeReference != null) return null
                 val prop = target.parent as? KtProperty ?: return null
                 val text = prop.typeReference?.text ?: return null
@@ -3887,7 +3888,10 @@ internal class KotlinSemanticChecks(
         }
         val fn = target as? KtNamedFunction ?: return null
         // A lambda's own value never leaves it through a non-local return; an expression body only through one.
-        if (!fn.hasBlockBody() && (!throughLambda || fn.typeReference == null)) return null
+        if (!fn.hasBlockBody() && !throughLambda) return null
+        // An expression body with no written type has the type of the body, in which a `return` is `Nothing`
+        // (`fun f() = run { return "" }` is a `Nothing` function, and `""` does not fit it).
+        if (!fn.hasBlockBody() && fn.typeReference == null) return valueMismatch(implicitExpressionBodyType(fn, resolver), value, resolver)
         val actual = resolver.inferType(value)
         val declaredText = fn.typeReference?.text
         // A block body with no declared return type has the type Unit; returning a value from it is an error.
@@ -3900,7 +3904,7 @@ internal class KotlinSemanticChecks(
     /** A value returned where `Unit` was expected (see [returnTypeMismatch]). Conservative: the returned value's
      *  type must be a fully-known, non-`Unit`/`Nothing`, non-type-parameter type — so an unmodeled expression
      *  (whose type the parse-only model can't pin) never false-flags. */
-    private fun unitReturnMismatch(value: KtExpression, actual: KotlinType?): Diagnostic? {
+    internal fun unitReturnMismatch(value: KtExpression, actual: KotlinType?): Diagnostic? {
         if (actual == null || actual.isTypeParameter) return null
         if (actual.qualifiedName == "kotlin.Unit" || actual.qualifiedName == "kotlin.Nothing") return null
         if (!service.isKnownType(actual.qualifiedName)) return null

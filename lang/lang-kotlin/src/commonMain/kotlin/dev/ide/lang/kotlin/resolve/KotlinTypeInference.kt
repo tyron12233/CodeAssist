@@ -85,6 +85,9 @@ fun KotlinResolver.inferType(expr: KtExpression?): KotlinType? {
     val r = try {
         approximateCapturedValue(when (expr) {
             is KtParenthesizedExpression -> inferType(expr.expression)
+            // A label or an annotation on an expression does not change its value (`foo@ true` is a Boolean).
+            is dev.ide.kotlin.syntax.psi.KtLabeledExpression -> inferType(expr.baseExpression)
+            is dev.ide.kotlin.syntax.psi.KtAnnotatedExpression -> inferType(expr.baseExpression)
             is KtConstantExpression -> constType(expr)
             is KtStringTemplateExpression -> service.typeByFqn("kotlin.String")
             is KtNameReferenceExpression -> companionValueType(expr) ?: typeOfName(
@@ -93,6 +96,10 @@ fun KotlinResolver.inferType(expr: KtExpression?): KotlinType? {
             )
 
             is KtCallExpression -> typeOfCall(expr, null)
+            // `a?.b` is null whenever `a` is: on a nullable receiver its type is the selector's made nullable.
+            is dev.ide.kotlin.syntax.psi.KtSafeQualifiedExpression -> typeOfQualified(expr)?.let { t ->
+                if (!t.nullable && inferType(expr.receiverExpression)?.nullable == true) t.withNullable(true) else t
+            }
             is KtQualifiedExpression -> typeOfQualified(expr)
             is KtClassLiteralExpression -> classLiteralType(expr)
             // An anonymous object (`object : Foo { }` / `object { }`): typed to the synthetic classifier the source
