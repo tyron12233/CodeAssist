@@ -61,6 +61,7 @@ import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.TreeViewMode
+import dev.ide.ui.backend.defaultExpandedTreeIds
 import dev.ide.ui.backend.UiMenuGroup
 import dev.ide.ui.backend.UiMenuNode
 import dev.ide.ui.icons.CaIcons
@@ -757,16 +758,11 @@ private fun CheckableMenuItem(label: String, checked: Boolean, onClick: () -> Un
 }
 
 
-/** Fallback default-expanded set for the [expandedState]-less path (previews/tests): modules, source roots,
- *  and the workspace open. In the real app the host owns this map ([IdeUiState.treeExpanded], persisted). */
+/** Fallback default-expanded set for the [expandedState]-less path (previews/tests): see [defaultExpandedTreeIds].
+ *  In the real app the host owns this map ([IdeUiState.treeExpanded], persisted). */
 private fun mutableSetExpandedDefaults(root: TreeNode): androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean> {
     val map = androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
-    fun walk(n: TreeNode) {
-        if (n.kind == NodeKind.Module || n.kind == NodeKind.SourceRoot || n.kind == NodeKind.Workspace) map[n.id] =
-            true
-        n.children.forEach(::walk)
-    }
-    walk(root)
+    defaultExpandedTreeIds(root).forEach { map[it] = true }
     return map
 }
 
@@ -974,17 +970,14 @@ private fun TreeRowContent(
             }
             if (inSelectionMode && selectablePath != null) SelectionCheck(isSelected) else NodeIcon(node, isOpen)
             Spacer(Modifier.width(8.dp))
-            // A multi-segment row (a compacted package `com.example.compose`, or a source-root label
-            // `app/src/main/java`) renders as tappable segments so each middle level is its own New-target;
-            // otherwise only the deepest level is reachable. Package levels are real packages (typed-source ok);
-            // source-root ancestors are plain dirs (File/Directory only, since a class there is on no compile path).
-            val labelSegments = node.segmentsForLabel()
+            // A compacted package (`com.example.compose`) renders as tappable segments so each middle level is
+            // its own New-target; otherwise only the deepest level would be reachable. Only packages compact:
+            // every folder outside a source root is a row of its own, as in IntelliJ.
+            val labelSegments = if (node.kind == NodeKind.Package) node.packageSegments else emptyList()
             if (labelSegments.size > 1) {
-                SegmentedPathLabel(
+                PackageSegmentsLabel(
                     node = node,
                     segments = labelSegments,
-                    separator = if (node.kind == NodeKind.Package) "." else "/",
-                    allowSource = node.kind == NodeKind.Package,
                     onNewFile = onNewFile,
                     onNewFolder = onNewFolder,
                     onNewResource = onNewResource,
@@ -1311,8 +1304,7 @@ private fun NewActionItems(
     close: () -> Unit,
 ) {
     // The package chain is forwarded so the dialog can switch levels (`com` vs `com.example`); empty for a
-    // plain folder / res context. A compacted folder chain also carries segments, but the dialog labels its
-    // chips "Package", so those stay behind (each folder level has its own New menu on the row's label).
+    // plain folder / res context.
     val segs = if (node.kind == NodeKind.Package) node.packageSegments else emptyList()
     if (isSourceContext && targetDir != null) {
         // An `aidl/` root is a package context too, but a Java class does not belong in one, so it offers
@@ -1398,19 +1390,15 @@ private fun NewHoverButton(
 }
 
 /**
- * A multi-segment row name drawn as individual segments: a compacted package (`com.example.compose`), a
- * compacted folder chain in the All-Files view (`src/main/java`), or a source-root label (`app/src/main/java`). Each **prefix** segment is tappable and opens a "New ▸" menu
- * scoped to *that* directory, so a file can be created at a middle level the single row would otherwise hide.
- * The final segment is plain text, so tapping it (like tapping the row elsewhere) falls through to the row's
- * expand/collapse. [allowSource] gates whether the per-segment menu offers typed Java/Kotlin classes (true
- * for package levels; false for source-root ancestors, which aren't on any compile path).
+ * A compacted package's name (`com.example.compose`) drawn as individual segments. Each **prefix** segment is
+ * tappable and opens a "New ▸" menu scoped to *that* package, so a class can be created at a middle level the
+ * single row would otherwise hide. The final segment is plain text, so tapping it (like tapping the row
+ * elsewhere) falls through to the row's expand/collapse.
  */
 @Composable
-private fun SegmentedPathLabel(
+private fun PackageSegmentsLabel(
     node: TreeNode,
     segments: List<PackageSegment>,
-    separator: String,
-    allowSource: Boolean,
     onNewFile: (dirPath: String, segments: List<PackageSegment>) -> Unit,
     onNewFolder: (dirPath: String, segments: List<PackageSegment>) -> Unit,
     onNewResource: (TreeNode) -> Unit,
@@ -1418,12 +1406,12 @@ private fun SegmentedPathLabel(
     modifier: Modifier = Modifier,
 ) {
     val lastIndex = segments.lastIndex
-    // A path or package reads left to right in every locale: a Row under RTL would lay the levels out
-    // backwards (`budgetapp.example.com`). The menus each level opens are UI, so they get the outer direction.
+    // A package reads left to right in every locale: a Row under RTL would lay the levels out backwards
+    // (`budgetapp.example.com`). The menus each level opens are UI, so they get the outer direction.
     val outerDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
     // Row measures unweighted children first, so the deepest level (unweighted) gets its width before the
     // prefix levels (weighted, not filling) share what is left and ellipsize. In a narrow drawer that keeps
-    // `java/com/acme/feature` reading as `java/c…/a…/feature`, not a full prefix with the leaf squeezed out.
+    // `com.acme.feature` reading as `c….a….feature`, not a full prefix with the leaf squeezed out.
     dev.ide.ui.LtrContent {
     Row(
         modifier,
@@ -1436,10 +1424,9 @@ private fun SegmentedPathLabel(
         },
     ) {
         segments.forEachIndexed { i, seg ->
-            if (i > 0) Text(separator, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
-            // packageName carries the cumulative level (`com.example` / `app/src`); show just this leaf. Split on
-            // this row's own separator only: a folder may have a dot in its name (`.github`, `v1.2`).
-            val leaf = seg.packageName.substringAfterLast(separator)
+            if (i > 0) Text(".", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
+            // packageName carries the cumulative level (`com.example`); show just this leaf.
+            val leaf = seg.packageName.substringAfterLast('.')
             if (i == lastIndex) {
                 Text(
                     leaf,
@@ -1470,7 +1457,7 @@ private fun SegmentedPathLabel(
                         NewActionItems(
                             node,
                             seg.dirPath,
-                            isSourceContext = allowSource,
+                            isSourceContext = true,
                             canNewResource = false,
                             onNewFile,
                             onNewFolder,
@@ -1484,37 +1471,6 @@ private fun SegmentedPathLabel(
             }
         }
     }
-    }
-}
-
-/** The segments to render this row's name as (tappable middle levels), or empty for a plain single-level row:
- *  a compacted package's chain, a compacted folder chain, or a source-root label's directory ancestors derived
- *  from [TreeNode.dirPath]. */
-private fun TreeNode.segmentsForLabel(): List<PackageSegment> = when (kind) {
-    NodeKind.Package -> packageSegments
-    // A compacted folder chain in the All-Files view (`src/main/java`), built with its levels by the backend.
-    NodeKind.Folder -> packageSegments
-    NodeKind.SourceRoot -> deriveDirSegments()
-    else -> emptyList()
-}
-
-/**
- * Split a source-root label like `app/src/main/java` into one [PackageSegment] per level, recovering each
- * level's absolute directory by peeling trailing segments off [TreeNode.dirPath]. Returns empty (so the row
- * stays a plain label) unless the name is a relative multi-segment path whose tail matches [dirPath].
- */
-private fun TreeNode.deriveDirSegments(): List<PackageSegment> {
-    val dir = dirPath ?: return emptyList()
-    val rawName = name.replace('\\', '/')
-    if (rawName.startsWith('/')) return emptyList()                 // an absolute fallback label, don't segment
-    val labels = rawName.split('/').filter { it.isNotEmpty() }
-    if (labels.size <= 1) return emptyList()
-    val dirParts = dir.replace('\\', '/').trimEnd('/').split('/')
-    if (dirParts.size < labels.size || dirParts.takeLast(labels.size) != labels) return emptyList()
-    return labels.indices.map { k ->
-        val cumulative = labels.subList(0, k + 1).joinToString("/")
-        val abs = dirParts.subList(0, dirParts.size - (labels.size - 1 - k)).joinToString("/")
-        PackageSegment(cumulative, abs)
     }
 }
 

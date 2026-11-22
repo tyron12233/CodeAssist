@@ -34,7 +34,7 @@ class PushDrawerSnapshot {
                 "app", "app", NodeKind.Module, null, iconId = "module",
                 children = listOf(
                     TreeNode(
-                        "src", "src/main/java", NodeKind.SourceRoot, null, iconId = "sourceset.java",
+                        "src", "java", NodeKind.SourceRoot, null, iconId = "sourceset.java",
                         children = listOf(
                             TreeNode(
                                 "pkg", "com.example.app", NodeKind.Package, null, iconId = "package",

@@ -29,7 +29,8 @@ class FileTreeIconsTest {
                 assertEquals("java", nodes.first { it.name == "Greeter.java" }.iconId)
 
                 // (b) the main Java source root gets the java source-set id and carries its path (a new-class target).
-                val srcRoot = nodes.first { it.kind == NodeKind.SourceRoot && it.name.endsWith("src/main/java") }
+                val srcRoot = nodes.first { it.kind == NodeKind.SourceRoot && it.dirPath!!.endsWith("src/main/java") }
+                assertEquals("java", srcRoot.name, "a source root shows just its own name")
                 assertEquals("sourceset.java", srcRoot.iconId)
                 assertNotNull(srcRoot.sourceRootPath)
 
@@ -107,37 +108,37 @@ class FileTreeIconsTest {
     }
 
     /**
-     * The All-Files view folds chains of single-child directories into one row (VS Code's compact folders), so a
-     * deep tree does not spend a phone drawer's width on indent. A directory with its own icon (a source root)
-     * starts a new row instead of disappearing into the chain.
+     * The All-Files view never merges a chain of single-child directories into one row: IntelliJ's Project Files
+     * view draws every directory on its own row, and only packages inside a source root ever compact.
      */
     @Test
-    fun allFilesViewCompactsSingleChildFolderChains() {
+    fun allFilesViewDrawsEveryFolderOnItsOwnRow() {
         withTempDir("ide-tree-compact") { dir ->
             IdeServices.bootstrapJavaDemo(dir).use { ide ->
                 Files.createDirectories(dir.resolve("docs/guides/intro"))
                 dir.resolve("docs/guides/intro/start.md").toFile().writeText("# Start\n")
-                // A directory that holds a file stops the chain, even with a single subdirectory.
-                Files.createDirectories(dir.resolve("notes/drafts"))
-                dir.resolve("notes/todo.txt").toFile().writeText("x\n")
-                dir.resolve("notes/drafts/a.txt").toFile().writeText("x\n")
 
-                val nodes = flatten(IdeServicesBackend(ide).files.fileTree(dev.ide.ui.backend.TreeViewMode.AllFiles))
+                val root = IdeServicesBackend(ide).files.fileTree(dev.ide.ui.backend.TreeViewMode.AllFiles)
+                val nodes = flatten(root)
+                assertTrue(nodes.none { it.name.contains('/') }, "no merged row: ${nodes.filter { it.name.contains('/') }.map { it.name }}")
+                assertTrue(nodes.all { it.packageSegments.isEmpty() }, "no row carries chain segments")
 
-                val docs = nodes.first { it.kind == NodeKind.Folder && it.name == "docs/guides/intro" }
-                assertEquals(dir.resolve("docs/guides/intro").toString(), docs.dirPath, "the row is the deepest dir")
-                assertEquals("dir:${dir.resolve("docs/guides/intro")}", docs.id)
-                assertEquals(listOf("docs", "docs/guides", "docs/guides/intro"), docs.packageSegments.map { it.packageName })
-                assertEquals(dir.resolve("docs/guides").toString(), docs.packageSegments[1].dirPath)
-                assertEquals(listOf("start.md"), docs.children.map { it.name })
+                val docs = root.children.first { it.name == "docs" }
+                assertEquals("dir:${dir.resolve("docs")}", docs.id)
+                val guides = docs.children.single()
+                assertEquals("guides", guides.name)
+                val intro = guides.children.single()
+                assertEquals("intro", intro.name)
+                assertEquals(dir.resolve("docs/guides/intro").toString(), intro.dirPath)
+                assertEquals(listOf("start.md"), intro.children.map { it.name })
 
-                assertTrue(nodes.any { it.kind == NodeKind.Folder && it.name == "notes" }, "a dir with a file is not merged")
-                assertTrue(nodes.any { it.kind == NodeKind.Folder && it.name == "drafts" && it.packageSegments.isEmpty() })
-
-                // The java source root keeps its own row (and icon) rather than being folded into `src/main`.
+                // The java source root is a row of its own with its role's icon, and the folders under it are plain
+                // folders here too: `com ▸ example ▸ core`, not `com.example.core`.
                 val javaRoot = nodes.first { it.kind == NodeKind.Folder && it.iconId == "sourceset.java" }
-                assertTrue(javaRoot.name == "java" || javaRoot.name.startsWith("java/"), "got ${javaRoot.name}")
-                assertTrue(nodes.none { it.kind == NodeKind.Folder && it.name.contains("/java") && it.iconId != "sourceset.java" })
+                assertEquals("java", javaRoot.name)
+                assertEquals(listOf("com"), javaRoot.children.map { it.name })
+                assertEquals(listOf("example"), javaRoot.children.single().children.map { it.name })
+                assertTrue(nodes.none { it.kind == NodeKind.Package }, "the All Files view has no packages")
             }
             dir.toFile().deleteRecursively()
         }

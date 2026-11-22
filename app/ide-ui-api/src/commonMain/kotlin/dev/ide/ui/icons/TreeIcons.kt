@@ -89,8 +89,12 @@ object TreeIcons {
         register("module.android", TreeIcon.Glyph(CaIcons.androidLogo, IconTint.Fixed(androidGreen)))
         register("module.android.lib", TreeIcon.ModuleFolder(androidGreen, outlinedBadge = true))
         register("module.kmp", TreeIcon.ModuleFolder(kotlinPurple))
-        register("sourceset.java", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Accent))
+        // Source roots in IntelliJ's blue (the theme's info tone); a Kotlin root keeps the Kotlin purple.
+        register("sourceset.java", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Info))
         register("sourceset.kotlin", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Fixed(Color(0xFFCD7EE0))))
+        // Test roots are green, as in IntelliJ: the theme's success tone, so it follows light and dark.
+        register("sourceset.test", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Success))
+        register("sourceset.test-resources", TreeIcon.Glyph(CaIcons.resources, IconTint.Success))
         register("sourceset.resources", TreeIcon.Glyph(CaIcons.resources, IconTint.Info))
         register("sourceset.android-res", TreeIcon.Glyph(CaIcons.image, IconTint.Fixed(androidGreen)))
         register("sourceset.assets", TreeIcon.Glyph(CaIcons.box, IconTint.Warning))

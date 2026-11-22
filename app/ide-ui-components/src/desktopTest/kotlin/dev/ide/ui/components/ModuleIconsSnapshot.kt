@@ -23,7 +23,7 @@ class ModuleIconsSnapshot {
         "root", "KotlinProject", NodeKind.Workspace, null, iconId = "workspace",
         children = listOf(
             TreeNode("a", "androidApp", NodeKind.Module, null, iconId = "module.android.app",
-                children = listOf(TreeNode("s", "src/main/kotlin", NodeKind.SourceRoot, null, iconId = "sourceset.kotlin"))),
+                children = listOf(TreeNode("s", "kotlin", NodeKind.SourceRoot, null, iconId = "sourceset.kotlin"))),
             TreeNode("d", "desktopApp", NodeKind.Module, null, iconId = "module"),
             TreeNode("s2", "shared", NodeKind.Module, null, iconId = "module.kmp"),
             TreeNode("l", "mylibrary", NodeKind.Module, null, iconId = "module.android.lib"),

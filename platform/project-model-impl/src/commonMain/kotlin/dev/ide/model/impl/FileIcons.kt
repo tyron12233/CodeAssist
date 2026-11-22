@@ -41,7 +41,10 @@ object DefaultFileIconProvider : FileIconProvider {
         }
         is IconTarget.SourceRoot -> when {
             ContentRole.GENERATED in target.roles -> "sourceset.generated"
+            // Test roots in IntelliJ's green: a test source set's code and its resources.
+            ContentRole.RESOURCE in target.roles && isTestSourceSet(target.sourceSetName) -> "sourceset.test-resources"
             ContentRole.RESOURCE in target.roles -> "sourceset.resources"
+            ContentRole.SOURCE in target.roles && isTestSourceSet(target.sourceSetName) -> "sourceset.test"
             ContentRole.SOURCE in target.roles && target.leafName == "kotlin" -> "sourceset.kotlin"
             ContentRole.SOURCE in target.roles -> "sourceset.java"
             else -> "sourceset.java"
@@ -51,3 +54,9 @@ object DefaultFileIconProvider : FileIconProvider {
         is IconTarget.ModuleNode -> "module"
     }
 }
+
+/**
+ * Whether a source set named [name] holds tests: `test`, or one named for its target and ending in `Test`
+ * (`androidTest`, `jvmTest`, `commonTest`), the Gradle and Kotlin Multiplatform conventions.
+ */
+internal fun isTestSourceSet(name: String): Boolean = name == "test" || (name.length > 4 && name.endsWith("Test"))

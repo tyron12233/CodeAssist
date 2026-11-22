@@ -65,7 +65,10 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
     // File-tree expansion is remembered per project + view mode in the project's generic settings store
     // (`.platform/settings.properties`), keyed by the stable path-based TreeNode ids. Empty stored value =
     // "user collapsed everything" (a real state); absent key = "never persisted" → null → caller defaults.
-    private fun treeStateKey(mode: TreeViewMode) = "tree.expanded.${mode.name}"
+    // `v2`: the tree stopped flattening source roots and folder chains, so the rows the old ids named are gone
+    // (`src`, `main` are rows of their own now). Starting from the defaults opens the way down to the sources;
+    // the old set would reopen with those new folders closed and the sources out of sight.
+    private fun treeStateKey(mode: TreeViewMode) = "tree.expanded.v2.${mode.name}"
 
     override fun expandedTreeState(mode: TreeViewMode): List<String>? {
         val raw = ctx.servicesOrNull?.projectPref(treeStateKey(mode)) ?: return null
@@ -92,39 +95,58 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         val moduleDirs = ctx.services.modules().mapNotNull { ctx.services.moduleRoot(it)?.normalize() }.toSet()
         val moduleNodes = ctx.services.modules().sortedBy { it.name }.map { module ->
             val moduleDir = ctx.services.moduleRoot(module)
+            val moduleDirKey = moduleDir?.let(::pathKey)
             val children = ArrayList<TreeNode>()
-            // The AndroidManifest sits above the source roots, so surface it explicitly (first, like Studio).
-            ctx.services.manifestPath(module)?.takeIf { Files.isRegularFile(it) }?.let { mf -> children.add(fileNode(mf, module)) }
-            // Code/resources/assets roots, each with a distinct icon by role — sources first, then res/assets.
+            // Code/resources/assets roots. Two roles declared on one directory draw it once, as the role that
+            // ranks first (sources before resources, res and assets).
             val roots = ctx.services.treeRootsDetailed(module)
                 .filter { Files.isDirectory(it.path) }
                 .sortedWith(compareBy({ it.roles.rootRank() }, { it.path.toString() }))
+                .distinctBy { pathKey(it.path) }
             // A root that IS the module's directory (a language with no source folder: the project folder is
             // the source root) gets no node of its own. The module node already stands for that directory, so
             // its folders and files are listed straight under it, once.
-            val moduleDirKey = moduleDir?.let(::pathKey)
-            val (inPlace, below) = roots.partition { pathKey(it.path) == moduleDirKey }
-            below.forEach { info -> children.add(sourceRootNode(info, module, root)) }
+            val (inPlace, others) = roots.partition { pathKey(it.path) == moduleDirKey }
+            val (nested, outside) = others.partition { moduleDirKey != null && pathKey(it.path).startsWith(moduleDirKey) }
+            // A root outside the module's directory (sources shared from elsewhere) has no folder to nest under,
+            // so it hangs off the module, as IntelliJ draws an extra content root.
+            outside.forEach { info -> children.add(sourceRootNode(info, module)) }
+            // The directories drawn on the way down to a root; the build outputs land in `build/` when it is one.
+            val walked = HashSet<Path>()
+            val buildDir = moduleDirKey?.resolve("build")
             val moduleAsRoot = inPlace.firstOrNull()
-            if (moduleAsRoot != null) {
-                // Not the folders drawn already: another root nested in this one, and `build/`, which the
-                // "build outputs" node below covers.
-                val drawn = below.mapTo(HashSet()) { pathKey(it.path) }
-                moduleDirKey?.let { drawn.add(it.resolve("build")) }
-                children.addAll(rootChildren(moduleAsRoot, module).filterNot { n ->
-                    n.kind != NodeKind.File && n.dirPath?.let { pathKey(Paths.get(it)) in drawn } == true
-                })
-            } else if (moduleDir != null) {
-                // The module's root-level files (module.toml, build scripts, README…) — visible config, not just
-                // creatable source files. `module.toml` opens the Module Settings editor instead of a text view.
-                moduleRootFiles(moduleDir, module).forEach { children.add(it) }
-                // The output folders the module declares (`bin/`, `obj/`) that no root above already contains.
-                declaredOutputDirs(module).filter { dir -> roots.none { pathKey(dir).startsWith(pathKey(it.path)) } }
-                    .forEach { children.add(excludedDirNode(it)) }
+            if (moduleDirKey != null && moduleAsRoot != null) {
+                // The roots inside this one get the folders that lead to them; the rest of the directory is the
+                // root's own listing, minus those folders and `build/`, which the build outputs cover.
+                val toRoots = rootPathDirs(moduleDirKey, nested, module, buildDir, excluded = false, walked)
+                val drawn = toRoots.mapNotNullTo(HashSet()) { n -> n.dirPath?.let { pathKey(Paths.get(it)) } }
+                buildDir?.let { drawn.add(it) }
+                val listing = rootChildren(moduleAsRoot, module).filterNot { n ->
+                    n.kind != NodeKind.File && n.dirPath?.let { topDirUnder(moduleDirKey, it) in drawn } == true
+                }
+                children.addAll((toRoots + listing.filter { it.kind != NodeKind.File }).sortedBy { it.name })
+                children.addAll(listing.filter { it.kind == NodeKind.File })
+            } else if (moduleDirKey != null) {
+                // Real nested folders, as in IntelliJ's Project view: `src ▸ main ▸ kotlin`, with `test ▸ java`
+                // beside `main`. Only the folders that lead to a root are drawn; the module's own files (module.toml,
+                // build scripts, README) follow, and `module.toml` opens the Module Settings editor.
+                val toRoots = rootPathDirs(moduleDirKey, nested, module, buildDir, excluded = false, walked)
+                // The output folders the module declares (`bin/`, `obj/`) that no root above already draws.
+                val drawn = toRoots.mapNotNullTo(HashSet()) { n -> n.dirPath?.let { pathKey(Paths.get(it)) } }
+                val outputs = declaredOutputDirs(module)
+                    .filter { dir -> pathKey(dir) !in drawn && roots.none { pathKey(dir).startsWith(pathKey(it.path)) } }
+                    .map { excludedDirNode(it) }
+                children.addAll((toRoots + outputs).sortedBy { it.name })
+                children.addAll(moduleRootFiles(moduleDirKey, module))
             }
-            // A curated, dimmed "build outputs" node (APK/AAB/jar/mapping) at the bottom — like Studio's, so
-            // the user can locate and export the artifacts without leaving the project view.
-            buildOutputsNode(module)?.let { children.add(it) }
+            // An Android manifest in a folder the tree does not draw (a custom location) is still surfaced.
+            ctx.services.manifestPath(module)?.takeIf { Files.isRegularFile(it) }
+                ?.takeIf { mf -> mf.parent?.let(::pathKey).let { it != moduleDirKey && it !in walked } }
+                ?.let { mf -> children.add(0, fileNode(mf, module)) }
+            // A curated, dimmed "build outputs" node (APK/AAB/jar/mapping) at the bottom, like Studio's, so the
+            // user can locate and export the artifacts without leaving the project view. When `build/` is drawn
+            // already (a generated root lives in it), they are listed in that folder instead.
+            if (buildDir == null || buildDir !in walked) buildOutputsNode(module)?.let { children.add(it) }
             TreeNode(
                 id = "module:${module.name}",
                 name = module.name,
@@ -151,6 +173,55 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
             children = moduleNodes + rootFiles,
             dirPath = root.toString(),
         )
+    }
+
+    /**
+     * The folders directly in [dir] that are, or lead down to, one of [roots] (each strictly below [dir]): a root
+     * is drawn as itself, named by its own directory, and any other folder as a real folder holding its files and
+     * the next folders down. Nothing here is compacted; IntelliJ only compacts packages inside a source root.
+     * A folder in [buildDir] or any other output folder is dimmed as output, and `build/` itself also lists the
+     * module's build outputs. Every folder drawn on the way is added to [walked].
+     */
+    private fun rootPathDirs(
+        dir: Path,
+        roots: List<TreeRootInfo>,
+        module: Module,
+        buildDir: Path?,
+        excluded: Boolean,
+        walked: MutableSet<Path>,
+    ): List<TreeNode> {
+        val byChild = LinkedHashMap<Path, MutableList<TreeRootInfo>>()
+        for (info in roots) {
+            val path = pathKey(info.path)
+            if (path == dir || !path.startsWith(dir)) continue
+            byChild.getOrPut(dir.resolve(dir.relativize(path).getName(0))) { ArrayList() }.add(info)
+        }
+        return byChild.entries.sortedBy { it.key.fileName.toString() }.map { (child, under) ->
+            under.firstOrNull { pathKey(it.path) == child }?.let { return@map sourceRootNode(it, module) }
+            walked.add(child)
+            val derived = excluded || child == buildDir || isOutputDir(child)
+            val (_, files) = childPartition(child)
+            val fileNodes = files.map { f -> fileNode(f, module).let { if (derived) it.copy(styleHint = "excluded") else it } }
+            val outputs = if (child == buildDir) buildOutputChildren(module) else emptyList()
+            TreeNode(
+                id = "dir:$child",
+                name = child.fileName.toString(),
+                kind = NodeKind.Folder,
+                filePath = null,
+                iconId = if (derived) "build-output"
+                else ctx.services.iconFor(IconTarget.Directory(child.fileName.toString(), emptySet())) ?: "folder",
+                children = (rootPathDirs(child, under, module, buildDir, derived, walked) + outputs).sortedBy { it.name } + fileNodes,
+                dirPath = child.toString(),
+                styleHint = if (derived) "excluded" else null,
+            )
+        }
+    }
+
+    /** The directory directly in [base] that [path] sits in (or is), for matching a row against drawn folders. */
+    private fun topDirUnder(base: Path, path: String): Path? {
+        val p = pathKey(Paths.get(path))
+        if (p == base || !p.startsWith(base)) return null
+        return base.resolve(base.relativize(p).getName(0))
     }
 
     /** Regular files directly in a module's root dir (config/docs), excluding ones already shown as roots. */
@@ -186,11 +257,8 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
      * `styleHint = "excluded"` so the UI renders it as derived output, IntelliJ-style.
      */
     private fun buildOutputsNode(module: Module): TreeNode? {
-        // `<module>/build/classes`.parent == `<module>/build` (the same anchor AndroidBuildSystem uses).
-        val buildDir = runCatching { Paths.get(module.dir.path).resolve("build") }.getOrNull() ?: return null
-        val children = listOf(buildDir.resolve("outputs"), buildDir.resolve("libs"))
-            .filter { Files.isDirectory(it) }
-            .flatMap { excludedChildren(it) }
+        val buildDir = moduleBuildDir(module) ?: return null
+        val children = buildOutputChildren(module).flatMap { it.children }
         if (children.isEmpty()) return null
         return TreeNode(
             id = "build-outputs:${module.name}",
@@ -202,6 +270,15 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
             dirPath = buildDir.toString(),
             styleHint = "excluded",
         )
+    }
+
+    /** `<module>/build`, the anchor of the module's build outputs (the same one AndroidBuildSystem uses). */
+    private fun moduleBuildDir(module: Module): Path? = runCatching { Paths.get(module.dir.path).resolve("build") }.getOrNull()
+
+    /** The module's `build/outputs` and `build/libs` folders that exist, drawn as output. */
+    private fun buildOutputChildren(module: Module): List<TreeNode> {
+        val buildDir = moduleBuildDir(module) ?: return emptyList()
+        return listOf(buildDir.resolve("outputs"), buildDir.resolve("libs")).filter { Files.isDirectory(it) }.map(::excludedDirNode)
     }
 
     /** Real files/dirs under [dir], recursively, every node tagged as derived output (dimmed + output icon). */
@@ -237,11 +314,6 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
     }
 
     /**
-     * Recursive raw-filesystem children, skipping transient dirs (`.gradle`/`.idea`/platform caches). The
-     * `build/` tree IS shown here (so an APK is locatable) but dimmed IntelliJ-style: once inside a `build/`
-     * dir, [excluded] propagates so the whole derived subtree renders muted with the output icon.
-     */
-    /**
      * The icons IntelliJ's Project Files view gives directories that mean something to the model: a module's
      * directory its module icon, and a source, resource or res root the icon of its role. Keyed by normalized path.
      */
@@ -261,6 +333,11 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         return icons
     }
 
+    /**
+     * Recursive raw-filesystem children, skipping transient dirs (`.gradle`/`.idea`/platform caches). The
+     * `build/` tree IS shown here (so an APK is locatable) but dimmed IntelliJ-style: once inside a `build/`
+     * dir, [excluded] propagates so the whole derived subtree renders muted with the output icon.
+     */
     private fun rawChildren(
         dir: Path,
         moduleRoots: Map<Path, String>,
@@ -275,55 +352,29 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
     }
 
     /**
-     * A raw directory row that **compacts single-child chains**, like VS Code's compact folders: from [start] it
-     * follows the chain while a level holds exactly one directory and no files, so `src/ → main/ → java/` is one
-     * `src/main/java` row instead of three indent levels. On a phone each level costs width the file names need.
-     *
-     * The chain only extends into plain directories. A directory with its own meaning (a module, a source or
-     * res root, `build/`) starts a row of its own so its icon stays visible: `src/main` then `java/com/acme`
-     * with the source-root icon. Each level is kept as a [PackageSegment] so the UI can still target any of
-     * them for New, and the row's id and [TreeNode.dirPath] are the deepest directory's (what Rename edits).
+     * A raw directory row: one row per directory, never a merged chain, as in IntelliJ's Project Files view. A
+     * directory with its own meaning (a module, a source or res root) carries that meaning's icon, and `build/`
+     * or a declared output folder is dimmed with everything under it.
      */
     private fun rawDirNode(
-        start: Path,
+        dir: Path,
         moduleRoots: Map<Path, String>,
         dirIcons: Map<Path, String>,
         excluded: Boolean,
     ): TreeNode {
-        val derived = excluded || start.fileName?.toString() == "build" || isOutputDir(start)
-        val chain = arrayListOf(start)
-        var listing = rawPartition(start)
-        while (true) {
-            val (dirs, files) = listing
-            val next = dirs.singleOrNull() ?: break
-            if (files.isNotEmpty() || dirIcons.containsKey(next.normalize()) || next.fileName?.toString() == "build" ||
-                isOutputDir(next)
-            ) break
-            chain.add(next)
-            listing = rawPartition(next)
-        }
-        val end = chain.last()
-        val labels = chain.map { it.fileName.toString() }
-        val (dirs, files) = listing
-        val children = dirs.map { d -> rawDirNode(d, moduleRoots, dirIcons, derived) } + files.map { f ->
-            val node = fileNode(f, ctx.services.moduleForFile(f), moduleRoots)
-            if (derived) node.copy(styleHint = "excluded") else node
-        }
+        val derived = excluded || dir.fileName?.toString() == "build" || isOutputDir(dir)
         return TreeNode(
-            id = "dir:$end",
-            name = labels.joinToString("/"),
+            id = "dir:$dir",
+            name = dir.fileName.toString(),
             kind = NodeKind.Folder,
             filePath = null,
             iconId = when {
                 derived -> "build-output"
-                else -> dirIcons[start.normalize()]
-                    ?: ctx.services.iconFor(IconTarget.Directory(start.fileName.toString(), emptySet())) ?: "folder"
+                else -> dirIcons[dir.normalize()]
+                    ?: ctx.services.iconFor(IconTarget.Directory(dir.fileName.toString(), emptySet())) ?: "folder"
             },
-            children = children,
-            packageSegments = if (chain.size > 1) {
-                chain.indices.map { k -> PackageSegment(labels.subList(0, k + 1).joinToString("/"), chain[k].toString()) }
-            } else emptyList(),
-            dirPath = end.toString(),
+            children = rawChildren(dir, moduleRoots, dirIcons, derived),
+            dirPath = dir.toString(),
             styleHint = if (derived) "excluded" else null,
         )
     }
@@ -344,20 +395,21 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         return dir.parent?.fileName?.toString() == ".platform" && (name == "caches" || name == "local-history" || name == "trash")
     }
 
-    /** A surfaced content root. `SOURCE`/`GENERATED`/`AIDL` roots are package contexts (compactable,
-     *  new-file targets); everything else (`res/`, `assets/`, resources) is a plain folder tree. */
-    private fun sourceRootNode(info: TreeRootInfo, module: Module, workspaceRoot: Path): TreeNode {
+    /**
+     * A surfaced content root, named by its own directory (`kotlin`, `java`, `res`) and told apart by its icon,
+     * which names its role (sources, test sources, resources, Android res, assets), as IntelliJ marks a root by
+     * its folder icon rather than its label. `SOURCE`/`GENERATED`/`AIDL` roots are package contexts (compacted,
+     * new-file targets); everything else (`res/`, `assets/`, resources) is a plain folder tree.
+     */
+    private fun sourceRootNode(info: TreeRootInfo, module: Module): TreeNode {
         // `.aidl` files are laid out by package exactly like Java, and AIDL resolves imports through that
         // layout, so an `aidl/` root reads far better compacted into packages than as nested folders.
         val aidl = ContentRole.AIDL in info.roles
         val packageRoot = isPackageRoot(info, module)
-        val label = runCatching { workspaceRoot.relativize(info.path).toString() }.getOrDefault(info.path.toString())
-            // A root at the workspace root itself relativizes to nothing; name it after its directory.
-            .ifEmpty { info.path.fileName?.toString() ?: info.path.toString() }
         val children = rootChildren(info, module)
         return TreeNode(
             id = "root:${info.path}",
-            name = label,
+            name = info.path.fileName?.toString() ?: info.path.toString(),
             kind = NodeKind.SourceRoot,
             filePath = null,
             iconId = ctx.services.iconFor(IconTarget.SourceRoot(info.sourceSetName, info.roles, module, info.path.fileName?.toString() ?: "")) ?: "sourceset.java",

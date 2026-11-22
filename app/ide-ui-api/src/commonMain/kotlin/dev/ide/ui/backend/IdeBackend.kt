@@ -1642,9 +1642,8 @@ data class TreeNode(
     /**
      * For a (possibly compacted) `Package` node, one entry per package level — its dotted package name and
      * directory — so a New-Class action can target any intermediate level (e.g. `com.tyron` inside a
-     * collapsed `com.tyron.codeassist`). A compacted `Folder` in the All-Files view (`src/main/java`, a chain
-     * of single-child directories shown as one row) carries one entry per level the same way, with a
-     * `/`-joined cumulative label (`src`, `src/main`, `src/main/java`). Empty otherwise.
+     * collapsed `com.tyron.codeassist`). Empty for every other kind of node: only packages inside a source
+     * root are compacted, never a plain folder.
      */
     val packageSegments: List<PackageSegment> = emptyList(),
     /**
@@ -1679,10 +1678,36 @@ data class TreeNode(
 )
 
 /**
- * One level of a multi-segment tree row: its cumulative label ([packageName] — a dotted package like
- * `com.example`, or a path level like `app/src` for a source-root row) and the [dirPath] backing it.
+ * One level of a compacted package row: its cumulative dotted package ([packageName], like `com.example`) and
+ * the [dirPath] backing it.
  */
 data class PackageSegment(val packageName: String, val dirPath: String)
+
+/**
+ * The node ids a tree opens with before the user has expanded anything: the workspace, each module, each source
+ * root, and the plain folders on the way down to a source root (`src`, `main`), so a fresh project shows its
+ * sources rather than a column of closed folders. A dimmed output folder stays closed even when a generated root
+ * sits inside it, as it does in IntelliJ. Packages and the rest stay closed.
+ */
+fun defaultExpandedTreeIds(root: TreeNode): Set<String> {
+    val out = HashSet<String>()
+    // Returns whether [n] is or holds a source root.
+    fun walk(n: TreeNode): Boolean {
+        val isRoot = n.kind == NodeKind.SourceRoot
+        var holdsRoot = false
+        // Below a source root there are only packages and folders of that root; no further roots to find.
+        if (!isRoot) for (c in n.children) if (walk(c)) holdsRoot = true
+        val open = when (n.kind) {
+            NodeKind.Workspace, NodeKind.Module, NodeKind.SourceRoot -> true
+            NodeKind.Folder -> holdsRoot && n.styleHint != "excluded"
+            else -> false
+        }
+        if (open) out.add(n.id)
+        return isRoot || holdsRoot
+    }
+    walk(root)
+    return out
+}
 
 /**
  * One entry in the mobile move/copy directory browser: a subdirectory to descend into ([isDirectory] true)

@@ -11,7 +11,6 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
 import dev.ide.ui.backend.NodeKind
-import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.platform.LocalMouseInput
@@ -22,18 +21,14 @@ import java.io.File
 import kotlin.test.Test
 
 /**
- * Off-screen PNG of a deep All-Files tree in a phone-width drawer, with touch sizing: compacted folder chains,
- * indent guides, and source files without their extension. Not an assertion; for eyeballing the layout.
+ * Off-screen PNG of a deep All-Files tree in a phone-width drawer, with touch sizing: one row per folder (no
+ * merged chains, as in IntelliJ), indent guides, and source files without their extension. Not an assertion;
+ * for eyeballing the layout.
  */
 class DeepTreeSnapshot {
 
-    private fun folder(path: String, icon: String = "folder", vararg children: TreeNode): TreeNode {
-        val labels = path.split('/')
-        val segs = if (labels.size > 1) labels.indices.map { k ->
-            PackageSegment(labels.subList(0, k + 1).joinToString("/"), "/p/" + labels.subList(0, k + 1).joinToString("/"))
-        } else emptyList()
-        return TreeNode("dir:/p/$path", path, NodeKind.Folder, null, icon, children.toList(), packageSegments = segs, dirPath = "/p/$path")
-    }
+    private fun folder(path: String, icon: String = "folder", vararg children: TreeNode): TreeNode =
+        TreeNode("dir:/p/$path", path.substringAfterLast('/'), NodeKind.Folder, null, icon, children.toList(), dirPath = "/p/$path")
 
     private fun java(name: String) = TreeNode("file:$name", "$name.java", NodeKind.File, "/p/$name.java", "java")
 
@@ -41,15 +36,27 @@ class DeepTreeSnapshot {
         "workspace", "AssemblyLab", NodeKind.Workspace, null,
         children = listOf(
             folder(
-                "src/main", "folder",
+                "src", "folder",
                 folder(
-                    "java/com/tanvir/assemblylab", "sourceset.java",
+                    "src/main", "folder",
                     folder(
-                        "stage06_analysis", "folder",
-                        java("AnalysisManager"), java("AnalysisReport"), java("AnalysisSection"),
+                        "src/main/java", "sourceset.java",
+                        folder(
+                            "src/main/java/com", "folder",
+                            folder(
+                                "src/main/java/com/tanvir", "folder",
+                                folder(
+                                    "src/main/java/com/tanvir/assemblylab", "folder",
+                                    folder(
+                                        "src/main/java/com/tanvir/assemblylab/stage06_analysis", "folder",
+                                        java("AnalysisManager"), java("AnalysisReport"), java("AnalysisSection"),
+                                    ),
+                                    java("DotNetFieldReader"), java("DotNetIdentityResolver"), java("DotNetMetadataStream"),
+                                    java("DotNetMethodBodyDecoder"), java("DotNetTablesReader"), java("DotNetTypeDefinition"),
+                                ),
+                            ),
+                        ),
                     ),
-                    java("DotNetFieldReader"), java("DotNetIdentityResolver"), java("DotNetMetadataStream"),
-                    java("DotNetMethodBodyDecoder"), java("DotNetTablesReader"), java("DotNetTypeDefinition"),
                 ),
             ),
             TreeNode("file:b", "build.gradle.kts", NodeKind.File, "/p/build.gradle.kts", "kotlin"),

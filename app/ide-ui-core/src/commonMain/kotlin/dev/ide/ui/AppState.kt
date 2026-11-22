@@ -12,6 +12,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.text.TextRange
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.NodeKind
+import dev.ide.ui.backend.defaultExpandedTreeIds
 import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.TreeNode
@@ -983,7 +984,7 @@ class IdeUiState(
 
     /**
      * (Re)seed [treeExpanded] for the current [treeMode]: the persisted expanded set if this project has one,
-     * otherwise the defaults (each module / source root / the workspace expanded). Called on creation and on a
+     * otherwise the defaults (each module, source root and the folders leading to it, and the workspace). Called on creation and on a
      * view-mode flip (the two modes shape the tree differently, so each remembers its own expansion).
      */
     private fun loadTreeExpansion() {
@@ -993,15 +994,11 @@ class IdeUiState(
         backend.files.expandedTreeState(treeMode)?.forEach { treeExpanded[it] = true }
     }
 
-    /** Expand modules / source roots / the workspace by default. Additive (doesn't clear user toggles), so it's
-     *  safe to (re)run once the real tree lands. Reads [tree], so it must run after a tree build. */
+    /** Expand the workspace, modules, source roots and the folders leading to them by default
+     *  ([defaultExpandedTreeIds]). Additive (doesn't clear user toggles), so it's safe to (re)run once the real
+     *  tree lands. Reads [tree], so it must run after a tree build. */
     private fun seedDefaultExpansion() {
-        fun seed(n: TreeNode) {
-            if (n.kind == NodeKind.Module || n.kind == NodeKind.SourceRoot || n.kind == NodeKind.Workspace)
-                treeExpanded[n.id] = true
-            n.children.forEach(::seed)
-        }
-        seed(tree)
+        defaultExpandedTreeIds(tree).forEach { treeExpanded[it] = true }
     }
 
     /** The currently-expanded tree-node ids — the host persists this (debounced) whenever it changes. */

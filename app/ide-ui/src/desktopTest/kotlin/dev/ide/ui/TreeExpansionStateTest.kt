@@ -26,14 +26,30 @@ class TreeExpansionStateTest {
                 TreeNode(
                     "module:app", "app", NodeKind.Module, null,
                     children = listOf(
+                        // app ▸ src ▸ main ▸ java, real folders down to the root, as the Project view draws them.
                         TreeNode(
-                            "root:/app/src", "src/main/java", NodeKind.SourceRoot, null,
+                            "dir:/app/src", "src", NodeKind.Folder, null,
                             children = listOf(
                                 TreeNode(
-                                    "pkg:/app/src/com", "com", NodeKind.Package, null,
+                                    "dir:/app/src/main", "main", NodeKind.Folder, null,
                                     children = listOf(
-                                        TreeNode("file:/app/src/com/A.kt", "A.kt", NodeKind.File, "/app/src/com/A.kt"),
+                                        TreeNode(
+                                            "root:/app/src", "java", NodeKind.SourceRoot, null,
+                                            children = listOf(
+                                                TreeNode(
+                                                    "pkg:/app/src/com", "com", NodeKind.Package, null,
+                                                    children = listOf(
+                                                        TreeNode("file:/app/src/com/A.kt", "A.kt", NodeKind.File, "/app/src/com/A.kt"),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
                                     ),
+                                ),
+                                // A folder with no root under it stays closed.
+                                TreeNode(
+                                    "dir:/app/src/docs", "docs", NodeKind.Folder, null,
+                                    children = listOf(TreeNode("file:/app/src/docs/a.md", "a.md", NodeKind.File, "/app/src/docs/a.md")),
                                 ),
                             ),
                         ),
@@ -49,10 +65,14 @@ class TreeExpansionStateTest {
     fun seedsDefaultsWhenNothingPersisted() {
         val state = IdeUiState(TreeBackend())
         runBlocking { state.ensureTreeLoaded() } // the tree builds off-thread now — await it before seeding defaults
-        // Modules, source roots, and the workspace open by default; packages/files stay closed.
+        // Modules, source roots, the folders leading to them, and the workspace open by default; packages, files
+        // and folders with no root under them stay closed.
         assertTrue(state.treeExpanded["workspace"] == true)
         assertTrue(state.treeExpanded["module:app"] == true)
+        assertTrue(state.treeExpanded["dir:/app/src"] == true)
+        assertTrue(state.treeExpanded["dir:/app/src/main"] == true)
         assertTrue(state.treeExpanded["root:/app/src"] == true)
+        assertFalse(state.treeExpanded["dir:/app/src/docs"] == true)
         assertFalse(state.treeExpanded["pkg:/app/src/com"] == true)
     }
 
