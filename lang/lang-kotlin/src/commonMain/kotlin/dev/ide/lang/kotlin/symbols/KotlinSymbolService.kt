@@ -1617,7 +1617,8 @@ class KotlinSymbolService(
                 return cand
             }
             // A package-private library class (`java.net.InetAddressImpl`) is invisible from another package.
-            val shape = typeShape(cand) ?: continue
+            // A built-in with no class file (`kotlin.js.JsName`, kept in the stdlib's module file) is one too.
+            val shape = typeShape(cand) ?: builtinShape(cand) ?: continue
             if (!shape.isPublic && pkg != samePkg) continue
             return cand
         }

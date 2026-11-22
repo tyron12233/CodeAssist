@@ -59,7 +59,24 @@ class BuiltinsReader(private val jars: List<String>) {
     private fun load(): Map<String, TypeShape> {
         val out = HashMap<String, TypeShape>()
         forEachFragment { _, bytes -> out.putAll(shapesFrom(bytes)) }
+        forEachModuleFile { bytes -> for ((k, v) in shapesFromModule(bytes)) out.putIfAbsent(k, v) }
         return out
+    }
+
+    /** Hand every module file (`META-INF/<name>.kotlin_module`) in every jar to [block]. */
+    private inline fun forEachModuleFile(block: (ByteArray) -> Unit) {
+        for (jar in jars) {
+            val source: FileSource = openFile(jar) ?: continue
+            try {
+                val archive = ZipArchive.open(source) ?: continue
+                for (entry in archive.entries) {
+                    if (!entry.name.startsWith("META-INF/") || !entry.name.endsWith(MODULE_SUFFIX)) continue
+                    block(archive.read(entry) ?: continue)
+                }
+            } finally {
+                source.close()
+            }
+        }
     }
 
     /** Hand every `.kotlin_builtins` entry in every jar to [block], as (entry path, bytes). */
@@ -85,6 +102,7 @@ class BuiltinsReader(private val jars: List<String>) {
 
     companion object {
         private const val SUFFIX = ".kotlin_builtins"
+        private const val MODULE_SUFFIX = ".kotlin_module"
 
         private val BINARY = SymbolOrigin(fromSource = false, file = null)
 
@@ -93,7 +111,14 @@ class BuiltinsReader(private val jars: List<String>) {
          *  as a `Type.` reference sees them. The shared producer for the live reader AND the persistent index. */
         fun shapesFrom(bytes: ByteArray): Map<String, TypeShape> {
             val fragment = KotlinBuiltins.read(bytes) ?: return emptyMap()
-            val classes = fragment.classes
+            return shapesFromClasses(fragment.classes)
+        }
+
+        /** The optional annotation classes a `.kotlin_module` keeps (`kotlin.js.JsName` on the JVM), as shapes. */
+        fun shapesFromModule(bytes: ByteArray): Map<String, TypeShape> =
+            shapesFromClasses(dev.ide.kotlin.classfile.KotlinModuleFile.optionalAnnotationClasses(bytes))
+
+        private fun shapesFromClasses(classes: Map<String, KotlinClassInfo>): Map<String, TypeShape> {
             val out = HashMap<String, TypeShape>(classes.size)
             for ((fqn, cls) in classes) {
                 val owner = KotlinSymbol(fqn.substringAfterLast('.'), SymbolKind.CLASS, origin = BINARY)

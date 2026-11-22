@@ -2090,6 +2090,21 @@ class KotlinCompilerParityTest {
             "fun foo(x: DIV) {\n assign(x, jsObject { tabIndex })\n assign2(x, jsObject { tabIndex })\n val d: DIV = jsObject { tabIndex }\n}")
     }
 
+    /** A smart cast to an unrelated type leaves an intersection: the declared type's members and assignability stay. */
+    @Test
+    fun aSmartCastToAnUnrelatedTypeIsAnIntersection() {
+        clean("interface A { fun fa() }\ninterface B { fun fb() }\nfun f(a: A): B? { if (a is B) { a.fa(); a.fb(); val x: A = a; return a }; return null }")
+        assertCodes("interface A { fun fa() }\ninterface B { fun fb() }\nfun g(a: A) { if (a is B) { a.fc() } }", KotlinDiagnosticCodes.UNRESOLVED)
+        clean("sealed interface A\nsealed interface B\ndata class X(val s: String): A, B\ndata class Y(val s: String): A, B\n" +
+            "fun problem(a: A): B { return when (a) { is X, is Y -> a } }")
+    }
+
+    /** An optional annotation class kept only in the stdlib's module file (`kotlin.js.JsName`) resolves. */
+    @Test
+    fun anOptionalAnnotationClassFromTheModuleFileResolves() {
+        clean("import kotlin.js.*\n@JsName(\"\")\npublic fun test() {}")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

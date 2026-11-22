@@ -3863,6 +3863,8 @@ internal class KotlinSemanticChecks(
         // `List<Int>`). No variance can bridge two unrelated final argument types, so that is a real mismatch.
         // A Java collection (`java.util.List` from `Collectors.toList()`) is the platform type `(Mutable)List`,
         // so it fills a declared `MutableList` as well as a `List`.
+        // An intersection fits a declaration one of its components fits.
+        if (a.intersection.any { c -> !isMismatch(declared, c) }) return false
         if (d.isAssignableFrom(a) || sameClassifier(d, a)) return genericArgsMismatch(d, a)
         // An unsigned literal adapts among the unsigned types the way an integer literal does (`val n: ULong = 1u`).
         if (d.qualifiedName in UNSIGNED && a.qualifiedName in UNSIGNED) return false
@@ -4945,6 +4947,8 @@ internal class KotlinSemanticChecks(
         // `membersNamedForCheck` misses them. Mirror the completion gate (spelled as the FQN, a type receiver) so
         // a bare `String.valueOf` stays flagged (Kotlin reports it) while the explicit FQN resolves.
         val typeStatics = resolver.mappedJavaStatics(receiver, recvType, name)
+        // An intersection (`B & A` after a smart cast) has the members of every component.
+        if (recvType.intersection.any { c -> service.membersNamedForCheck(c.qualifiedName, c.typeArguments, name).any { it.name == name } }) return null
         val matching = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name) +
             (if (resolver.isTypeReceiver(receiver)) service.companionMembersFor(recvType.qualifiedName, name).filter { it.name == name } else emptyList()) +
             typeStatics

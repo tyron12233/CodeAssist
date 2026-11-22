@@ -1145,7 +1145,9 @@ internal fun KotlinResolver.classLiteralType(e: KtClassLiteralExpression): Kotli
 }
 
 internal fun KotlinResolver.memberNamed(type: KotlinType, name: String): KotlinSymbol? {
+    // An intersection (`B & A`) has the members of every component.
     val all = service.membersNamed(type.qualifiedName, type.typeArguments, name)
+        .ifEmpty { type.intersection.firstNotNullOfOrNull { c -> service.membersNamed(c.qualifiedName, c.typeArguments, name).takeIf { it.isNotEmpty() } }.orEmpty() }
     // A property read wants a PROPERTY: `t.priority` is `Thread`'s `getPriority()` property, not its
     // package-private `void priority(int)` method, which typed the read `Unit`. And a public one before a
     // protected field: `Calendar`'s `protected long time` is out of reach where `c.time` is the `Date` that

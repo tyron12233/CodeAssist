@@ -181,7 +181,14 @@ private fun KotlinResolver.keepDeclaredWhenNarrower(narrowed: KotlinType, name: 
     // `G<Number>`), which the erased narrowing cannot carry but the declaration would contradict.
     if (narrowed.qualifiedName == declared.qualifiedName) return narrowed
     val nonNull = declared.withNullable(false)
-    return if (narrowed.isAssignableFrom(nonNull)) nonNull else narrowed
+    if (narrowed.isAssignableFrom(nonNull)) return nonNull
+    // Two unrelated types (`a: A` checked `is B`): the value is both, `B & A`, so it keeps the declared type's
+    // members and assignability. Only for two known classifiers with no type arguments to reconcile.
+    if (!nonNull.isAssignableFrom(narrowed) && nonNull.typeArguments.isEmpty() && narrowed.intersection.isEmpty() &&
+        service.isKnownType(nonNull.qualifiedName) && service.isKnownType(narrowed.qualifiedName) &&
+        nonNull.qualifiedName != "kotlin.Any"
+    ) return narrowed.withIntersection(listOf(nonNull))
+    return narrowed
 }
 
 /**
@@ -652,9 +659,16 @@ internal fun KotlinResolver.whenSubjectNarrowing(
         val aliasOfThis = !matches && name == THIS_SUBJECT &&
             subjectVariable?.initializer?.let { smartCastSubjectKey(it) } == THIS_SUBJECT
         if (!matches && !aliasOfThis) return null
-        // Only a single positive `is T` narrows; a comma branch (`is A, is B`) doesn't smart-cast.
-        if (!entry.isElse) (entry.conditions.singleOrNull() as? KtWhenConditionIsPattern)
-            ?.takeIf { !it.isNegated }?.let { return typeFromIsTarget(it.typeReference) }
+        // A single positive `is T` narrows to `T`; a comma branch of positive checks (`is X, is Y`) to what the
+        // types have in common, their nearest common supertypes, intersected (`A & B` for two data classes that
+        // both implement `A` and `B`).
+        if (!entry.isElse) {
+            val patterns = entry.conditions.map { it as? KtWhenConditionIsPattern ?: return@map null }
+            if (patterns.isNotEmpty() && patterns.all { it != null && !it.isNegated }) {
+                if (patterns.size == 1) return typeFromIsTarget(patterns[0]!!.typeReference)
+                patterns.map { typeFromIsTarget(it!!.typeReference) ?: return null }.let { commonSupertypesType(it) }?.let { return it }
+            }
+        }
         // A failed `!is T` branch leaves the subject a `T`.
         for (e in earlier) {
             val p = e.conditions.singleOrNull() as? KtWhenConditionIsPattern ?: continue
@@ -670,6 +684,21 @@ internal fun KotlinResolver.whenSubjectNarrowing(
         conditionNarrowing(c, name, whenTrue = false)?.let { return it }
     }
     return null
+}
+
+/** The nearest common supertypes of [types] as one type, the first heading an intersection of the rest
+ *  (`X`, `Y` both `: A, B` → `A & B`); null when they share nothing but `Any`. */
+private fun KotlinResolver.commonSupertypesType(types: List<KotlinType>): KotlinType? {
+    val distinct = types.distinctBy { it.qualifiedName }
+    if (distinct.size == 1) return distinct[0]
+    val first = distinct[0]
+    val candidates = (listOf(first) + service.supertypesOf(first.qualifiedName).filterIsInstance<KotlinType>())
+        .distinctBy { it.qualifiedName }
+        .filter { c -> c.qualifiedName != "kotlin.Any" && c.qualifiedName != "java.lang.Object" && distinct.all { c.isAssignableFrom(it) } }
+    // Keep only the nearest: drop one that another candidate is already a subtype of.
+    val nearest = candidates.filter { c -> candidates.none { o -> o !== c && c.isAssignableFrom(o) && !o.isAssignableFrom(c) } }
+    if (nearest.isEmpty()) return null
+    return nearest[0].withIntersection(nearest.drop(1))
 }
 
 /** The key a `when` narrows on: its subject `val` (`when (val y = …)` → `y`), a simple-name subject

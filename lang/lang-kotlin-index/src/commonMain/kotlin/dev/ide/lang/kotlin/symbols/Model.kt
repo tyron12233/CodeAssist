@@ -216,21 +216,32 @@ class KotlinType(
      *  argument for it drops the `?` (`T & Any` with `T = String?` is `String`). Only meaningful when
      *  [isTypeParameter]. */
     val definitelyNonNull: Boolean = false,
+    /** The OTHER components of an intersection type this one heads (`B & A`, what a smart cast of an `A` to an
+     *  unrelated `B` leaves): the value is each of them too, so it is assignable to anything one of them is and
+     *  has their members. Empty for an ordinary type. */
+    val intersection: List<KotlinType> = emptyList(),
 ) : TypeRef {
+
+    /** This type intersected with [others] (`this & others…`). */
+    fun withIntersection(others: List<KotlinType>): KotlinType =
+        if (others.isEmpty() && intersection.isEmpty()) this
+        else KotlinType(qualifiedName, typeArguments, nullable, context, isTypeParameter, isExtensionFunctionType, isComposable, projection, definitelyNonNull, others)
 
     /** `T & Any` for a type parameter, otherwise this type made non-null: the type of `x!!`. */
     fun definitelyNotNull(): KotlinType =
         if (!isTypeParameter) withNullable(false)
         else if (definitelyNonNull && !nullable) this
-        else KotlinType(qualifiedName, typeArguments, false, context, isTypeParameter, isExtensionFunctionType, isComposable, projection, true)
+        else KotlinType(qualifiedName, typeArguments, false, context, isTypeParameter, isExtensionFunctionType, isComposable, projection, true, intersection)
 
     /** A copy carrying the use-site [p]rojection (`out`/`in`/`*`/``) for when this type sits as a type argument. */
     fun withProjection(p: String): KotlinType =
         if (p == projection) this
-        else KotlinType(qualifiedName, typeArguments, nullable, context, isTypeParameter, isExtensionFunctionType, isComposable, p, definitelyNonNull)
+        else KotlinType(qualifiedName, typeArguments, nullable, context, isTypeParameter, isExtensionFunctionType, isComposable, p, definitelyNonNull, intersection)
 
     override fun isAssignableFrom(other: TypeRef): Boolean {
         if (other.qualifiedName == qualifiedName) return true
+        // An intersection is assignable wherever one of its components is.
+        if (other is KotlinType && other.intersection.any { isAssignableFrom(it) }) return true
         if (qualifiedName == "kotlin.Any" || qualifiedName == "java.lang.Object") return true
         // A Kotlin typealias and its JVM target are one classifier under two names (`kotlin.Comparator` is
         // `java.util.Comparator`), and either side may carry either spelling: a checker canonicalizes the
@@ -265,6 +276,8 @@ class KotlinType(
             isComposable,
             projection,
             definitelyNonNull && !n,
+            // A nullable intersection is not what any smart cast leaves; nullability ends it.
+            if (n) emptyList() else intersection,
         )
 
     /** A copy with the classifier [fqn] (same arguments, nullability, context) — for canonicalizing a JVM
@@ -282,6 +295,7 @@ class KotlinType(
             isComposable,
             projection,
             definitelyNonNull,
+            intersection,
         )
 
     /** Rebind the resolution [context] through the whole tree (used when reloading a context-free cache). */
@@ -296,6 +310,7 @@ class KotlinType(
             isComposable,
             projection,
             definitelyNonNull,
+            intersection.map { it.withContext(ctx) },
         )
 
     override fun toString(): String {
@@ -313,7 +328,8 @@ class KotlinType(
             isTypeParameter,
             isExtensionFunctionType
         )
-        val shown = if (definitelyNonNull && isTypeParameter) "$base & Any" else base
+        val shown = (if (definitelyNonNull && isTypeParameter) "$base & Any" else base) +
+            intersection.joinToString("") { " & $it" }
         // A use-site projection prefixes the argument: `out Number`, `in T`.
         return if (projection.isEmpty()) shown else "$projection $shown"
     }

@@ -31,16 +31,20 @@ object KotlinBuiltinsIndex : IndexExtension<String, TypeShape> {
     // v4 segment was read with the newer format and desynced mid-value (UTFDataFormatException in readSymbol).
     // 5→6: the decode gained enum ENTRIES, so a segment built before it holds enum shapes with no constants.
     // 6→7: the decode gained CONSTRUCTORS (`Array(size, init)`), absent from a segment built before it.
-    override val version = 7 + TypeShapeExternalizer.FORMAT
+    // 7→8: a library's `.kotlin_module` optional annotation classes (`kotlin.js.JsName`) are indexed too.
+    override val version = 8 + TypeShapeExternalizer.FORMAT
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = TypeShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried only by exact Kotlin FQN
     override val inputFilter = InputFilter {
-        (it.origin == IndexOrigin.SDK || it.origin == IndexOrigin.LIBRARY) && it.unitName?.endsWith(".kotlin_builtins") == true
+        (it.origin == IndexOrigin.SDK || it.origin == IndexOrigin.LIBRARY) &&
+            (it.unitName?.endsWith(".kotlin_builtins") == true || it.unitName?.endsWith(".kotlin_module") == true)
     }
 
     override fun index(input: IndexInput): Map<String, Collection<TypeShape>> {
         val bytes = runCatching { input.bytes() }.getOrNull() ?: return emptyMap()
-        return BuiltinsReader.shapesFrom(bytes).mapValues { (_, shape) -> listOf(shape) }
+        val shapes = if (input.unitName?.endsWith(".kotlin_module") == true) BuiltinsReader.shapesFromModule(bytes)
+            else BuiltinsReader.shapesFrom(bytes)
+        return shapes.mapValues { (_, shape) -> listOf(shape) }
     }
 }
