@@ -1932,6 +1932,34 @@ class KotlinCompilerParityTest {
         assertCodes("class T {\n class A<X>\n class B<X>\n fun <X> B<X>.extensionFun(): A<X> = A()\n fun test() { val r = B<*>::extensionFun }\n}", c)
     }
 
+    /** A value whose `invoke` cannot take the arguments gives way to the next value of that name further out. */
+    @Test
+    fun anInapplicableValueInvokeFallsBackToAnOuterValue() {
+        clean("operator fun String.invoke() = this\nval some = \"\"\nfun sss() {\n val some = 10\n some()\n}")
+        clean("fun foo() {\n val x = fun(s: String) {}\n fun nested() {\n  val x = fun(i: Int) {}\n  x(\"hello\")\n }\n}")
+        assertCodes("fun main() { val f = 5; f() }", KotlinDiagnosticCodes.NOT_CALLABLE)
+    }
+
+    /** A null check on a safe cast's chain proves the cast: `(q as? Complex)?.superClass == null` false. */
+    @Test
+    fun aFailedNullCheckOnASafeCastChainNarrows() {
+        clean("interface State\ninterface Complex { val superClass: Complex? }\ninterface ExceptionState : State\n" +
+            "fun test(q: State?) {\n if (q == null || q is ExceptionState || (q as? Complex)?.superClass == null) return\n q.superClass\n}")
+    }
+
+    /** A member `val` given its value in an `init` block takes that value's type there. */
+    @Test
+    fun aMemberValAssignedInInitIsSmartCast() {
+        clean("interface I\ninterface S : I { fun foo() }\nfun s(): S = TODO()\nclass Main {\n private val x: I\n init {\n  x = s()\n  x.foo()\n }\n}")
+    }
+
+    /** `this@label is T` narrows that labeled lambda's receiver, also when another receiver is innermost. */
+    @Test
+    fun aCheckOnALabeledThisNarrowsThatReceiver() {
+        clean("interface IA\ninterface IB\nobject A : IA { fun B.foo() {} }\nobject B : IB\nfun test(a: IA, b: IB) {\n" +
+            " with(a) lambda1@{\n  with(b) lambda2@{\n   if (this@lambda1 is A && this@lambda2 is B) { foo() }\n  }\n }\n}")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

@@ -71,16 +71,35 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
     // Set once the walk leaves a nested (non-`inner`) class, an object or a companion: past that point the
     // outer declarations' receivers have no `this` to be reached through (see [closesOuterInstanceScope]).
     var outerInstanceClosed = false
+    // The labels of the receiver lambdas around the offset (`with(a) lambda1@{ ... }`): a check on `this@lambda1`
+    // further in narrows that lambda's receiver, found on the way up before the lambda itself is reached.
+    val labeledLambdas = HashMap<KtLambdaExpression, String>()
+    run {
+        var n: KtElement? = node
+        while (n != null) {
+            if (n is KtLambdaExpression) (n.parent as? dev.ide.kotlin.syntax.psi.KtLabeledExpression)?.getLabelName()
+                ?.removeSurrounding("`")?.let { labeledLambdas[n as KtLambdaExpression] = it }
+            n = n.parent
+        }
+    }
+    val labelNarrowing = HashMap<String, KotlinType>()
     while (node != null) {
         if (out.isEmpty() && thisNarrowing == null) {
             thisNarrowing = narrowingAtNode(node, child, offset, THIS_SUBJECT)
+        }
+        if (labeledLambdas.isNotEmpty()) for (label in labeledLambdas.values) {
+            if (label !in labelNarrowing) narrowingAtNode(node, child, offset, "this@$label")?.let { labelNarrowing[label] = it }
         }
         val hadReceiver = out.isNotEmpty()
         when (node) {
             // A receiver lambda's implicit `this` — both spellings of it: an extension function type
             // (`ColumnScope.() -> Unit`) and a `fun interface` whose abstract method is a member extension
             // (`MeasurePolicy` is `MeasureScope.measure(…)`, so `Layout { }`'s body has a `MeasureScope`).
-            is KtLambdaExpression -> if (!outerInstanceClosed) lambdaReceiverType(node)?.let(out::add)
+            is KtLambdaExpression -> if (!outerInstanceClosed) lambdaReceiverType(node)?.let { recv ->
+                // Narrowed by an `is` check on `this@label` between here and the use, when it is not the innermost
+                // receiver there (that case is [thisNarrowing]).
+                out += labeledLambdas[node]?.let { labelNarrowing[it] } ?: recv
+            }
 
             is KtNamedFunction -> if (!outerInstanceClosed) node.receiverTypeReference?.text
                 ?.let { boundedTypeParameterReceiver(node, it) ?: service.typeFromText(it, fileContext) }?.let(out::add)

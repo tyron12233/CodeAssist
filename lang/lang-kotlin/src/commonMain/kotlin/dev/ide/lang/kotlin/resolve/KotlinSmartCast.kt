@@ -284,7 +284,7 @@ internal const val THIS_SUBJECT = "this"
 internal fun KotlinResolver.subjectMatches(expr: KtExpression?, name: String): Boolean =
     when (val e = unwrapParens(expr)) {
         is KtNameReferenceExpression -> e.getReferencedName() == name
-        is KtThisExpression -> name == THIS_SUBJECT && smartCastSubjectKey(e) == THIS_SUBJECT
+        is KtThisExpression -> (name == THIS_SUBJECT || name.startsWith("this@")) && smartCastSubjectKey(e) == name
         is dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression -> {
             val sel = (e.selectorExpression as? KtNameReferenceExpression)?.getReferencedName()
             val dot = name.lastIndexOf('.')
@@ -298,7 +298,10 @@ internal fun KotlinResolver.smartCastSubjectKey(expr: KtExpression?): String? =
     when (val e = unwrapParens(expr)) {
         is KtNameReferenceExpression -> e.getReferencedName()
         // `this@foo` naming the innermost receiver is that same `this` (K2 keys both to one receiver variable).
-        is KtThisExpression -> if (e.getLabelName() == null || labeledReceiverOwner(e)?.second == true) THIS_SUBJECT else null
+        // An outer one (`this@lambda1` inside `lambda2`) is its own receiver variable, keyed by its label: an `is`
+        // check on it narrows that lambda's receiver ([computeImplicitReceiversAt]).
+        is KtThisExpression -> if (e.getLabelName() == null || labeledReceiverOwner(e)?.second == true) THIS_SUBJECT
+            else e.getLabelName()?.removeSurrounding("`")?.let { "this@$it" }
         is dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression -> qualifiedPathKey(e)
         else -> null
     }
@@ -514,14 +517,40 @@ internal fun KotlinResolver.conditionNarrowing(
             KtTokens.OROR -> if (!whenTrue) conditionNarrowing(c.left, name, false)
                 ?: conditionNarrowing(c.right, name, false) else null
 
-            KtTokens.EQEQ, KtTokens.EQEQEQ -> if (whenTrue) equalityNarrowing(c, name) else null
-            KtTokens.EXCLEQ, KtTokens.EXCLEQEQEQ -> if (!whenTrue) equalityNarrowing(c, name) else null
+            KtTokens.EQEQ, KtTokens.EQEQEQ -> if (whenTrue) equalityNarrowing(c, name) else nonNullSafeCastNarrowing(c, name)
+            KtTokens.EXCLEQ, KtTokens.EXCLEQEQEQ -> if (!whenTrue) equalityNarrowing(c, name) else nonNullSafeCastNarrowing(c, name)
 
             else -> null
         }
 
         else -> null
     }
+
+/**
+ * A comparison with `null` known to fail, of a value rooted in a safe cast of the subject: `(x as? T) != null`,
+ * `(x as? T)?.member != null`, `(x as? T)?.a?.b == null` taken false. The safe cast then gave a value, so `x` is a
+ * `T` (K2 records `x is T` on the non-null branch of the safe cast's own null check, and a safe call chain is
+ * non-null only when its receiver is).
+ */
+private fun KotlinResolver.nonNullSafeCastNarrowing(c: KtBinaryExpression, name: String): KotlinType? {
+    fun isNull(e: KtExpression?) = unwrapParens(e).let { it is dev.ide.kotlin.syntax.psi.KtConstantExpression && it.text == "null" }
+    var e: KtExpression? = when {
+        isNull(c.right) -> c.left
+        isNull(c.left) -> c.right
+        else -> return null
+    }
+    while (true) {
+        e = unwrapParens(e)
+        e = when (e) {
+            is dev.ide.kotlin.syntax.psi.KtSafeQualifiedExpression -> e.receiverExpression
+            else -> break
+        }
+    }
+    val cast = e as? dev.ide.kotlin.syntax.psi.KtBinaryExpressionWithTypeRHS ?: return null
+    if (cast.operationReference.getReferencedNameElementType() != KtTokens.AS_SAFE) return null
+    if (!subjectMatches(cast.left, name)) return null
+    return typeFromIsTarget(cast.right)
+}
 
 /**
  * `a == b` holding: each operand then has the other's type, when the equality is known to be primitive
@@ -795,10 +824,17 @@ internal fun KotlinResolver.earlyExitNarrowing(
         if (result == null) {
             assignedValueType(st, name)?.let { t ->
                 val local = block.statements.firstOrNull { it is KtProperty && it.name == name && it.textRange.endOffset <= st.textRange.startOffset } as? KtProperty
+                // A member `val` given its value in an `init` block (`private val x: I; init { x = s(); x.foo() }`):
+                // a final, plain property is stable there, so the value's type holds too.
+                val memberVal = local == null && block.parent is dev.ide.kotlin.syntax.psi.KtAnonymousInitializer &&
+                    localsAt(st.textRange.startOffset, name).isEmpty() &&
+                    (block.parent?.parent?.parent as? KtClassOrObject)?.declarations?.any {
+                        it is KtProperty && it.name == name && !it.isVar && !it.hasDelegate() && it.getter == null
+                    } == true
                 // K2's stability rule for a captured `var` (FirLocalVariableAssignmentAnalyzer): one that a lambda,
                 // local function or local class also writes is not smart cast, so only a local written nowhere but
                 // in its own flow gets the assigned type.
-                if (local != null && !local.hasDelegate() && !writtenInClosure(block, name)) { result = t; fromAssignment = true; continue }
+                if ((local != null && !local.hasDelegate() || memberVal) && !writtenInClosure(block, name)) { result = t; fromAssignment = true; continue }
             }
         }
         // A write after the narrowing replaces what it said: `x = 10` makes `x` an `Int` from there on (K2 records

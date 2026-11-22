@@ -910,16 +910,35 @@ fun KotlinResolver.annotationParameters(entry: KtAnnotationEntry): List<ParamInf
  */
 internal fun KotlinResolver.nearerValueInvokeTargets(call: KtCallExpression, name: String): List<KotlinSymbol>? {
     val offset = call.textRange.startOffset
-    val local = localsAt(offset, name).firstOrNull()
+    val locals = localsAt(offset, name)
+    val local = locals.firstOrNull()
     val isValue = when {
         local != null -> local.kind != SymbolKind.METHOD // the nearest local decides: a local fun is a function
         else -> innermostClassDeclaresValue(offset, name) ?: return null
     }
     if (!isValue) return null
-    val type = typeOfName(name, offset) ?: return emptyList()
-    if (type.isTypeParameter) return emptyList()
+    val nearest = valueInvokeTargets(typeOfName(name, offset), offset)
+    // K2's tower: a value whose `invoke` cannot take these arguments does not end the search; the next value of
+    // that name further out is tried (`val some = 10; some()` calls a top-level `some: String` through
+    // `String.invoke`, an inner `x: (Int) -> Unit` gives way to an outer `x: (String) -> Unit` for `x("hello")`).
+    // Only when no value fits is the nearest one the answer, so its own error is what gets reported.
+    if (nearest == null || nearest.isEmpty() || nearest.none { isApplicable(it, call, null) }) {
+        val outer = locals.drop(1).takeWhile { it.kind != SymbolKind.METHOD }.mapNotNull { it.type as? KotlinType } +
+            service.topLevelByName(name).filter { it.kind == SymbolKind.FIELD && it.isExtension.not() }.mapNotNull { it.type as? KotlinType }
+        for (t in outer) {
+            val targets = valueInvokeTargets(t, offset) ?: continue
+            if (targets.any { isApplicable(it, call, null) }) return targets
+        }
+    }
+    return nearest
+}
+
+/** The `invoke` candidates a value of [type] is called through (null when it has none, empty when its type is
+ *  unknown): its `invoke` members and extensions, else the shape of a function type. */
+private fun KotlinResolver.valueInvokeTargets(type: KotlinType?, offset: Int): List<KotlinSymbol>? {
+    if (type == null || type.isTypeParameter) return emptyList()
     service.membersNamed(type.qualifiedName, type.typeArguments, "invoke")
-        .filter { it.kind == SymbolKind.METHOD }
+        .filter { it.kind == SymbolKind.METHOD && (!it.isExtension || extensionInScope(it)) }
         .takeIf { it.isNotEmpty() }
         ?.let { return it }
     // A function type the member lookup can't enumerate: its shape is the `invoke` signature. An extension
