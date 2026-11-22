@@ -167,7 +167,15 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
             // REORDERS: when nothing is in scope the whole list is kept, so the leniency a bare `Text` /
             // `Column` relies on is untouched, which is what filtering outright broke.
             .let { cands ->
-                cands.filter { topLevelInScope(it, fileContext) }.ifEmpty {
+                cands.filter { topLevelInScope(it, fileContext) }
+                    // The nearest scope level that can take the call is the only one Kotlin looks at: a same-package
+                    // `testFun()` beats a star-imported one, an explicit import beats both.
+                    .let { inScope ->
+                        if (inScope.size < 2) inScope
+                        else inScope.groupBy { topLevelScopeRank(it, fileContext) }.entries.sortedBy { it.key }.map { it.value }
+                            .firstOrNull { level -> level.any { !needsMoreArguments(it, argCount) } } ?: inScope
+                    }
+                    .ifEmpty {
                     // None in scope, but the name IS a type in scope (`import android.widget.Button` and then
                     // `Button(ctx)`): that class's constructor is the call. An unimported function of the same name
                     // (Material3's `Button`) is invisible to Kotlin, and keeping it made a View constructor read as
@@ -668,6 +676,14 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
         name,
         exactName = true
     ).filter { it.name == name && it.kind == SymbolKind.METHOD && (!it.isExtension || extensionInScope(it)) }
+    // A capitalized name that a TYPE in scope answers to (`import java.nio.file.Path`, then `Path("x")`) is that
+    // type; a top-level function of the same name that no import brings in (`kotlin.io.path.Path`) is invisible to
+    // Kotlin and is no target. The same rule [computeCallee] applies to the callee itself.
+    if ((q == null || q.selectorExpression !== call) && name.firstOrNull()?.isUpperCase() == true && out.isNotEmpty() &&
+        service.resolveTypeName(name, fileContext, enclosingClassFqn(call.textRange.startOffset))?.let { service.isKnownType(it) } == true
+    ) {
+        out.removeAll { f -> f.packageName != null && !f.isExtension && !topLevelInScope(f, fileContext) }
+    }
     // A fully-qualified top-level call `kotlin.math.abs(x)` / `kotlinx.coroutines.flow.flowOf(…)`: the receiver is
     // a PACKAGE (not a value/type — `memberReceiverOf` was null and the in-scope lookup above missed, since the
     // name isn't imported). Resolve the top-level function by its package FQN. Purely additive: only fires for a

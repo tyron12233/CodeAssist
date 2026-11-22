@@ -277,7 +277,7 @@ class KotlinSymbolService(
 
     // Per-(sub → super) memo of a type's parameterized instantiation of a supertype, expressed as a TEMPLATE
     // in the sub type's own type-parameter refs (arg-independent, so a receiver's actual args substitute in per
-    // call). Keyed "sub super"; a genuine non-supertype is not cached (rare — the receiver's extension set
+    // call). Keyed "sub\u0000super"; a genuine non-supertype is not cached (rare — the receiver's extension set
     // only carries extensions whose declared receiver IS a supertype). Powers [receiverSupertypeArgs].
     private val supertypeArgTemplateMemo = ConcurrentMap<String, List<TypeRef>>()
 
@@ -1109,7 +1109,7 @@ class KotlinSymbolService(
             val lastArgs = segs.last().substringAfter('<', "").substringBeforeLast('>', "")
             val fqn = resolveTypeName(path, ctx, enclosingClassFqn) ?: return null
             val args = if (lastArgs.isBlank()) emptyList()
-            else splitTopLevel(lastArgs).mapNotNull { typeFromText(it, ctx, enclosingClassFqn) }
+            else splitTopLevel(lastArgs).mapNotNull { typeArgumentFromText(it, ctx, enclosingClassFqn) }
             return KotlinType(fqn, args, nullable, this)
         }
         val head = core.substringBefore('<').trim()
@@ -1132,8 +1132,21 @@ class KotlinSymbolService(
         }
         val fqn = resolveTypeName(head, ctx, enclosingClassFqn) ?: return null
         val args = if (argText.isBlank()) emptyList()
-        else splitTopLevel(argText).mapNotNull { typeFromText(it, ctx, enclosingClassFqn) }
+        else splitTopLevel(argText).mapNotNull { typeArgumentFromText(it, ctx, enclosingClassFqn) }
         return KotlinType(fqn, args, nullable, this)
+    }
+
+    /** One written type argument: a use-site projection (`out T`, `in T`) is read off the text and carried as the
+     *  argument's [KotlinType.projection], the way a classpath type carries it, instead of becoming part of the
+     *  classifier name (a type named "out T", which resolved to nothing). */
+    private fun typeArgumentFromText(text: String, ctx: FileContext?, enclosingClassFqn: String?): KotlinType? {
+        val t = text.trim()
+        val projection = when {
+            t.length > 4 && t.startsWith("out") && t[3].isWhitespace() -> "out"
+            t.length > 3 && t.startsWith("in") && t[2].isWhitespace() -> "in"
+            else -> return typeFromText(t, ctx, enclosingClassFqn)
+        }
+        return typeFromText(t.substring(projection.length).trim(), ctx, enclosingClassFqn)?.withProjection(projection)
     }
 
     /** [core]'s segments split at top-level dots when some segment before the last carries type arguments
@@ -1363,7 +1376,10 @@ class KotlinSymbolService(
      * resolving it would only surface members the code can't call until the import is added.
      */
     fun resolveTypeName(name: String, ctx: FileContext?, enclosingClassFqn: String? = null): String? {
-        val simple = name.trim().removeSuffix("?").substringBefore('<').trim()
+        // An inner class of a generic outer (`Super<T1>.Inner`): the classifier is the dotted path without the
+        // outer's type arguments; cutting at the first `<` named the OUTER class.
+        val trimmed = name.trim().removeSuffix("?")
+        val simple = (if (">." in trimmed) stripOuterTypeArguments(trimmed) else trimmed).substringBefore('<').trim()
         if (simple.isEmpty()) return null
         // Memoized per (file scope, enclosing chain, name) — see [typeNameMemo] for the inputs this depends on
         // and where it is dropped. Keyed on the NORMALIZED [simple], so `Foo`, `Foo?` and `Foo<Bar>` share one
@@ -1398,6 +1414,32 @@ class KotlinSymbolService(
             prev = c
         }
         return sb.toString()
+    }
+
+    /** `A<X>.B<Y>` without the type arguments of every segment but the last: `A.B<Y>`. */
+    private fun stripOuterTypeArguments(text: String): String {
+        // Each segment before the last top-level dot loses its `<...>`.
+        val out = StringBuilder(text.length)
+        var depth = 0
+        var lastDot = -1
+        for ((i, ch) in text.withIndex()) if (ch == '<') depth++ else if (ch == '>') depth-- else if (ch == '.' && depth == 0) lastDot = i
+        depth = 0
+        for ((i, ch) in text.withIndex()) {
+            if (i > lastDot) { out.append(ch); continue }
+            when (ch) {
+                '<' -> depth++
+                '>' -> depth--
+                else -> if (depth == 0) out.append(ch)
+            }
+        }
+        return out.toString()
+    }
+
+    /** Whether the source class [rc] is `@Deprecated(level = HIDDEN)`. */
+    private fun hiddenDeprecated(rc: RawClass): Boolean {
+        if ("Deprecated" !in rc.annotationNames) return false
+        val psi = (rc.node as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? dev.ide.kotlin.syntax.psi.KtClassOrObject ?: return false
+        return psi.annotationEntries.any { it.shortName?.asString() == "Deprecated" && it.text.contains("HIDDEN") }
     }
 
     /** [resolveTypeName]'s resolution proper, on an already-normalized [simple] name. */
@@ -1447,7 +1489,9 @@ class KotlinSymbolService(
                 // memoized walk stays off the common path.
                 for (sup in kotlinSupertypesMemo(owner)) {
                     if (classes[sup]?.isInterface == true) continue
-                    "$sup.$simple".let { if (it in classes) return it }
+                    // A HIDDEN-deprecated nested class is not inherited into the subclass's scope (KT-14059): the
+                    // name goes on to the outer scopes.
+                    "$sup.$simple".let { if (it in classes && !hiddenDeprecated(classes.getValue(it))) return it }
                 }
                 owner = owner.substringBeforeLast('.', "").ifEmpty { null }
             }
@@ -1637,10 +1681,13 @@ class KotlinSymbolService(
         val m = PrefixMatcher(namePrefix)
         val own =
             KotlinPerf.span("own") { ownAndInheritedCached(typeFqn, typeArgs) }
+        // A value typed by the Java spelling `java.lang.Object` (`this as java.lang.Object`) has the Java class's
+        // own instance methods (`getClass()`, `notify()`, `wait()`), which the mapped `kotlin.Any` omits.
+        val all = if (typeFqn == JAVA_OBJECT) own + javaObjectInstanceMembers().filter { j -> own.none { it.name == j.name } } else own
         val ownMatched = when {
-            namePrefix.isEmpty() -> own
-            exactName -> own.filter { it.name == namePrefix }
-            else -> own.filter { m.matches(it.name) }
+            namePrefix.isEmpty() -> all
+            exactName -> all.filter { it.name == namePrefix }
+            else -> all.filter { m.matches(it.name) }
         }
         return ownMatched + KotlinPerf.span("ext") {
             extensionsFor(
@@ -1664,6 +1711,16 @@ class KotlinSymbolService(
      * receiver written as the explicit JVM FQN (a dotted `java.lang.String`), never a bare `String`, since
      * Kotlin exposes the JVM statics only through the Java spelling — both resolve to the same [typeFqn] here.
      */
+    /** Whether some project class declares a member extension PROPERTY named [name] (`val String.x` in its body). */
+    fun isMemberExtensionPropertyName(name: String): Boolean = name in model().memberExtensionPropertyNames
+
+    /** `java.lang.Object`'s instance methods read from its bytecode shape (see [membersForCompletion]). */
+    private fun javaObjectInstanceMembers(): List<KotlinSymbol> =
+        typeShape(JAVA_OBJECT)
+            ?.let { membersFromShape(it, emptyList(), HashSet(), synthesizeBeanProps = false) }
+            ?.filter { Modifier.STATIC !in it.modifiers && it.kind == SymbolKind.METHOD }
+            ?: emptyList()
+
     fun mappedTypeStatics(typeFqn: String): List<KotlinSymbol> {
         if (Builtins.kotlinTypeFor(typeFqn) == null) return emptyList() // not an explicit mapped JVM FQN
         val compute = {
@@ -1914,9 +1971,10 @@ class KotlinSymbolService(
             // `value: T` becomes `value: String`). toSymbol marks the class's `T` as a type parameter, then
             // substituteSymbol replaces it. No type arguments (a raw use) → members keep their `T` (unbound).
             val classBindings = rc.typeParameterNames.zip(typeArgs).toMap()
+            val readBindings = capturedReadBindings(classBindings, { rc.typeParameterNames }, { classTypeParameterBounds(fqn) })
             val own = rc.members.map {
                 val sym = toSymbol(it, fqn, rc.typeParameterNames)
-                if (classBindings.isEmpty()) sym else substituteSymbol(sym, classBindings)
+                if (classBindings.isEmpty()) sym else substituteSymbol(sym, classBindings, readBindings)
             }
             // An enum's `values()`/`valueOf()`/`entries` are compiler-synthesized (not written in source), so
             // the source model would otherwise miss them and `Color.values()` would flag unresolved.
@@ -1930,9 +1988,9 @@ class KotlinSymbolService(
             // `S.() -> S` parameter had an unbound receiver and every member call in its body went unresolved.
             val tps = rc.typeParameterNames.toHashSet()
             val inherited = rc.superTypeTexts.mapNotNull { text ->
-                val superFqn = sourceSupertypeFqn(text, rc.ctx, rc.fqn) ?: return@mapNotNull null
+                val superFqn = sourceSupertypeFqn(text, rc.ctx, headerScopeOwner(rc.fqn)) ?: return@mapNotNull null
                 val args = if ('<' !in text || "->" in text) emptyList()
-                else markTypeParameters(typeFromText(text, rc.ctx, fqn), tps)?.typeArguments.orEmpty()
+                else markTypeParameters(typeFromText(text, rc.ctx, headerScopeOwner(fqn)), tps)?.typeArguments.orEmpty()
                     .map { if (classBindings.isEmpty()) it else substitute(it, classBindings) }
                 superFqn to args
             }.flatMap { (superFqn, args) ->
@@ -2384,6 +2442,8 @@ class KotlinSymbolService(
         val text = rc.receiverText ?: return null
         // An extension on a project TYPEALIAS (`typealias Stroke = List<Offset>`, `fun Stroke.extendedWith(…)`) is
         // an extension on the alias's target, so it is keyed there; under the alias name no value ever finds it.
+        // A function-type receiver (`infix fun (() -> Unit).foo(...)`) is keyed under its `kotlin.FunctionN`.
+        if ("->" in text) return typeFromText(text, rc.ctx, ownerFqn)?.qualifiedName
         val tp = sourceReceiverTypeParam(rc)
             ?: return typeAliasTargetFqn(text.substringBefore('<').removeSuffix("?").trim(), rc.ctx)
                 ?: resolveTypeName(text, rc.ctx, ownerFqn)
@@ -2609,7 +2669,7 @@ class KotlinSymbolService(
         // mid-build index go uncached (mirrors [membersNamedForCheck]).
         if (idx == null || sourceClass(fqn) != null || !classpathCacheUsable(idx))
             return computeCompanionMembers(typeFqnRaw, namePrefix)
-        return companionMembersMemo.getOrPut("$typeFqnRaw $namePrefix") {
+        return companionMembersMemo.getOrPut("$typeFqnRaw\u0000$namePrefix") {
             computeCompanionMembers(
                 typeFqnRaw,
                 namePrefix
@@ -2931,13 +2991,15 @@ class KotlinSymbolService(
         synthesizeBeanProps: Boolean
     ): List<KotlinSymbol> {
         val bindings = classBindings(shape, typeArgs)
+        val readBindings = capturedReadBindings(bindings, { shape.typeParameters }, { shape.typeParameterBounds })
         // A member that re-declares a class type-parameter name (a static `<E> of(E)` on `List<E>`) shadows it,
         // so its own parameters are excluded from the class binding (bound later from the call site).
         val own = shape.members.map { m ->
             enrich(
                 substituteSymbol(
                     m,
-                    if (m.typeParameters.isEmpty()) bindings else bindings - m.typeParameters.toSet()
+                    if (m.typeParameters.isEmpty()) bindings else bindings - m.typeParameters.toSet(),
+                    if (m.typeParameters.isEmpty()) readBindings else readBindings - m.typeParameters.toSet(),
                 )
             )
         }
@@ -3057,6 +3119,25 @@ class KotlinSymbolService(
      *  use) falls back to its erased bound when known (Java bytecode), so a member's generic return type still
      *  resolves to something concrete (`findViewById(): T` → its `View` bound). The metadata decode carries no
      *  bounds, so an uncovered parameter there is simply left unbound (its old behavior). */
+    /**
+     * The class bindings a member's RESULT is read through. A receiver argument projected `in X` captures a type
+     * whose only known upper bound is the class's declared bound for that parameter (`Box<in String>` with
+     * `class Box<T : CharSequence>` reads `value` as a `CharSequence`, `Foo<in C>` with `<T : A>` as an `A`, and an
+     * unbounded parameter as `Any?`). Written out as an `out` projection of that bound, which an expression's type
+     * then approximates to the bound itself. A parameter position keeps the plain bindings, where `in X` takes X.
+     */
+    private fun capturedReadBindings(
+        bindings: Map<String, TypeRef>, tps: () -> List<String>, boundsOf: () -> List<TypeRef?>,
+    ): Map<String, TypeRef> {
+        if (bindings.values.none { (it as? KotlinType)?.projection == "in" }) return bindings
+        val tps = tps()
+        val bounds = boundsOf()
+        return bindings.mapValues { (name, v) ->
+            if ((v as? KotlinType)?.projection != "in") v
+            else ((bounds.getOrNull(tps.indexOf(name)) as? KotlinType) ?: KotlinType("kotlin.Any", nullable = true, context = this)).withProjection("out")
+        }
+    }
+
     private fun classBindings(shape: TypeShape, typeArgs: List<TypeRef>): Map<String, TypeRef> {
         if (shape.typeParameters.isEmpty()) return emptyMap()
         val out = HashMap<String, TypeRef>(shape.typeParameters.size)
@@ -3074,10 +3155,10 @@ class KotlinSymbolService(
      *  either is expected can be typed. Null when [type] isn't functional. */
     fun functionalShape(type: KotlinType): FunctionalShape? {
         if (TypeRendering.isFunctionType(type.qualifiedName) && type.typeArguments.isNotEmpty()) {
-            val params = type.typeArguments.dropLast(1)
+            val params = type.typeArguments.dropLast(1).map(::unprojected)
             val inputs = if (type.isExtensionFunctionType) params.drop(1) else params
             return FunctionalShape(
-                inputs, type.typeArguments.last(), type.isExtensionFunctionType,
+                inputs, unprojected(type.typeArguments.last()), type.isExtensionFunctionType,
                 receiverType = if (type.isExtensionFunctionType) params.firstOrNull() else null,
             )
         }
@@ -3098,10 +3179,19 @@ class KotlinSymbolService(
         // `Density` member. A Java SAM has no extension receiver, so this is null there.
         val samReceiver = sam.receiverTypeFqn?.let { typeByFqn(it, sam.receiverTypeArgs) }
         return FunctionalShape(
-            sam.paramTypes, sam.type,
+            sam.paramTypes.map { it?.let(::unprojected) }, sam.type?.let(::unprojected),
             isExtension = samReceiver != null, receiverType = samReceiver,
         )
     }
+
+    /**
+     * A lambda's parameter or result type without the use-site projection it was substituted with: a lambda
+     * converted to `Comparator<in String>` (Java's `Comparator<? super T>`) or `(in K) -> out V` takes a `String`
+     * and returns a `V` (K2 converts the projected functional type to its plain shape), so a projection kept here
+     * would read as a captured type, approximated to its bound.
+     */
+    private fun unprojected(t: TypeRef): TypeRef =
+        (t as? KotlinType)?.takeIf { it.projection == "in" || it.projection == "out" }?.withProjection("") ?: t
 
     /** Bind an extension's receiver type params from the actual receiver: `T.also` → T = the receiver type;
      *  `Iterable<T>.first()` on `List<String>` → T = String (positional from the receiver's args); a NESTED
@@ -3243,16 +3333,21 @@ class KotlinSymbolService(
     private fun sourceSupertypeRefs(fqn: String): List<TypeRef> {
         val rc = model().classByFqn[fqn] ?: return emptyList()
         val tps = rc.typeParameterNames.toHashSet()
-        return rc.superTypeTexts.mapNotNull { markTypeParameters(typeFromText(it, rc.ctx, fqn), tps) }
+        return rc.superTypeTexts.mapNotNull { markTypeParameters(typeFromText(it, rc.ctx, headerScopeOwner(fqn)), tps) }
     }
 
     /** Apply type-parameter [bindings] to a symbol's return/param/receiver-arg types. */
-    fun substituteSymbol(s: KotlinSymbol, bindings: Map<String, TypeRef>): KotlinSymbol {
+    fun substituteSymbol(
+        s: KotlinSymbol,
+        bindings: Map<String, TypeRef>,
+        /** The bindings for the RESULT type, where a captured type reads differently (see [capturedReadBindings]). */
+        resultBindings: Map<String, TypeRef> = bindings,
+    ): KotlinSymbol {
         if (bindings.isEmpty()) return s
         return KotlinSymbol(
             name = s.name,
             kind = s.kind,
-            type = s.type?.let { substitute(it, bindings) },
+            type = s.type?.let { substitute(it, resultBindings) },
             owner = s.owner,
             modifiers = s.modifiers,
             origin = s.origin,
@@ -3326,7 +3421,8 @@ class KotlinSymbolService(
             this,
             isTp,
             type.isExtensionFunctionType,
-            type.isComposable
+            type.isComposable,
+            type.projection,
         )
     }
 
@@ -3367,7 +3463,7 @@ class KotlinSymbolService(
             // walking the owner chain. A TOP-LEVEL hierarchy hid this -- the same-package fallback found it --
             // so only a sealed family nested in an object or class lost its supertype, and with it every
             // `return Plan.Full` from a function declared to return `Plan`.
-            rc.superTypeTexts.forEach { t -> sourceSupertypeFqn(t, rc.ctx, rc.fqn)?.let { direct += it } }
+            rc.superTypeTexts.forEach { t -> sourceSupertypeFqn(t, rc.ctx, headerScopeOwner(rc.fqn))?.let { direct += it } }
             // Every `enum class` extends `kotlin.Enum<Self>` without naming it: `val a: Enum<E> = E.A` and an
             // `Enum<*>` parameter both accept the entries.
             if (rc.isEnum) direct += "kotlin.Enum"
@@ -4445,7 +4541,7 @@ class KotlinSymbolService(
             val out = ArrayList<String>()
             for (rc in m.classByFqn.values) {
                 if (rc.fqn == fqn) continue
-                if (rc.superTypeTexts.any { superHeadFqn(it, rc.ctx, rc.fqn) == fqn }) out += rc.fqn
+                if (rc.superTypeTexts.any { superHeadFqn(it, rc.ctx, headerScopeOwner(rc.fqn)) == fqn }) out += rc.fqn
             }
             return out
         }
@@ -4597,18 +4693,47 @@ class KotlinSymbolService(
      * Either way the chain named no function type, so an `F()` passed where `(Int) -> Unit` is expected read as
      * "inferred type is F but (Int) -> Unit was expected".
      */
-    private fun sourceSupertypeFqn(text: String, ctx: FileContext?, ownerFqn: String): String? {
+    /**
+     * The class whose scope a source class [fqn]'s HEADER (its supertype list) is resolved in: the class around
+     * it, or none for a top-level one. K2 resolves supertypes outside the class, so its own nested classifiers
+     * are not visible there (`class MyClass : Base by prop { interface Base }` extends the outer `Base`).
+     */
+    private fun headerScopeOwner(fqn: String): String? {
+        val m = model()
+        // A local or anonymous type keeps its own key: its scope chain runs through the synthetic local keys,
+        // which only it can reach.
+        if (m.classByFqn[fqn]?.isLocal == true) return fqn
+        return fqn.substringBeforeLast('.', "").takeIf { it.isNotEmpty() && m.classByFqn.containsKey(it) }
+    }
+
+    private fun sourceSupertypeFqn(text: String, ctx: FileContext?, ownerFqn: String?): String? {
         if ("->" in text) return typeFromText(text, ctx, ownerFqn)?.qualifiedName
+        // An inner class of a generic outer (`Super<T1>.Inner()`): the classifier is the dotted path without the
+        // outer's arguments, which the type-text reader assembles.
+        val call = text.trim().let { t -> if (t.endsWith(")")) t.substringBefore('(') else t }
+        if ('<' in call && '.' in call.substringAfterLast('>')) typeFromText(call, ctx, ownerFqn)?.qualifiedName?.let { return it }
         // A supertype written through a PROJECT typealias (`typealias TA = Foo<String>; class B : TA()`) is the
         // aliased class, and that class's members and nested types are what `B` inherits. Generic aliases
         // count too, since only the head classifier matters for the chain.
         val head = text.substringBefore('<').removeSuffix("?").trim()
         // `Super<T1>.Inner` (an inner class's supertype) is `Super.Inner`: the arguments sit on every segment.
         val written = if ('.' in text && '<' in text) withoutTypeArguments(text) else text
-        val direct = if (model().classByFqn[ownerFqn]?.isLocal == true) resolveTypeName(written, ctx, ownerFqn)
+        val direct = if (ownerFqn == null || model().classByFqn[ownerFqn]?.isLocal == true) resolveTypeName(written, ctx, ownerFqn)
         else headerTypeName(written, ctx, ownerFqn)
         if (direct == null || direct !in model().classByFqn && !isKnownType(direct)) {
+            // A NESTED typealias of the class around (`class SubNested : NestedTA()` beside `typealias NestedTA = Nested`).
+            nestedTypeAlias(head.substringBefore('(').trim(), ownerFqn)?.takeIf { it.targetText.isNotBlank() }?.let { alias ->
+                val target = alias.targetText.substringBefore('<').removeSuffix("?").trim()
+                resolveTypeName(target, alias.ctx, alias.fqn.substringBeforeLast('.', "").ifEmpty { null })
+                    ?.takeIf { it in model().classByFqn || isKnownType(it) }?.let { return it }
+            }
             projectAliasClassifier(head, ctx)?.let { return it }
+            // A local class extending another local class of the same function (`class DerivedLocal : BaseLocal()`).
+            val localAt = ownerFqn?.lastIndexOf(".\$L") ?: -1
+            if (localAt >= 0) {
+                model().localClassesByOwnerAndName[ownerFqn!!.substring(0, localAt) + "#" + head.substringBefore('(').trim()]
+                    ?.let { return it }
+            }
         }
         val resolved = direct ?: return null
         if ('.' !in resolved && !isKnownType(resolved) && TypeRendering.isFunctionType("kotlin.$resolved")) {
@@ -4693,7 +4818,7 @@ class KotlinSymbolService(
         return rc.superTypeTexts.any { text ->
             // A supertype text carries its constructor call and type arguments (`Adapter()`, `Comparator<Int>`).
             val name = text.substringBefore('<').substringBefore('(').trim()
-            if (name.isEmpty()) false else resolveTypeName(name, rc.ctx, rc.fqn)?.let { !isKnownType(it) } ?: true
+            if (name.isEmpty()) false else resolveTypeName(name, rc.ctx, headerScopeOwner(rc.fqn))?.let { !isKnownType(it) } ?: true
         }
     }
 
@@ -4803,6 +4928,14 @@ class KotlinSymbolService(
      * KotlinNavigationTest.theseResolveButHaveNoNavigableDeclarationYet, which is waiting for the alias to get
      * a location of its own).
      */
+    /** The classifier the project typealias with FQN [fqn] denotes (`testPack.MyTypeAlias` = `AnnotationTarget`),
+     *  or null when [fqn] is no non-generic project alias. An import through an alias reaches the target's members. */
+    fun typeAliasClassifierByFqn(fqn: String): String? {
+        val alias = model().typeAliasByFqn[fqn]?.takeIf { it.typeParamCount == 0 && it.targetText.isNotBlank() } ?: return null
+        val target = alias.targetText.substringBefore('<').removeSuffix("?").trim()
+        return resolveTypeName(target, alias.ctx)?.takeIf { isKnownType(it) }
+    }
+
     fun typeAliasTargetFqn(simpleName: String, ctx: FileContext? = null): String? {
         if (aliasExpandDepth.get().value >= ALIAS_EXPAND_LIMIT) return null
         val alias = visibleTypeAlias(simpleName, ctx)
@@ -4922,7 +5055,7 @@ class KotlinSymbolService(
         if (Builtins.builtinSupertypes(fqn).isNotEmpty()) return true
         val declared = model().classByFqn[fqn] ?: return false
         for (text in declared.superTypeTexts) {
-            val resolved = resolveTypeName(text, declared.ctx, declared.fqn)
+            val resolved = resolveTypeName(text, declared.ctx, headerScopeOwner(declared.fqn))
             if (resolved == null) return false
             if (!closureKnown(resolved, visited)) return false
         }

@@ -101,6 +101,10 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
             is KtClassOrObject -> {
                 val inHeader = child != null && child !is KtClassBody
                 if (!inHeader && (!outerInstanceClosed || isSingletonScope(node))) {
+                    // An enum entry's body is an anonymous subclass of its enum: `this` there also has the enum's
+                    // members (`E1 { override fun foo() = outerFun() }`), which the entry's own key does not list.
+                    val enumOfEntry = (node as? dev.ide.kotlin.syntax.psi.KtEnumEntry)
+                        ?.getParentOfType<KtClassOrObject>(strict = true)?.fqName?.asString()
                     val fqn = node.fqName?.asString()
                         ?: (node as? KtObjectDeclaration)?.let {
                             dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(
@@ -110,11 +114,14 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
                         ?: (node as? KtClass)?.takeIf { it !is KtEnumEntry }
                             ?.let { dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(it) }
                     if (fqn != null) out += service.typeByFqn(fqn)
+                    if (enumOfEntry != null && enumOfEntry != fqn) out += service.typeByFqn(enumOfEntry)
                 }
                 // The class's companion object, then each superclass's, are implicit receivers after the instance:
                 // a `fun A.Companion.foo()` is a bare call inside `A` and inside a subclass. Singletons, so they
                 // stay reachable from the header and from nested classes, where the instance is not.
-                if (!(node is KtObjectDeclaration && node.isCompanion())) node.fqName?.asString()?.let { fqn ->
+                // Not from the class's own annotations, which are resolved outside it ([inClassHeaderScope]).
+                val inAnnotations = child is dev.ide.kotlin.syntax.psi.KtModifierList && child.parent === node
+                if (!(node is KtObjectDeclaration && node.isCompanion()) && !inAnnotations) node.fqName?.asString()?.let { fqn ->
                     for (owner in listOf(fqn) + service.supertypesOf(fqn).map { it.qualifiedName }) {
                         service.companionObjectFqn(owner)?.let { out += service.typeByFqn(it) }
                     }
@@ -277,6 +284,9 @@ fun KotlinResolver.localsAt(offset: Int, name: String? = null): List<KotlinSymbo
                     is KtDestructuringDeclaration -> if (wantedAny(st.entries.map { it.name })) {
                         out += destructuringLocals(st, inferType(st.initializer))
                     }
+                    // A labeled declaration (`L@ val fn = {}`) declares its local all the same.
+                    is dev.ide.kotlin.syntax.psi.KtLabeledExpression ->
+                        (st.baseExpression as? KtProperty)?.let { if (wanted(it.name)) out += localVar(it) }
 
                     else -> {}
                 }
@@ -481,7 +491,9 @@ internal fun KotlinResolver.accessorScopeLocals(offset: Int): List<KotlinSymbol>
         service.typeFromText(prop.typeReference?.text, fileContext, enclosingClassFqnOf(prop))
             ?: inferType(prop.initializer)
     val out = ArrayList<KotlinSymbol>(2)
-    out += KotlinSymbol(
+    // An extension property has no backing field: `field` in its accessor is an ordinary name
+    // (`val String.x get() = field.foo()` reads the member extension `String.field`).
+    if (prop.receiverTypeReference == null) out += KotlinSymbol(
         "field", SymbolKind.FIELD, type = propType, origin = SOURCE,
         declarationNode = runCatching { parsed.adapt(prop) }.getOrNull(),
     )
@@ -887,20 +899,37 @@ internal fun KotlinResolver.topLevelInScope(sym: KotlinSymbol, ctx: FileContext)
     return ctx.imports.any { imp -> if (imp.isStar) imp.packageName == pkg else imp.fqn == "$pkg.${sym.name}" }
 }
 
+/**
+ * The scope level an in-scope top-level [sym] is reached through, lower first: an explicit import (0) outranks the
+ * file's own package (1), which outranks a star import (2) and the default imports (3). K2 stops at the first
+ * level that has the name, so `import a.X` with `import b.*` reads `a.X`.
+ */
+internal fun topLevelScopeRank(sym: KotlinSymbol, ctx: FileContext): Int {
+    val pkg = sym.packageName ?: sym.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null } ?: return 1
+    val fqn = if (pkg.isEmpty()) sym.name else "$pkg.${sym.name}"
+    if (ctx.imports.any { !it.isStar && it.fqn == fqn }) return 0
+    if (pkg == ctx.packageName) return 1
+    if (ctx.imports.any { it.isStar && it.packageName == pkg }) return 2
+    return 3
+}
+
 /** Whether [name] is a member (function/property or a constructor `val/var` param) of any class enclosing
  *  [offset] in the live buffer — including an enclosing enum's own CONSTANTS, which are bare-accessible within
  *  its body (`fun opp() = LEFT`, `when (this) { LEFT -> … }`). Resolves same-file members the disk-based symbol
  *  service can't see yet. */
 internal fun KotlinResolver.enclosingClassMembersContain(offset: Int, name: String): Boolean {
     var node: KtElement? = elementAt(offset)
+    var child: KtElement? = null
     while (node != null) {
-        if (node is KtClassOrObject) {
+        // The class's own annotations are resolved outside it (see [inClassHeaderScope]).
+        if (node is KtClassOrObject && !(child is dev.ide.kotlin.syntax.psi.KtModifierList && child.parent === node)) {
             if (node.declarations.any {
                     (it is KtNamedFunction && it.name == name) || (it is KtProperty && it.name == name) ||
                         (it is KtEnumEntry && it.name == name)
                 }) return true
             if (node.primaryConstructorParameters.any { it.hasValOrVar() && it.name == name }) return true
         }
+        child = node
         node = node.parent
     }
     return false
@@ -1084,7 +1113,17 @@ fun KotlinResolver.enclosingClassFqn(offset: Int): String? = elementAt(offset)?.
  *  the `elementAt` offset lookup. */
 internal fun enclosingClassFqnOf(element: KtElement): String? {
     var node: KtElement? = element
+    var child: KtElement? = null
     while (node != null) {
+        // A class's header is resolved outside the class: its supertype types and its own annotations see the
+        // outer scope and the type parameters, not the class's nested classifiers (K2's class-header scopes;
+        // `class MyClass(...) : Base by prop { interface Base }` names the outer `Base`). The arguments of a
+        // supertype constructor call are not header types and keep the class's static scope.
+        if (node is KtClassOrObject && child != null && inClassHeaderScope(node, child, element)) {
+            child = node
+            node = node.parent
+            continue
+        }
         // A local class or an anonymous `object` has no FQN of its own, but the source model registers it under
         // a synthetic one ([dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn]) nested under the named
         // owner. Returning that keeps the scope walk going: its own nested types, its supertypes' nested types
@@ -1094,9 +1133,23 @@ internal fun enclosingClassFqnOf(element: KtElement): String? {
         if (node is KtClassOrObject) return node.fqName?.asString()
             ?: if (node is dev.ide.kotlin.syntax.psi.KtEnumEntry) null
             else dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(node)
+        child = node
         node = node.parent
     }
     return null
+}
+
+/**
+ * Whether [element], reached through [child] (a direct child of [cls]), stands in [cls]'s header proper: the type
+ * of a supertype entry, or an annotation of the class itself. Those are resolved in the scope around the class.
+ */
+internal fun inClassHeaderScope(cls: KtClassOrObject, child: KtElement, element: KtElement): Boolean = when (child) {
+    is dev.ide.kotlin.syntax.psi.KtSuperTypeList -> child.entries.any { e ->
+        val t = e.typeReference ?: return@any false
+        t.textRange.startOffset <= element.textRange.startOffset && element.textRange.endOffset <= t.textRange.endOffset
+    }
+    is dev.ide.kotlin.syntax.psi.KtModifierList -> cls !is dev.ide.kotlin.syntax.psi.KtEnumEntry && child.parent === cls
+    else -> false
 }
 
 /** The candidate set for a bare name-reference completion: locals, enclosing members, top-level.

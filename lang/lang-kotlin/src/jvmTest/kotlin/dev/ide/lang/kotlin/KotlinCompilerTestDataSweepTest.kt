@@ -199,9 +199,16 @@ class KotlinCompilerTestDataSweepTest {
         val stage = Regex("""^// RUN_PIPELINE_TILL: *(\w+)""", RegexOption.MULTILINE).find(text)?.groupValues?.get(1)
             ?: return null to "noStage"
         val heads = Regex("""^// ?FILE: *(\S+).*$""", RegexOption.MULTILINE).findAll(text).toList()
-        val files = if (heads.isEmpty()) listOf("Test.kt" to text) else heads.mapIndexed { i, m ->
-            val end = heads.getOrNull(i + 1)?.range?.first ?: text.length
-            m.groupValues[1] to text.substring(m.range.last + 1, end)
+        val files = if (heads.isEmpty()) listOf("Test.kt" to text) else {
+            // Code ahead of the first `// FILE:` is a file of the test too (the compiler's test runner keeps it,
+            // under the test's own name); dropping it lost declarations the other files use.
+            val lead = text.substring(0, heads.first().range.first)
+            val leadHasCode = lead.lineSequence().any { l -> l.isNotBlank() && !l.trimStart().startsWith("//") }
+            val leadFile = if (leadHasCode && heads.none { it.groupValues[1] == f.name }) listOf(f.name to lead) else emptyList()
+            leadFile + heads.mapIndexed { i, m ->
+                val end = heads.getOrNull(i + 1)?.range?.first ?: text.length
+                m.groupValues[1] to text.substring(m.range.last + 1, end)
+            }
         }
         if (files.any { !it.first.endsWith(".kt") }) return null to "nonKotlinFile"
         if (files.map { it.first }.toSet().size != files.size) return null to "dupFile"

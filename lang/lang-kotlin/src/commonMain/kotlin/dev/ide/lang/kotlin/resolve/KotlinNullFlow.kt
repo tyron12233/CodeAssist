@@ -295,7 +295,10 @@ internal fun KotlinResolver.flowProvenTypes(ref: KtNameReferenceExpression, deep
         val key = erasedTypeText(target.text ?: continue)
         if (!seen.add(key)) continue
         val g = Goal(nameMatcher(name, alias), key, deep, name = name)
-        if (flowProvenAt(ref, offset, g, name, stopAt = null)) typeFromIsTarget(target)?.let { out += it }
+        if (flowProvenAt(ref, offset, g, name, stopAt = null)) typeFromIsTarget(target)?.let { t ->
+            // Proven only nullable (`a as String?`) unless the flow also proves the value non-null.
+            out += if (isNonNullIsTarget(target.text) || flowProvenNonNull(ref)) t else t.withNullable(true)
+        }
     }
     return out
 }
@@ -678,11 +681,13 @@ private class Goal(
 ) {
     val nonNull: Boolean get() = type == null && !provesNull
 
-    /** Whether [ref], the target of an `is`/`as` on the value, proves this goal. */
+    /** Whether [ref], the target of an `is`/`as` on the value, proves this goal. A nullable target
+     *  (`a as String?`) proves the type without proving non-null: K2 records `a: String?`, which a later `!!` on
+     *  the same value then makes a `String`. */
     fun target(ref: KtTypeReference?): Boolean {
         if (provesNull) return false
         val text = ref?.text ?: return false
-        return isNonNullIsTarget(text) && (type == null || erasedTypeText(text) == type)
+        return if (type == null) isNonNullIsTarget(text) else erasedTypeText(text) == type
     }
 
     /** Whether [e] evaluates to the value itself: it is, or it is a `val` copy, `!!` or `as` of it. */
@@ -1269,6 +1274,9 @@ private fun KotlinResolver.condGuarantees(
             (condGuarantees(c.right, whenTrue, g) || completionProves(c.right, g) ||
                 (stripAll(c.right) as? KtConstantExpression)?.text == (!whenTrue).toString())
 
+        // An infix call to a project function whose contract speaks for its result (`b takeRight (x is String)`).
+        KtTokens.IDENTIFIER -> g.deep && infixContractGuarantees(c, whenTrue, g)
+
         else -> false
     }
     // `v is T` (a non-nullable target) implies non-null on the true side (`!is` flips it).
@@ -1347,6 +1355,32 @@ private fun KotlinResolver.contractGuarantees(
     completion: Boolean = false,
 ): Boolean {
     val callee = runCatching { resolveCalleeFunction(call) }.getOrNull() ?: return false
+    val args = call.valueArguments
+    return contractGuaranteesOf(callee, receiver, whenTrue, g, completion) { params, name ->
+        val named = args.firstOrNull { it.getArgumentName()?.asName?.identifier == name }
+        val i = params.indexOf(name)
+        val arg = named ?: args.getOrNull(i)?.takeIf { it.getArgumentName() == null && i >= 0 }
+        arg?.getArgumentExpression()
+    }
+}
+
+/** [contractGuarantees] for an infix call `left name right`: the receiver is `left`, the one argument `right`. */
+private fun KotlinResolver.infixContractGuarantees(c: KtBinaryExpression, whenTrue: Boolean, g: Goal): Boolean {
+    if (c.operationToken != KtTokens.IDENTIFIER) return false
+    val callee = runCatching { resolveInfixFunction(c) }.getOrNull() ?: return false
+    return contractGuaranteesOf(callee, c.left, whenTrue, g, completion = false) { params, name ->
+        c.right.takeIf { params.indexOf(name) == 0 }
+    }
+}
+
+private fun KotlinResolver.contractGuaranteesOf(
+    callee: dev.ide.lang.kotlin.symbols.KotlinSymbol,
+    receiver: KtExpression?,
+    whenTrue: Boolean,
+    g: Goal,
+    completion: Boolean,
+    argumentFor: (params: List<String?>, name: String) -> KtExpression?,
+): Boolean {
     if (!callee.origin.fromSource) return false
     val fn = (callee.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi
         as? dev.ide.kotlin.syntax.psi.KtNamedFunction ?: return false
@@ -1354,17 +1388,11 @@ private fun KotlinResolver.contractGuarantees(
     if ((first.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() != "contract") return false
     val effects = first.lambdaArguments.firstOrNull()?.getLambdaExpression()?.bodyExpression?.statements.orEmpty()
     val params = fn.valueParameters.map { it.name }
-    val args = call.valueArguments
     // Each contract expression names a parameter (or `this`); it matches when the argument passed for it does.
     val argMatches: Matcher = { e ->
         when (val x = unwrapParens(e)) {
             is dev.ide.kotlin.syntax.psi.KtThisExpression -> receiver != null && carriesValue(receiver, g)
-            is KtNameReferenceExpression -> {
-                val named = args.firstOrNull { it.getArgumentName()?.asName?.identifier == x.getReferencedName() }
-                val i = params.indexOf(x.getReferencedName())
-                val arg = named ?: args.getOrNull(i)?.takeIf { it.getArgumentName() == null && i >= 0 }
-                arg != null && carriesValue(arg.getArgumentExpression(), g)
-            }
+            is KtNameReferenceExpression -> argumentFor(params, x.getReferencedName())?.let { carriesValue(it, g) } == true
             else -> false
         }
     }
@@ -1383,7 +1411,14 @@ private fun KotlinResolver.contractGuarantees(
             }
             else -> false
         }
-        if (holds && condGuarantees(implies.right, true, inner)) return true
+        if (!holds) continue
+        if (condGuarantees(implies.right, true, inner)) return true
+        // `implies cond` on a Boolean parameter: what the argument passed for it guarantees when true
+        // (`b takeRight (x is String)` makes `x` a String).
+        (unwrapParens(implies.right) as? KtNameReferenceExpression)?.getReferencedName()
+            ?.takeIf { it in params }
+            ?.let { argumentFor(params, it) }
+            ?.let { if (condGuarantees(it, true, g)) return true }
     }
     return false
 }

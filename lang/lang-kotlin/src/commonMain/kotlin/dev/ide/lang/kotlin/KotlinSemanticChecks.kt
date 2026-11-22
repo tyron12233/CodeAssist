@@ -9,6 +9,7 @@ import dev.ide.kotlin.syntax.psi.KtLabeledExpression
 import dev.ide.kotlin.syntax.psi.KtPropertyDelegate
 import dev.ide.lang.kotlin.resolve.flowProvenTypes
 import dev.ide.lang.kotlin.resolve.flowProvenNonNull
+import dev.ide.lang.kotlin.resolve.importedSingletonMembers
 import dev.ide.kotlin.syntax.psi.KtAnnotated
 import dev.ide.kotlin.syntax.psi.KtAnnotationEntry
 import dev.ide.kotlin.syntax.psi.KtArrayAccessExpression
@@ -763,10 +764,11 @@ internal class KotlinSemanticChecks(
         // lone functional argument.
         if (service.isInterfaceType(fqn) == true && (isSamConversion(call) || isFunctionValueArgument(call, resolver))) return null
         val r = callee.textRange
+        // K2's two wordings: INTERFACE_AS_FUNCTION for an interface, CREATING_AN_INSTANCE_OF_ABSTRACT_CLASS else.
+        val message = if (service.isInterfaceType(fqn) == true) "Interface '$name' does not have constructors"
+        else "Cannot create an instance of an abstract class '$name'"
         return Diagnostic(
-            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
-            "Cannot create an instance of abstract class or interface '$name'",
-            KotlinDiagnosticCodes.ABSTRACT_INSTANTIATION,
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR, message, KotlinDiagnosticCodes.ABSTRACT_INSTANTIATION,
         )
     }
 
@@ -847,12 +849,21 @@ internal class KotlinSemanticChecks(
             if (resolver.localsAt(off, name).isNotEmpty()) return null
             if (resolver.enclosingClassMembersContain(off, name)) return null
             if (resolver.localTypesInScope(off).containsKey(name)) return null
+            // A value brought in by a star import of a class (`import TestEnum.*`, an enum entry `Annotation`).
+            if (resolver.importedSingletonMembers(name, exactName = true).any { it.name == name && it.kind != SymbolKind.METHOD }) return null
             if (service.topLevelByName(name).any {
                     (it.kind == SymbolKind.FIELD || it.kind == SymbolKind.METHOD) && resolver.topLevelInScope(it, resolver.fileContext)
                 }
             ) return null
         }
 
+        // A PROPERTY of the receiver's value outranks a nested classifier in value position: `D.E` where
+        // `object D { class E }` and `val D.E get() = ""` reads the property (K2's qualifier priority).
+        if (full is KtDotQualifiedExpression) resolver.inferType(full.receiverExpression)?.let { recv ->
+            if (service.membersNamed(recv.qualifiedName, recv.typeArguments, name)
+                    .any { it.name == name && it.kind == SymbolKind.FIELD && (!it.isExtension || extensionInScope(it, resolver.fileContext)) }
+            ) return null
+        }
         val r = full.textRange
         return Diagnostic(
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,
@@ -3231,7 +3242,10 @@ internal class KotlinSemanticChecks(
      *  a type declaring an `invoke` operator. Kept permissive so a callable value is never flagged. */
     internal fun isInvocable(type: KotlinType): Boolean {
         if (type.qualifiedName.startsWith("kotlin.Function") || type.isExtensionFunctionType) return true
-        return service.membersNamedForCheck(type.qualifiedName, type.typeArguments, "invoke").isNotEmpty()
+        if (service.membersNamedForCheck(type.qualifiedName, type.typeArguments, "invoke").isNotEmpty()) return true
+        // A class or interface with a function type among its supertypes (`interface A : (String) -> Unit`)
+        // inherits that function type's `invoke`.
+        return service.supertypesOf(type.qualifiedName).any { TypeRendering.isFunctionType(it.qualifiedName) }
     }
 
     /**
@@ -3609,7 +3623,18 @@ internal class KotlinSemanticChecks(
      */
     private fun callAcceptsNullableReceiver(expr: KtDotQualifiedExpression, resolver: KotlinResolver): Boolean {
         val call = expr.selectorExpression as? KtCallExpression ?: return false
-        val sym = runCatching { resolver.resolveCalleeFunction(call) }.getOrNull() ?: return false
+        val callee = runCatching { resolver.resolveCalleeFunction(call) }.getOrNull() ?: return false
+        // On a nullable receiver a member is not applicable at all, so an extension declared on the nullable
+        // type is the one Kotlin binds even when the type also has a same-named member (`fun Any?.foo()` beside
+        // `Foo.foo()`, called on a `Foo?`).
+        if (!callee.isExtension) {
+            return runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+                .any { it.isExtension && it.kind == SymbolKind.METHOD && extensionAcceptsNull(it) }
+        }
+        return extensionAcceptsNull(callee)
+    }
+
+    private fun extensionAcceptsNull(sym: KotlinSymbol): Boolean {
         if (!sym.isExtension) return false
         val decl = (sym.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? KtCallableDeclaration
         if (decl != null && sym.origin.fromSource) {

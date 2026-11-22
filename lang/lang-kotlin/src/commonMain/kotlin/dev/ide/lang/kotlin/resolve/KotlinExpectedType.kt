@@ -54,11 +54,11 @@ private fun KotlinResolver.expectedTypeWalk(from: KtElement?, start: KtElement?)
         when (node) {
             is KtProperty ->
                 if (child != null && child === node.initializer)
-                    return node.typeReference?.text?.let { service.typeFromText(it, fileContext) }
+                    return node.typeReference?.text?.let { service.typeFromText(it, fileContext, enclosingClassFqnOf(node)) }
 
             is KtNamedFunction ->
                 if (child != null && child === node.bodyExpression && !node.hasBlockBody())
-                    return node.typeReference?.text?.let { service.typeFromText(it, fileContext) }
+                    return node.typeReference?.text?.let { service.typeFromText(it, fileContext, enclosingClassFqnOf(node)) }
                 // A block body, a parameter, a default value: what surrounds the declaration expects nothing of
                 // them. Walking on handed a local function's statements the type of whatever encloses it.
                 else if (child != null) return null

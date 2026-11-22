@@ -80,7 +80,7 @@ fun KotlinResolver.inferType(expr: KtExpression?): KotlinType? {
     if (KotlinResolverStats.enabled) KotlinResolverStats.inferComputes++
     val frame = if (scoringMemoable) ScoringDepFrame().also { scoringDepFrames.addLast(it) } else null
     val r = try {
-        when (expr) {
+        approximateCapturedValue(when (expr) {
             is KtParenthesizedExpression -> inferType(expr.expression)
             is KtConstantExpression -> constType(expr)
             is KtStringTemplateExpression -> service.typeByFqn("kotlin.String")
@@ -116,7 +116,7 @@ fun KotlinResolver.inferType(expr: KtExpression?): KotlinType? {
             // gives `::name.isInitialized` and `User::name.name` their members.
             is KtCallableReferenceExpression -> propertyReferenceType(expr)
             else -> null
-        }
+        })
     } finally {
         if (frame != null) scoringDepFrames.removeLast()
         inferringTypes.remove(expr)
@@ -124,6 +124,21 @@ fun KotlinResolver.inferType(expr: KtExpression?): KotlinType? {
     if (cacheable) inferCache[expr] = r
     else if (frame != null) scoringInferCache[expr] = ScoringEntry(r, frame.deps)
     return r
+}
+
+/**
+ * The type a value has when the type substituted into its position was a PROJECTED type argument: `x.get()` on
+ * an `Inv<out Number>` reads a captured `out Number`, a type the value only knows by its upper bound. K2
+ * approximates such a captured type of a value to that bound (`Number`); for an `in` projection the bound is
+ * `Any?` (`MutableList<in Int>.get()` is `Any?`). A star keeps its existing shape, read by the callers that
+ * know it. Substitution leaves the projection on a top-level type parameter's binding, so the expression's type
+ * is the one place the approximation happens.
+ */
+internal fun KotlinResolver.approximateCapturedValue(t: KotlinType?): KotlinType? = when (t?.projection) {
+    null, "", "*" -> t
+    "out" -> t.withProjection("")
+    "in" -> service.typeByFqn("kotlin.Any").withNullable(true)
+    else -> t
 }
 
 /** Infer the result type of a binary operator: comparison/equality/logical → `Boolean`; elvis → the
@@ -395,8 +410,46 @@ internal fun KotlinResolver.inferArrayGet(e: KtArrayAccessExpression): KotlinTyp
 internal fun KotlinResolver.thisType(expr: KtThisExpression): KotlinType? {
     val receivers = implicitReceiversAt(expr.textRange.startOffset)
     val label = expr.getLabelName()
-    return if (label == null) receivers.firstOrNull()
-    else receivers.firstOrNull { it.qualifiedName.substringAfterLast('.') == label }
+    if (label == null) return receivers.firstOrNull()
+    // A label names a function, lambda or class, not a type: `this@foo` in `fun Any?.foo()` is foo's receiver.
+    // The innermost one is the receiver at the head of the chain, which carries any smart cast of `this`.
+    labeledReceiverOwner(expr)?.let { (owner, innermost) ->
+        if (innermost) receivers.firstOrNull()?.let { return it }
+        val declared = when (owner) {
+            is KtNamedFunction -> owner.receiverTypeReference?.text
+                ?.let { service.typeFromText(it, fileContext, enclosingClassFqnOf(owner)) }
+            is dev.ide.kotlin.syntax.psi.KtLambdaExpression -> lambdaReceiverType(owner)
+            is dev.ide.kotlin.syntax.psi.KtClassOrObject -> owner.fqName?.asString()?.let { service.typeByFqn(it) }
+            else -> null
+        }
+        if (declared != null) return if (declared.nullable && outerReceiverNullChecked(expr, owner)) declared.withNullable(false) else declared
+    }
+    return receivers.firstOrNull { it.qualifiedName.substringAfterLast('.') == label }
+}
+
+/**
+ * Whether an `if (this != null)` (or `this@label != null`) written in [owner]'s own body, outside every receiver
+ * scope nested in it, encloses [expr] in its then-branch: the outer receiver `this@label` reads is then non-null.
+ */
+private fun KotlinResolver.outerReceiverNullChecked(expr: KtThisExpression, owner: KtElement): Boolean {
+    var node: KtElement? = expr.parent as? KtElement
+    // A check counts only when no receiver scope lies between it and [owner] (it is then about [owner]'s `this`).
+    var checked = false
+    while (node != null && node !== owner) {
+        if (node is dev.ide.kotlin.syntax.psi.KtLambdaExpression || node is KtNamedFunction || node is dev.ide.kotlin.syntax.psi.KtClassOrObject) {
+            checked = false
+        } else if (node is KtIfExpression && node.then?.textRange?.contains(expr.textRange.startOffset) == true) {
+            val c = unwrapParens(node.condition) as? KtBinaryExpression
+            if (c != null && c.operationToken == KtTokens.EXCLEQ) {
+                val l = unwrapParens(c.left)
+                val r = unwrapParens(c.right)
+                val thisSide = if (r is KtConstantExpression && r.text == "null") l else if (l is KtConstantExpression && l.text == "null") r else null
+                if (thisSide is KtThisExpression) checked = true
+            }
+        }
+        node = node.parent as? KtElement
+    }
+    return checked
 }
 
 /** `super` (optionally `super<Base>`) → the enclosing class's supertype, so `super.member` lists inherited
@@ -506,6 +559,14 @@ private fun intSuffixes(raw: String): Triple<String, Boolean, Boolean> {
 internal fun KotlinResolver.typeOfQualified(q: KtQualifiedExpression): KotlinType? {
     // A fully-qualified type used directly (`android.R`, `java.util.Locale`) — resolve the whole text.
     if (service.isKnownType(q.text)) return service.typeByFqn(q.text)
+    // A member access path checked earlier (`if (b.x is String) b.x.length`, `if (Obj.y is Int) n = Obj.y`) is
+    // smart cast like a variable. Off while the lowerer drives its own narrowing stack, as for names.
+    if (narrowings.isEmpty() && q is dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression && checkedPathSelectors().isNotEmpty() &&
+        (q.selectorExpression as? KtNameReferenceExpression)?.getReferencedName()?.let { it in checkedPathSelectors() } == true
+    ) {
+        qualifiedPathKey(q)?.takeIf { it in checkedPaths() }
+            ?.let { key -> pathSmartCastAt(q, key, q.textRange.startOffset)?.let { return it } }
+    }
     // Static ENUM-CONSTANT access (`SomeEnum.A`): the constant's value type IS the enum. Resolve it via the
     // receiver's TYPE denotation FIRST — so it works even when the receiver name also resolves to a value
     // (an enum `E` shadowed by the top-level `kotlin.math.E`, a Double), and without this `SomeEnum.A` is
@@ -811,7 +872,7 @@ internal fun KotlinResolver.constructorResultType(fqn: String, call: KtCallExpre
     // before the type-parameter check below, which the service leaves empty for the built-in `Array`.
     if (fqn == "kotlin.Array") {
         call.typeArgumentList?.arguments?.firstOrNull()?.typeReference?.text
-            ?.let { service.typeFromText(it, fileContext) }
+            ?.let { service.typeFromText(it, fileContext, enclosingClassFqnOf(call)) }
             ?.let { return service.typeByFqn(fqn, listOf(it)) }
         val initLambda = call.lambdaArguments.firstOrNull()?.getLambdaExpression()
             ?: call.valueArguments.mapNotNull { it.getArgumentExpression() as? KtLambdaExpression }
@@ -824,7 +885,7 @@ internal fun KotlinResolver.constructorResultType(fqn: String, call: KtCallExpre
     // used verbatim — Kotlin does no argument inference when they're spelled out. Take them positionally.
     call.typeArgumentList?.arguments?.takeIf { it.isNotEmpty() }?.let { targs ->
         val args = tps.mapIndexed { i, _ ->
-            targs.getOrNull(i)?.typeReference?.text?.let { service.typeFromText(it, fileContext) }
+            targs.getOrNull(i)?.typeReference?.text?.let { service.typeFromText(it, fileContext, enclosingClassFqnOf(call)) }
                 ?: service.typeByFqn("kotlin.Any")
         }
         return service.typeByFqn(fqn, args)
@@ -895,7 +956,9 @@ internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
     if (narrowings.isEmpty()) smartCastTypeAt(name, offset)?.let { return it }
     localsAt(offset, name).firstOrNull()?.let { return it.type as? KotlinType }
     // Members of any implicit `this` (apply/with/run block, extension fn, enclosing class).
-    for (recv in implicitReceiversAt(offset)) {
+    val receivers = implicitReceiversAt(offset)
+    for (level in receivers.indices) {
+        val recv = receivers[level]
         // For a same-file class PROPERTY prefer the live PSI inference: the source model types an implicit-typed
         // member from a crude parse of the initializer's callee name (`val x = MutableStateFlow(Key())` →
         // raw `MutableStateFlow`), dropping the generic argument, whereas [sameFileProperty] runs full
@@ -904,6 +967,14 @@ internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
         val live = sameFileTypeMember(recv.qualifiedName, name)?.takeIf { it.kind == SymbolKind.FIELD }
         (live?.type as? KotlinType)?.let { return it }
         (memberNamed(recv, name)?.type as? KotlinType)?.let { return it }
+        // A member extension property of an enclosing class, taking this receiver as its extension receiver
+        // (`val String.x` declared in the class, read bare inside `with(s) { x }`): K2's tower tries the
+        // extensions of a receiver level before the members of the receivers outside it.
+        if (level < receivers.size - 1 && mayBeMemberExtensionProperty(name)) {
+            scopeMemberExtensions(offset, recv, name, exactName = true)
+                .firstOrNull { it.name == name && it.kind == SymbolKind.FIELD }
+                ?.let { (it.type as? KotlinType)?.let { t -> return t } }
+        }
     }
     // A bare read of an enclosing class's COMPANION member (`fun f() = CONST` inside the class) — companion
     // members are accessible without a qualifier, but live on a distinct classifier the receiver walk misses.
@@ -925,8 +996,18 @@ internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
         ?.let { return sameFileProperty(it as KtProperty, null).type as? KotlinType }
     // Only one that is IN SCOPE (imported, same package, default-imported): `kotlin.math.E` is a top-level
     // property too, and without the scope test a project `enum class E` read as that `Double` everywhere.
-    service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.FIELD && topLevelInScope(it, fileContext) }
-        ?.let { return it.type as? KotlinType }
+    run {
+        var best: dev.ide.lang.kotlin.symbols.KotlinSymbol? = null
+        var bestRank = Int.MAX_VALUE
+        for (s in service.topLevelByName(name)) {
+            if (s.kind != SymbolKind.FIELD || !topLevelInScope(s, fileContext)) continue
+            if (best == null) { best = s; continue } // a single candidate (the usual case) needs no ranking
+            if (bestRank == Int.MAX_VALUE) bestRank = topLevelScopeRank(best, fileContext)
+            val rank = topLevelScopeRank(s, fileContext)
+            if (rank < bestRank) { best = s; bestRank = rank }
+        }
+        best?.let { return it.type as? KotlinType }
+    }
     // A bare type name used as an expression (e.g. `Foo` in `Foo.CONST`): a LOCAL type in scope first (a local
     // `object`/`class` the module model registered under a synthetic FQN), else a resolvable type name. The
     // ENCLOSING class is passed so a NESTED one reached by its simple name resolves (`object Inner` referenced
@@ -935,10 +1016,30 @@ internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
     // read as unresolved. Mirrors the unresolved-TYPE check, which already passes it.
     if (name.firstOrNull()?.isUpperCase() == true) {
         localTypesInScope(offset)[name]?.let { return service.typeByFqn(it) }
+        // A value a star import of a class brings in (`import TestEnum.*` then `val x = Annotation`): an explicit
+        // star import outranks the default imports, whose `kotlin.Annotation` classifier is no value anyway.
+        importedSingletonMembers(name, exactName = true)
+            .firstOrNull { it.name == name && (it.kind == SymbolKind.ENUM_CONSTANT || it.kind == SymbolKind.FIELD) }
+            ?.let { (it.type as? KotlinType)?.let { t -> return t } }
         service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))
             ?.let { return service.typeByFqn(it) }
     }
     return null
+}
+
+/** Whether a class of this file or of the project declares a member extension property named [name]: the gate in
+ *  front of the receiver-level extension lookup in [typeOfName]. */
+private fun KotlinResolver.mayBeMemberExtensionProperty(name: String): Boolean {
+    val live = caches.memberExtensionPropertyNames ?: HashSet<String>().also { out ->
+        fun visit(e: KtElement) {
+            if (e is KtProperty && e.receiverTypeReference != null && e.parent is dev.ide.kotlin.syntax.psi.KtClassBody) e.name?.let { out += it }
+            var c = e.firstChild
+            while (c != null) { (c as? KtElement)?.let(::visit); c = c.nextSibling }
+        }
+        visit(ktFile)
+        caches.memberExtensionPropertyNames = out
+    }
+    return name in live || service.isMemberExtensionPropertyName(name)
 }
 
 internal fun KotlinResolver.typeOfTypeName(expr: KtExpression): KotlinType? {

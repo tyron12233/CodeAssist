@@ -34,7 +34,7 @@ internal fun KotlinResolver.inferCallBindings(
 
     call.typeArgumentList?.arguments?.takeIf { it.isNotEmpty() }?.let { targs ->
         sym.typeParameters.forEachIndexed { i, name ->
-            targs.getOrNull(i)?.typeReference?.text?.let { service.typeFromText(it, fileContext) }
+            targs.getOrNull(i)?.typeReference?.text?.let { service.typeFromText(it, fileContext, enclosingClassFqnOf(call)) }
                 ?.let { cs.fix(name, it) }
         }
         return cs.solve(erasure)

@@ -1709,6 +1709,153 @@ class KotlinCompilerParityTest {
         clean("fun foo(p: Int.() -> Unit) { 1.p(); with(2) { p() } }")
     }
 
+    /** A use-site projection written in source is a projection: a value read through it is the captured type's
+     *  bound (`out T` reads its bound, `in T` reads `Any?`), and an `in` position binds the variable itself. */
+    @Test
+    fun projectedTypeArgumentsCaptureAndApproximate() {
+        clean("interface Inv<T> { fun get(): T }\nfun f(x: Inv<out CharSequence>) { x.get().length }")
+        clean("interface Inv<T>\nfun <Y> bar(l: Inv<Y>): Y = TODO()\nfun <X : Inv<out String>> foo(x: X) { bar(x).length }")
+        clean(
+            "class Key<T>\nclass Box<T>\nfun <T : Any> get(key: Key<in T>): T? = null\nfun <T> acceptBox(box: Box<T>) {}\n" +
+                "fun <V> test(key: Key<in Box<V>>) { get(key)?.let { acceptBox(it) } }",
+        )
+        assertCodes("fun f(x: MutableList<in Int>) { val s: Int = x[0] }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+    }
+
+    /** `a == b` smart casts each side to the other's type when the left's `equals` is primitive (`String`, an enum,
+     *  a final class), and `===` always does. */
+    @Test
+    fun equalitySmartCastsThroughPrimitiveEquals() {
+        clean("fun foo(vararg ts: String, a: Any?) { if (ts[0] == a) { a.length } }")
+        clean("interface A\nclass B : A\nval X = B()\nfun foo(b: B) {}\nfun main(a: A) { if (a === X) { foo(a) } }")
+    }
+
+    /** A cast to a nullable type proves the type; a `!!` on the same value then makes it non-null. */
+    @Test
+    fun nullableCastThenNotNullAssertion() {
+        clean("fun t(a: Any?) {\n (a as String?)!!\n a.length\n}")
+    }
+
+    /** A generic extension PROPERTY (`val <R> R.boxed`) applies to any receiver, as a generic extension function does. */
+    @Test
+    fun genericExtensionPropertiesResolveOnAnyReceiver() {
+        clean("class Box<V>(val value: V)\nval <R> R.boxed: Box<R> get() = TODO()\ninterface A\nfun t(a: A) { a.boxed.value }")
+        clean("val <T> T.foo: T? get() = null\nfun test(): Int? = 1.foo")
+    }
+
+    /** A class's supertypes are resolved outside it: its own nested classifiers are not visible there. */
+    @Test
+    fun classHeaderSeesTheOuterScope() {
+        clean("interface Base { fun foo() {} }\nclass MyClass(val prop: Base) : Base by prop { interface Base }\nfun t(d: MyClass) { d.foo() }")
+        assertCodes("class A : Nested() { open class Nested }", KotlinDiagnosticCodes.UNRESOLVED)
+    }
+
+    /** At one receiver level the receiver's extensions (a member extension of an enclosing class) come before the
+     *  members of the receivers outside it. */
+    @Test
+    fun memberExtensionOfInnerReceiverBeatsOuterMember() {
+        clean("class Test(val x: Int) {\n val String.x: String get() = this\n fun test(s: String) { with(s) { x.length } }\n}")
+    }
+
+    /** A project function's contract speaks for an infix call too, including `implies` on a Boolean parameter. */
+    @Test
+    fun infixCallContracts() {
+        clean(
+            "import kotlin.contracts.*\n@OptIn(ExperimentalContracts::class)\ninfix fun Boolean.takeRight(cond: Boolean): Boolean {\n" +
+                " contract { returns(true) implies cond }\n return cond\n}\nfun t(b: Boolean, x: Any) { if (b takeRight (x is String)) { x.length } }",
+        )
+    }
+
+    /** `when (val x = this)` narrows `this` along with `x`; `this@foo` naming the innermost receiver is `this`. */
+    @Test
+    fun receiverAliasesNarrowTogether() {
+        clean("fun Any.t(): Int = when (val x = this) { is String -> { x.length; length }\n else -> 0 }")
+        clean("fun Any?.foo(): Int { if (this@foo is Int) return this; return 1 }")
+    }
+
+    /** A type with a function type among its supertypes is invocable. */
+    @Test
+    fun functionSupertypeMakesAValueInvocable() {
+        clean("interface T\ninterface A : T, (String) -> Unit\nfun t(f: T) { when (f) { is A -> f(\"Hello\") } }")
+    }
+
+    /** A star import of a class's members outranks the default imports in value position. */
+    @Test
+    fun starImportedEnumEntryOutranksDefaultImport() {
+        clean("import demo.TestEnum.*\nenum class TestEnum { Annotation, Collection }\nfun t() { val x1 = Annotation; val x2 = Collection }")
+    }
+
+    /** Smaller scope fixes: a labeled local declaration, a property beside a nested class in value position, a
+     *  HIDDEN nested class not inherited, a local class extending another, explicit type arguments in a class. */
+    @Test
+    fun scopeResolutionCorners() {
+        clean("fun t() {\n L@ val fn = {}\n fn()\n}")
+        clean("object D { class E }\nval D.E get() = \"\"\nval de = D.E")
+        clean(
+            "open class A {\n @Deprecated(\"\", level = DeprecationLevel.HIDDEN)\n class B\n}\nclass B { fun foo() {} }\n" +
+                "class C : A() { fun test(b: B) { b.foo() } }",
+        )
+        clean("open class Bar { fun foo() {} }\nfun t() {\n open class BaseLocal : Bar() { fun baz() {} }\n class DerivedLocal : BaseLocal()\n DerivedLocal().baz()\n DerivedLocal().foo()\n}")
+        clean(
+            "fun <T> materialize(): T = null!!\nclass Result\nclass Foo {\n fun t() { val r = materialize<Result>(); save(r) }\n" +
+                " private fun save(r: Result) {}\n class Result\n}",
+        )
+    }
+
+    /** A member access path checked with `is` is smart cast where it is read again. */
+    @Test
+    fun memberPathSmartCasts() {
+        clean("object Obj { val y: Any? = 2 }\nfun t(): Int { var b = 0\n if (Obj.y is Int) { b = Obj.y }\n return b }")
+        clean("open class A(open val x: Any)\nclass B(x: Any) : A(x)\nfun t(b: B) { if (b.x is String) { b.x.length } }")
+    }
+
+    /** An explicit import outranks a star import, and the file's own package outranks a star import. */
+    @Test
+    fun importLevelsRankTopLevels() {
+        assertCodes("var X: Int = 1\nfun t() { val s: String = X }", KotlinDiagnosticCodes.TYPE_MISMATCH)
+        clean("fun testFun() = \"239\"\nval t: String = testFun()")
+    }
+
+    /** On a nullable receiver an extension declared on the nullable type is the call, not the member. */
+    @Test
+    fun nullableReceiverExtensionOverMember() {
+        clean("class Foo { fun foo() {} }\nfun Any?.foo() {}\nfun test(f: Foo?) { f.foo() }")
+    }
+
+    /** An extension property has no backing field: `field` in its accessor is an ordinary name. */
+    @Test
+    fun extensionPropertyHasNoBackingField() {
+        clean("interface B { fun foo(): Int }\nclass A {\n val String.x: Int get() { return field.foo() }\n val String.field: B get() = TODO()\n}")
+    }
+
+    /** Calling an interface is an error (INTERFACE_AS_FUNCTION) when the only `Path` in scope is the imported
+     *  `java.nio.file.Path`: the unimported top-level `kotlin.io.path.Path(...)` function is not a candidate. With
+     *  that function imported the call is fine. The bound reference `REGEX_TEST::find` in `?.let` stays clean. */
+    @Test
+    fun calledInterfaceWithUnimportedSameNamedFunction() {
+        val body = "\nval REGEX_TEST = Regex(\"\")\nfun readOrNull(path: Path): String? = runCatching { path.readText() }.getOrNull()\n" +
+            "fun main(): String? {\n    return readOrNull(Path(\"Hello.kt\"))\n        ?.let(REGEX_TEST::find)\n" +
+            "        ?.groupValues\n        ?.firstOrNull()\n}\n"
+        val missing = jdkErrors("import java.nio.file.Path\nimport kotlin.io.path.readText\nimport kotlin.io.readText\n$body")
+        assertEquals(listOf(KotlinDiagnosticCodes.ABSTRACT_INSTANTIATION), missing.map { it.code }, "for the unimported factory: $missing")
+        assertTrue(missing.single().message.contains("does not have constructors"), missing.single().message)
+        val imported = jdkErrors("import java.nio.file.Path\nimport kotlin.io.path.Path\nimport kotlin.io.path.readText\n$body")
+        assertTrue(imported.isEmpty(), "with `import kotlin.io.path.Path`: $imported")
+        val star = jdkErrors("import java.nio.file.Path\nimport kotlin.io.path.*\n$body")
+        assertTrue(star.isEmpty(), "with `import kotlin.io.path.*`: $star")
+    }
+
+    /** [errors] with the JDK on the classpath, for code that names `java.*` types. */
+    private fun jdkErrors(code: String): List<Diagnostic> = runBlocking {
+        val text = "package demo\n$code\n"
+        val src = tempProject(mapOf("Use.kt" to text))
+        val jdk = dev.ide.testkit.TestJars.jdkBaseJar(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"), "codeassist-jdk-jar"))
+        val a = KotlinSourceAnalyzer(fakeContext(src, listOfNotNull(stdlibJarPath(), jdk)))
+        val doc = SnippetDoc(text, DiskFile(src.resolve("Use.kt")))
+        a.incrementalParser.parseFull(doc)
+        a.analyze(doc.file).diagnostics.filter { it.severity == Severity.ERROR && it.code != KotlinDiagnosticCodes.SYNTAX }
+    }
+
     /** The errors of [target], one of several [files] of one project (each taken as written, no package added). */
     private fun errorsIn(files: Map<String, String>, target: String): List<Diagnostic> = runBlocking {
         val src = tempProject(files)

@@ -142,7 +142,7 @@ internal fun KotlinResolver.inferTypeArguments(
     call.typeArgumentList?.arguments?.takeIf { it.isNotEmpty() }?.let { targs ->
         sym.typeParameters.forEachIndexed { i, name ->
             targs.getOrNull(i)?.typeReference?.text
-                ?.let { service.typeFromText(it, fileContext) }?.let { bindings[name] = it }
+                ?.let { service.typeFromText(it, fileContext, enclosingClassFqnOf(call)) }?.let { bindings[name] = it }
         }
         return bindings
     }
@@ -168,10 +168,23 @@ internal fun KotlinResolver.inferTypeArguments(
             expr is KtCallableReferenceExpression && bindCallableReferenceReturn(pt, expr, bindings) -> {}
             // A spread `*arr` fills the vararg with the array's ELEMENTS: `listOf(*arr)` binds T to the element.
             else -> inferType(expr)?.let { if (arg.getSpreadElement() != null) spreadElementType(it) else it }
-                ?.let { unify(pt, it, bindings) }
+                ?.let { unify(pt, throughTypeParameterBound(pt, it, expr), bindings) }
         }
     }
     return bindings
+}
+
+/**
+ * The argument type [at] as the generic parameter [pt] sees it: a value typed by an in-scope type parameter
+ * (`x: X` with `<X : Inv<out String>>`) is an `Inv<...>` only through its bound, and K2's constraint
+ * `X <: Inv<Y>` is solved through that supertype, so `bar(x)` for `fun <Y> bar(l: Inv<Y>): Y` binds `Y` from
+ * the bound's argument. Anything else is returned as it is.
+ */
+internal fun KotlinResolver.throughTypeParameterBound(pt: KotlinType, at: KotlinType, expr: KtExpression): KotlinType {
+    if (pt.typeArguments.isEmpty() || at.typeArguments.isNotEmpty() || '.' in at.qualifiedName ||
+        at.qualifiedName == pt.qualifiedName || pt.isTypeParameter
+    ) return at
+    return receiverForMembers(at, expr.textRange.startOffset) ?: at
 }
 
 /**
@@ -185,7 +198,7 @@ internal fun KotlinResolver.inferTypeArguments(
  */
 internal fun KotlinResolver.lambdaFunctionType(lambda: KtLambdaExpression): KotlinType {
     val params = lambda.valueParameters.map { p ->
-        p.typeReference?.text?.let { service.typeFromText(it, fileContext) } ?: KotlinType(UNKNOWN_LAMBDA_PARAMETER)
+        p.typeReference?.text?.let { service.typeFromText(it, fileContext, enclosingClassFqnOf(lambda)) } ?: KotlinType(UNKNOWN_LAMBDA_PARAMETER)
     }
     val result = (if (params.isEmpty()) inferLambdaResult(lambda) as? KotlinType else null)
         ?: service.typeByFqn("kotlin.Any").withNullable(true)
@@ -498,7 +511,8 @@ internal fun KotlinResolver.bindingsFromArgExprs(
         val paramIndex = if (sym.varargParamIndex in 0..<i) sym.varargParamIndex else i
         val pt = (sym.paramTypes.getOrNull(paramIndex) ?: sym.paramTypes.lastOrNull()) as? KotlinType
             ?: return@forEachIndexed
-        inferType(expr)?.let { if (i in spread) spreadElementType(it) else it }?.let { unify(pt, it, bindings) }
+        inferType(expr)?.let { if (i in spread) spreadElementType(it) else it }
+            ?.let { unify(pt, throughTypeParameterBound(pt, it, expr), bindings) }
     }
     return bindings
 }
@@ -533,7 +547,11 @@ internal fun KotlinResolver.unify(
         // with `R : Any` — so `xs.mapNotNull { … : Note? }` yields `List<Note>`, not `List<Note?>` (which would
         // make the elements spuriously nullable). A bare `R` binds the argument unchanged (`R = Note?` stays
         // nullable), so `let { it }` / `map { … }` are unaffected.
-        val bound = if (param.nullable) arg.withNullable(false) else arg
+        // A projection the parameter's position itself carries is not part of the variable: `Key<in T>` against
+        // `Key<in Box<V>>` makes `T = Box<V>`. Against an unprojected position (`Inv<T>` for `Inv<out X>`) the
+        // variable takes the captured type, kept as the projected argument and approximated where it is read.
+        val unprojected = if (param.projection.isNotEmpty() && arg.projection == param.projection) arg.withProjection("") else arg
+        val bound = if (param.nullable) unprojected.withNullable(false) else unprojected
         val cur = bindings[param.qualifiedName] as? KotlinType
         when {
             cur == null -> bindings.getOrPut(param.qualifiedName) { bound }

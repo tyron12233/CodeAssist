@@ -233,7 +233,8 @@ internal fun KotlinResolver.importedSingletonMembers(
     var out: ArrayList<KotlinSymbol>? = null
     for (imp in fileContext.imports) {
         if (imp.alias != null || !imp.containerCapitalized) continue
-        val container = imp.container
+        // An import through a project typealias (`import testPack.MyTypeAlias.*`) reaches the aliased class.
+        val container = imp.container.let { c -> if (c.isEmpty()) c else service.typeAliasClassifierByFqn(c) ?: c }
         if (container.isEmpty()) continue
         // A non-star import names ONE member, so a name that can't match it skips the lookup entirely.
         val member = if (imp.isStar) null else imp.lastSegment

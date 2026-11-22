@@ -229,7 +229,7 @@ internal fun KotlinResolver.bindingsFromTypeArgs(
     val args = call.typeArgumentList?.arguments ?: return emptyMap()
     val bindings = HashMap<String, TypeRef>()
     sym.typeParameters.forEachIndexed { i, tp ->
-        args.getOrNull(i)?.typeReference?.text?.let { service.typeFromText(it, fileContext) }
+        args.getOrNull(i)?.typeReference?.text?.let { service.typeFromText(it, fileContext, enclosingClassFqnOf(call)) }
             ?.let { bindings[tp] = it }
     }
     return bindings

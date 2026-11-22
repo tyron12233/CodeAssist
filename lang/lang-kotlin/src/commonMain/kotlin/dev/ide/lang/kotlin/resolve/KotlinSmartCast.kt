@@ -59,12 +59,56 @@ internal fun KotlinResolver.smartCastTypeAt(name: String, offset: Int): KotlinTy
             // back edge brings the written value round to this read, so K2's data flow merges the narrowing away
             // at the loop's entry (FirDataFlowAnalyzer's loop-entry reset of reassigned variables).
             if (rewrittenBetween(start, node, name)) return null
+            // A declaration of the same name between the check and the use shadows the checked variable
+            // (`when (val y = x) { is String -> { val y = y.length; useInt(y) } }`): the use reads the new one.
+            if (shadowedBetween(start, node, name)) return null
+            // A plain write of the variable between the check and the use replaces the value the check was about
+            // (`if (b is DefaultImpl) { b = makeOther(); b.x }`): what holds now is the flow's to say.
+            if (assignedBetween(start, node, name)) return flowNarrowing(name, offset)
             return keepDeclaredWhenNarrower(it, name, offset)
         }
         child = node
         node = node.parent
     }
     return flowNarrowing(name, offset)
+}
+
+/** Whether a block strictly between [from] and its ancestor [to] has a statement `name = ...` before the path to [from]. */
+private fun KotlinResolver.assignedBetween(from: KtElement?, to: KtElement, name: String): Boolean {
+    if ('.' in name || name == THIS_SUBJECT) return false
+    var child: KtElement? = null
+    var n = from
+    while (n != null && n !== to) {
+        if (n is KtBlockExpression && child != null) {
+            for (st in n.statements) {
+                if (st === child) break
+                if (st is KtBinaryExpression && st.operationToken == KtTokens.EQ &&
+                    (unwrapParens(st.left) as? KtNameReferenceExpression)?.getReferencedName() == name
+                ) return true
+            }
+        }
+        child = n
+        n = n.parent
+    }
+    return false
+}
+
+/** Whether a block strictly between [from] and its ancestor [to] declares a local [name] before the path to [from]. */
+private fun shadowedBetween(from: KtElement?, to: KtElement, name: String): Boolean {
+    if ('.' in name || name == THIS_SUBJECT) return false
+    var child: KtElement? = null
+    var n = from
+    while (n != null && n !== to) {
+        if (n is KtBlockExpression && child != null) {
+            for (st in n.statements) {
+                if (st === child) break
+                if ((st as? dev.ide.kotlin.syntax.psi.KtProperty)?.name == name) return true
+            }
+        }
+        child = n
+        n = n.parent
+    }
+    return false
 }
 
 /** Whether a node strictly between [from] and its ancestor [to] runs again and writes [name] ([rewrittenOnBackEdge]). */
@@ -230,12 +274,219 @@ internal const val THIS_SUBJECT = "this"
 
 /** The smart-cast key an `is` check's subject stands for: its simple name, or [THIS_SUBJECT] for a bare
  *  `this`. Null for everything else (a call, a qualified chain, a labeled `this`), which never narrows. */
+/** `smartCastSubjectKey(expr) == name` without building a path key unless the selector already matches: this runs
+ *  for every name read under every enclosing condition, so the common miss must not allocate. */
+internal fun KotlinResolver.subjectMatches(expr: KtExpression?, name: String): Boolean =
+    when (val e = unwrapParens(expr)) {
+        is KtNameReferenceExpression -> e.getReferencedName() == name
+        is KtThisExpression -> name == THIS_SUBJECT && smartCastSubjectKey(e) == THIS_SUBJECT
+        is dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression -> {
+            val sel = (e.selectorExpression as? KtNameReferenceExpression)?.getReferencedName()
+            val dot = name.lastIndexOf('.')
+            sel != null && name.length - dot - 1 == sel.length && name.regionMatches(dot + 1, sel, 0, sel.length) &&
+                qualifiedPathKey(e) == name
+        }
+        else -> false
+    }
+
 internal fun KotlinResolver.smartCastSubjectKey(expr: KtExpression?): String? =
     when (val e = unwrapParens(expr)) {
         is KtNameReferenceExpression -> e.getReferencedName()
-        is KtThisExpression -> if (e.getLabelName() == null) THIS_SUBJECT else null
+        // `this@foo` naming the innermost receiver is that same `this` (K2 keys both to one receiver variable).
+        is KtThisExpression -> if (e.getLabelName() == null || labeledReceiverOwner(e)?.second == true) THIS_SUBJECT else null
+        is dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression -> qualifiedPathKey(e)
         else -> null
     }
+
+/** The path keys this file checks ([KotlinResolverCaches.checkedPaths]), from one walk of the file. */
+internal fun KotlinResolver.checkedPaths(): Set<String> {
+    caches.checkedPaths?.let { return it }
+    val out = HashSet<String>()
+    val aliases = HashMap<String, MutableList<String>>()
+    fun add(e: KtExpression?) {
+        (unwrapParens(e) as? dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression)?.let { qualifiedPathKey(it) }?.let { out += it }
+    }
+    fun visit(p: KtElement) {
+        when (p) {
+            is dev.ide.kotlin.syntax.psi.KtProperty -> if (!p.isVar && p.isLocal && p.typeReference == null) {
+                val key = (unwrapParens(p.initializer) as? dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression)?.let { qualifiedPathKey(it) }
+                val n = p.name
+                if (key != null && n != null) { aliases.getOrPut(key) { ArrayList(1) } += n; out += key }
+            }
+            is KtIsExpression -> add(p.leftHandSide)
+            is KtBinaryExpressionWithTypeRHS -> add(p.left)
+            is KtWhenExpression -> add(p.subjectExpression)
+            is KtBinaryExpression -> if (p.operationToken == KtTokens.EQEQ || p.operationToken == KtTokens.EXCLEQ ||
+                p.operationToken == KtTokens.EQEQEQ || p.operationToken == KtTokens.EXCLEQEQEQ) { add(p.left); add(p.right) }
+        }
+        var c = p.firstChild
+        while (c != null) { (c as? KtElement)?.let(::visit); c = c.nextSibling }
+    }
+    visit(ktFile)
+    caches.pathAliases = aliases
+    caches.checkedPaths = out
+    return out
+}
+
+/** Whether the member access path [q] reads one stable value: its receiver is stable (a stable name, `this`, an
+ *  object or package qualifier, a stable path) and its selector is a stable property of this project. */
+private fun KotlinResolver.stablePath(q: dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression, depth: Int = 0): Boolean {
+    if (depth > 8) return false
+    val sel = (q.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return false
+    val r = unwrapParens(q.receiverExpression)
+    val recvType = inferType(r)
+    if (recvType == null) {
+        // A package qualifier: a top-level property of this project, a `val` with no getter or delegate.
+        val decl = service.topLevelByName(sel).firstOrNull { it.kind == dev.ide.lang.resolve.SymbolKind.FIELD }
+            ?.let { (it.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? dev.ide.kotlin.syntax.psi.KtProperty }
+            ?: return false
+        return !decl.isVar && decl.getter?.bodyExpression == null && !decl.hasDelegate()
+    }
+    val receiverStable = when (r) {
+        is KtThisExpression -> true
+        is KtNameReferenceExpression -> smartCastInstability(r, null) == null && !varWrittenInClosure(r)
+        is dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression -> isTypeReceiver(r) || stablePath(r, depth + 1)
+        else -> false
+    }
+    if (!receiverStable) return false
+    if (service.sourceClass(recvType.qualifiedName) == null) return false
+    if (sourceMemberInstability(recvType.qualifiedName, sel) != null) return false
+    // [sourceMemberInstability] leaves an inherited open member of a final class undecided; the declaration the
+    // read reaches must itself be a plain `val` (a custom getter, a delegate or a `var` is never stable).
+    val decl = service.membersNamed(recvType.qualifiedName, recvType.typeArguments, sel)
+        .firstOrNull { it.kind == dev.ide.lang.resolve.SymbolKind.FIELD && !it.isExtension }
+        ?.let { (it.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi } ?: return false
+    return when (decl) {
+        is dev.ide.kotlin.syntax.psi.KtProperty -> !decl.isVar && decl.getter?.bodyExpression == null && !decl.hasDelegate()
+        is dev.ide.kotlin.syntax.psi.KtParameter -> !decl.isMutable
+        else -> false
+    }
+}
+
+/** Whether [ref] reads a local `var` that a closure in its scope (a lambda, a local function, an object) writes: the
+ *  value the variable holds may then change at any time, so no member path through it is stable. */
+private fun KotlinResolver.varWrittenInClosure(ref: KtNameReferenceExpression): Boolean {
+    val name = ref.getReferencedName()
+    val decl = (localsAt(ref.textRange.startOffset, name).firstOrNull()?.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi
+        as? dev.ide.kotlin.syntax.psi.KtProperty ?: return false
+    if (!decl.isVar) return false
+    val scope = decl.parent as? KtElement ?: return false
+    var found = false
+    fun visit(e: KtElement, inClosure: Boolean) {
+        if (found) return
+        val closure = inClosure || e is dev.ide.kotlin.syntax.psi.KtLambdaExpression ||
+            e is dev.ide.kotlin.syntax.psi.KtNamedFunction || e is dev.ide.kotlin.syntax.psi.KtObjectLiteralExpression
+        if (closure && e is KtBinaryExpression && e.operationToken == KtTokens.EQ &&
+            (unwrapParens(e.left) as? KtNameReferenceExpression)?.getReferencedName() == name
+        ) { found = true; return }
+        var c = e.firstChild
+        while (c != null) { (c as? KtElement)?.let { visit(it, closure) }; c = c.nextSibling }
+    }
+    visit(scope, false)
+    return found
+}
+
+/** The narrowing of the path [key] read at [offset]: a check on the path itself, else one on a local `val`
+ *  initialized with it ([KotlinResolverCaches.pathAliases]). */
+internal fun KotlinResolver.pathSmartCastAt(q: dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression, key: String, offset: Int): KotlinType? {
+    // Only a STABLE path is smart cast (K2: every step a `val` without a custom getter or open override, declared in
+    // this module); an unstable one keeps its declared type, and the smart-cast-impossible check speaks for it.
+    if (!stablePath(q)) return null
+    smartCastTypeAt(key, offset)?.let { return it }
+    for (alias in caches.pathAliases?.get(key).orEmpty()) {
+        // Only while the alias is the in-scope declaration of that name.
+        if (localsAt(offset, alias).isEmpty()) continue
+        smartCastTypeAt(alias, offset)?.let { return it }
+    }
+    return null
+}
+
+/** The selectors of [checkedPaths]. */
+internal fun KotlinResolver.checkedPathSelectors(): Set<String> =
+    caches.checkedPathSelectors ?: checkedPaths().mapTo(HashSet()) { it.substringAfterLast('.') }
+        .also { caches.checkedPathSelectors = it }
+
+/**
+ * The smart-cast key of a member access PATH (`b.x`, `Obj.y`, `example.ns.y`, `this.p`): the names joined by dots,
+ * a leading `this` kept. A check on the path narrows the same path read again (K2 tracks a stable member access
+ * as a variable of its own). Null for anything with a call, an index or a safe call in it.
+ */
+internal fun KotlinResolver.qualifiedPathKey(e: dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression): String? =
+    rawPathKey(e)?.let { canonicalPath(it) }
+
+private fun KotlinResolver.rawPathKey(e: dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression): String? {
+    val sel = e.selectorExpression as? KtNameReferenceExpression ?: return null
+    val head = when (val r = unwrapParens(e.receiverExpression)) {
+        is KtNameReferenceExpression -> r.getReferencedName()
+        is KtThisExpression -> if (r.getLabelName() == null) "this" else return null
+        is dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression -> rawPathKey(r) ?: return null
+        else -> return null
+    }
+    return head + "." + sel.getReferencedName()
+}
+
+/** [path] as the file spells the same declaration by its shortest name: its own package dropped (`example.x` is
+ *  `x` in package `example`), an explicitly imported head replaced by its simple name (`example.ns.y` is `y` under
+ *  `import example.ns.y`). One variable has one key however it is written. */
+private fun KotlinResolver.canonicalPath(path: String): String {
+    for (imp in fileContext.imports) {
+        if (imp.isStar || imp.alias != null) continue
+        val f = imp.fqn
+        if (path == f) return imp.simpleName
+        if (path.length > f.length && path.startsWith(f) && path[f.length] == '.') return imp.simpleName + path.substring(f.length)
+    }
+    val pkg = fileContext.packageName
+    return if (pkg.isNotEmpty() && path.length > pkg.length && path.startsWith(pkg) && path[pkg.length] == '.') path.substring(pkg.length + 1) else path
+}
+
+/**
+ * The declaration a labeled `this@label` names, and whether it provides the INNERMOST implicit receiver at that
+ * point: the nearest enclosing extension function, receiver lambda or class whose label is [label] (a function's
+ * or class's name, a lambda's `label@` or the name of the call it is passed to). Null when no receiver owner
+ * carries the label.
+ */
+internal fun KotlinResolver.labeledReceiverOwner(e: KtThisExpression): Pair<KtElement, Boolean>? {
+    val label = e.getLabelName() ?: return null
+    var first = true
+    var node: KtElement? = e.parent as? KtElement
+    while (node != null) {
+        when (node) {
+            is dev.ide.kotlin.syntax.psi.KtLambdaExpression -> if (lambdaReceiverType(node) != null) {
+                if (lambdaLabel(node) == label) return node to first
+                first = false
+            }
+            is dev.ide.kotlin.syntax.psi.KtNamedFunction -> if (node.receiverTypeReference != null) {
+                if (node.name == label) return node to first
+                first = false
+            }
+            is dev.ide.kotlin.syntax.psi.KtProperty -> if (node.receiverTypeReference != null) {
+                if (node.name == label) return node to first
+                first = false
+            }
+            is dev.ide.kotlin.syntax.psi.KtClassOrObject -> {
+                if (node.name == label) return node to first
+                first = false
+            }
+        }
+        node = node.parent as? KtElement
+    }
+    return null
+}
+
+/** A lambda's label: its own `label@`, else the name of the call it is an argument of (`with(x) { this@with }`). */
+internal fun lambdaLabel(lambda: dev.ide.kotlin.syntax.psi.KtLambdaExpression): String? {
+    var e: KtElement = lambda
+    while (true) {
+        val p = e.parent
+        if (p is dev.ide.kotlin.syntax.psi.KtLabeledExpression) return p.getLabelName()
+        if (p is dev.ide.kotlin.syntax.psi.KtAnnotatedExpression || p is dev.ide.kotlin.syntax.psi.KtParenthesizedExpression) { e = p; continue }
+        break
+    }
+    var arg: KtElement? = e.parent as? KtElement
+    if (arg is dev.ide.kotlin.syntax.psi.KtValueArgument) arg = arg.parent as? KtElement
+    if (arg is dev.ide.kotlin.syntax.psi.KtValueArgumentList) arg = arg.parent as? KtElement
+    return ((arg as? KtCallExpression)?.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+}
 
 /** The narrowing a condition imposes on [name] when it evaluates to [whenTrue]: from `name is T` (true side)
  *  / `name !is T` (false side), conjoined through `&&` on the true side and `||` on the false side. Null when
@@ -248,8 +499,7 @@ internal fun KotlinResolver.conditionNarrowing(
 ): KotlinType? =
     when (val c = unwrapParens(cond)) {
         is KtIsExpression -> {
-            val lhs = smartCastSubjectKey(c.leftHandSide)
-            if (lhs == name && whenTrue != c.isNegated) typeFromIsTarget(c.typeReference) else null
+            if (whenTrue != c.isNegated && subjectMatches(c.leftHandSide, name)) typeFromIsTarget(c.typeReference) else null
         }
 
         is KtBinaryExpression -> when (c.operationToken) {
@@ -259,11 +509,76 @@ internal fun KotlinResolver.conditionNarrowing(
             KtTokens.OROR -> if (!whenTrue) conditionNarrowing(c.left, name, false)
                 ?: conditionNarrowing(c.right, name, false) else null
 
+            KtTokens.EQEQ, KtTokens.EQEQEQ -> if (whenTrue) equalityNarrowing(c, name) else null
+            KtTokens.EXCLEQ, KtTokens.EXCLEQEQEQ -> if (!whenTrue) equalityNarrowing(c, name) else null
+
             else -> null
         }
 
         else -> null
     }
+
+/**
+ * `a == b` holding: each operand then has the other's type, when the equality is known to be primitive
+ * (identity-like). Port of FirDataFlowAnalyzer.processEqContractsBasedOnPrimitiveEquals: always for `===`, and
+ * for `==` when the `equals` the LEFT operand's type calls is `Any`'s, `String`'s or an enum's (K2 asks its
+ * EqualsOverrideContract of the left operand's type, whichever side is narrowed). Nothing when both sides are
+ * nullable, or the other side is the `null` literal (a null check is the null flow's).
+ */
+private fun KotlinResolver.equalityNarrowing(c: KtBinaryExpression, name: String): KotlinType? {
+    val other = when {
+        subjectMatches(c.left, name) -> c.right
+        subjectMatches(c.right, name) -> c.left
+        else -> return null
+    } ?: return null
+    if (unwrapParens(other).let { it is dev.ide.kotlin.syntax.psi.KtConstantExpression && it.text == "null" }) return null
+    val subject = if (other === c.right) c.left else c.right
+    val otherType = inferType(other) ?: return null
+    val subjectType = inferType(subject)
+    if (otherType.nullable && subjectType?.nullable != false) return null
+    // The value then has BOTH types; one type stands for that intersection only when it is the narrower of the
+    // two (`current === this` on an unrelated `A` and `B` keeps `current` an `A`).
+    if (subjectType != null && !subjectType.isTypeParameter && !subjectType.withNullable(false).isAssignableFrom(otherType.withNullable(false))) return null
+    val identity = c.operationToken == KtTokens.EQEQEQ || c.operationToken == KtTokens.EXCLEQEQEQ
+    if (!identity) {
+        val leftType = (if (other === c.left) otherType else subjectType) ?: return null
+        if (!equalsSafeForSmartCast(leftType, c.textRange.startOffset)) return null
+    }
+    return if (subjectType?.nullable == false) otherType.withNullable(false) else otherType
+}
+
+/** Whether `equals` on a value of [t] is known to be primitive: `String`'s, an enum's, or `Any`'s own in a final
+ *  class (no class on the way up overrides it). A type parameter answers for its bound. */
+private fun KotlinResolver.equalsSafeForSmartCast(t: KotlinType, offset: Int, depth: Int = 0): Boolean {
+    if (depth > 4) return false
+    if (t.isTypeParameter || isTypeParameterInScope(t.qualifiedName, offset)) {
+        val bound = typeParameterUpperBound(t.qualifiedName, offset) ?: return false
+        return equalsSafeForSmartCast(bound, offset, depth + 1)
+    }
+    val fqn = canonicalTypeForCheck(t).qualifiedName
+    if (fqn == "kotlin.String") return true
+    val supers = service.supertypesOf(fqn).map { it.qualifiedName }
+    if ("kotlin.Enum" in supers || "java.lang.Enum" in supers) return true
+    if (!service.isKnownType(fqn) || service.isFinalType(fqn) != true) return false
+    // A final class whose `equals` is still `Any`'s: neither it nor a superclass declares one.
+    return (listOf(fqn) + supers)
+        .filter { it != "kotlin.Any" && it != "java.lang.Object" }
+        .none { owner -> overridesEquals(owner) }
+}
+
+/** Whether the class [owner] itself overrides `equals(Any?)`: read off a source class's declarations, else the
+ *  binary's own members. */
+private fun KotlinResolver.overridesEquals(owner: String): Boolean {
+    service.sourceClass(owner)?.let { rc ->
+        val psi = (rc.node as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? dev.ide.kotlin.syntax.psi.KtClassOrObject
+            ?: return true // unknown shape: assume it might
+        return psi.declarations.any {
+            it is dev.ide.kotlin.syntax.psi.KtNamedFunction && it.name == "equals" && it.valueParameters.size == 1 &&
+                it.hasModifier(KtTokens.OVERRIDE_KEYWORD)
+        }
+    }
+    return service.membersNamed(owner, emptyList(), "equals").any { it.declaringClassFqn == owner && it.paramTypes.size == 1 }
+}
 
 /** `when (subject) { is T -> ‹here› }` (or a subject `val`) narrows a simple-name subject to `T` inside a
  *  positive single-`is` branch; a subjectless `when { name is T -> … }` narrows via the branch condition.
@@ -275,9 +590,14 @@ internal fun KotlinResolver.whenSubjectNarrowing(
 ): KotlinType? {
     val entry = fromChild as? KtWhenEntry ?: return null
     if (entry.isElse) return null
-    val subjectName = whenSubjectName(whenExpr)
-    if (subjectName != null) {
-        if (subjectName != name) return null
+    val subjectVariable = whenExpr.subjectVariable
+    if (subjectVariable != null || whenExpr.subjectExpression != null) {
+        val matches = if (subjectVariable != null) subjectVariable.name == name else subjectMatches(whenExpr.subjectExpression, name)
+        // `when (val x = this)`: the subject variable is the receiver itself, so a check on it narrows `this` too
+        // (K2's data flow treats the `val` as an alias of the value it was initialized with).
+        val aliasOfThis = !matches && name == THIS_SUBJECT &&
+            subjectVariable?.initializer?.let { smartCastSubjectKey(it) } == THIS_SUBJECT
+        if (!matches && !aliasOfThis) return null
         // Only a single positive `is T` narrows; a comma branch (`is A, is B`) doesn't smart-cast.
         val pattern = entry.conditions.singleOrNull() as? KtWhenConditionIsPattern ?: return null
         return if (pattern.isNegated) null else typeFromIsTarget(pattern.typeReference)
@@ -307,6 +627,32 @@ internal fun KotlinResolver.whenSubjectName(whenExpr: KtWhenExpression): String?
  *    `kt.typeMismatch` hits were one file's dispatch table saying `KtElement but KtProperty was expected`.
  *    `as?` is excluded -- it yields null instead of throwing, so it guarantees nothing.
  */
+/**
+ * The type both branches of [st] give [name] when each ends by assigning it a value of one same known, non-null
+ * type, and [name] is a `var` declared earlier in [block] with no initializer (its definite assignment). Null
+ * otherwise.
+ */
+private fun KotlinResolver.branchesAssignSameType(block: KtBlockExpression, st: KtIfExpression, name: String): KotlinType? {
+    fun isWrite(s: KtExpression) = s is KtBinaryExpression && s.operationToken == KtTokens.EQ &&
+        (unwrapParens(s.left) as? KtNameReferenceExpression)?.getReferencedName() == name
+    fun assigned(branch: KtExpression?): KotlinType? {
+        val statements = (branch as? KtBlockExpression)?.statements ?: listOfNotNull(branch)
+        // The branch's one write of the variable, with nothing after it writing the name again.
+        val i = statements.indexOfLast { isWrite(it) }
+        if (i < 0 || statements.drop(i + 1).any { name in writtenNames(it).written }) return null
+        val a = statements[i] as KtBinaryExpression
+        return a.right?.let { inferType(it) }?.takeIf { !it.isTypeParameter && !it.nullable && service.isKnownType(it.qualifiedName) }
+    }
+    val declared = block.statements.takeWhile { it !== st }
+        .lastOrNull { it is dev.ide.kotlin.syntax.psi.KtProperty && it.name == name } as? dev.ide.kotlin.syntax.psi.KtProperty
+        ?: return null
+    // `var y: Any` or a deferred `val x: Any`: the branches give it its value.
+    if (declared.initializer != null || declared.hasDelegate()) return null
+    val t = assigned(st.then) ?: return null
+    val e = assigned(st.`else`) ?: return null
+    return t.takeIf { e.qualifiedName == t.qualifiedName }
+}
+
 internal fun KotlinResolver.earlyExitNarrowing(
     block: KtBlockExpression,
     fromChild: KtElement?,
@@ -332,7 +678,7 @@ internal fun KotlinResolver.earlyExitNarrowing(
         }
         if (st is KtBinaryExpressionWithTypeRHS) {
             if (st.operationReference.getReferencedNameElementType() == KtTokens.AS_KEYWORD &&
-                smartCastSubjectKey(st.left) == name
+                subjectMatches(st.left, name)
             ) {
                 typeFromIsTarget(st.right)?.let { result = it }
             }
@@ -349,7 +695,12 @@ internal fun KotlinResolver.earlyExitNarrowing(
             continue
         }
         val guard = st as? KtIfExpression ?: continue
-        if (guard.`else` != null) continue                // a fall-through `else` isn't an early exit
+        if (guard.`else` != null) {
+            // `var y: Any` given its first value in both branches (`if (c) y = "a" else y = "b"`): K2 merges the
+            // two assignments' types, so after the `if` the variable has their common type.
+            branchesAssignSameType(block, guard, name)?.let { result = it }
+            continue                                       // a fall-through `else` isn't an early exit
+        }
         if (!branchAlwaysJumps(guard.then)) continue       // the then must transfer control out
         // After `if (cond) <jump>`, the rest of the block holds cond == false.
         conditionNarrowing(guard.condition, name, whenTrue = false)?.let { result = it }

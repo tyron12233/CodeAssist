@@ -124,6 +124,21 @@ class KotlinResolverCaches {
     /** The names of this file's top-level declarations, for the per-reference "does a bare name resolve" test. */
     var topLevelNames: Set<String>? = null
 
+    /** The member access paths (`b.x`, `Obj.y`) this file checks with `is`/`as`/`==` or a `when` subject: the gate
+     *  of the path smart cast, so a path nothing checks never walks for a narrowing. */
+    var checkedPaths: Set<String>? = null
+
+    /** The names of the member extension properties this file's classes declare (the live buffer's share of the
+     *  gate [dev.ide.lang.kotlin.symbols.KotlinSymbolService.isMemberExtensionPropertyName] keeps for the model). */
+    var memberExtensionPropertyNames: Set<String>? = null
+
+    /** The last segment of each of [checkedPaths], the allocation-free first gate. */
+    var checkedPathSelectors: Set<String>? = null
+
+    /** Local `val`s holding a member access path (`val y = x.data`), by path: a check on the `val` is one on the
+     *  path too (K2 aliases a stable value and the `val` initialized with it). */
+    var pathAliases: Map<String, List<String>>? = null
+
     /** The names of this file's `@Deprecated(level = HIDDEN)` functions and properties (any depth), the cheap gate
      *  of the hidden-only resolution test. */
     var hiddenNames: Set<String>? = null
