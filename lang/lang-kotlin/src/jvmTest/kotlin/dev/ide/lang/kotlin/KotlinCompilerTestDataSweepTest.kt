@@ -200,14 +200,14 @@ class KotlinCompilerTestDataSweepTest {
             ?: return null to "noStage"
         val heads = Regex("""^// ?FILE: *(\S+).*$""", RegexOption.MULTILINE).findAll(text).toList()
         val files = if (heads.isEmpty()) listOf("Test.kt" to text) else {
-            // Code ahead of the first `// FILE:` is a file of the test too (the compiler's test runner keeps it,
-            // under the test's own name); dropping it lost declarations the other files use.
+            // Code ahead of the first `// FILE:` belongs to the FIRST file: the compiler's test runner
+            // (ModuleStructureExtractorImpl) keeps the lines read so far when it meets the module's first FILE
+            // directive (`resetFileCaches` clears them only once a file is done). Dropping it lost declarations the
+            // other files use.
             val lead = text.substring(0, heads.first().range.first)
-            val leadHasCode = lead.lineSequence().any { l -> l.isNotBlank() && !l.trimStart().startsWith("//") }
-            val leadFile = if (leadHasCode && heads.none { it.groupValues[1] == f.name }) listOf(f.name to lead) else emptyList()
-            leadFile + heads.mapIndexed { i, m ->
+            heads.mapIndexed { i, m ->
                 val end = heads.getOrNull(i + 1)?.range?.first ?: text.length
-                m.groupValues[1] to text.substring(m.range.last + 1, end)
+                m.groupValues[1] to ((if (i == 0) lead else "") + text.substring(m.range.last + 1, end))
             }
         }
         if (files.any { !it.first.endsWith(".kt") }) return null to "nonKotlinFile"
