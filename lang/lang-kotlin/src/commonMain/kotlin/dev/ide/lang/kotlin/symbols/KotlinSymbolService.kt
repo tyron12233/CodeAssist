@@ -1988,7 +1988,7 @@ class KotlinSymbolService(
             // `S.() -> S` parameter had an unbound receiver and every member call in its body went unresolved.
             val tps = rc.typeParameterNames.toHashSet()
             val inherited = rc.superTypeTexts.mapNotNull { text ->
-                val superFqn = sourceSupertypeFqn(text, rc.ctx, headerScopeOwner(rc.fqn)) ?: return@mapNotNull null
+                val superFqn = sourceSupertypeFqn(text, rc.ctx, rc.fqn) ?: return@mapNotNull null
                 val args = if ('<' !in text || "->" in text) emptyList()
                 else markTypeParameters(typeFromText(text, rc.ctx, headerScopeOwner(fqn)), tps)?.typeArguments.orEmpty()
                     .map { if (classBindings.isEmpty()) it else substitute(it, classBindings) }
@@ -3463,7 +3463,7 @@ class KotlinSymbolService(
             // walking the owner chain. A TOP-LEVEL hierarchy hid this -- the same-package fallback found it --
             // so only a sealed family nested in an object or class lost its supertype, and with it every
             // `return Plan.Full` from a function declared to return `Plan`.
-            rc.superTypeTexts.forEach { t -> sourceSupertypeFqn(t, rc.ctx, headerScopeOwner(rc.fqn))?.let { direct += it } }
+            rc.superTypeTexts.forEach { t -> sourceSupertypeFqn(t, rc.ctx, rc.fqn)?.let { direct += it } }
             // Every `enum class` extends `kotlin.Enum<Self>` without naming it: `val a: Enum<E> = E.A` and an
             // `Enum<*>` parameter both accept the entries.
             if (rc.isEnum) direct += "kotlin.Enum"
