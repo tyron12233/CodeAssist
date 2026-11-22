@@ -752,7 +752,7 @@ internal fun KotlinResolver.typeOfQualified(q: KtQualifiedExpression): KotlinTyp
                 ?: nestedType(receiverType.qualifiedName, name)
                 // A member extension PROPERTY of an enclosing class or an implicit receiver (`1.u` with
                 // `val <T> T.u` declared in `A`, inside `with(a)`), its receiver parameter bound from `1`.
-                ?: (if (!typeReceiver) scopeMemberExtensions(sel.textRange.startOffset, receiverType, name, exactName = true)
+                ?: (if (!typeReceiver && mayBeMemberExtensionProperty(name)) scopeMemberExtensions(sel.textRange.startOffset, receiverType, name, exactName = true)
                     .firstOrNull { it.name == name && it.kind == SymbolKind.FIELD }?.type as? KotlinType else null)
                 ?: if (typeReceiver) companionMemberType(
                     receiverType.qualifiedName,
@@ -1257,7 +1257,7 @@ internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
 
 /** Whether a class of this file or of the project declares a member extension property named [name]: the gate in
  *  front of the receiver-level extension lookup in [typeOfName]. */
-private fun KotlinResolver.mayBeMemberExtensionProperty(name: String): Boolean {
+internal fun KotlinResolver.mayBeMemberExtensionProperty(name: String): Boolean {
     val live = caches.memberExtensionPropertyNames ?: HashSet<String>().also { out ->
         fun visit(e: KtElement) {
             if (e is KtProperty && e.receiverTypeReference != null && e.parent is dev.ide.kotlin.syntax.psi.KtClassBody) e.name?.let { out += it }

@@ -1958,6 +1958,12 @@ class KotlinSymbolService(
     }
 
     private fun ownAndInheritedCached(fqn: String, typeArgs: List<TypeRef>): List<KotlinSymbol> {
+        // A generic class over its OWN parameters (`Outer<E>`, the `this` of its body) has exactly its unbound
+        // members: served from the unbound memo rather than recomputed (type-parameter arguments make no bound key).
+        if (typeArgs.isNotEmpty() && model().classByFqn.containsKey(Builtins.kotlinTypeFor(fqn) ?: fqn) &&
+            typeArgs.all { (it as? KotlinType)?.isTypeParameter == true && it.typeArguments.isEmpty() } &&
+            typeArgs.map { it.qualifiedName } == classTypeParameters(fqn)
+        ) return ownAndInheritedCached(fqn, emptyList())
         if (typeArgs.isNotEmpty()) return boundMembersCached(fqn, typeArgs)
         val kfqn = Builtins.kotlinTypeFor(fqn) ?: fqn
         val idx = index
@@ -4469,6 +4475,25 @@ class KotlinSymbolService(
     /** The constructors declared by a classpath type [fqn] (own shape only — constructors aren't inherited),
      *  for validating a constructor call's arguments. Served from the `kotlin.typeShape` index when built.
      *  [enrich]ed like members, so signature help and hints show `NotificationChannel(id: String, …)`. */
+    /**
+     * Whether the project class [fqn], or a project supertype of it, declares a non-extension function [name] that
+     * can take [argCount] arguments, read off the raw source model without typing anything. Null when [fqn] or one of
+     * its supertypes is not a project class, so the caller asks the full member model.
+     */
+    fun sourceMethodTakes(fqn: String, name: String, argCount: Int): Boolean? {
+        val classes = model().classByFqn
+        val rc = classes[fqn] ?: return null
+        fun takes(c: RawCallable) = c.isFunction && c.name == name && c.receiverText == null &&
+            (c.varargParamIndex >= 0 || argCount in c.paramHasDefault.count { !it }..c.paramTexts.size)
+        if (rc.members.any(::takes)) return true
+        for (sup in kotlinSupertypesMemo(fqn)) {
+            if (sup == "kotlin.Any" || sup == "java.lang.Object") continue
+            val s = classes[sup] ?: return null
+            if (s.members.any(::takes)) return true
+        }
+        return false
+    }
+
     fun constructorsOf(fqn: String): List<KotlinSymbol> =
         // A built-in declared only in `.kotlin_builtins` (`kotlin.Array`, `kotlin.concurrent.atomics.AtomicArray`)
         // has no class file, so its constructors come from its built-in shape.

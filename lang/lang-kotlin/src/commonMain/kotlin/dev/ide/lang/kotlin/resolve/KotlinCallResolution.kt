@@ -111,8 +111,11 @@ internal fun KotlinResolver.reentrantCalleeFallback(call: KtCallExpression): Kot
 /** Whether an implicit receiver at [offset] has a member FUNCTION [name] that can take [argCount] arguments. */
 private fun KotlinResolver.implicitReceiverHasMethod(offset: Int, name: String, argCount: Int): Boolean =
     implicitReceiversAt(offset).any { recv ->
-        service.membersNamed(recv.qualifiedName, recv.typeArguments, name)
-            .any { it.name == name && it.kind == SymbolKind.METHOD && !it.isExtension && !needsMoreArguments(it, argCount) }
+        // A project class (and its project supertypes) answers from its raw declarations: building its member
+        // symbols infers every expression-bodied member's type, too much to pay on each bare call.
+        service.sourceMethodTakes(recv.qualifiedName, name, argCount)
+            ?: service.membersNamed(recv.qualifiedName, recv.typeArguments, name)
+                .any { it.name == name && it.kind == SymbolKind.METHOD && !it.isExtension && !needsMoreArguments(it, argCount) }
     }
 
 internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol? {
@@ -1123,6 +1126,7 @@ internal fun KotlinResolver.receiverValueInvokeTargets(
         // `A`, read inside `with(a) { with(b) { c.foo() } }`).
         ?: implicitReceiversAt(offset).any { recv ->
             service.membersNamed(recv.qualifiedName, recv.typeArguments, name).any { it.name == name && it.kind == SymbolKind.FIELD } ||
+                mayBeMemberExtensionProperty(name) &&
                 scopeMemberExtensions(offset, recv, name, exactName = true).any { it.name == name && it.kind == SymbolKind.FIELD }
         }
     if (!isValue) return emptyList()
