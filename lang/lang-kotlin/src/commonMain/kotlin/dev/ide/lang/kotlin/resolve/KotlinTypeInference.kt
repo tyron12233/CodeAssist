@@ -16,6 +16,7 @@ import dev.ide.kotlin.syntax.psi.KtDeclaration
 import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.kotlin.syntax.psi.KtFile
 import dev.ide.kotlin.syntax.psi.KtIfExpression
+import dev.ide.kotlin.syntax.psi.getStrictParentOfType
 import dev.ide.kotlin.syntax.psi.KtLambdaExpression
 import dev.ide.kotlin.syntax.psi.KtReturnExpression
 import dev.ide.kotlin.syntax.psi.KtValueArgument
@@ -1046,7 +1047,14 @@ internal fun isSyntheticLocalTypeFqn(fqn: String): Boolean =
  *  type it returns stays denotable in its enclosing scope, so no escape approximation applies. */
 internal fun isLocalDeclaration(decl: KtDeclaration): Boolean {
     val parent = decl.parent
-    return parent !is KtFile && parent !is KtClassBody
+    if (parent is KtClassBody) {
+        // A member of a LOCAL or anonymous class is not visible outside the local scope either, so it keeps the
+        // anonymous type too (`val a = object { val b = object { val c = 42 } }; a.b.c`).
+        val owner = parent.parent
+        return owner is dev.ide.kotlin.syntax.psi.KtObjectDeclaration && owner.parent is dev.ide.kotlin.syntax.psi.KtObjectLiteralExpression ||
+            (owner as? dev.ide.kotlin.syntax.psi.KtElement)?.getStrictParentOfType<dev.ide.kotlin.syntax.psi.KtBlockExpression>() != null
+    }
+    return parent !is KtFile
 }
 
 /**

@@ -32,6 +32,9 @@ import dev.ide.lang.kotlin.resolve.localsAt
  * names the K2 code and checker it follows. Registered from [KotlinSemanticChecks.checkers], after the earlier rounds.
  */
 internal fun KotlinSemanticChecks.round9PortedCheckers(): List<KotlinChecker> = listOf(
+    KotlinChecker(dev.ide.kotlin.syntax.psi.KtTypeConstraint::class) { psi ->
+        report(nameInConstraintNotATypeParameter(psi as dev.ide.kotlin.syntax.psi.KtTypeConstraint))
+    },
     KotlinChecker(KtNameReferenceExpression::class) { psi ->
         if (resolveReady) report(privateToThisAccess(psi as KtNameReferenceExpression, resolver))
     },
@@ -288,4 +291,24 @@ internal fun KotlinSemanticChecks.functionValueMissingArguments(call: KtCallExpr
         TextRange(r.startOffset, r.endOffset), Severity.ERROR,
         "No value passed for parameter 'p${given + 1}'", KotlinDiagnosticCodes.ARGUMENT_COUNT,
     )
+}
+
+/** NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER: a `where X : A` whose `X` is not a type parameter of the declaration. */
+internal fun KotlinSemanticChecks.nameInConstraintNotATypeParameter(c: dev.ide.kotlin.syntax.psi.KtTypeConstraint): Diagnostic? {
+    val subject = c.subjectTypeParameterName ?: return null
+    val name = subject.getReferencedName()
+    var owner: dev.ide.kotlin.syntax.psi.KtElement? = c.parent as? dev.ide.kotlin.syntax.psi.KtElement
+    while (owner != null && owner !is dev.ide.kotlin.syntax.psi.KtTypeParameterListOwner) owner = owner.parent as? dev.ide.kotlin.syntax.psi.KtElement
+    val tps = (owner as? dev.ide.kotlin.syntax.psi.KtTypeParameterListOwner)?.typeParameters ?: return null
+    // With no type parameters at all the `where` is a syntax error instead.
+    if (tps.any { it.name == name }) return null
+    if (tps.isEmpty() && (owner as dev.ide.kotlin.syntax.psi.KtTypeParameterListOwner).typeParameterList == null) return null
+    // Reported once per name, on its first constraint.
+    val list = c.parent as? dev.ide.kotlin.syntax.psi.KtTypeConstraintList
+    if (list != null && list.children.filterIsInstance<dev.ide.kotlin.syntax.psi.KtTypeConstraint>()
+            .firstOrNull { it.subjectTypeParameterName?.getReferencedName() == name } !== c) return null
+    val r = subject.textRange
+    return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+        "$name does not refer to a type parameter of ${(owner as? dev.ide.kotlin.syntax.psi.KtNamedDeclaration)?.name ?: "the declaration"}",
+        KotlinDiagnosticCodes.NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER)
 }

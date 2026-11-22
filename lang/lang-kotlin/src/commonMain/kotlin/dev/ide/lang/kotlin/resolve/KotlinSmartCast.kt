@@ -836,6 +836,12 @@ private fun KotlinResolver.branchesAssignSameType(block: KtBlockExpression, st: 
         ?: return null
     // `var y: Any` or a deferred `val x: Any`: the branches give it its value.
     if (declared.initializer != null || declared.hasDelegate()) return null
+    // A branch that never falls through (`if (x is String) break else y = "abc"`) leaves the other one's value.
+    val thenJumps = branchAlwaysJumps(st.then)
+    val elseJumps = branchAlwaysJumps(st.`else`)
+    if (thenJumps && elseJumps) return null
+    if (thenJumps) return assigned(st.`else`)
+    if (elseJumps) return assigned(st.then)
     val t = assigned(st.then) ?: return null
     val e = assigned(st.`else`) ?: return null
     return t.takeIf { e.qualifiedName == t.qualifiedName }

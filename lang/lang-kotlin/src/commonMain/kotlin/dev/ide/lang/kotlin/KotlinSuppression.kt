@@ -51,14 +51,38 @@ internal object KotlinSuppression {
         for (entry in entries) {
             if (entry.shortName?.asString() != "Suppress") continue
             for (arg in entry.valueArguments) {
-                val text = arg.getArgumentExpression()?.text ?: continue
-                STRING_LITERAL.findAll(text).forEach { out += it.groupValues[1] }
+                val expr = arg.getArgumentExpression() ?: continue
+                // A constant expression names the diagnostic as well as a literal does (`"UNRESOLVED" + "_REFERENCE"`,
+                // a `const val DIAG = "…"`), which K2 honours (reporting ERROR_SUPPRESSION on it besides).
+                constantString(expr, 0)?.let { out += it; continue }
+                STRING_LITERAL.findAll(expr.text).forEach { out += it.groupValues[1] }
             }
         }
         return out
     }
 
     private val STRING_LITERAL = Regex("\"([^\"]*)\"")
+
+    /** The value of a constant string expression: a plain literal, a `+` of constants, or a `const val` of the file. */
+    private fun constantString(e: dev.ide.kotlin.syntax.psi.KtExpression, depth: Int): String? {
+        if (depth > 8) return null
+        return when (e) {
+            is dev.ide.kotlin.syntax.psi.KtParenthesizedExpression -> e.expression?.let { constantString(it, depth + 1) }
+            is dev.ide.kotlin.syntax.psi.KtStringTemplateExpression ->
+                e.text.takeIf { it.length >= 2 && it.startsWith("\"") && it.endsWith("\"") && '$' !in it && !it.startsWith("\"\"\"") }?.let { it.substring(1, it.length - 1) }
+            is dev.ide.kotlin.syntax.psi.KtBinaryExpression -> if (e.operationToken == dev.ide.kotlin.syntax.psi.KtTokens.PLUS) {
+                val l = e.left?.let { constantString(it, depth + 1) } ?: return null
+                val r = e.right?.let { constantString(it, depth + 1) } ?: return null
+                l + r
+            } else null
+            is dev.ide.kotlin.syntax.psi.KtNameReferenceExpression -> {
+                val name = e.getReferencedName()
+                val decl = e.containingKtFile.declarations.firstOrNull { it is dev.ide.kotlin.syntax.psi.KtProperty && it.name == name } as? dev.ide.kotlin.syntax.psi.KtProperty
+                decl?.takeIf { it.hasModifier(dev.ide.kotlin.syntax.psi.KtTokens.CONST_KEYWORD) }?.initializer?.let { constantString(it, depth + 1) }
+            }
+            else -> null
+        }
+    }
 
     /** Our code -> the K2 diagnostic names it can stand for. */
     val K2_NAMES: Map<String, Set<String>> = mapOf(

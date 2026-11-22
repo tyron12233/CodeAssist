@@ -315,6 +315,7 @@ object KotlinDiagnosticCodes {
     /** `String & Any`, `T & String` (INCORRECT_LEFT/RIGHT_COMPONENT_OF_INTERSECTION). */
     const val DEFINITELY_NOT_NULL_COMPONENT = "kt.definitelyNotNullComponent"
     const val EXPECTED_PARAMETER_TYPE_MISMATCH = "kt.expectedParameterTypeMismatch"
+    const val NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER = "kt.nameInConstraintIsNotATypeParameter"
     /** `interface A<T : A<*>>` (FINITE_BOUNDS_VIOLATION). */
     const val FINITE_BOUNDS_VIOLATION = "kt.finiteBoundsViolation"
     /** `super<String>` in a class that does not extend it (NOT_A_SUPERTYPE). */

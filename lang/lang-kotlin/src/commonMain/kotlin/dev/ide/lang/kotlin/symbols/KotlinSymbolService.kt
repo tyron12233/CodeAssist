@@ -1604,6 +1604,9 @@ class KotlinSymbolService(
         //    a simple name is visible if it lives in one of these packages.
         for (pkg in starPackages) { // existence via the type-shape index (self-gates in dumb mode); no live probe when wired
             val cand = "$pkg.$simple"
+            // `kotlin.FunctionN` / `kotlin.SuspendFunctionN` are synthesized by the compiler, with no class file or
+            // builtin shape, yet `Function1<Int, Unit>` names them through the `kotlin` default import.
+            if (pkg == "kotlin" && TypeRendering.isFunctionType(cand) && TypeRendering.reflectFunctionArity(cand) == null) return cand
             // The module model is consulted alongside the type-shape index because a project SOURCE class has
             // no shape (nothing compiled it yet), so a star-imported one would otherwise never resolve here,
             // the way the same-package step above already handles.

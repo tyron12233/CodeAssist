@@ -693,6 +693,10 @@ fun KotlinResolver.isTypeParameterInScope(name: String, offset: Int): Boolean {
     var node: KtElement? = elementAt(offset)
     while (node != null) {
         if (node is KtTypeParameterListOwner && node.typeParameters.any { it.name == name }) return true
+        // A `where AA : …` naming no declared parameter makes `AA` one anyway (K2 reports only the constraint,
+        // NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER, and the declaration then uses `AA` as a type parameter).
+        if (node is KtTypeParameterListOwner && node.typeParameterList != null &&
+            node.typeConstraints.any { it.subjectTypeParameterName?.getReferencedName() == name }) return true
         node = node.parent
     }
     return false
@@ -822,6 +826,9 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
                 .any { !it.isExtension || extensionInScope(it) }
         }
     ) return true
+    // A function-typed implicit receiver (`fun Function1<Int, Unit>.f() { invoke(11) }`, `f.apply { invoke() }`) has
+    // the `invoke` its function type defines.
+    if (name == "invoke" && implicitReceiversAt(offset).any { dev.ide.lang.kotlin.symbols.TypeRendering.isFunctionType(it.qualifiedName) }) return true
     // An `inner` class of an implicit receiver's class (or of a supertype): K2's receiver scope holds its
     // constructor, so `fun A.B.f() = C()` builds `A.B.C` through the extension receiver.
     if (name.firstOrNull()?.isUpperCase() == true && innerClassOfReceiver(name, offset) != null) return true

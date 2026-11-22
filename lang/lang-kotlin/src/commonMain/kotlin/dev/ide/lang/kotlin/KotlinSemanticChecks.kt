@@ -829,6 +829,8 @@ internal class KotlinSemanticChecks(
         if (fp is KtQualifiedExpression && fp.receiverExpression === full) return null        // `X.Y.more`
         if (fp is KtDoubleColonExpression) return null               // `Foo::class` / `Foo::member`
         if (inTypeReference(full)) return null
+        // The subject of a `where T : A` constraint names a type parameter, not a value.
+        if (fp is dev.ide.kotlin.syntax.psi.KtTypeConstraint) return null
 
         // Resolve to a classifier; back off unless it is confidently a known class that is NOT a valid value.
         // The ENCLOSING class is passed so a NESTED declaration wins over a same-named one at file/package
@@ -4884,6 +4886,13 @@ internal class KotlinSemanticChecks(
     private fun inImportOrPackage(expr: KtElement): Boolean =
         hasAncestor(expr) { it is KtImportDirective || it is KtPackageDirective }
 
+    /** Whether the source class [ownerFqn] declares an `inner typealias` [name]: only an inner one is reached through
+     *  an instance (`c.P(1, 1)`); a plain nested alias through an instance is unresolved. */
+    private fun innerTypeAliasOf(ownerFqn: String, name: String): Boolean {
+        val cls = (service.sourceClass(ownerFqn)?.node as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? KtClassOrObject ?: return false
+        return cls.declarations.any { it is dev.ide.kotlin.syntax.psi.KtTypeAlias && it.name == name && it.hasModifier(KtTokens.INNER_KEYWORD) }
+    }
+
     private fun unresolvedMember(expr: KtNameReferenceExpression, resolver: KotlinResolver): Diagnostic? {
         val parent = expr.parent
         // `recv.name` (property) or `recv.name(...)` (call — expr is the callee under the selector call).
@@ -4972,6 +4981,8 @@ internal class KotlinSemanticChecks(
         // `membersNamedForCheck` misses them. Mirror the completion gate (spelled as the FQN, a type receiver) so
         // a bare `String.valueOf` stays flagged (Kotlin reports it) while the explicit FQN resolves.
         val typeStatics = resolver.mappedJavaStatics(receiver, recvType, name)
+        // A typealias the receiver's class declares (`c.P(1, 1)` with `inner typealias P = Pair<T, T>` in `C`).
+        if (name.firstOrNull()?.isUpperCase() == true && innerTypeAliasOf(recvType.qualifiedName, name)) return null
         // An intersection (`B & A` after a smart cast) has the members of every component.
         if (recvType.intersection.any { c -> service.membersNamedForCheck(c.qualifiedName, c.typeArguments, name).any { it.name == name } }) return null
         val matching = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name) +

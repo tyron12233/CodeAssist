@@ -2152,6 +2152,19 @@ class KotlinCompilerParityTest {
         clean("class Outer<E> { inner class Inner<H> { val prop: E = null!! }\n fun f(y: Any?) { if (y is Outer<*>.Inner<*>) { y.prop } } }")
     }
 
+    /** A `where X : A` naming no type parameter of the declaration is reported once; `where T : A` is a constraint. */
+    @Test
+    fun aConstraintOnANonTypeParameterIsReported() {
+        assertCodes("fun <T> f(t: T) where AA : Number, AA : Comparable<AA> {}", KotlinDiagnosticCodes.NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER)
+        clean("interface A\nclass B<T> where T : A")
+    }
+
+    /** A member extension on its own type parameter (`operator fun <T> T.invoke`) applies to any receiver. */
+    @Test
+    fun aGenericMemberExtensionAppliesToAnyReceiver() {
+        clean("class F<T>\nclass A9 { operator fun <T> T.invoke(h: () -> Unit) {} }\nfun A9.main(z: F<Int>?) { z.invoke({}) }")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

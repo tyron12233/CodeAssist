@@ -75,6 +75,14 @@ fun KotlinResolver.scopeMemberExtensions(
         val recvRef = d.receiverTypeReference ?: return
         val name = d.name ?: return
         if (!matches(name)) return
+        // A receiver that is the declaration's OWN type parameter (`operator fun <T> T.invoke(…)`) takes any
+        // receiver within its bound.
+        val recvText = recvRef.text.trim().removeSuffix("?").trim()
+        (d as? dev.ide.kotlin.syntax.psi.KtTypeParameterListOwner)?.typeParameters?.firstOrNull { it.name == recvText }?.let { tp ->
+            val bound = tp.extendsBound?.text?.let { service.resolveTypeName(it.substringBefore('<').removeSuffix("?").trim(), fileContext) }
+            if (bound == null || bound == "kotlin.Any" || bound in recvTargets) sameFileMemberExtension(d, recvText)?.let { out += bindMemberExtensionReceiver(it, receiverType) }
+            return
+        }
         val recvFqn = service.resolveTypeName(recvRef.text, fileContext) ?: return
         if (recvFqn !in recvTargets) return
         sameFileMemberExtension(d, recvFqn)?.let { out += bindMemberExtensionReceiver(it, receiverType) }
@@ -109,7 +117,7 @@ fun KotlinResolver.scopeMemberExtensions(
         // scope there and only the model lists it, so those are kept.
         val live = scope.qualifiedName in liveOwners
         service.membersForCompletion(scope.qualifiedName, scope.typeArguments, namePrefix, exactName && namePrefix.isNotEmpty())
-            .filter { it.isExtension && it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets }
+            .filter { it.isExtension && (it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets || genericReceiverAccepts(it, recvTargets)) }
             .filter { c -> !live || out.none { it.name == c.name && it.receiverTypeFqn == c.receiverTypeFqn && it.kind == c.kind } }
             .forEach { out += bindMemberExtensionReceiver(it, receiverType) }
     }
@@ -132,7 +140,7 @@ fun KotlinResolver.scopeMemberExtensions(
         for (fqn in listOf(ownerFqn) + sourceSupertypeFqns(ownerFqn)) {
             val comp = service.sourceCompanionFqn(fqn)?.takeIf { it !in liveOwners } ?: continue
             service.membersForCompletion(comp, emptyList(), namePrefix, exactName && namePrefix.isNotEmpty())
-                .filter { it.isExtension && it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets }
+                .filter { it.isExtension && (it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets || genericReceiverAccepts(it, recvTargets)) }
                 .forEach { out += bindMemberExtensionReceiver(it, receiverType) }
         }
     }
@@ -173,6 +181,16 @@ private fun KotlinResolver.typeParameterMemberExtensions(
         node = node.parent
     }
     return out
+}
+
+/** Whether [ext]'s receiver is its own type parameter (`fun <T> T.invoke`) whose bound admits a receiver of [recvTargets]. */
+private fun genericReceiverAccepts(ext: KotlinSymbol, recvTargets: Set<String>): Boolean {
+    val tp = ext.receiverTypeParam ?: return false
+    if (tp !in ext.typeParameters) return false
+    val bound = ext.typeParameterBounds.getOrNull(ext.typeParameters.indexOf(tp)) as? dev.ide.lang.kotlin.symbols.KotlinType
+    // No recorded bound means "unbounded" only for a source declaration; a library symbol may simply not carry it.
+    if (bound == null) return ext.origin.fromSource
+    return bound.qualifiedName == "kotlin.Any" || bound.qualifiedName in recvTargets
 }
 
 /** The receiver FQNs a member extension may be declared on to apply to [receiverType]: the type itself plus
@@ -244,7 +262,7 @@ private fun KotlinResolver.importedSingletonExtensions(
                     .filter { Modifier.STATIC in it.modifiers } }
         candidates.asSequence()
             .filter { member == null || it.name == member }
-            .filter { it.isExtension && it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets }
+            .filter { it.isExtension && (it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets || genericReceiverAccepts(it, recvTargets)) }
             .forEach { out += bindMemberExtensionReceiver(it, receiverType) }
     }
     return out
