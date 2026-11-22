@@ -163,7 +163,10 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         // (`sym.list.any { }` with `sym` untyped is not some library's top-level `any(…)`). Only a dotted name whose
         // segments name that function's package qualifies.
         val pkg = q.receiverExpression.text.filterNot { it.isWhitespace() }
-        service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD && !it.isExtension && it.packageName == pkg }
+        val tops = service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD && !it.isExtension && it.packageName == pkg }
+        // `pkg.Foo(x)` with both a class `Foo` and a factory `fun Foo(…)` in `pkg`: the one the arguments fit.
+        if (tops.isNotEmpty() && constructorFitsInstead("$pkg.$name", tops, call)) return null
+        tops
     } else {
         // A nearer VALUE with an `invoke` (a function-typed property or local) shadows every top-level function
         // of that name ([nearerValueInvokeTargets]), so no FUNCTION is the callee: the call is the value's
@@ -236,6 +239,11 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
                 // function is short of arguments and a constructor can take the call, the call constructs.
                 if (typeInScope && tops.isNotEmpty() && tops.all { needsMoreArguments(it, argCount) } &&
                     service.resolveTypeName(name, fileContext)?.let { t -> service.constructorsOf(t).any { !needsMoreArguments(it, argCount) && it.paramTypes.size >= argCount - (if (it.varargParamIndex >= 0) 99 else 0) } } == true
+                ) return null
+                // The same when the functions take the count but not the TYPES (`LocalFileSystem(path.toString())`
+                // beside `fun LocalFileSystem(root: Path)`).
+                if (typeInScope && tops.isNotEmpty() &&
+                    service.resolveTypeName(name, fileContext)?.let { constructorFitsInstead(it, tops, call) } == true
                 ) return null
                 // A top-level function that cannot take this many arguments is not the callee when the implicit
                 // receiver has one that can: inside `fun String.pad(n: Int) = repeat(n)`, `repeat(n)` is
@@ -314,6 +322,20 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         return bestOverload(pool, call, receiverType)
     }
     return viable.firstOrNull()
+}
+
+/**
+ * Whether a call that names both the class [typeFqn] and same-level factory functions [functions] constructs:
+ * no function is applicable and a (callable) constructor is. K2 weighs the class's constructors together with
+ * the functions of that level, so the applicable one is the callee.
+ */
+private fun KotlinResolver.constructorFitsInstead(typeFqn: String, functions: List<KotlinSymbol>, call: KtCallExpression): Boolean {
+    if (!service.isKnownType(typeFqn)) return false
+    if (functions.any { isApplicable(it, call, null) }) return false
+    val ctors = (service.constructorsOf(typeFqn) +
+        service.sourceClass(typeFqn)?.constructors.orEmpty().map { sourceCtorSymbol(it, typeFqn) })
+        .filter { Modifier.PRIVATE !in it.modifiers }
+    return ctors.any { it.paramTypes.size == call.valueArguments.size && isApplicable(it, call, null) }
 }
 
 /** Whether [sym] has more REQUIRED parameters than the [argCount] arguments supplied (no default, not the
@@ -794,6 +816,12 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
     if (q != null && q.selectorExpression === call) {
         packageDottedPath(q.receiverExpression)?.let { pkg ->
             out += service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD && it.packageName == pkg }
+            // `pkg.Foo(…)` naming a class there too: its constructors compete with a same-named factory.
+            val fqn = "$pkg.$name"
+            if (name.firstOrNull()?.isUpperCase() == true && service.isKnownType(fqn)) {
+                out += service.constructorsOf(fqn)
+                service.sourceClass(fqn)?.constructors?.forEach { rc -> out += sourceCtorSymbol(rc, fqn) }
+            }
         }
     }
     // A capitalized callee is a constructor call (`Foo(…)`): its parameters come from the type's constructors.

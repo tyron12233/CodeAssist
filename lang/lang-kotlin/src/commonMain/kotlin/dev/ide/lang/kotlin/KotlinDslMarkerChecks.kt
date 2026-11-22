@@ -134,8 +134,12 @@ private fun KotlinSemanticChecks.typeUsageMarkers(lambda: KtLambdaExpression, re
     val fn = (sym.declaration() as? KotlinDomNode)?.psi as? KtNamedFunction ?: return emptySet()
     val param = fn.valueParameters.getOrNull(resolver.lambdaParamIndex(call, argIndex, sym)) ?: return emptySet()
     val text = param.typeReference?.text ?: return emptySet()
-    val receiverPart = text.substringBefore(".(", missingDelimiterValue = "")
+    var receiverPart = text.substringBefore(".(", missingDelimiterValue = "")
     if (receiverPart.isEmpty()) return emptySet()
+    // A type-parameter receiver (`fun <T> foo(x: T.() -> Unit)`) takes the markers written on the type argument
+    // the call passes for it: `foo<@Ann A> { }` makes the block's receiver an `@Ann A`.
+    val tpIndex = fn.typeParameters.indexOfFirst { it.name == receiverPart.trim() }
+    if (tpIndex >= 0) receiverPart = call.typeArguments.getOrNull(tpIndex)?.text ?: return emptySet()
     return Regex("""@([A-Za-z_][A-Za-z0-9_.]*)""").findAll(receiverPart)
         .map { it.groupValues[1].substringAfterLast('.') }
         .filter { isDslMarker(it, resolver) }.toSet()

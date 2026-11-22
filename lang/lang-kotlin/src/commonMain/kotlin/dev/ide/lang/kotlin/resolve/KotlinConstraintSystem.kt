@@ -125,6 +125,12 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
         }
         // A Java parameter's collection type is flexible in mutability (`(Mutable)Map<K, V>!`): a Kotlin `Map` or
         // `MutableMap` is the `java.util.Map` it compiles to, so `HashMap(m)` takes a read-only `m`.
+        // A Java spelling of a mapped built-in is that built-in: a Java method's `java.lang.String` result is a
+        // `kotlin.String` (`path.toString()` passed for `root: String`).
+        val aKotlin = Builtins.kotlinTypeFor(a.qualifiedName)
+        if (aKotlin != null && aKotlin == (Builtins.kotlinTypeFor(b.qualifiedName) ?: b.qualifiedName) && aKotlin !in MUTABILITY_FLEXIBLE) {
+            decompose(aKotlin, a.typeArguments, b.typeArguments); return
+        }
         if (Builtins.javaTypeFor(a.qualifiedName) == b.qualifiedName) {
             decompose(b.qualifiedName, a.typeArguments, b.typeArguments); return
         }
@@ -150,6 +156,10 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
         if (service.isKnownType(a.qualifiedName) && service.isKnownType(b.qualifiedName)) hasContradiction =
             true
     }
+
+    /** The collection built-ins a Java type maps to in its MUTABLE form (`java.util.List` -> `MutableList`): a
+     *  read-only target is not that mutable type, which the classifier walk below decides instead. */
+    private val MUTABILITY_FLEXIBLE = Builtins.JAVA_TO_KOTLIN.values.filter { it.startsWith("kotlin.collections.Mutable") }.toSet()
 
     /** Pairwise decomposition of type arguments by their EFFECTIVE variance: the target argument's USE-SITE
      *  projection (`Array<out Number>`, `Comparator<in T>`, `List<*>`) if present, else the classifier [fqn]'s

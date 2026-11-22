@@ -1906,6 +1906,43 @@ class KotlinCompilerParityTest {
         assertTrue(errors("fun f(s: String?) = s.length").isNotEmpty(), "a member on a nullable receiver still errors")
     }
 
+    /** `Char + String` is the stdlib's `Char.plus(String): String`, and `String? + x` its `String?.plus`: both are
+     *  `String`, so a `when` joining one with `String`/`null` is a `String?`. */
+    @Test
+    fun charAndNullableStringPlusAreStrings() {
+        val clean = listOf(
+            "fun f(name: String): String? {\n fun decap(r: String) = r.takeIf { it.isNotEmpty() }?.let { it[0].lowercaseChar() + it.substring(1) }\n" +
+                " return when { name.startsWith(\"get\") -> decap(name.substring(3)); name.length > 2 -> name; else -> null }\n}",
+            "fun f(s: String?) { val x: String = s + 1 }",
+        )
+        for (code in clean) assertEquals(emptyList(), errors(code).map { it.code }, "for `$code`")
+        assertEquals(listOf(KotlinDiagnosticCodes.TYPE_MISMATCH), errors("fun f() { val x: Int = 'a' + \"b\" }").map { it.code })
+    }
+
+    /** A class and a same-named factory function in one package: the call binds whichever the arguments fit,
+     *  bare or package-qualified (`fs.Box("x")` constructs when the factory takes an `Int`); and a Java method's
+     *  `java.lang.String` result is a `kotlin.String` argument. */
+    @Test
+    fun constructorAndFactoryCompeteByArguments() {
+        val files = mapOf(
+            "a.kt" to "package fs\nclass Box(root: String) { fun get(): Int = 1 }\nfun Box(root: Int): Box = Box(root.toString())\n",
+            "b.kt" to "package use\nimport fs.Box\nfun f() { val a: Int = fs.Box(\"x\").get(); val b: Int = Box(\"x\").get(); val c: Int = Box(1).get() }\n",
+        )
+        assertEquals(emptyList(), errorsIn(files, "b.kt").map { it.code })
+        val jdk = "fun g(s: String) = 1\nfun g(i: Int) = \"\"\nfun f(p: java.nio.file.Path) { val x: Int = g(p.toString()) }"
+        assertEquals(emptyList(), jdkErrors(jdk).map { it.code }, "for `$jdk`")
+    }
+
+    /** A builder lambda's receiver takes the call's explicit type arguments: inside `buildMap<String, MutableList<C>> { }`
+     *  `this` is a `MutableMap<String, MutableList<C>>`, so `getOrPut(k) { ArrayList() }` is a `MutableList<C>`. */
+    @Test
+    fun explicitTypeArgumentsReachABuilderReceiver() {
+        val code = "class C\nval m = buildMap<String, MutableList<C>> { getOrPut(\"k\") { ArrayList() }.add(C()) }"
+        assertEquals(emptyList(), errors(code).map { it.code }, "for `$code`")
+        val wrong = "class C\nval m = buildMap<String, MutableList<C>> { val x: Int = getOrPut(\"k\") { ArrayList() } }"
+        assertEquals(listOf(KotlinDiagnosticCodes.TYPE_MISMATCH), errors(wrong).map { it.code }, "for `$wrong`")
+    }
+
     /** [errors] with kotlin-test on the classpath too. */
     private fun kotlinTestErrors(code: String): List<Diagnostic> = runBlocking {
         val text = "package demo\n$code\n"

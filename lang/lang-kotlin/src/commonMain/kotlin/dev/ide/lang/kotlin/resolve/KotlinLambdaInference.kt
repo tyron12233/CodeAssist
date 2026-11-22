@@ -167,7 +167,9 @@ internal fun KotlinResolver.expectedFunctionTypeFor(lambda: KtLambdaExpression):
     // receiver's type param from the actual receiver (T = typeof(x)), so the block's receiver `this` is the
     // concrete type (`MutableList<Int>`), not an unbound `T`. Without it a member call in the block
     // (`apply { add(x) }`) can't resolve its receiver. (Skip lambdas to avoid recursing into this lambda.)
-    val bindings = HashMap<String, TypeRef>(bindingsFromValueArgs(sym, call))
+    // The call's EXPLICIT type arguments fix their parameters outright (`buildMap<String, Int> { }` makes the
+    // block's receiver a `MutableMap<String, Int>`); value arguments bind the rest.
+    val bindings = HashMap<String, TypeRef>(bindingsFromValueArgs(sym, call) + bindingsFromTypeArgs(sym, call))
     sym.receiverTypeParam?.let { tp ->
         val recv =
             (call.parent as? KtDotQualifiedExpression)?.takeIf { it.selectorExpression === call }?.receiverExpression

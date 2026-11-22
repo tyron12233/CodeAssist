@@ -215,14 +215,16 @@ internal fun KotlinResolver.inferBinaryType(e: KtBinaryExpression): KotlinType? 
             val leftType = inferType(e.left) ?: return null
             val rightType = inferType(e.right)
             when {
-                token == KtTokens.PLUS && leftType.qualifiedName == "kotlin.String" -> leftType
+                // `String.plus(Any?)`, and on a nullable left the stdlib's `String?.plus(Any?)`: a `String` either way.
+                token == KtTokens.PLUS && leftType.qualifiedName == "kotlin.String" -> leftType.withNullable(false)
                 // `Char` is not a number: `'a' + 1` and `c - 1` are `Char` (`Char.plus/minus(Int)`), `c - 'a'` is
                 // an `Int` (`Char.minus(Char)`). Promotion ranked it with Byte/Short and typed all three `Int`.
                 leftType.qualifiedName == "kotlin.Char" && rightType != null &&
                     (token == KtTokens.PLUS || token == KtTokens.MINUS) -> when (rightType.qualifiedName) {
                     "kotlin.Int" -> service.typeByFqn("kotlin.Char")
                     "kotlin.Char" -> if (token == KtTokens.MINUS) service.typeByFqn("kotlin.Int") else null
-                    else -> null
+                    // Anything else is an extension operator's (`Char.plus(String): String`).
+                    else -> arithmeticOperatorReturn(leftType, convention, rightType)
                 }
                 // Two primitive numbers → Kotlin's WIDENING promotion directly (`1 * 1.0` = Double, `1 + 1L` =
                 // Long; Byte/Short/Char promote to Int). NOT [arithmeticOperatorReturn]: its by-argument overload
