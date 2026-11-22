@@ -26,12 +26,18 @@ import dev.ide.lang.kotlin.resolve.inferType
 import dev.ide.lang.kotlin.resolve.isTypeParameterInScope
 import dev.ide.lang.kotlin.resolve.localTypesInScope
 import dev.ide.lang.kotlin.resolve.localsAt
+import dev.ide.lang.kotlin.resolve.scopeMemberExtensions
+import dev.ide.lang.kotlin.resolve.extensionInScope
+import dev.ide.lang.kotlin.resolve.localFunctionsInScope
 
 /**
  * A ninth round of rules ported from the K2 compiler's checkers (`compiler/fir/checkers`, Apache 2.0). Each function
  * names the K2 code and checker it follows. Registered from [KotlinSemanticChecks.checkers], after the earlier rounds.
  */
 internal fun KotlinSemanticChecks.round9PortedCheckers(): List<KotlinChecker> = listOf(
+    KotlinChecker(dev.ide.kotlin.syntax.psi.KtBinaryExpression::class) { psi ->
+        if (resolveReady) report(infixModifierRequired(psi as dev.ide.kotlin.syntax.psi.KtBinaryExpression, resolver))
+    },
     KotlinChecker(dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration::class) { psi ->
         report(nonLocalDestructuring(psi as dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration))
     },
@@ -293,6 +299,46 @@ internal fun KotlinSemanticChecks.functionValueMissingArguments(call: KtCallExpr
     return Diagnostic(
         TextRange(r.startOffset, r.endOffset), Severity.ERROR,
         "No value passed for parameter 'p${given + 1}'", KotlinDiagnosticCodes.ARGUMENT_COUNT,
+    )
+}
+
+/**
+ * INFIX_MODIFIER_REQUIRED (FirInfixFunctionCallChecker): `a name b` calls a `name` that is not `infix`. Every
+ * function of that name that could take the one argument is gathered (members, local and member extensions,
+ * extensions in scope); the call is reported only when there is one and none of them is `infix`. A value of
+ * function type called this way (`f invoke 1`, `1 ext 2` with `ext: Int.(Int) -> Unit`) is an `invoke`, which
+ * is never infix. An operand whose type is unknown is not judged.
+ */
+private fun KotlinSemanticChecks.infixModifierRequired(e: dev.ide.kotlin.syntax.psi.KtBinaryExpression, resolver: KotlinResolver): Diagnostic? {
+    if (e.operationToken != KtTokens.IDENTIFIER || e.right == null) return null
+    val ref = e.operationReference
+    val name = ref.getReferencedName()
+    val left = resolver.inferType(e.left) ?: return null
+    if (left.isTypeParameter) return null
+    val offset = e.textRange.startOffset
+    fun takesOne(s: dev.ide.lang.kotlin.symbols.KotlinSymbol): Boolean {
+        val n = s.paramTypes.size
+        if (n == 0) return false
+        val required = if (s.paramHasDefault.size == n) s.paramHasDefault.count { !it } else n
+        return required <= 1 || s.varargParamIndex >= 0
+    }
+    val candidates = (service.membersNamed(left.qualifiedName, left.typeArguments, name) +
+        resolver.scopeMemberExtensions(offset, left, name, exactName = true))
+        .filter { it.name == name && it.kind == dev.ide.lang.resolve.SymbolKind.METHOD && takesOne(it) &&
+            (!it.isExtension || it.owner != null || resolver.extensionInScope(it)) }
+    val locals = resolver.localFunctionsInScope(offset, name)
+        .filter { fn -> fn.receiverTypeReference != null && fn.valueParameters.isNotEmpty() }
+    if (candidates.any { it.isInfix } || locals.any { it.hasModifier(KtTokens.INFIX_KEYWORD) }) return null
+    // A function value's own `invoke` (`f invoke 1`): an `operator`, never `infix`.
+    val functionInvoke = name == "invoke" && dev.ide.lang.kotlin.symbols.TypeRendering.isFunctionType(left.qualifiedName)
+    val viaValue = functionInvoke || candidates.isEmpty() && locals.isEmpty() && resolver.localsAt(offset, name).any { v ->
+        (v.type as? dev.ide.lang.kotlin.symbols.KotlinType)?.let { dev.ide.lang.kotlin.symbols.TypeRendering.isFunctionType(it.qualifiedName) } == true
+    }
+    if (candidates.isEmpty() && locals.isEmpty() && !viaValue) return null
+    val r = ref.textRange
+    return Diagnostic(
+        TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+        "'infix' modifier is required on '$name'", KotlinDiagnosticCodes.INFIX_MODIFIER_REQUIRED,
     )
 }
 

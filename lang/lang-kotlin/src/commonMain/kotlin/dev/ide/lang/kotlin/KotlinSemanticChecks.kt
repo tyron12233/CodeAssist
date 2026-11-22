@@ -4168,6 +4168,11 @@ internal class KotlinSemanticChecks(
         // Only flag when the receiver type is enumerable: an unknown type yields an empty member set and would
         // produce a false "unresolved" (mirrors [unresolvedMember]).
         if (!service.isKnownType(recvType.qualifiedName)) return null
+        // A VALUE of function type of that name (`1 ext 2` with `ext: Int.(Int) -> Unit`) is its `invoke`: it
+        // resolves, and what K2 reports is the missing `infix` ([infixModifierRequired]).
+        if (resolver.localsAt(ref.textRange.startOffset, name).any { v ->
+                (v.type as? KotlinType)?.let { dev.ide.lang.kotlin.symbols.TypeRendering.isFunctionType(it.qualifiedName) } == true
+            }) return null
         val r = ref.textRange
         return Diagnostic(
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,

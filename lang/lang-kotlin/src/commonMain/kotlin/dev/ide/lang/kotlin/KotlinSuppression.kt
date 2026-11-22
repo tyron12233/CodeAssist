@@ -99,6 +99,7 @@ internal object KotlinSuppression {
         "kt.whenExhaustive" to setOf("NO_ELSE_IN_WHEN"),
         "kt.abstractNotImplemented" to setOf("ABSTRACT_MEMBER_NOT_IMPLEMENTED"),
         "kt.nonLocalDestructuringDeclaration" to setOf("NON_LOCAL_DESTRUCTURING_DECLARATION"),
+        "kt.infixModifierRequired" to setOf("INFIX_MODIFIER_REQUIRED"),
         "kt.abstractClassMemberNotImplemented" to setOf("ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED"),
         "kt.manyImplMemberNotImplemented" to setOf("MANY_IMPL_MEMBER_NOT_IMPLEMENTED"),
         "kt.manyInterfacesMemberNotImplemented" to setOf("MANY_INTERFACES_MEMBER_NOT_IMPLEMENTED"),

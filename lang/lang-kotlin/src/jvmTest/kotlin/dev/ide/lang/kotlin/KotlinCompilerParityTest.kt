@@ -2007,6 +2007,18 @@ class KotlinCompilerParityTest {
         assertEquals(listOf(KotlinDiagnosticCodes.TYPE_MISMATCH), pclaErrors.map { it.code }, "for `$pcla`: $pclaErrors")
     }
 
+    /** INFIX_MODIFIER_REQUIRED: `a name b` calling a function that is not `infix` (a member, an extension, a numeric
+     *  operator, a function value's `invoke`), and never a call to an `infix` one (stdlib, member or local). */
+    @Test
+    fun infixModifierRequired() {
+        val code = "class E { fun nonInfix(o: E) = 1; infix fun inf(o: E) = 2 }\nfun E.ext(o: E) = 3\n" +
+            "fun f(a: E, b: E, g: (Int) -> Unit) { a nonInfix b; a ext b; 1 plus 1; g invoke 1; a inf b }"
+        assertEquals(List(4) { KotlinDiagnosticCodes.INFIX_MODIFIER_REQUIRED }, errors(code).map { it.code }, "for `$code`")
+        val clean = "class A { infix fun String.m(o: Int) = 1; fun u() { \"a\" m 1 } }\n" +
+            "fun f() { infix fun Int.l(o: Int) = o; 1 l 2; val a = 1 shl 2; val b = true and false; val c = 1 to 2; val d = 10 downTo 1 step 2 }"
+        assertEquals(emptyList(), errors(clean).map { it.code }, "for `$clean`")
+    }
+
     /** A builder lambda's receiver takes the call's explicit type arguments: inside `buildMap<String, MutableList<C>> { }`
      *  `this` is a `MutableMap<String, MutableList<C>>`, so `getOrPut(k) { ArrayList() }` is a `MutableList<C>`. */
     @Test

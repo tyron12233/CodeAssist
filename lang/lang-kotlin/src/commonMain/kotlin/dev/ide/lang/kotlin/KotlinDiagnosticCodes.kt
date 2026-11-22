@@ -328,6 +328,8 @@ object KotlinDiagnosticCodes {
     const val DEFINITELY_NOT_NULL_COMPONENT = "kt.definitelyNotNullComponent"
     const val EXPECTED_PARAMETER_TYPE_MISMATCH = "kt.expectedParameterTypeMismatch"
     const val NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER = "kt.nameInConstraintIsNotATypeParameter"
+    /** `a name b` where the `name` it calls is not declared `infix`. */
+    const val INFIX_MODIFIER_REQUIRED = "kt.infixModifierRequired"
     /** `val (a, b) = …` outside a block: in a class body or at the top level. */
     const val NON_LOCAL_DESTRUCTURING_DECLARATION = "kt.nonLocalDestructuringDeclaration"
     /** `interface A<T : A<*>>` (FINITE_BOUNDS_VIOLATION). */

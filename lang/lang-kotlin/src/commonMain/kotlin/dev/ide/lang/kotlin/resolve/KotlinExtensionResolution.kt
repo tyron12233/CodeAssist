@@ -2,6 +2,7 @@ package dev.ide.lang.kotlin.resolve
 
 import dev.ide.kotlin.syntax.psi.KtTypeParameterListOwner
 import dev.ide.kotlin.syntax.psi.KtBlockExpression
+import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.KtCallableDeclaration
 import dev.ide.kotlin.syntax.psi.KtClassOrObject
 import dev.ide.kotlin.syntax.psi.KtElement
@@ -403,6 +404,7 @@ internal fun KotlinResolver.sameFileMemberExtension(
                 paramTypes = params.map { (_, t) -> typed(t) },
                 paramNames = params.map { (n, _) -> n },
                 paramHasDefault = d.valueParameters.map { it.hasDefaultValue() },
+                isInfix = d.hasModifier(KtTokens.INFIX_KEYWORD),
                 varargParamIndex = d.valueParameters.indexOfFirst { it.isVarArg },
                 isComposable = d.annotationEntries.any { it.shortName?.asString() == "Composable" },
                 receiverTypeArgs = recvArgs,
