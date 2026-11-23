@@ -12,7 +12,21 @@ object TypeRendering {
     fun isFunctionType(fqn: String): Boolean {
         val tail = fqn.substringAfterLast('.')
         return (tail.startsWith("Function") && tail.removePrefix("Function").toIntOrNull() != null) ||
-            isSuspendFunctionType(fqn)
+            isSuspendFunctionType(fqn) || reflectFunctionArity(fqn) != null
+    }
+
+    /**
+     * The arity of `kotlin.reflect.KFunctionN` / `KSuspendFunctionN`, the type of a function reference (`::foo`),
+     * which is a function type with `FunctionN`'s argument layout; null for anything else.
+     */
+    fun reflectFunctionArity(fqn: String): Int? {
+        if (!fqn.startsWith("kotlin.reflect.K")) return null
+        val tail = fqn.removePrefix("kotlin.reflect.")
+        return when {
+            tail.startsWith("KSuspendFunction") -> tail.removePrefix("KSuspendFunction").toIntOrNull()
+            tail.startsWith("KFunction") -> tail.removePrefix("KFunction").toIntOrNull()
+            else -> null
+        }
     }
 
     /**
@@ -24,7 +38,9 @@ object TypeRendering {
      */
     fun isSuspendFunctionType(fqn: String): Boolean {
         val tail = fqn.substringAfterLast('.')
-        return tail.startsWith("SuspendFunction") && tail.removePrefix("SuspendFunction").toIntOrNull() != null
+        return (tail.startsWith("SuspendFunction") && tail.removePrefix("SuspendFunction").toIntOrNull() != null) ||
+            (fqn.startsWith("kotlin.reflect.KSuspendFunction") &&
+                fqn.removePrefix("kotlin.reflect.KSuspendFunction").toIntOrNull() != null)
     }
 
     /** Whether [simpleName] is the synthetic key a local or anonymous type is registered under. */
