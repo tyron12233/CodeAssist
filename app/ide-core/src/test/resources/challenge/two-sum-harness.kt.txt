@@ -1,0 +1,351 @@
+import java.io.File
+import java.io.OutputStream
+import java.io.PrintStream
+
+{{USER_CODE}}
+
+private class CaNum(val raw: String)
+
+private object CaJson {
+    fun parse(text: String): Any? = P(text).let { p -> val v = p.value(); p.ws(); v }
+
+    private class P(val s: String) {
+        var i = 0
+        fun ws() { while (i < s.length && s[i].isWhitespace()) i++ }
+        fun value(): Any? {
+            ws()
+            if (i >= s.length) throw RuntimeException("unexpected end of payload")
+            return when (s[i]) {
+                '{' -> obj()
+                '[' -> arr()
+                '"' -> str()
+                't' -> { expect("true"); true }
+                'f' -> { expect("false"); false }
+                'n' -> { expect("null"); null }
+                else -> num()
+            }
+        }
+        fun expect(word: String) {
+            if (!s.startsWith(word, i)) throw RuntimeException("bad literal at " + i)
+            i += word.length
+        }
+        fun obj(): LinkedHashMap<String, Any?> {
+            val m = LinkedHashMap<String, Any?>()
+            i++
+            ws()
+            if (i < s.length && s[i] == '}') { i++; return m }
+            while (true) {
+                ws()
+                val k = str()
+                ws()
+                if (s[i] != ':') throw RuntimeException("expected colon at " + i)
+                i++
+                m[k] = value()
+                ws()
+                when (s[i]) {
+                    ',' -> i++
+                    '}' -> { i++; return m }
+                    else -> throw RuntimeException("bad object at " + i)
+                }
+            }
+        }
+        fun arr(): ArrayList<Any?> {
+            val a = ArrayList<Any?>()
+            i++
+            ws()
+            if (i < s.length && s[i] == ']') { i++; return a }
+            while (true) {
+                a.add(value())
+                ws()
+                when (s[i]) {
+                    ',' -> i++
+                    ']' -> { i++; return a }
+                    else -> throw RuntimeException("bad array at " + i)
+                }
+            }
+        }
+        fun str(): String {
+            if (s[i] != '"') throw RuntimeException("expected string at " + i)
+            i++
+            val b = StringBuilder()
+            while (true) {
+                val c = s[i++]
+                if (c == '"') return b.toString()
+                if (c != '\\') { b.append(c); continue }
+                when (val e = s[i++]) {
+                    '"' -> b.append('"')
+                    '\\' -> b.append('\\')
+                    '/' -> b.append('/')
+                    'b' -> b.append('\b')
+                    'f' -> b.append('\u000C')
+                    'n' -> b.append('\n')
+                    'r' -> b.append('\r')
+                    't' -> b.append('\t')
+                    'u' -> { b.append(s.substring(i, i + 4).toInt(16).toChar()); i += 4 }
+                    else -> throw RuntimeException("bad escape " + e)
+                }
+            }
+        }
+        fun num(): CaNum {
+            val st = i
+            while (i < s.length && (s[i] == '-' || s[i] == '+' || s[i] == '.' || s[i] == 'e' || s[i] == 'E' || s[i].isDigit())) i++
+            if (st == i) throw RuntimeException("expected a value at " + i)
+            return CaNum(s.substring(st, i))
+        }
+    }
+
+    fun asLong(v: Any?): Long = when (v) {
+        is CaNum -> if (v.raw.contains('.') || v.raw.contains('e') || v.raw.contains('E')) v.raw.toDouble().toLong() else v.raw.toLong()
+        is Boolean -> if (v) 1L else 0L
+        else -> throw RuntimeException("expected a number, got " + v)
+    }
+    fun asDouble(v: Any?): Double = when (v) {
+        is CaNum -> v.raw.toDouble()
+        else -> throw RuntimeException("expected a number, got " + v)
+    }
+    private fun at(a: List<Any?>, k: Int): Any? {
+        if (k >= a.size) throw RuntimeException("missing argument " + k)
+        return a[k]
+    }
+    private fun list(a: List<Any?>, k: Int): List<Any?> {
+        val v = at(a, k)
+        if (v !is List<*>) throw RuntimeException("argument " + k + " is not an array")
+        return v
+    }
+
+    fun i(a: List<Any?>, k: Int): Int = asLong(at(a, k)).toInt()
+    fun l(a: List<Any?>, k: Int): Long = asLong(at(a, k))
+    fun d(a: List<Any?>, k: Int): Double = asDouble(at(a, k))
+    fun b(a: List<Any?>, k: Int): Boolean = at(a, k) == true
+    fun s(a: List<Any?>, k: Int): String = at(a, k) as? String ?: throw RuntimeException("argument " + k + " is not a string")
+    fun ia(a: List<Any?>, k: Int): IntArray = list(a, k).let { v -> IntArray(v.size) { asLong(v[it]).toInt() } }
+    fun la(a: List<Any?>, k: Int): LongArray = list(a, k).let { v -> LongArray(v.size) { asLong(v[it]) } }
+    fun da(a: List<Any?>, k: Int): DoubleArray = list(a, k).let { v -> DoubleArray(v.size) { asDouble(v[it]) } }
+    fun ba(a: List<Any?>, k: Int): BooleanArray = list(a, k).let { v -> BooleanArray(v.size) { v[it] == true } }
+    fun sa(a: List<Any?>, k: Int): Array<String> = list(a, k).let { v -> Array(v.size) { v[it] as String } }
+    fun iaa(a: List<Any?>, k: Int): Array<IntArray> = list(a, k).let { v ->
+        Array(v.size) { r -> (v[r] as List<*>).let { row -> IntArray(row.size) { asLong(row[it]).toInt() } } }
+    }
+    fun saa(a: List<Any?>, k: Int): Array<Array<String>> = list(a, k).let { v ->
+        Array(v.size) { r -> (v[r] as List<*>).let { row -> Array(row.size) { row[it] as String } } }
+    }
+
+    fun encStr(v: String): String {
+        val b = StringBuilder(v.length + 2)
+        b.append('"')
+        for (c in v) when (c) {
+            '"' -> b.append("\\\"")
+            '\\' -> b.append("\\\\")
+            '\n' -> b.append("\\n")
+            '\r' -> b.append("\\r")
+            '\t' -> b.append("\\t")
+            else -> if (c < ' ') b.append(String.format("\\u%04x", c.code)) else b.append(c)
+        }
+        b.append('"')
+        return b.toString()
+    }
+
+    fun enc(v: Any?): String = when (v) {
+        null -> "null"
+        is Boolean -> v.toString()
+        is Int, is Long, is Short, is Byte -> v.toString()
+        is Double -> encD(v)
+        is Float -> encD(v.toDouble())
+        is String -> encStr(v)
+        is Char -> encStr(v.toString())
+        is IntArray -> v.joinToString(",", "[", "]")
+        is LongArray -> v.joinToString(",", "[", "]")
+        is DoubleArray -> v.joinToString(",", "[", "]") { encD(it) }
+        is BooleanArray -> v.joinToString(",", "[", "]")
+        is CharArray -> v.joinToString(",", "[", "]") { encStr(it.toString()) }
+        is Array<*> -> v.joinToString(",", "[", "]") { enc(it) }
+        is Iterable<*> -> v.joinToString(",", "[", "]") { enc(it) }
+        is Map<*, *> -> v.entries.joinToString(",", "{", "}") { encStr(it.key.toString()) + ":" + enc(it.value) }
+        else -> encStr(v.toString())
+    }
+
+    private fun encD(v: Double): String =
+        if (v.isNaN() || v.isInfinite()) encStr(v.toString()) else v.toString()
+}
+
+private object CaRun {
+    @Volatile var sink: Int = 0
+    @Volatile var completed: Int = 0
+
+    // Reached by name rather than by type. The same harness compiles on a phone, where neither
+    // java.lang.management nor com.sun.management exists, and there it simply reports no measurement.
+    private var bean: Any? = null
+    private var allocMethod: java.lang.reflect.Method? = null
+    private val allocArg: Array<Any?> = arrayOf(java.lang.Thread.currentThread().id)
+
+    init {
+        try {
+            val factory = Class.forName("java.lang.management.ManagementFactory")
+            val b = factory.getMethod("getThreadMXBean").invoke(null)
+            val sun = Class.forName("com.sun.management.ThreadMXBean")
+            if (sun.isInstance(b)) {
+                bean = b
+                allocMethod = sun.getMethod("getThreadAllocatedBytes", java.lang.Long.TYPE)
+            }
+        } catch (t: Throwable) {
+            bean = null
+            allocMethod = null
+        }
+    }
+
+    fun alloc(): Long = try {
+        val m = allocMethod ?: return -1L
+        (m.invoke(bean, *allocArg) as java.lang.Long).toLong()
+    } catch (t: Throwable) { -1L }
+
+    fun describe(t: Throwable): String {
+        val name = t.javaClass.simpleName
+        val msg = t.message
+        val head = if (msg.isNullOrBlank()) name else name + ": " + msg
+        val frame = t.stackTrace.firstOrNull { it.className != "CaRun" && !it.className.startsWith("java.") }
+        return if (frame == null) head else head + " (at " + frame.methodName + ":" + frame.lineNumber + ")"
+    }
+}
+
+private fun caPrepare(a: List<Any?>): Array<Any?> = arrayOf(CaJson.ia(a, 0), CaJson.i(a, 1))
+
+@Suppress("UNCHECKED_CAST")
+private fun caInvoke(p: Array<Any?>): Any? = twoSum(p[0] as IntArray, p[1] as Int)
+
+fun main(args: Array<String>) {
+    // With a file the run is the server's; with nothing, the payload arrives on standard input, which is
+    // how the app runs the same harness on the device where it cannot pass arguments.
+    val mode = if (args.isNotEmpty()) args[0] else "check"
+    val text = if (args.size > 1) File(args[1]).readText() else System.`in`.readBytes().toString(Charsets.UTF_8)
+    val payload = CaJson.parse(text) as Map<*, *>
+    val nonce = if (args.size > 2) args[2] else ""
+    val real = System.out
+    val quiet = PrintStream(object : OutputStream() { override fun write(b: Int) {} })
+    val out = StringBuilder()
+
+    val budget = (payload["budgetMs"] as? CaNum)?.let { CaJson.asLong(it) } ?: 10000L
+    val watchdog = Thread {
+        try { Thread.sleep(budget) } catch (e: InterruptedException) { return@Thread }
+        real.println("__CA_BEGIN__" + nonce)
+        real.println("{\"timeout\":true,\"completed\":" + CaRun.completed + "}")
+        real.println("__CA_END__" + nonce)
+        real.flush()
+        Runtime.getRuntime().halt(7)
+    }
+    watchdog.isDaemon = true
+    watchdog.start()
+
+    try {
+        System.setOut(quiet)
+        if (mode == "probe") probe(payload, out, if (args.size > 3) args[3].toInt() else -1) else check(payload, out)
+    } catch (t: Throwable) {
+        out.setLength(0)
+        out.append("{\"fatal\":").append(CaJson.encStr(CaRun.describe(t))).append("}")
+    } finally {
+        System.setOut(real)
+    }
+
+    watchdog.interrupt()
+    real.println("__CA_BEGIN__" + nonce)
+    real.println(out.toString())
+    real.println("__CA_END__" + nonce)
+    real.flush()
+}
+
+private fun check(payload: Map<*, *>, out: StringBuilder) {
+    val cases = payload["cases"] as List<*>
+    out.append("{\"results\":[")
+    for ((idx, raw) in cases.withIndex()) {
+        val c = raw as Map<*, *>
+        val id = CaJson.asLong(c["id"]).toInt()
+        @Suppress("UNCHECKED_CAST")
+        val a = c["args"] as List<Any?>
+        if (idx > 0) out.append(",")
+        out.append("{\"id\":").append(id)
+        try {
+            val prepared = caPrepare(a)
+            val r = caInvoke(prepared)
+            out.append(",\"v\":").append(CaJson.enc(r))
+        } catch (t: Throwable) {
+            out.append(",\"err\":").append(CaJson.encStr(CaRun.describe(t)))
+        }
+        out.append("}")
+        CaRun.completed = idx + 1
+    }
+    out.append("]}")
+}
+
+private fun probe(payload: Map<*, *>, out: StringBuilder, only: Int) {
+    val all = payload["probe"] as List<*>
+    // A probe process measures ONE size. Running every size in one JVM lets the later sizes inherit the
+    // JIT compilation the earlier ones paid for, which flattens the curve and can read a quadratic as
+    // linearithmic. One process per size makes every size equally warm.
+    val points = if (only >= 0) listOf(all[only]) else all
+    val warmup = (payload["warmup"] as? CaNum)?.let { CaJson.asLong(it).toInt() } ?: 20000
+    val warmNs = ((payload["warmupMs"] as? CaNum)?.let { CaJson.asLong(it) } ?: 200L) * 1000000L
+    val minSamples = (payload["minSamples"] as? CaNum)?.let { CaJson.asLong(it).toInt() } ?: 12
+    val maxSamples = (payload["maxSamples"] as? CaNum)?.let { CaJson.asLong(it).toInt() } ?: 20000
+    val sampleNs = ((payload["sampleBudgetMs"] as? CaNum)?.let { CaJson.asLong(it) } ?: 250L) * 1000000L
+    val budget = (payload["probeBudgetMs"] as? CaNum)?.let { CaJson.asLong(it) } ?: 8000L
+    val reuse = payload["reuseArgs"] == true
+    val started = System.nanoTime()
+    var truncated = false
+
+    out.append("{\"probe\":[")
+    var written = 0
+    for (raw in points) {
+        if ((System.nanoTime() - started) / 1000000L > budget) { truncated = true; break }
+        val p = raw as Map<*, *>
+        val n = CaJson.asLong(p["n"]).toInt()
+        @Suppress("UNCHECKED_CAST")
+        val a = p["args"] as List<Any?>
+
+        try {
+            // A problem that never modifies its input can build the arguments once. For a sublinear
+            // solution the argument construction is far larger than the work being measured, and
+            // rebuilding it every sample would measure the allocator instead of the algorithm.
+            val shared = if (reuse) caPrepare(a) else null
+            var warmed = 0
+            val warmStart = System.nanoTime()
+            while (warmed < warmup && System.nanoTime() - warmStart < warmNs) {
+                CaRun.sink += java.util.Objects.hashCode(caInvoke(shared ?: caPrepare(a)))
+                warmed++
+            }
+            var bestNs = Long.MAX_VALUE
+            var bestBytes = Long.MAX_VALUE
+            var samples = 0
+            var spent = 0L
+            // Sample until the size has spent enough time to be measurable rather than a fixed count:
+            // a fast size gets many readings, a slow one gets few, and the minimum of each is what the
+            // fit sees. A fixed count leaves small sizes dominated by clock and scheduling noise.
+            while (samples < maxSamples && (samples < minSamples || spent < sampleNs)) {
+                val prepared = shared ?: caPrepare(a)
+                val a0 = CaRun.alloc()
+                val t0 = System.nanoTime()
+                val r = caInvoke(prepared)
+                val t1 = System.nanoTime()
+                val a1 = CaRun.alloc()
+                CaRun.sink += java.util.Objects.hashCode(r)
+                val dt = t1 - t0
+                if (dt < bestNs) bestNs = dt
+                if (a0 >= 0 && a1 - a0 < bestBytes) bestBytes = a1 - a0
+                samples++
+                spent += dt
+            }
+            if (written > 0) out.append(",")
+            out.append("{\"n\":").append(n)
+                .append(",\"ns\":").append(bestNs)
+                .append(",\"bytes\":").append(if (bestBytes == Long.MAX_VALUE) -1 else bestBytes)
+                .append(",\"samples\":").append(samples)
+                .append("}")
+            written++
+            CaRun.completed = written
+        } catch (t: Throwable) {
+            if (written > 0) out.append(",")
+            out.append("{\"n\":").append(n).append(",\"err\":").append(CaJson.encStr(CaRun.describe(t))).append("}")
+            written++
+            break
+        }
+    }
+    out.append("],\"truncated\":").append(truncated).append("}")
+}

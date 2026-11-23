@@ -32,6 +32,8 @@ import dev.ide.ui.backend.UiLocalRun
 import dev.ide.ui.backend.UiSampleOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.nio.file.Files
@@ -108,20 +110,23 @@ internal class ChallengeBackend(
         }
 
         val started = System.currentTimeMillis()
-        val services = try {
-            scratchFor(language) ?: return@withContext UiLocalRun(diagnostics = listOf("The runner isn't available."))
-        } catch (e: Throwable) {
-            return@withContext UiLocalRun(diagnostics = listOf("Couldn't prepare the runner: ${reason(e)}"))
-        }
+        // One run at a time: two would write the same harness file under each other.
+        val capture = runLock.withLock {
+            val services = try {
+                runScratchFor(language) ?: return@withContext UiLocalRun(diagnostics = listOf("The runner isn't available."))
+            } catch (e: Throwable) {
+                return@withContext UiLocalRun(diagnostics = listOf("Couldn't prepare the runner: ${reason(e)}"))
+            }
 
-        runCatching { writeSolution(services, language, material.harness.replace(USER_CODE, source)) }
-            .exceptionOrNull()
-            ?.let { return@withContext UiLocalRun(diagnostics = listOf("Couldn't save your code: ${reason(it)}")) }
+            runCatching { writeSolution(services, language, material.harness.replace(USER_CODE, source)) }
+                .exceptionOrNull()
+                ?.let { return@withContext UiLocalRun(diagnostics = listOf("Couldn't save your code: ${reason(it)}")) }
 
-        val capture = try {
-            services.runAndCapture("app", stdin = payloadFor(problem), timeoutMs = LOCAL_RUN_TIMEOUT_MS)
-        } catch (e: Throwable) {
-            return@withContext UiLocalRun(diagnostics = listOf("The runner failed: ${reason(e)}"))
+            try {
+                services.runAndCapture("app", stdin = payloadFor(problem), timeoutMs = LOCAL_RUN_TIMEOUT_MS)
+            } catch (e: Throwable) {
+                return@withContext UiLocalRun(diagnostics = listOf("The runner failed: ${reason(e)}"))
+            }
         }
 
         if (!capture.compiled) {
@@ -323,6 +328,8 @@ internal class ChallengeBackend(
 
     override suspend fun prepare(language: UiChallengeLanguage): Boolean = withContext(Dispatchers.Default) {
         val services = runCatching { scratchFor(language) }.getOrNull() ?: return@withContext false
+        // The run project too, so the first "Run examples" does not also pay for creating it.
+        runCatching { runScratchFor(language) }
         withTimeoutOrNull(PREPARE_TIMEOUT_MS) {
             services.indexStatus.first { !it.building }
             true
@@ -336,10 +343,11 @@ internal class ChallengeBackend(
     // ---- scratch -------------------------------------------------------------------------------------
 
     /**
-     * The hidden project a challenge is compiled in.
+     * The hidden project the challenge editor's intelligence (completion, diagnostics, hints, folds) works in.
      *
-     * Separate from the Learn scratches so a lesson in progress is never clobbered by a challenge run,
-     * and separate per language because the two need different module types.
+     * Separate from the Learn scratches so a lesson in progress is never clobbered by a challenge, and
+     * separate per language because the two need different module types. Runs do NOT happen here: see
+     * [runScratchFor].
      */
     private suspend fun scratchFor(language: UiChallengeLanguage): IdeServices? {
         val manager = ctx.manager ?: return null
@@ -348,6 +356,28 @@ internal class ChallengeBackend(
             UiChallengeLanguage.Java -> manager.scratch("challenge-java", "java-console")
         }
     }
+
+    /**
+     * The hidden project "Run examples" compiles and runs in, apart from the editor's [scratchFor].
+     *
+     * They used to share one: the editor's file and the runner's harness were the same `Solution` file. Every
+     * editor request (diagnostics, hints, folds, completion) puts the solver's snippet into the engine as that
+     * file's open buffer, and a run starts by flushing open buffers to disk. The player keeps making those
+     * requests while a run is going, so one landing between writing the harness and the flush put the snippet
+     * back on disk, and the run failed with "No runnable main() found in app" (the snippet has no entry point;
+     * the harness does). On a phone that was most runs. Nothing but a run ever opens this project, so there is
+     * no buffer here to race with.
+     */
+    private suspend fun runScratchFor(language: UiChallengeLanguage): IdeServices? {
+        val manager = ctx.manager ?: return null
+        return when (language) {
+            UiChallengeLanguage.Kotlin -> manager.scratch("challenge-kotlin-run", "kotlin-console")
+            UiChallengeLanguage.Java -> manager.scratch("challenge-java-run", "java-console")
+        }
+    }
+
+    /** Serializes runs; see [run]. */
+    private val runLock = Mutex()
 
     /**
      * Makes sure the solution file exists before the engine is asked about it.
@@ -370,17 +400,11 @@ internal class ChallengeBackend(
         ).resolve(if (language == UiChallengeLanguage.Kotlin) "Solution.kt" else "Solution.java")
 
     /**
-     * Writes the filled harness, clearing whatever the previous challenge left behind.
+     * Writes the filled harness into the run project, clearing whatever the previous challenge left behind.
      *
      * Written straight to disk rather than through the editor's save path, so the main-class detection
      * that follows has to scan the live sources rather than trust an index that still names yesterday's
-     * class.
-     *
-     * The engine's overlay for the same path is moved with it. [ensureSolution] points the editor at this
-     * very file, so completion and analysis leave the solver's bare snippet there as an open buffer, and a
-     * run begins by flushing every open buffer to disk. Leaving the overlay behind therefore puts the
-     * snippet back over the harness between this write and the run, and the run fails with "no runnable
-     * main() found" — the snippet is a function, the entry point lives in the harness.
+     * class. The engine's overlay for the path is moved with it, so a flush can only ever write the harness.
      */
     private fun writeSolution(services: IdeServices, language: UiChallengeLanguage, text: String) {
         val path = solutionPath(services, language)

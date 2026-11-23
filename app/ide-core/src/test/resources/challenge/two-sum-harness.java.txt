@@ -1,0 +1,496 @@
+import java.io.File;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+{{USER_CODE}}
+
+final class CaNum {
+    final String raw;
+    CaNum(String raw) { this.raw = raw; }
+}
+
+final class CaJson {
+    private final String s;
+    private int i;
+    private CaJson(String s) { this.s = s; }
+
+    static Object parse(String text) { return new CaJson(text).value(); }
+
+    private void ws() { while (i < s.length() && Character.isWhitespace(s.charAt(i))) i++; }
+
+    private Object value() {
+        ws();
+        if (i >= s.length()) throw new RuntimeException("unexpected end of payload");
+        char c = s.charAt(i);
+        if (c == '{') return obj();
+        if (c == '[') return arr();
+        if (c == '"') return str();
+        if (c == 't') { expect("true"); return Boolean.TRUE; }
+        if (c == 'f') { expect("false"); return Boolean.FALSE; }
+        if (c == 'n') { expect("null"); return null; }
+        return num();
+    }
+
+    private void expect(String word) {
+        if (!s.startsWith(word, i)) throw new RuntimeException("bad literal at " + i);
+        i += word.length();
+    }
+
+    private Map<String, Object> obj() {
+        LinkedHashMap<String, Object> m = new LinkedHashMap<>();
+        i++;
+        ws();
+        if (i < s.length() && s.charAt(i) == '}') { i++; return m; }
+        while (true) {
+            ws();
+            String k = str();
+            ws();
+            if (s.charAt(i) != ':') throw new RuntimeException("expected colon at " + i);
+            i++;
+            m.put(k, value());
+            ws();
+            char c = s.charAt(i);
+            if (c == ',') { i++; continue; }
+            if (c == '}') { i++; return m; }
+            throw new RuntimeException("bad object at " + i);
+        }
+    }
+
+    private List<Object> arr() {
+        ArrayList<Object> a = new ArrayList<>();
+        i++;
+        ws();
+        if (i < s.length() && s.charAt(i) == ']') { i++; return a; }
+        while (true) {
+            a.add(value());
+            ws();
+            char c = s.charAt(i);
+            if (c == ',') { i++; continue; }
+            if (c == ']') { i++; return a; }
+            throw new RuntimeException("bad array at " + i);
+        }
+    }
+
+    private String str() {
+        if (s.charAt(i) != '"') throw new RuntimeException("expected string at " + i);
+        i++;
+        StringBuilder b = new StringBuilder();
+        while (true) {
+            char c = s.charAt(i++);
+            if (c == '"') return b.toString();
+            if (c != '\\') { b.append(c); continue; }
+            char e = s.charAt(i++);
+            switch (e) {
+                case '"': b.append('"'); break;
+                case '\\': b.append('\\'); break;
+                case '/': b.append('/'); break;
+                case 'b': b.append('\b'); break;
+                case 'f': b.append('\f'); break;
+                case 'n': b.append('\n'); break;
+                case 'r': b.append('\r'); break;
+                case 't': b.append('\t'); break;
+                case 'u': b.append((char) Integer.parseInt(s.substring(i, i + 4), 16)); i += 4; break;
+                default: throw new RuntimeException("bad escape " + e);
+            }
+        }
+    }
+
+    private CaNum num() {
+        int st = i;
+        while (i < s.length()) {
+            char c = s.charAt(i);
+            if (c == '-' || c == '+' || c == '.' || c == 'e' || c == 'E' || Character.isDigit(c)) i++;
+            else break;
+        }
+        if (st == i) throw new RuntimeException("expected a value at " + i);
+        return new CaNum(s.substring(st, i));
+    }
+
+    static long asLong(Object v) {
+        if (v instanceof CaNum) {
+            String r = ((CaNum) v).raw;
+            if (r.indexOf('.') >= 0 || r.indexOf('e') >= 0 || r.indexOf('E') >= 0) return (long) Double.parseDouble(r);
+            return Long.parseLong(r);
+        }
+        if (v instanceof Boolean) return ((Boolean) v) ? 1L : 0L;
+        throw new RuntimeException("expected a number, got " + v);
+    }
+
+    static double asDouble(Object v) {
+        if (v instanceof CaNum) return Double.parseDouble(((CaNum) v).raw);
+        throw new RuntimeException("expected a number, got " + v);
+    }
+
+    private static Object at(List<Object> a, int k) {
+        if (k >= a.size()) throw new RuntimeException("missing argument " + k);
+        return a.get(k);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Object> list(List<Object> a, int k) {
+        Object v = at(a, k);
+        if (!(v instanceof List)) throw new RuntimeException("argument " + k + " is not an array");
+        return (List<Object>) v;
+    }
+
+    static int i(List<Object> a, int k) { return (int) asLong(at(a, k)); }
+    static long l(List<Object> a, int k) { return asLong(at(a, k)); }
+    static double d(List<Object> a, int k) { return asDouble(at(a, k)); }
+    static boolean b(List<Object> a, int k) { return Boolean.TRUE.equals(at(a, k)); }
+    static String s(List<Object> a, int k) {
+        Object v = at(a, k);
+        if (!(v instanceof String)) throw new RuntimeException("argument " + k + " is not a string");
+        return (String) v;
+    }
+    static int[] ia(List<Object> a, int k) {
+        List<Object> v = list(a, k);
+        int[] r = new int[v.size()];
+        for (int j = 0; j < r.length; j++) r[j] = (int) asLong(v.get(j));
+        return r;
+    }
+    static long[] la(List<Object> a, int k) {
+        List<Object> v = list(a, k);
+        long[] r = new long[v.size()];
+        for (int j = 0; j < r.length; j++) r[j] = asLong(v.get(j));
+        return r;
+    }
+    static double[] da(List<Object> a, int k) {
+        List<Object> v = list(a, k);
+        double[] r = new double[v.size()];
+        for (int j = 0; j < r.length; j++) r[j] = asDouble(v.get(j));
+        return r;
+    }
+    static boolean[] ba(List<Object> a, int k) {
+        List<Object> v = list(a, k);
+        boolean[] r = new boolean[v.size()];
+        for (int j = 0; j < r.length; j++) r[j] = Boolean.TRUE.equals(v.get(j));
+        return r;
+    }
+    static String[] sa(List<Object> a, int k) {
+        List<Object> v = list(a, k);
+        String[] r = new String[v.size()];
+        for (int j = 0; j < r.length; j++) r[j] = (String) v.get(j);
+        return r;
+    }
+    @SuppressWarnings("unchecked")
+    static int[][] iaa(List<Object> a, int k) {
+        List<Object> v = list(a, k);
+        int[][] r = new int[v.size()][];
+        for (int j = 0; j < r.length; j++) {
+            List<Object> row = (List<Object>) v.get(j);
+            int[] rr = new int[row.size()];
+            for (int q = 0; q < rr.length; q++) rr[q] = (int) asLong(row.get(q));
+            r[j] = rr;
+        }
+        return r;
+    }
+    @SuppressWarnings("unchecked")
+    static String[][] saa(List<Object> a, int k) {
+        List<Object> v = list(a, k);
+        String[][] r = new String[v.size()][];
+        for (int j = 0; j < r.length; j++) {
+            List<Object> row = (List<Object>) v.get(j);
+            String[] rr = new String[row.size()];
+            for (int q = 0; q < rr.length; q++) rr[q] = (String) row.get(q);
+            r[j] = rr;
+        }
+        return r;
+    }
+
+    static String encStr(String v) {
+        StringBuilder b = new StringBuilder(v.length() + 2);
+        b.append('"');
+        for (int j = 0; j < v.length(); j++) {
+            char c = v.charAt(j);
+            if (c == '"') b.append("\\\"");
+            else if (c == '\\') b.append("\\\\");
+            else if (c == '\n') b.append("\\n");
+            else if (c == '\r') b.append("\\r");
+            else if (c == '\t') b.append("\\t");
+            else if (c < ' ') b.append(String.format("\\u%04x", (int) c));
+            else b.append(c);
+        }
+        b.append('"');
+        return b.toString();
+    }
+
+    static String encD(double v) {
+        if (Double.isNaN(v) || Double.isInfinite(v)) return encStr(Double.toString(v));
+        return Double.toString(v);
+    }
+
+    static String enc(Object v) {
+        if (v == null) return "null";
+        if (v instanceof Boolean || v instanceof Integer || v instanceof Long
+                || v instanceof Short || v instanceof Byte) return v.toString();
+        if (v instanceof Double) return encD((Double) v);
+        if (v instanceof Float) return encD(((Float) v).doubleValue());
+        if (v instanceof String) return encStr((String) v);
+        if (v instanceof Character) return encStr(v.toString());
+        if (v instanceof int[]) {
+            int[] x = (int[]) v;
+            StringBuilder b = new StringBuilder("[");
+            for (int j = 0; j < x.length; j++) { if (j > 0) b.append(','); b.append(x[j]); }
+            return b.append(']').toString();
+        }
+        if (v instanceof long[]) {
+            long[] x = (long[]) v;
+            StringBuilder b = new StringBuilder("[");
+            for (int j = 0; j < x.length; j++) { if (j > 0) b.append(','); b.append(x[j]); }
+            return b.append(']').toString();
+        }
+        if (v instanceof double[]) {
+            double[] x = (double[]) v;
+            StringBuilder b = new StringBuilder("[");
+            for (int j = 0; j < x.length; j++) { if (j > 0) b.append(','); b.append(encD(x[j])); }
+            return b.append(']').toString();
+        }
+        if (v instanceof boolean[]) {
+            boolean[] x = (boolean[]) v;
+            StringBuilder b = new StringBuilder("[");
+            for (int j = 0; j < x.length; j++) { if (j > 0) b.append(','); b.append(x[j]); }
+            return b.append(']').toString();
+        }
+        if (v instanceof char[]) {
+            char[] x = (char[]) v;
+            StringBuilder b = new StringBuilder("[");
+            for (int j = 0; j < x.length; j++) { if (j > 0) b.append(','); b.append(encStr(String.valueOf(x[j]))); }
+            return b.append(']').toString();
+        }
+        if (v instanceof Object[]) {
+            Object[] x = (Object[]) v;
+            StringBuilder b = new StringBuilder("[");
+            for (int j = 0; j < x.length; j++) { if (j > 0) b.append(','); b.append(enc(x[j])); }
+            return b.append(']').toString();
+        }
+        if (v instanceof Iterable) {
+            StringBuilder b = new StringBuilder("[");
+            boolean first = true;
+            for (Object o : (Iterable<?>) v) { if (!first) b.append(','); b.append(enc(o)); first = false; }
+            return b.append(']').toString();
+        }
+        if (v instanceof Map) {
+            StringBuilder b = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<?, ?> e : ((Map<?, ?>) v).entrySet()) {
+                if (!first) b.append(',');
+                b.append(encStr(String.valueOf(e.getKey()))).append(':').append(enc(e.getValue()));
+                first = false;
+            }
+            return b.append('}').toString();
+        }
+        return encStr(v.toString());
+    }
+}
+
+final class CaRun {
+    static volatile int sink = 0;
+    static volatile int completed = 0;
+
+    // Reached by name rather than by type. The same harness compiles on a phone, where neither
+    // java.lang.management nor com.sun.management exists, and there it simply reports no measurement.
+    private static Object bean;
+    private static java.lang.reflect.Method allocMethod;
+    private static final Object[] ALLOC_ARG = { Long.valueOf(Thread.currentThread().getId()) };
+
+    static {
+        try {
+            Class<?> factory = Class.forName("java.lang.management.ManagementFactory");
+            Object b = factory.getMethod("getThreadMXBean").invoke(null);
+            Class<?> sun = Class.forName("com.sun.management.ThreadMXBean");
+            if (sun.isInstance(b)) {
+                bean = b;
+                allocMethod = sun.getMethod("getThreadAllocatedBytes", long.class);
+            }
+        } catch (Throwable t) {
+            bean = null;
+            allocMethod = null;
+        }
+    }
+
+    static long alloc() {
+        try {
+            if (allocMethod == null) return -1L;
+            return ((Long) allocMethod.invoke(bean, ALLOC_ARG)).longValue();
+        } catch (Throwable t) { return -1L; }
+    }
+
+    static String describe(Throwable t) {
+        String name = t.getClass().getSimpleName();
+        String msg = t.getMessage();
+        String head = (msg == null || msg.trim().isEmpty()) ? name : name + ": " + msg;
+        for (StackTraceElement f : t.getStackTrace()) {
+            if (!f.getClassName().startsWith("java.") && !f.getClassName().equals("CaRun")) {
+                return head + " (at " + f.getMethodName() + ":" + f.getLineNumber() + ")";
+            }
+        }
+        return head;
+    }
+}
+
+final class CaCall {
+    static Object[] prepare(List<Object> a) {
+        return new Object[] { CaJson.ia(a, 0), CaJson.i(a, 1) };
+    }
+
+    static Object invoke(Object[] p) {
+        return new Solution().twoSum((int[]) p[0], ((Integer) p[1]).intValue());
+    }
+}
+
+class Main {
+    @SuppressWarnings("unchecked")
+    public static void main(String[] args) throws Exception {
+        // With a file the run is the server's; with nothing, the payload arrives on standard input, which
+        // is how the app runs the same harness on the device where it cannot pass arguments.
+        String mode = args.length > 0 ? args[0] : "check";
+        String text = args.length > 1
+                ? new String(Files.readAllBytes(new File(args[1]).toPath()), StandardCharsets.UTF_8)
+                : readAll(System.in);
+        Map<String, Object> payload = (Map<String, Object>) CaJson.parse(text);
+        final String nonce = args.length > 2 ? args[2] : "";
+        final PrintStream real = System.out;
+        PrintStream quiet = new PrintStream(new OutputStream() { public void write(int b) { } });
+        final StringBuilder out = new StringBuilder();
+
+        long budget = payload.containsKey("budgetMs") ? CaJson.asLong(payload.get("budgetMs")) : 10000L;
+        Thread watchdog = new Thread(new Runnable() {
+            public void run() {
+                try { Thread.sleep(budget); } catch (InterruptedException e) { return; }
+                real.println("__CA_BEGIN__" + nonce);
+                real.println("{\"timeout\":true,\"completed\":" + CaRun.completed + "}");
+                real.println("__CA_END__" + nonce);
+                real.flush();
+                Runtime.getRuntime().halt(7);
+            }
+        });
+        watchdog.setDaemon(true);
+        watchdog.start();
+
+        try {
+            System.setOut(quiet);
+            if ("probe".equals(mode)) probe(payload, out, args.length > 3 ? Integer.parseInt(args[3]) : -1); else check(payload, out);
+        } catch (Throwable t) {
+            out.setLength(0);
+            out.append("{\"fatal\":").append(CaJson.encStr(CaRun.describe(t))).append("}");
+        } finally {
+            System.setOut(real);
+        }
+
+        watchdog.interrupt();
+        real.println("__CA_BEGIN__" + nonce);
+        real.println(out.toString());
+        real.println("__CA_END__" + nonce);
+        real.flush();
+    }
+
+    private static String readAll(java.io.InputStream in) throws Exception {
+        java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+        byte[] chunk = new byte[8192];
+        int read;
+        while ((read = in.read(chunk)) > 0) buffer.write(chunk, 0, read);
+        return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void check(Map<String, Object> payload, StringBuilder out) {
+        List<Object> cases = (List<Object>) payload.get("cases");
+        out.append("{\"results\":[");
+        for (int idx = 0; idx < cases.size(); idx++) {
+            Map<String, Object> c = (Map<String, Object>) cases.get(idx);
+            int id = (int) CaJson.asLong(c.get("id"));
+            List<Object> a = (List<Object>) c.get("args");
+            if (idx > 0) out.append(",");
+            out.append("{\"id\":").append(id);
+            try {
+                Object r = CaCall.invoke(CaCall.prepare(a));
+                out.append(",\"v\":").append(CaJson.enc(r));
+            } catch (Throwable t) {
+                out.append(",\"err\":").append(CaJson.encStr(CaRun.describe(t)));
+            }
+            out.append("}");
+            CaRun.completed = idx + 1;
+        }
+        out.append("]}");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void probe(Map<String, Object> payload, StringBuilder out, int only) {
+        List<Object> all = (List<Object>) payload.get("probe");
+        // A probe process measures ONE size. Running every size in one JVM lets the later sizes inherit
+        // the JIT compilation the earlier ones paid for, which flattens the curve and can read a
+        // quadratic as linearithmic. One process per size makes every size equally warm.
+        List<Object> points = only >= 0 ? java.util.Collections.singletonList(all.get(only)) : all;
+        int warmup = payload.containsKey("warmup") ? (int) CaJson.asLong(payload.get("warmup")) : 20000;
+        long warmNs = (payload.containsKey("warmupMs") ? CaJson.asLong(payload.get("warmupMs")) : 200L) * 1000000L;
+        int minSamples = payload.containsKey("minSamples") ? (int) CaJson.asLong(payload.get("minSamples")) : 12;
+        int maxSamples = payload.containsKey("maxSamples") ? (int) CaJson.asLong(payload.get("maxSamples")) : 20000;
+        long sampleNs = (payload.containsKey("sampleBudgetMs") ? CaJson.asLong(payload.get("sampleBudgetMs")) : 250L) * 1000000L;
+        long budget = payload.containsKey("probeBudgetMs") ? CaJson.asLong(payload.get("probeBudgetMs")) : 8000L;
+        boolean reuse = Boolean.TRUE.equals(payload.get("reuseArgs"));
+        long started = System.nanoTime();
+        boolean truncated = false;
+        int written = 0;
+
+        out.append("{\"probe\":[");
+        for (Object raw : points) {
+            if ((System.nanoTime() - started) / 1000000L > budget) { truncated = true; break; }
+            Map<String, Object> p = (Map<String, Object>) raw;
+            int n = (int) CaJson.asLong(p.get("n"));
+            List<Object> a = (List<Object>) p.get("args");
+            try {
+                // A problem that never modifies its input can build the arguments once. For a
+                // sublinear solution the argument construction is far larger than the work being
+                // measured, and rebuilding it every sample would measure the allocator instead.
+                Object[] shared = reuse ? CaCall.prepare(a) : null;
+                int warmed = 0;
+                long warmStart = System.nanoTime();
+                while (warmed < warmup && System.nanoTime() - warmStart < warmNs) {
+                    CaRun.sink += java.util.Objects.hashCode(CaCall.invoke(shared != null ? shared : CaCall.prepare(a)));
+                    warmed++;
+                }
+                long bestNs = Long.MAX_VALUE;
+                long bestBytes = Long.MAX_VALUE;
+                int samples = 0;
+                long spent = 0L;
+                // Sample until the size has spent enough time to be measurable rather than a fixed
+                // count: a fast size gets many readings, a slow one gets few, and the minimum of each is
+                // what the fit sees. A fixed count leaves small sizes dominated by clock noise.
+                while (samples < maxSamples && (samples < minSamples || spent < sampleNs)) {
+                    Object[] prepared = shared != null ? shared : CaCall.prepare(a);
+                    long a0 = CaRun.alloc();
+                    long t0 = System.nanoTime();
+                    Object res = CaCall.invoke(prepared);
+                    long t1 = System.nanoTime();
+                    long a1 = CaRun.alloc();
+                    CaRun.sink += java.util.Objects.hashCode(res);
+                    long dt = t1 - t0;
+                    if (dt < bestNs) bestNs = dt;
+                    if (a0 >= 0 && a1 - a0 < bestBytes) bestBytes = a1 - a0;
+                    samples++;
+                    spent += dt;
+                }
+                if (written > 0) out.append(",");
+                out.append("{\"n\":").append(n)
+                   .append(",\"ns\":").append(bestNs)
+                   .append(",\"bytes\":").append(bestBytes == Long.MAX_VALUE ? -1 : bestBytes)
+                   .append(",\"samples\":").append(samples)
+                   .append("}");
+                written++;
+                CaRun.completed = written;
+            } catch (Throwable t) {
+                if (written > 0) out.append(",");
+                out.append("{\"n\":").append(n).append(",\"err\":").append(CaJson.encStr(CaRun.describe(t))).append("}");
+                written++;
+                break;
+            }
+        }
+        out.append("],\"truncated\":").append(truncated).append("}");
+    }
+}
