@@ -20,7 +20,8 @@ class SeasonTest {
 
     @Test
     fun winterRunsAcrossTheNewYear() {
-        assertNull(Season.at(1127))
+        assertNull(Season.at(1122))
+        assertEquals(Season.Winter, Season.at(1123))
         assertEquals(Season.Winter, Season.at(1128))
         assertEquals(Season.Winter, Season.at(1201))
         assertEquals(Season.Winter, Season.at(1225))

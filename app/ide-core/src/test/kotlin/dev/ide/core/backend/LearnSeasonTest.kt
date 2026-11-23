@@ -14,7 +14,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Seasonal tracks: the New Year card track is listed from Nov 28 through Jan 6 (local date), a window that
+ * Seasonal tracks: the New Year card track is listed from Nov 23 through Jan 6 (local date), a window that
  * wraps the new year, and nowhere else. The filter lives in [LearnBackend], so the UI only ever sees the
  * tracks that are in season.
  */
@@ -26,11 +26,11 @@ class LearnSeasonTest {
     fun theWinterWindowWrapsTheNewYear() {
         val w = assertNotNull(newYear.visibleIn)
         // Inside, on both sides of the new year, including both ends.
-        for (d in listOf("2026-11-28", "2026-12-01", "2026-12-25", "2026-12-31", "2027-01-01", "2027-01-06")) {
+        for (d in listOf("2026-11-23", "2026-11-28", "2026-12-01", "2026-12-25", "2026-12-31", "2027-01-01", "2027-01-06")) {
             assertTrue(w.contains(LocalDate.parse(d)), "$d should be in season")
         }
         // Outside, just past each end and mid-year.
-        for (d in listOf("2026-11-27", "2027-01-07", "2026-07-15", "2028-02-29", "2026-11-01")) {
+        for (d in listOf("2026-11-22", "2027-01-07", "2026-07-15", "2028-02-29", "2026-11-01")) {
             assertFalse(w.contains(LocalDate.parse(d)), "$d should be out of season")
         }
     }
@@ -49,8 +49,8 @@ class LearnSeasonTest {
     fun theCatalogListsTheTrackOnlyInSeason() {
         runBlocking {
             for ((date, expected) in listOf(
-                "2026-11-27" to false,
-                "2026-11-28" to true,
+                "2026-11-22" to false,
+                "2026-11-23" to true,
                 "2026-12-24" to true,
                 "2027-01-06" to true,
                 "2027-01-07" to false,

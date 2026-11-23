@@ -58,7 +58,7 @@ class HolidayLedger(
         return if (day % 10_000 < 200) year - 1 else year
     }
 
-    /** True while the winter season is on the calendar (Nov 28 through Jan 6). */
+    /** True while the winter season is on the calendar (Nov 23 through Jan 6). */
     fun inSeason(day: Int = today()): Boolean = Season.Winter.contains(day % 10_000)
 
     /**
@@ -70,7 +70,7 @@ class HolidayLedger(
         if (!inSeason(day)) return 0
         val md = day % 10_000
         return when {
-            md in 1128..1130 -> 0
+            md / 100 == 11 -> 0
             md in 1201..1231 -> md - 1200
             else -> DOORS
         }
@@ -80,7 +80,7 @@ class HolidayLedger(
     fun daysUntilFirstDoor(day: Int = today()): Int {
         val md = day % 10_000
         // November has 30 days, so from Nov 28 it is 3 days to December 1.
-        return if (inSeason(day) && md in 1128..1130) 31 - md % 100 else 0
+        return if (inSeason(day) && md / 100 == 11) 31 - md % 100 else 0
     }
 
     /** Days left until New Year's Day during December (1 on New Year's Eve); null on any other day. */

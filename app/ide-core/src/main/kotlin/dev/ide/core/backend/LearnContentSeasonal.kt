@@ -7,8 +7,8 @@ package dev.ide.core.backend
 /** Aurora teal, from the winter season's "Aurora night" palette. */
 internal val ACCENT_HOLIDAY = 0xFF6FE0C8L
 
-/** The winter season: Nov 28 through Jan 6, across the new year. */
-internal val WINTER_SEASON = SeasonWindow(startMonth = 11, startDay = 28, endMonth = 1, endDay = 6)
+/** The winter season: Nov 23 through Jan 6, across the new year (the UI's `Season.Winter`). */
+internal val WINTER_SEASON = SeasonWindow(startMonth = 11, startDay = 23, endMonth = 1, endDay = 6)
 
 /**
  * "Build a New Year card in Compose": one starry greeting card, grown a concept at a time (composables and

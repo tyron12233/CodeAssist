@@ -76,8 +76,8 @@ internal data class LearnTrackDef(
 }
 
 /**
- * A yearly window of local calendar days, both ends included. It may wrap the year end: Nov 28 to Jan 6 is
- * `SeasonWindow(11, 28, 1, 6)` and covers late November, all of December and the first days of January.
+ * A yearly window of local calendar days, both ends included. It may wrap the year end: Nov 23 to Jan 6 is
+ * `SeasonWindow(11, 23, 1, 6)` and covers late November, all of December and the first days of January.
  */
 internal data class SeasonWindow(val startMonth: Int, val startDay: Int, val endMonth: Int, val endDay: Int) {
     init {

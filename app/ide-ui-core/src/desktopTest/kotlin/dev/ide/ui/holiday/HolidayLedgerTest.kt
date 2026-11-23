@@ -14,6 +14,10 @@ class HolidayLedgerTest {
 
     @Test
     fun daysUnlockOneByOneAndStayOpenAfterNewYear() {
+        assertEquals(0, ledger.unlockedThrough(20261122))
+        assertEquals(0, ledger.daysUntilFirstDoor(20261122))
+        assertEquals(0, ledger.unlockedThrough(20261123))
+        assertEquals(8, ledger.daysUntilFirstDoor(20261123))
         assertEquals(0, ledger.unlockedThrough(20261128))
         assertEquals(3, ledger.daysUntilFirstDoor(20261128))
         assertEquals(1, ledger.daysUntilFirstDoor(20261130))
