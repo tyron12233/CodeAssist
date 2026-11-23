@@ -6,6 +6,8 @@ import dev.ide.kotlin.syntax.psi.KtCollectionLiteralExpression
 import dev.ide.kotlin.syntax.psi.KtConstantExpression
 import dev.ide.kotlin.syntax.psi.KtExpression
 import dev.ide.lang.dom.Diagnostic
+import dev.ide.lang.dom.Severity
+import dev.ide.lang.dom.TextRange
 import dev.ide.lang.kotlin.analysis.KotlinChecker
 import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.kotlin.parse.unwrapParen
@@ -43,8 +45,19 @@ private fun KotlinSemanticChecks.annotationArgumentTypes(entry: KtAnnotationEntr
     val typeRef = entry.typeReference ?: return emptyList()
     val fqn = classifierFqnOf(typeRef, resolver) ?: return emptyList()
     val params = annotationParameters(fqn, resolver) ?: return emptyList()
-    if (params.isEmpty()) return emptyList()
     val out = ArrayList<Diagnostic>()
+    fun tooMany(arg: dev.ide.kotlin.syntax.psi.KtValueArgument) {
+        val r = (arg.getArgumentExpression() ?: arg).textRange
+        out += Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Too many arguments for '${typeRef.text.trim()}'", KotlinDiagnosticCodes.ARGUMENT_COUNT,
+        )
+    }
+    // An annotation with no parameters takes no arguments (TOO_MANY_ARGUMENTS on each, as on any call).
+    if (params.isEmpty()) {
+        args.filter { it.getArgumentName() == null }.forEach(::tooMany)
+        return out
+    }
     var sawNamed = false
     for ((i, arg) in args.withIndex()) {
         val named = arg.getArgumentName()?.asName?.identifier
@@ -53,7 +66,11 @@ private fun KotlinSemanticChecks.annotationArgumentTypes(entry: KtAnnotationEntr
         val p = when {
             named != null -> params.firstOrNull { it.name == named } ?: return out
             varargAt in 0..i -> params[varargAt]
-            else -> params.getOrNull(i) ?: return out
+            else -> params.getOrNull(i) ?: run {
+                // A positional argument past the last parameter, with no vararg to take it.
+                args.drop(i).filter { it.getArgumentName() == null }.forEach(::tooMany)
+                return out
+            }
         }
         val value = arg.getArgumentExpression()?.let { unwrapParen(it) } ?: continue
         // A vararg named argument takes the whole array, not an element: left alone.

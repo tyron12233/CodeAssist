@@ -520,7 +520,10 @@ internal object KotlinModifierChecks {
             val name = e.typeReference?.text ?: continue
             val key = (e.useSiteTarget ?: "") + "|" + name
             val earlier = seen.getOrPut(key) { ArrayList() }
-            if (earlier.isNotEmpty() && earlier.none { it.text.trim() == e.text.trim() } && isNonRepeatableOwnAnnotation(e, file)) {
+            // One not allowed on this element at all is WRONG_ANNOTATION_TARGET each time, never a repeat.
+            val misplaced = list.parent is dev.ide.kotlin.syntax.psi.KtTypeParameter &&
+                allowedTargetsOf(e, file)?.let { T.TYPE_PARAMETER !in it } == true
+            if (!misplaced && earlier.isNotEmpty() && earlier.none { it.text.trim() == e.text.trim() } && isNonRepeatableOwnAnnotation(e, file)) {
                 out += diag(e, "This annotation is not repeatable", KotlinDiagnosticCodes.DECLARATION_SHAPE)
             }
             earlier += e

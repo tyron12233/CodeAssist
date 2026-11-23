@@ -2073,6 +2073,23 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** An annotation call takes no more arguments than its constructor has parameters: TOO_MANY_ARGUMENTS. */
+    @Test
+    fun annotationWithTooManyArguments() {
+        val bad = "annotation class A1\nannotation class A2(val some: Int = 12)\n@A1(12) class C\n@A2(1, 2) class D"
+        assertEquals(List(2) { KotlinDiagnosticCodes.ARGUMENT_COUNT }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = "annotation class A1\nannotation class A2(val some: Int = 12)\nannotation class V(vararg val xs: Int)\n@A1 @A2(3) @V(1, 2, 3) class C"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
+    /** An annotation not allowed on a type parameter is WRONG_ANNOTATION_TARGET each time it is written there, not
+     *  a repeated one. */
+    @Test
+    fun misplacedAnnotationIsNotARepeat() {
+        val code = "annotation class A1\nclass C<@A1 @A1() T>"
+        assertEquals(List(2) { KotlinDiagnosticCodes.WRONG_ANNOTATION_TARGET }, errors(code).map { it.code }, "for `$code`")
+    }
+
     /** A default value may read only EARLIER parameters: itself or a later one is in scope but uninitialized
      *  (UNINITIALIZED_PARAMETER), also from a lambda or a local function inside the default value. */
     @Test
