@@ -412,6 +412,8 @@ object KotlinDiagnosticCodes {
     const val JVM_EXPOSE_BOXED_CANNOT_EXPOSE_PRIVATE = "kt.jvmExposeBoxedPrivate"
     /** `val a by A()` where `A` has no `getValue` (DELEGATE_SPECIAL_FUNCTION_MISSING). */
     const val DELEGATE_SPECIAL_FUNCTION_MISSING = "kt.delegateSpecialFunctionMissing"
+    /** `val a: Int by A()` where no `getValue`/`setValue` of `A` can take the property's call. */
+    const val DELEGATE_SPECIAL_FUNCTION_NONE_APPLICABLE = "kt.delegateSpecialFunctionNoneApplicable"
     /** A captured local `val` assigned in a lambda or local function (CAPTURED_VAL_INITIALIZATION). */
     const val CAPTURED_VAL_INITIALIZATION = "kt.capturedValInitialization"
     /** `v += x` where both `plusAssign` and `plus` apply (ASSIGN_OPERATOR_AMBIGUITY). */

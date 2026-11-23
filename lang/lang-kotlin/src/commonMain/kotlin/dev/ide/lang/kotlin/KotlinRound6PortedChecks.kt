@@ -76,6 +76,7 @@ internal fun KotlinSemanticChecks.round6PortedCheckers(): List<KotlinChecker> = 
         reportAll(accessorForDelegatedProperty(psi))
         report(varOverriddenByVal(psi))
         reportAll(delegateSpecialFunctionMissing(psi))
+        if (resolveReady) reportAll(delegateSpecialFunctionNoneApplicable(psi, resolver))
     },
     KotlinChecker(dev.ide.kotlin.syntax.psi.KtBinaryExpression::class) { psi ->
         if (resolveReady) report(assignmentOperatorReturningValue(psi as dev.ide.kotlin.syntax.psi.KtBinaryExpression, resolver))
@@ -208,6 +209,7 @@ internal val ROUND6_K2_NAMES: Map<String, Set<String>> = mapOf(
     KotlinDiagnosticCodes.JVM_EXPOSE_BOXED_CANNOT_EXPOSE_PRIVATE to setOf("JVM_EXPOSE_BOXED_CANNOT_EXPOSE_PRIVATE"),
     KotlinDiagnosticCodes.NO_CONSTRUCTOR to setOf("NO_CONSTRUCTOR"),
     KotlinDiagnosticCodes.DELEGATE_SPECIAL_FUNCTION_MISSING to setOf("DELEGATE_SPECIAL_FUNCTION_MISSING"),
+    KotlinDiagnosticCodes.DELEGATE_SPECIAL_FUNCTION_NONE_APPLICABLE to setOf("DELEGATE_SPECIAL_FUNCTION_NONE_APPLICABLE"),
     KotlinDiagnosticCodes.CAPTURED_VAL_INITIALIZATION to setOf("CAPTURED_VAL_INITIALIZATION"),
     KotlinDiagnosticCodes.ASSIGN_OPERATOR_AMBIGUITY to setOf("ASSIGN_OPERATOR_AMBIGUITY"),
     KotlinDiagnosticCodes.PROTECTED_CONSTRUCTOR_NOT_IN_SUPER_CALL to setOf("PROTECTED_CONSTRUCTOR_NOT_IN_SUPER_CALL"),
@@ -1982,6 +1984,84 @@ internal fun delegateSpecialFunctionMissing(prop: KtProperty): List<Diagnostic> 
 }
 
 private val DELEGATE_OPERATOR_NAMES = setOf("getValue", "setValue", "provideDelegate")
+
+/**
+ * DELEGATE_SPECIAL_FUNCTION_NONE_APPLICABLE: `val b: Int by Delegate()` where the delegate class (one of this file,
+ * as for [delegateSpecialFunctionMissing]) declares `getValue` (or, for a `var`, `setValue`) but no declaration of
+ * it can take the call the property makes: a wrong parameter count, a `thisRef` parameter its owner is not (a
+ * top-level or local property passes `null`), or a `setValue` value parameter the property's type does not fit.
+ * Judged only where every parameter type is known; a generic function or class is left to the compiler.
+ */
+internal fun KotlinSemanticChecks.delegateSpecialFunctionNoneApplicable(prop: KtProperty, resolver: KotlinResolver): List<Diagnostic> {
+    val delegate = prop.delegate ?: return emptyList()
+    val call = delegate.expression as? KtCallExpression ?: return emptyList()
+    if (call.typeArgumentList != null) return emptyList()
+    val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return emptyList()
+    val file = prop.containingKtFile
+    if (file.importDirectives.any { it.isAllUnder || (it.aliasName ?: it.importedFqName?.asString()?.substringAfterLast('.')) == name }) return emptyList()
+    val cls = file.declarations.filterIsInstance<KtClass>().singleOrNull { it.name == name } ?: return emptyList()
+    if (cls.isInterface() || cls.isEnum() || cls.superTypeListEntries.isNotEmpty() || cls.typeParameters.isNotEmpty()) return emptyList()
+    var extensions = false
+    fun visit(e: KtElement) {
+        if (e is KtNamedFunction && e.receiverTypeReference != null && e.name in DELEGATE_OPERATOR_NAMES) extensions = true
+        var c = e.firstChild
+        while (c != null) { visit(c); c = c.nextSibling }
+    }
+    visit(file)
+    if (extensions) return emptyList()
+    val functions = cls.declarations.filterIsInstance<KtNamedFunction>()
+    if (functions.any { it.name == "provideDelegate" }) return emptyList()
+    if (prop.typeReference == null) return emptyList()
+    // What the property passes as `thisRef`: its class's instance, its extension receiver, or `null` at top level.
+    val owner = prop.parent?.parent as? KtClassOrObject
+    val thisRef: dev.ide.lang.kotlin.symbols.KotlinType? = when {
+        prop.receiverTypeReference != null -> service.typeFromText(prop.receiverTypeReference!!.text, resolver.fileContext, owner?.fqName?.asString()) ?: return emptyList()
+        owner != null -> owner.fqName?.asString()?.let { dev.ide.lang.kotlin.symbols.KotlinType(it) } ?: return emptyList()
+        prop.parent is dev.ide.kotlin.syntax.psi.KtFile -> null
+        else -> return emptyList()
+    }
+    if (owner != null && (owner.typeParameters.isNotEmpty() || owner !is KtClass && owner !is dev.ide.kotlin.syntax.psi.KtObjectDeclaration)) return emptyList()
+    val propType = service.typeFromText(prop.typeReference!!.text, resolver.fileContext, owner?.fqName?.asString()) ?: return emptyList()
+    val subtyping = KotlinStrictSubtyping(service)
+    fun type(p: dev.ide.kotlin.syntax.psi.KtParameter): dev.ide.lang.kotlin.symbols.KotlinType? =
+        p.typeReference?.text?.let { service.typeFromText(it, resolver.fileContext, cls.fqName?.asString()) }
+    /** Whether [fn] can take the call: true, false, or null when it cannot be judged. */
+    fun applicable(fn: KtNamedFunction, arity: Int): Boolean? {
+        if (fn.typeParameters.isNotEmpty() || fn.receiverTypeReference != null) return null
+        val params = fn.valueParameters
+        if (params.any { it.isVarArg || it.hasDefaultValue() }) return null
+        if (params.size != arity) return false
+        val t = type(params[0]) ?: return null
+        if (t.isTypeParameter) return null
+        // A top-level property passes `null`, which only a nullable parameter takes.
+        val thisFits = if (thisRef == null) t.nullable else subtyping.subtype(thisRef, t)
+        if (thisFits == false) return false
+        // The property parameter is a `KProperty<*>` (or something above it); any other shape is not judged.
+        val pp = params[1].typeReference?.text?.replace(" ", "") ?: return null
+        if (pp !in PROPERTY_PARAMETER_TYPES) return null
+        if (arity == 3) {
+            val v = type(params[2]) ?: return null
+            if (v.isTypeParameter) return null
+            if (subtyping.subtype(propType, v) == false) return false
+            if (subtyping.subtype(propType, v) == null) return null
+        }
+        return if (thisFits == null) null else true
+    }
+    val by = generateSequence(delegate.firstChild) { it.nextSibling }.firstOrNull { it.elementType == KtTokens.BY_KEYWORD } ?: delegate
+    val out = ArrayList<Diagnostic>()
+    for ((fnName, arity) in listOfNotNull("getValue" to 2, ("setValue" to 3).takeIf { prop.isVar })) {
+        val candidates = functions.filter { it.name == fnName }
+        if (candidates.isEmpty()) continue
+        val verdicts = candidates.map { applicable(it, arity) }
+        if (verdicts.all { it == false }) out += error(
+            by, "None of the '$fnName' functions of '$name' can be called for this property",
+            KotlinDiagnosticCodes.DELEGATE_SPECIAL_FUNCTION_NONE_APPLICABLE,
+        )
+    }
+    return out
+}
+
+private val PROPERTY_PARAMETER_TYPES = setOf("KProperty<*>", "kotlin.reflect.KProperty<*>", "Any?", "Any")
 
 // --- FirPropertyInitializationAnalyzer (captured values) ---
 

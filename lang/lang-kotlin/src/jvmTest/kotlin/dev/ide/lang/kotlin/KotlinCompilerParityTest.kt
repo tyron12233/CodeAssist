@@ -2073,6 +2073,19 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** A delegate whose `getValue`/`setValue` none can take the property's call: a `thisRef` its owner is not (a
+     *  top-level property passes `null`), or a `setValue` value parameter the property's type does not fit. */
+    @Test
+    fun delegateSpecialFunctionNoneApplicable() {
+        val decls = "import kotlin.reflect.KProperty\nclass A\nclass Get { operator fun getValue(t: A, p: KProperty<*>): Int = 1 }\n" +
+            "class Set { operator fun getValue(t: Any?, p: KProperty<*>): Int = 1\n operator fun setValue(t: Any?, p: KProperty<*>, v: String) {} }\n" +
+            "class Ok { operator fun getValue(t: Any?, p: KProperty<*>): Int = 1\n operator fun setValue(t: Any?, p: KProperty<*>, v: Int) {} }\n"
+        val bad = decls + "class B { val b: Int by Get() }\nval top: Int by Get()\nvar s: Int by Set()"
+        assertEquals(List(3) { KotlinDiagnosticCodes.DELEGATE_SPECIAL_FUNCTION_NONE_APPLICABLE }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = decls + "var o: Int by Ok()\nclass A2 { var x: Int by Ok() }"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** A lambda called in place and an object expression's initializers run during the class's initialization: a
      *  `val` they read before its own initializer has run is UNINITIALIZED_VARIABLE (a `var` read there compiles). */
     @Test
