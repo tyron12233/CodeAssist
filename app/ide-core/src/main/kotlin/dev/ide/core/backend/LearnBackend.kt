@@ -46,6 +46,8 @@ import java.nio.file.Path
 internal class LearnBackend(
     private val ctx: BackendContext,
     private val remote: dev.ide.store.LearnRemoteService = dev.ide.store.LearnRemoteService.Unsupported,
+    /** Today's local date, for seasonal tracks ([LearnTrackDef.visibleIn]). Injectable so tests can pick the day. */
+    private val today: () -> java.time.LocalDate = { java.time.LocalDate.now() },
 ) : LearnService {
 
     private val log = dev.ide.platform.log.Log.logger("learn.compose")
@@ -97,8 +99,11 @@ internal class LearnBackend(
 
     override suspend fun catalog(): UiLearnCatalog {
         val c = catalogStore.catalog()
+        val date = today()
         return UiLearnCatalog(
-            tracks = c.tracks.map { it.toUiTrack() },
+            // A seasonal track is listed only in its window. Its lessons stay loadable and its badge stays
+            // earned; it just leaves the catalog until next season.
+            tracks = c.tracks.filter { it.visibleOn(date) }.map { it.toUiTrack() },
             paths = c.paths.map { p ->
                 UiLearnPath(p.id, p.title, p.subtitle, p.iconId, p.accentColor, p.trackIds)
             },
@@ -653,6 +658,8 @@ internal class LearnBackend(
     override fun resume(): UiResumePoint? {
         val lessonId = pref(KEY_RESUME_LESSON) ?: return null
         val (track, lesson) = findLesson(lessonId) ?: return null
+        // Out of season the track is not listed, so offering to continue it would lead nowhere.
+        if (!track.visibleOn(today())) return null
         val lastIndex = (lesson.steps.size - 1).coerceAtLeast(0)
         val step = (pref(KEY_RESUME_STEP)?.toIntOrNull() ?: 0).coerceIn(0, lastIndex)
         val done = completedSteps(lessonId).count { id -> lesson.steps.any { it.id == id } }

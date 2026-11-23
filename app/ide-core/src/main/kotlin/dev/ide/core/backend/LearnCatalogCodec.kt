@@ -42,7 +42,7 @@ internal object LearnCatalogCodec {
      * value for lessons that use the new feature, whenever a lesson gains something an older build would
      * mishandle rather than ignore (a new step type, a check whose absence would pass everything).
      */
-    const val FORMAT: Int = 2
+    const val FORMAT: Int = 3
 
     /** The envelope format. Readers refuse a file whose envelope is newer than this. */
     const val ENVELOPE_FORMAT: Int = 1
@@ -83,6 +83,13 @@ internal object LearnCatalogCodec {
     fun lessonFormat(lesson: LearnLessonDef): Int =
         if (lesson.steps.any { it is LearnStepDef.Interactive && (it.check.ide.isNotEmpty() || it.files.isNotEmpty()) }) 2 else 1
 
+    /**
+     * The format every lesson of [track] needs at least. 3: the track is seasonal ([LearnTrackDef.visibleIn]).
+     * A format-2 build would ignore the window and list the track all year, so its lessons (and with them the
+     * track) are left out there instead.
+     */
+    fun trackFormatFloor(track: LearnTrackDef): Int = if (track.visibleIn != null) 3 else 1
+
     // ---- encode ----
 
     private fun path(p: LearnPathDef) = buildJsonObject {
@@ -104,12 +111,22 @@ internal object LearnCatalogCodec {
         put("category", t.category)
         put("level", t.level)
         put("prerequisites", strings(t.prerequisites))
-        put("lessons", buildJsonArray { t.lessons.forEach { add(lesson(it)) } })
+        t.visibleIn?.let { w ->
+            put("visibleIn", buildJsonObject {
+                put("from", monthDay(w.startMonth, w.startDay))
+                put("to", monthDay(w.endMonth, w.endDay))
+            })
+        }
+        val floor = trackFormatFloor(t)
+        put("lessons", buildJsonArray { t.lessons.forEach { add(lesson(it, floor)) } })
     }
 
-    private fun lesson(l: LearnLessonDef) = buildJsonObject {
+    /** `MM-dd`, built by hand: `String.format` would print the device locale's digits. */
+    private fun monthDay(month: Int, day: Int) = month.toString().padStart(2, '0') + "-" + day.toString().padStart(2, '0')
+
+    private fun lesson(l: LearnLessonDef, formatFloor: Int = 1) = buildJsonObject {
         put("id", l.id)
-        put("format", lessonFormat(l))
+        put("format", maxOf(lessonFormat(l), formatFloor))
         put("title", l.title)
         put("summary", l.summary)
         put("iconId", l.iconId)
@@ -286,7 +303,21 @@ internal object LearnCatalogCodec {
         },
         level = o.str("level").orEmpty(),
         prerequisites = o.strings("prerequisites"),
+        visibleIn = (o["visibleIn"] as? JsonObject)?.let(::readSeason),
     )
+
+    /** `{"from": "11-28", "to": "01-06"}`. A malformed window throws, which drops the track: better unlisted
+     *  than shown out of season. */
+    private fun readSeason(o: JsonObject): SeasonWindow {
+        fun md(key: String): Pair<Int, Int> {
+            val parts = o.req(key).split('-')
+            require(parts.size == 2) { "bad $key" }
+            return parts[0].trim().toInt() to parts[1].trim().toInt()
+        }
+        val (fm, fd) = md("from")
+        val (tm, td) = md("to")
+        return SeasonWindow(fm, fd, tm, td)
+    }
 
     private fun readLesson(o: JsonObject) = LearnLessonDef(
         id = o.req("id"),

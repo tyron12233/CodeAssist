@@ -19,9 +19,11 @@ internal object LearnContent {
      * outrank the copy it downloaded before, and a published catalog must outrank the release. Format:
      * `yyyyMMddNN`.
      */
-    const val VERSION: Long = 2026110403L
+    const val VERSION: Long = 2026112301L
 
     val tracks: List<LearnTrackDef> = listOf(
+        // Seasonal: listed only inside its window (see [LearnTrackDef.visibleIn]), and first while it is.
+        christmasCard(),
         caEditor(), caProjects(), caBuild(), caTools(),
         kotlinBasics(), kotlinNextSteps(), kotlinOo(), kotlinCoroutines(),
         kotlinPractice().withLessons(kotlinPracticeExtra()),
@@ -67,7 +69,29 @@ internal data class LearnTrackDef(
     val level: String = "",
     /** Track ids recommended first. Advisory: the screen says so, nothing is locked. */
     val prerequisites: List<String> = emptyList(),
-)
+    /** A seasonal track's yearly window; null lists it all year. [LearnBackend] applies it by the local date. */
+    val visibleIn: SeasonWindow? = null,
+) {
+    fun visibleOn(date: java.time.LocalDate): Boolean = visibleIn?.contains(date) ?: true
+}
+
+/**
+ * A yearly window of local calendar days, both ends included. It may wrap the year end: Nov 28 to Jan 6 is
+ * `SeasonWindow(11, 28, 1, 6)` and covers late November, all of December and the first days of January.
+ */
+internal data class SeasonWindow(val startMonth: Int, val startDay: Int, val endMonth: Int, val endDay: Int) {
+    init {
+        require(startMonth in 1..12 && endMonth in 1..12) { "month out of range" }
+        require(startDay in 1..31 && endDay in 1..31) { "day out of range" }
+    }
+
+    fun contains(date: java.time.LocalDate): Boolean {
+        val day = date.monthValue * 100 + date.dayOfMonth
+        val start = startMonth * 100 + startDay
+        val end = endMonth * 100 + endDay
+        return if (start <= end) day in start..end else day >= start || day <= end
+    }
+}
 
 internal data class LearnLessonDef(
     val id: String,
