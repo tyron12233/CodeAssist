@@ -19,11 +19,11 @@ internal object LearnContent {
      * outrank the copy it downloaded before, and a published catalog must outrank the release. Format:
      * `yyyyMMddNN`.
      */
-    const val VERSION: Long = 2026112301L
+    const val VERSION: Long = 2026112302L
 
     val tracks: List<LearnTrackDef> = listOf(
         // Seasonal: listed only inside its window (see [LearnTrackDef.visibleIn]), and first while it is.
-        christmasCard(),
+        newYearCard(),
         caEditor(), caProjects(), caBuild(), caTools(),
         kotlinBasics(), kotlinNextSteps(), kotlinOo(), kotlinCoroutines(),
         kotlinPractice().withLessons(kotlinPracticeExtra()),
