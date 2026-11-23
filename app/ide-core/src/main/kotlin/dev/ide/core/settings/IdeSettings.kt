@@ -19,7 +19,7 @@ data class IdeSettings(
     val themeMode: String = THEME_DARK,
     /** The interface language as a BCP 47 tag from [LANGUAGES], or [LANGUAGE_SYSTEM] to follow the device. */
     val language: String = LANGUAGE_SYSTEM,
-    /** [ACCENT_LIME] (the default), [ACCENT_VIOLET], [ACCENT_TEAL], [ACCENT_ORANGE], [ACCENT_PUMPKIN], or [ACCENT_CUSTOM]. */
+    /** [ACCENT_LIME] (the default), [ACCENT_VIOLET], [ACCENT_TEAL], [ACCENT_ORANGE], [ACCENT_PUMPKIN], [ACCENT_EVERGREEN], or [ACCENT_CUSTOM]. */
     val accent: String = ACCENT_LIME,
     /** Seed for [ACCENT_CUSTOM] — an `0xAARRGGBB` ARGB long. Ignored unless [accent] is custom. */
     val accentColor: Long = 0xFF8B5CF6L,
@@ -32,7 +32,7 @@ data class IdeSettings(
     /** Open a program's Run terminal full screen, as on a phone, instead of docking it beside the editor on a
      *  wide window (a tablet, a phone in landscape, the desktop). */
     val runFullScreen: Boolean = false,
-    /** Date-windowed seasonal touches (Halloween's bats and Home card). Each season turns itself off when it
+    /** Date-windowed seasonal touches (Halloween's bats, Christmas snow, the Home cards). Each season turns itself off when it
      *  ends; this is the one switch for someone who wants none of them. */
     val seasonalTouches: Boolean = true,
 
@@ -128,6 +128,7 @@ data class IdeSettings(
         const val ACCENT_TEAL = "teal"
         const val ACCENT_ORANGE = "orange"
         const val ACCENT_PUMPKIN = "pumpkin"
+        const val ACCENT_EVERGREEN = "evergreen"
         const val ACCENT_CUSTOM = "custom"
 
         /** An accent value naming an app theme a plugin ships: `theme:<id>` (see `ContributedAppThemes`). */

@@ -2,7 +2,8 @@ package dev.ide.ui.screens
 
 import dev.ide.ui.distinctKeys
 import dev.ide.ui.components.HalloweenBackdrop
-import dev.ide.ui.components.HauntedGhost
+import dev.ide.ui.components.ChristmasBackdrop
+import dev.ide.ui.components.SeasonalMascot
 import dev.ide.ui.components.SeasonalEmptyArt
 import dev.ide.ui.theme.LocalSeason
 import dev.ide.ui.theme.Season
@@ -319,8 +320,9 @@ fun ProjectsHomeScreen(
         )
     } else
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
-      // Behind everything, so the list scrolls over it; draws nothing outside the Halloween season.
+      // Behind everything, so the list scrolls over it; each draws nothing outside its season.
       HalloweenBackdrop()
+      ChristmasBackdrop()
       PullToRefreshBox(
         isRefreshing = isRefreshing,
         onRefresh = {
@@ -1378,6 +1380,7 @@ private fun WideProjectsHome(
     val sidebarShown = LocalHomeSidebarShown.current
     BoxWithConstraints(Modifier.fillMaxSize().background(c.background)) {
         HalloweenBackdrop()
+        ChristmasBackdrop()
         val showKind = maxWidth >= ProjectsKindColumnBreakpoint
         // Below this the labelled Import and Clone buttons leave no room for the title, which was cut to
         // "Your ...". They keep their icons and the primary action keeps its label.
@@ -1448,7 +1451,7 @@ private fun WideProjectsHome(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
-                                if (LocalSeason.current == Season.Halloween) HauntedGhost(44.dp)
+                                SeasonalMascot(44.dp)
                                 Text(
                                     stringResource(Res.string.home_no_match, query.trim()),
                                     style = MaterialTheme.typography.bodyMedium,

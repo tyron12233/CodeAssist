@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Christmas launcher icon's foreground: a lit fir with a gold star standing on snow, inside the adaptive
+     icon's 66dp safe zone; the same drawing as the in-app tree (ChristmasArt.drawFirTree). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Snow on the ground. -->
+    <path android:fillColor="#F4F1E8" android:pathData="M28,82 a26,4.6 0 1,0 52,0 a26,4.6 0 1,0 -52,0 Z" />
+    <path android:fillColor="#6B4A32" android:pathData="M50.5,73 L57.5,73 L57.5,81 L50.5,81 Z" />
+    <!-- Three tiers, the lit left half over the shaded right, bottom tier first. -->
+    <path android:fillColor="#3C9A6B" android:pathData="M54,52 L33,75 Q43.5,76.6 54,75 Z" />
+    <path android:fillColor="#2E7D55" android:pathData="M54,52 L75,75 Q64.5,76.6 54,75 Z" />
+    <path android:fillColor="#3C9A6B" android:pathData="M54,42 L37.5,62 Q45.75,63.6 54,62 Z" />
+    <path android:fillColor="#2E7D55" android:pathData="M54,42 L70.5,62 Q62.25,63.6 54,62 Z" />
+    <path android:fillColor="#3C9A6B" android:pathData="M54,33.5 L42,50 Q48.0,51.6 54,50 Z" />
+    <path android:fillColor="#2E7D55" android:pathData="M54,33.5 L66,50 Q60.0,51.6 54,50 Z" />
+    <!-- The lights. -->
+    <path android:fillColor="#E8C872" android:pathData="M42.50,72 a1.5,1.5 0 1,0 3.0,0 a1.5,1.5 0 1,0 -3.0,0 Z" />
+    <path android:fillColor="#E88A8F" android:pathData="M52.50,73.5 a1.5,1.5 0 1,0 3.0,0 a1.5,1.5 0 1,0 -3.0,0 Z" />
+    <path android:fillColor="#9FD4B0" android:pathData="M62.50,72 a1.5,1.5 0 1,0 3.0,0 a1.5,1.5 0 1,0 -3.0,0 Z" />
+    <path android:fillColor="#E88A8F" android:pathData="M45.50,59.5 a1.5,1.5 0 1,0 3.0,0 a1.5,1.5 0 1,0 -3.0,0 Z" />
+    <path android:fillColor="#E8C872" android:pathData="M56.50,60 a1.5,1.5 0 1,0 3.0,0 a1.5,1.5 0 1,0 -3.0,0 Z" />
+    <path android:fillColor="#E8C872" android:pathData="M49.50,47.5 a1.5,1.5 0 1,0 3.0,0 a1.5,1.5 0 1,0 -3.0,0 Z" />
+    <path android:fillColor="#E88A8F" android:pathData="M57.00,47 a1.5,1.5 0 1,0 3.0,0 a1.5,1.5 0 1,0 -3.0,0 Z" />
+    <!-- The star. -->
+    <path android:fillColor="#E8C872" android:pathData="M54.00,22.00 L55.65,26.23 L60.18,26.49 L56.66,29.37 L57.82,33.76 L54.00,31.30 L50.18,33.76 L51.34,29.37 L47.82,26.49 L52.35,26.23 Z" />
+</vector>

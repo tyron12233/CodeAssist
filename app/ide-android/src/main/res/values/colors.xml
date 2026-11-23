@@ -5,4 +5,6 @@
     <!-- Behind the launch logo: the system splash, the window, and the in-app splash all use this one colour,
          so nothing changes on screen when one hands over to the next. -->
     <color name="splash_background">#0E0E12</color>
+    <!-- The Christmas launcher icon's winter night, the same deep green as the in-app Christmas card. -->
+    <color name="ic_launcher_christmas_background">#173528</color>
 </resources>

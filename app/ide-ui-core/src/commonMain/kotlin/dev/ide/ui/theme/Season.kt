@@ -7,6 +7,8 @@ import dev.ide.ui.platform.localMonthDay
  * The seasonal events the UI dresses up for. Each one is a window of local calendar days that recurs every
  * year, so the touches come back on their own without a release; the user can turn all of them off with
  * Settings → Appearance → Seasonal touches.
+ *
+ * A window may run across the new year ([from] later in the year than [through]), as Christmas does.
  */
 enum class Season(
     /** First day, as `month * 100 + day`. */
@@ -16,9 +18,16 @@ enum class Season(
 ) {
     /** The week before Halloween through the week after (Nov 7), so the season gets a full week either side. */
     Halloween(from = 1024, through = 1107),
+
+    /**
+     * The end of November through Epiphany (Jan 6): it opens a few days ahead of the Advent calendar's first
+     * door on December 1 and stays up through the new year.
+     */
+    Christmas(from = 1128, through = 106),
     ;
 
-    fun contains(monthDay: Int): Boolean = monthDay in from..through
+    fun contains(monthDay: Int): Boolean =
+        if (from <= through) monthDay in from..through else monthDay >= from || monthDay <= through
 
     companion object {
         /** The season [monthDay] falls in, or null for an ordinary day. */
@@ -26,6 +35,9 @@ enum class Season(
 
         /** The season today falls in, by the device's local calendar. */
         fun current(): Season? = at(localMonthDay())
+
+        /** A season by its [name], case-insensitively, for the developer override; null for anything else. */
+        fun named(name: String?): Season? = entries.firstOrNull { it.name.equals(name?.trim(), ignoreCase = true) }
     }
 }
 
@@ -36,4 +48,3 @@ enum class Season(
  * renders the ordinary UI.
  */
 val LocalSeason = staticCompositionLocalOf<Season?> { null }
-

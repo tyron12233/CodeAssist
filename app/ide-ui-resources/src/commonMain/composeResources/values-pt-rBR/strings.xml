@@ -1777,6 +1777,12 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="halloween_put_back">Voltar como era</string>
     <string name="halloween_keep">Manter</string>
     <string name="halloween_boo">Buu!</string>
+    <!-- christmas:begin -->
+    <string name="christmas_title">Feliz Natal</string>
+    <string name="christmas_offer">Enfeite o IDE para a temporada: um tema de pinheiro, cores quentes no editor e uma vela como cursor.</string>
+    <string name="christmas_applied">Tudo pronto. Você pode mudar qualquer parte nas Configurações.</string>
+    <string name="christmas_over_title">As festas acabaram</string>
+    <!-- christmas:end -->
     <string name="home_resume_title">Continue de onde parou</string>
     <string name="home_account_title">Conta e ferramentas</string>
     <string name="home_settings_tools">Configurações e ferramentas</string>

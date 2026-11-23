@@ -775,6 +775,12 @@
     <string name="halloween_put_back">إعادتها</string>
     <string name="halloween_keep">الإبقاء عليها</string>
     <string name="halloween_boo">بوو!</string>
+    <!-- christmas:begin -->
+    <string name="christmas_title">عيد ميلاد مجيد</string>
+    <string name="christmas_offer">زيّن بيئة التطوير لهذا الموسم: سمة دائمة الخضرة، وألوان دافئة للمحرر، وشمعة بدل المؤشر.</string>
+    <string name="christmas_applied">كل شيء جاهز. يمكنك تغيير أي جزء منه من الإعدادات.</string>
+    <string name="christmas_over_title">انتهت العطلة</string>
+    <!-- christmas:end -->
     <string name="home_resume_title">تابع من حيث توقفت</string>
     <string name="home_account_title">الحساب والأدوات</string>
     <string name="home_settings_tools">الإعدادات والأدوات</string>

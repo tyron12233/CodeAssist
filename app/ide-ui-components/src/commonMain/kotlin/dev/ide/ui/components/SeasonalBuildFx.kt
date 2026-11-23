@@ -351,13 +351,14 @@ private inline fun DrawScope.withAlpha(alpha: Float, block: DrawScope.() -> Unit
 // ---------------------------------------------------------------------------
 
 /**
- * The build status glyph for [status]: in the season, a cauldron that bubbles while the build runs and puffs
+ * The build status glyph for [status]: at Christmas, a twinkling fir (see [ChristmasBuildGlyph]); at Halloween, a cauldron that bubbles while the build runs and puffs
  * a little green smoke as it finishes, then hands back to [glyph] (the ordinary check or cross). Outside the
  * season it is just [glyph]. [size] is the glyph's own footprint.
  */
 @Composable
 fun SeasonalBuildGlyph(status: RunStatus, size: Dp, glyph: @Composable () -> Unit) {
-    if (!isHalloween()) {
+    val season = LocalSeason.current
+    if (season == null) {
         glyph()
         return
     }
@@ -373,6 +374,12 @@ fun SeasonalBuildGlyph(status: RunStatus, size: Dp, glyph: @Composable () -> Uni
         }
     }
     val running = status == RunStatus.Running
+    if (season == Season.Christmas) {
+        // Christmas: a fir whose lights twinkle, and a star that pops as the build finishes.
+        if (!running && !puff.isRunning && last[0] != RunStatus.Running) glyph()
+        else ChristmasBuildGlyph(running, if (running) null else puff.value, size)
+        return
+    }
     // `last` still holds the previous status in the frame the build finishes (the effect that starts the puff
     // runs after it), so this keeps the cauldron up for that frame instead of flashing the check first.
     if (!running && !puff.isRunning && last[0] != RunStatus.Running) {

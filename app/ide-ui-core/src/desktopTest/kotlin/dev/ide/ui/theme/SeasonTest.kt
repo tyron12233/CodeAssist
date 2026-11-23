@@ -15,7 +15,27 @@ class SeasonTest {
         assertEquals(Season.Halloween, Season.at(1101))
         assertEquals(Season.Halloween, Season.at(1107))
         assertNull(Season.at(1108))
-        assertNull(Season.at(101))
+        assertNull(Season.at(201))
+    }
+
+    @Test
+    fun christmasRunsAcrossTheNewYear() {
+        assertNull(Season.at(1127))
+        assertEquals(Season.Christmas, Season.at(1128))
+        assertEquals(Season.Christmas, Season.at(1201))
+        assertEquals(Season.Christmas, Season.at(1225))
+        assertEquals(Season.Christmas, Season.at(1231))
+        assertEquals(Season.Christmas, Season.at(101))
+        assertEquals(Season.Christmas, Season.at(106))
+        assertNull(Season.at(107))
+        assertNull(Season.at(615))
+    }
+
+    @Test
+    fun namedIgnoresCase() {
+        assertEquals(Season.Christmas, Season.named(" christmas "))
+        assertNull(Season.named("easter"))
+        assertNull(Season.named(null))
     }
 
     @Test
@@ -25,5 +45,15 @@ class SeasonTest {
         val orange = expressiveColorScheme(CaAccent.Orange, dark = true)
         assertNotEquals(orange.background, pumpkin.background)
         assertNotEquals(orange.primary, pumpkin.primary)
+    }
+
+    @Test
+    fun evergreenIsAFullSchemeOnItsOwnNeutrals() {
+        for (dark in listOf(true, false)) {
+            val evergreen = expressiveColorScheme(CaAccent.Evergreen, dark)
+            val teal = expressiveColorScheme(CaAccent.Teal, dark)
+            assertNotEquals(teal.background, evergreen.background)
+            assertNotEquals(teal.primary, evergreen.primary)
+        }
     }
 }

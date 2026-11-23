@@ -19,7 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.components.HalloweenCard
-import dev.ide.ui.components.HalloweenCardMode
+import dev.ide.ui.components.SeasonalCardMode
 import dev.ide.ui.components.drawBat
 import dev.ide.ui.theme.CaAccent
 import dev.ide.ui.theme.CodeAssistTheme
@@ -46,7 +46,7 @@ class HalloweenSnapshot {
                         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        for (mode in HalloweenCardMode.entries) HalloweenCard(mode, onPrimary = {}, onSecondary = {})
+                        for (mode in SeasonalCardMode.entries) HalloweenCard(mode, onPrimary = {}, onSecondary = {})
                         Canvas(Modifier.fillMaxWidth().height(70.dp)) {
                             val ink = if (dark) Color(0xFF9A88AC) else Color(0xFF1E1424)
                             for (i in 0 until 5) {

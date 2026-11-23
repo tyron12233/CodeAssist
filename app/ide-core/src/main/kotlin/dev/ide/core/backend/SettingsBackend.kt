@@ -641,6 +641,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
             IdeSettings.ACCENT_TEAL -> UiAccent.Teal
             IdeSettings.ACCENT_ORANGE -> UiAccent.Orange
             IdeSettings.ACCENT_PUMPKIN -> UiAccent.Pumpkin
+            IdeSettings.ACCENT_EVERGREEN -> UiAccent.Evergreen
             IdeSettings.ACCENT_CUSTOM -> UiAccent.Custom
             IdeSettings.ACCENT_VIOLET -> UiAccent.Violet
             else -> UiAccent.Lime

@@ -1671,6 +1671,12 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="halloween_put_back">Kembalikan</string>
     <string name="halloween_keep">Pertahankan</string>
     <string name="halloween_boo">Boo!</string>
+    <!-- christmas:begin -->
+    <string name="christmas_title">Selamat Natal</string>
+    <string name="christmas_offer">Hias IDE untuk musim ini: tema hijau cemara, warna editor yang hangat, dan lilin sebagai kursor.</string>
+    <string name="christmas_applied">Semua sudah terpasang. Anda bisa mengubah bagian mana pun di Pengaturan.</string>
+    <string name="christmas_over_title">Liburan telah usai</string>
+    <!-- christmas:end -->
     <string name="home_resume_title">Lanjutkan dari yang terakhir</string>
     <string name="home_account_title">Akun dan alat</string>
     <string name="home_settings_tools">Setelan dan alat</string>

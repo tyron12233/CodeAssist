@@ -333,8 +333,10 @@ private fun CodeEditorContent(
         val caret = interaction.caretContent
         embers.spawn(caret.x, caret.y - metrics.lineHeight * 0.15f, flameTime.floatValue)
     }
-    // The Halloween overlays (cobweb, ghost, slime drips) only during the season, with Seasonal touches on.
-    val halloween = LocalSeason.current == Season.Halloween
+    // The seasonal overlays (Halloween's cobweb, ghost and slime drips; Christmas's snow, lights and icicles),
+    // only during their season, with Seasonal touches on.
+    val season = LocalSeason.current
+    val halloween = season == Season.Halloween
 
 
     // ---- feature controllers (state + async behaviour live in the *Controller classes) ----
@@ -1334,7 +1336,7 @@ private fun CodeEditorContent(
             painters = painters,
             drawColors = drawColors,
             handleColor = colors.accent,
-            halloween = halloween,
+            season = season,
             onFocusedChange = { isFocused = it },
             onDismissQuickDoc = { quickDoc = null },
             onPreviewKey = ::onPreviewKey,
@@ -1425,6 +1427,13 @@ private fun CodeEditorContent(
         EditorGhost(
             activity = activity,
             enabled = halloween,
+            background = drawColors.background,
+            modifier = Modifier.matchParentSize(),
+        )
+        // Christmas: light snow over an idle editor, settling along its top edge until the next keystroke.
+        EditorSnowfall(
+            activity = activity,
+            enabled = season == Season.Christmas,
             background = drawColors.background,
             modifier = Modifier.matchParentSize(),
         )
@@ -1706,7 +1715,7 @@ private fun EditorCanvasLayer(
     painters: EditorPainters,
     drawColors: EditorDrawColors,
     handleColor: Color,
-    halloween: Boolean,
+    season: Season?,
     onFocusedChange: (Boolean) -> Unit,
     onDismissQuickDoc: () -> Unit,
     onPreviewKey: (KeyEvent) -> Boolean,
@@ -1816,7 +1825,7 @@ private fun EditorCanvasLayer(
                     handlesVisible = interaction.handlesVisible && interaction.lastInputWasTouch,
                     handleColor = handleColor,
                     animatedSelection = animatedSel,
-                    spookyErrors = halloween,
+                    season = season,
                 )
             },
     )

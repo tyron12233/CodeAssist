@@ -4,8 +4,9 @@ import dev.ide.ui.screens.HomeAiTab
 import dev.ide.ui.ext.HomeTabContext
 import dev.ide.ui.ext.HomeTabContribution
 import dev.ide.ui.ext.HomeTabRegistry
+import dev.ide.ui.components.ChristmasCard
 import dev.ide.ui.components.HalloweenCard
-import dev.ide.ui.components.HalloweenCardMode
+import dev.ide.ui.components.SeasonalCardMode
 import dev.ide.ui.generated.resources.home_account
 import dev.ide.ui.generated.resources.notif_title
 import dev.ide.ui.icons.CaSymbols
@@ -895,8 +896,11 @@ private fun ProjectPickerRoute(
 ) {
     val backend = app.backend
     var notificationsVisible by remember { mutableStateOf(false) }
-    val halloween = remember(app) { HalloweenDressUp(app) }
-    val halloweenMode = halloween.mode()
+    val halloween = remember(app) { SeasonalDressUp(app, SeasonalOutfit.Halloween) }
+    val christmas = remember(app) { SeasonalDressUp(app, SeasonalOutfit.Christmas) }
+    // At most one card. The season under way wins; failing that, a season that has ended and is still worn.
+    val christmasMode = christmas.mode()
+    val halloweenMode = if (christmasMode == null) halloween.mode() else null
     // Store projects installed here that the store has a newer version of. Asked again when the project
     // list changes (an install, a delete), and memoised by the backend, so showing Home is not a network trip.
     val updates by produceState(emptyList<dev.ide.ui.backend.UiStoreUpdate>(), projects) {
@@ -905,12 +909,21 @@ private fun ProjectPickerRoute(
     ProjectsHomeScreen(
         updates = updates,
         onOpenUpdate = { app.openStoreItem(it.item) },
-        seasonalCard = halloweenMode?.let { mode ->
+        seasonalCard = christmasMode?.let { mode ->
+            { cardModifier ->
+                ChristmasCard(
+                    mode = mode,
+                    onPrimary = if (mode == SeasonalCardMode.Offer) christmas::dressUp else christmas::putBack,
+                    onSecondary = if (mode == SeasonalCardMode.Applied) christmas::putBack else christmas::dismiss,
+                    modifier = cardModifier,
+                )
+            }
+        } ?: halloweenMode?.let { mode ->
             { cardModifier ->
                 HalloweenCard(
                     mode = mode,
-                    onPrimary = if (mode == HalloweenCardMode.Offer) halloween::dressUp else halloween::putBack,
-                    onSecondary = if (mode == HalloweenCardMode.Applied) halloween::putBack else halloween::dismiss,
+                    onPrimary = if (mode == SeasonalCardMode.Offer) halloween::dressUp else halloween::putBack,
+                    onSecondary = if (mode == SeasonalCardMode.Applied) halloween::putBack else halloween::dismiss,
                     modifier = cardModifier,
                 )
             }

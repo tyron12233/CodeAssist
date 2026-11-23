@@ -552,6 +552,17 @@ class CodeAssistAppState(
         settings = backend.settings.settings()
     }
 
+    /**
+     * The season the calendar says it is, ignoring the Seasonal touches switch. A developer can pin one with
+     * the `seasonal.force` preference (a [Season] name, or `none`) to see a season out of its dates; read on
+     * each call, so it takes effect on the next settings change or launch like the calendar itself.
+     */
+    fun calendarSeason(): dev.ide.ui.theme.Season? {
+        val forced = backend.settings.preference(SEASON_OVERRIDE_KEY)?.trim().orEmpty()
+        if (forced.equals("none", ignoreCase = true)) return null
+        return dev.ide.ui.theme.Season.named(forced) ?: dev.ide.ui.theme.Season.current()
+    }
+
     /** Re-read the active color scheme after the scheme editor saved or switched one. */
     fun reloadColorScheme() {
         editorColorScheme = colorSchemes.active()
@@ -1520,6 +1531,9 @@ class CodeAssistAppState(
     }
 }
 
+/** The developer preference that pins a season (see [CodeAssistAppState.calendarSeason]). */
+internal const val SEASON_OVERRIDE_KEY = "seasonal.force"
+
 /**
  * Creates (and remembers) the [CodeAssistAppState] for this composition, tied to a scope that is cancelled
  * when the app leaves it. Re-created only if the backend or a host bridge is swapped.
@@ -1540,6 +1554,7 @@ internal fun accentOf(settings: UiSettings): CaAccent = when (settings.accent) {
     UiAccent.Orange -> CaAccent.Orange
     UiAccent.Violet -> CaAccent.Violet
     UiAccent.Pumpkin -> CaAccent.Pumpkin
+    UiAccent.Evergreen -> CaAccent.Evergreen
     else -> CaAccent.Lime
 }
 

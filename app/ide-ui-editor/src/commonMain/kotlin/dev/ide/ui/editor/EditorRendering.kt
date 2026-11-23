@@ -20,6 +20,7 @@ import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.editor.core.EditorDocument
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.folding.FoldModel
+import dev.ide.ui.theme.Season
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -151,8 +152,10 @@ internal fun DrawScope.drawEditor(
      *  the interpolated span of an in-progress expand animation. The logical selection is already the final
      *  range (caret/handles reflect it); this only grows the highlight. */
     animatedSelection: Pair<Int, Int>? = null,
-    /** Halloween: hang slime drips under error squiggles (static, see [slimeDrips]). */
-    spookyErrors: Boolean = false,
+    /** The season the editor is dressed for: Halloween hangs slime drips under error squiggles ([slimeDrips]),
+     *  Christmas hangs icicles there ([icicles]) and strings lights down the gutter's edge ([gutterLights]). All
+     *  static: this is the code layer, which must not animate. */
+    season: Season? = null,
     /** The x where the code area begins on screen. [gutterWidth] remains the origin the text is laid out from;
      *  a gutter that scrolls with the code (Settings → Editor) passes a smaller edge here, down to 0 once it is
      *  off screen. */
@@ -467,7 +470,8 @@ internal fun DrawScope.drawEditor(
                 if (c1 <= c0) continue
                 val v0 = rawToVisual(line, c0)
                 val v1 = rawToVisual(line, c1)
-                val drips = spookyErrors && seg.severity == UiSeverity.Error
+                val drips = season == Season.Halloween && seg.severity == UiSeverity.Error
+                val ice = season == Season.Christmas && seg.severity == UiSeverity.Error
                 if (!wrap) {
                     val x0 = textLeft + layout.getHorizontalPosition(v0, usePrimaryDirection = true)
                     if (longLine && x0 > clipRight) break
@@ -475,6 +479,7 @@ internal fun DrawScope.drawEditor(
                     if (x1 < clipLeft || x0 > clipRight) continue
                     wavyUnderline(color, x0, x1, lineTop(line) + lineH - 2f, clipLeft, clipRight)
                     if (drips) slimeDrips(slimeColor(color), max(x0, clipLeft), min(x1, clipRight), lineTop(line) + lineH - 1f, lineH, line * 31 + c0)
+                    if (ice) icicles(iceColor(color), max(x0, clipLeft), min(x1, clipRight), lineTop(line) + lineH - 1f, lineH, line * 31 + c0)
                 } else {
                     val firstSub = layout.getLineForOffset(v0)
                     val lastSub = layout.getLineForOffset(v1)
@@ -483,6 +488,7 @@ internal fun DrawScope.drawEditor(
                         val x1 = textLeft + (if (s == lastSub) layout.getHorizontalPosition(v1, usePrimaryDirection = true) else layout.getLineRight(s))
                         wavyUnderline(color, x0, x1, lineTop(line) + s * lineH + lineH - 2f)
                         if (drips) slimeDrips(slimeColor(color), x0, x1, lineTop(line) + s * lineH + lineH - 1f, lineH, line * 31 + c0 + s)
+                        if (ice) icicles(iceColor(color), x0, x1, lineTop(line) + s * lineH + lineH - 1f, lineH, line * 31 + c0 + s)
                     }
                 }
             }
@@ -605,8 +611,12 @@ internal fun DrawScope.drawEditor(
                 ),
             )
         }
-        // A hairline at the gutter's right edge separates it from the code area.
-        drawLine(colors.gutterBorder, Offset(gutterWidth, 0f), Offset(gutterWidth, size.height), strokeWidth = 1f)
+        // A hairline at the gutter's right edge separates it from the code area; at Christmas, a string of lights.
+        if (season == Season.Christmas) {
+            gutterLights(gutterWidth, visibleLines.filter { it % LIGHT_EVERY_LINES == 0 }.map { it to lineTop(it) + lineH / 2f }, lineH, colors.gutterBorder)
+        } else {
+            drawLine(colors.gutterBorder, Offset(gutterWidth, 0f), Offset(gutterWidth, size.height), strokeWidth = 1f)
+        }
     }
 
     // touch selection handles (under the selection edges / the caret)

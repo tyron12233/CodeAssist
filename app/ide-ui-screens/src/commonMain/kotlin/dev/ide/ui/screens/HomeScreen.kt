@@ -40,8 +40,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.HomeTab
 import dev.ide.ui.components.AppNavBar
-import dev.ide.ui.components.HalloweenGlyph
-import dev.ide.ui.components.HalloweenNavGlyph
+import dev.ide.ui.components.SeasonalGlyph
+import dev.ide.ui.components.SeasonalNavGlyph
 import dev.ide.ui.components.SeasonalAppNavBar
 import dev.ide.ui.components.NavDestination
 import dev.ide.ui.generated.resources.Res
@@ -56,11 +56,18 @@ import dev.ide.ui.theme.Season
 import dev.ide.ui.theme.Symbol
 import org.jetbrains.compose.resources.stringResource
 
-/** The tabs that wear a Halloween glyph, by tab id. Challenges keeps its bolt. */
+/** The tabs that wear a Halloween glyph, by tab id. Challenges keeps its bolt in every season. */
 private val HalloweenTabs = mapOf(
-    HomeTab.Projects.name to HalloweenGlyph.Pumpkin,
-    HomeTab.Store.name to HalloweenGlyph.Bat,
-    HomeTab.Learn.name to HalloweenGlyph.WitchHat,
+    HomeTab.Projects.name to SeasonalGlyph.Pumpkin,
+    HomeTab.Store.name to SeasonalGlyph.Bat,
+    HomeTab.Learn.name to SeasonalGlyph.WitchHat,
+)
+
+/** The tabs that wear a Christmas glyph, by tab id. */
+private val ChristmasTabs = mapOf(
+    HomeTab.Projects.name to SeasonalGlyph.Tree,
+    HomeTab.Store.name to SeasonalGlyph.Gift,
+    HomeTab.Learn.name to SeasonalGlyph.Star,
 )
 
 /** The AI tab's label, icon and body, supplied by the agent plugin (see `HomeTabRegistry`). */
@@ -114,8 +121,12 @@ fun HomeScreen(
     // contributed, a tab this build no longer has) reaches here, and a tap must never be able to take the app
     // down. An unknown id selects nothing.
     val select: (String) -> Unit = { id -> HomeTab.entries.firstOrNull { it.name == id }?.let(onSelectTab) }
-    // Halloween dresses three of the tabs up; the labels, and so what a screen reader says, stay the same.
-    val seasonal = if (LocalSeason.current == Season.Halloween) HalloweenTabs else emptyMap()
+    // A season dresses three of the tabs up; the labels, and so what a screen reader says, stay the same.
+    val seasonal = when (LocalSeason.current) {
+        Season.Halloween -> HalloweenTabs
+        Season.Christmas -> ChristmasTabs
+        null -> emptyMap()
+    }
     // Each tab's saved UI state (its scroll position above all), kept while another tab is shown, so going
     // Explore -> Projects -> Explore returns to the same place in the feed instead of its top.
     val tabStates = rememberSaveableStateHolder()
@@ -181,7 +192,7 @@ private fun HomeSidebar(
     selectedId: String,
     onSelect: (String) -> Unit,
     counts: Map<String, Int?>,
-    seasonal: Map<String, HalloweenGlyph>,
+    seasonal: Map<String, SeasonalGlyph>,
     footer: (@Composable ColumnScope.() -> Unit)?,
 ) {
     val c = MaterialTheme.colorScheme
@@ -233,8 +244,8 @@ fun HomeSidebarItem(
     count: Int? = null,
     /** A count drawn as an alert (the inbox's unread notifications) rather than a quiet total. */
     countIsAlert: Boolean = false,
-    /** A Halloween glyph drawn in place of [glyph] (see [HalloweenNavGlyph]); null keeps [glyph]. */
-    seasonalGlyph: HalloweenGlyph? = null,
+    /** A seasonal glyph drawn in place of [glyph] (see [SeasonalNavGlyph]); null keeps [glyph]. */
+    seasonalGlyph: SeasonalGlyph? = null,
     role: Role = Role.Button,
     onClick: () -> Unit,
 ) {
@@ -257,7 +268,7 @@ fun HomeSidebarItem(
             if (icon != null) {
                 androidx.compose.material3.Icon(icon, contentDescription = null, tint = c.primary, modifier = Modifier.size(20.dp))
             } else if (seasonalGlyph != null) {
-                HalloweenNavGlyph(seasonalGlyph, selected, size = 20.dp, tint = if (selected) c.onSecondaryContainer else c.onSurfaceVariant)
+                SeasonalNavGlyph(seasonalGlyph, selected, size = 20.dp, tint = if (selected) c.onSecondaryContainer else c.onSurfaceVariant)
             } else {
                 Symbol(glyph, contentDescription = null, size = 20.dp, filled = selected)
             }

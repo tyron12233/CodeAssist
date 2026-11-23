@@ -2,6 +2,7 @@ package dev.ide.ui
 
 import dev.ide.ui.platform.AppLanguage
 import dev.ide.ui.components.BuildSuccessBats
+import dev.ide.ui.components.ChristmasBuildFx
 import dev.ide.ui.components.HalloweenBuildFx
 import dev.ide.ui.theme.LocalSeason
 import dev.ide.ui.theme.Season
@@ -185,7 +186,7 @@ fun CodeAssistApp(
             // then inset by `safeDrawing`. On desktop these insets are empty, so this is a no-op there.
             // Read once per composition of the root: a session that crosses midnight into the season picks it up
             // on the next settings change or launch, which is soon enough for a decoration.
-            val season = if (app.settings.seasonalTouches) Season.current() else null
+            val season = if (app.settings.seasonalTouches) app.calendarSeason() else null
             // Translations of the text the backend writes in English (lessons, templates, settings pages).
             val backendText = dev.ide.ui.screens.rememberBackendText()
             CompositionLocalProvider(
@@ -237,6 +238,8 @@ fun CodeAssistApp(
                                 )
                                 // Boo on a failed build, candy when a program starts; nothing outside the season.
                                 HalloweenBuildFx(backend = backend)
+                                // Snow and a star on success, frost on failure, gold when a program starts.
+                                ChristmasBuildFx(backend = backend)
                             }
                         }
                         AppOverlays(

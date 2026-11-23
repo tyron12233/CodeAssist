@@ -62,7 +62,7 @@ fun BottomNavBar(
 }
 
 /**
- * [AppNavBar] with some destinations wearing a Halloween glyph ([seasonal], keyed by destination id) in place
+ * [AppNavBar] with some destinations wearing a seasonal glyph ([seasonal], keyed by destination id) in place
  * of their usual one. Labels, semantics, the animated pill and the colors are [AppNavBar]'s, unchanged.
  *
  * A sibling rather than a parameter on [AppNavBar] only because that file belongs to other in-flight work;
@@ -73,7 +73,7 @@ fun SeasonalAppNavBar(
     destinations: List<NavDestination>,
     selectedId: String,
     onSelect: (String) -> Unit,
-    seasonal: Map<String, HalloweenGlyph>,
+    seasonal: Map<String, SeasonalGlyph>,
     modifier: Modifier = Modifier,
 ) {
     val c = MaterialTheme.colorScheme
@@ -109,7 +109,7 @@ fun SeasonalAppNavBar(
                         val tint = if (selected) c.onPrimaryContainer else c.onSurfaceVariant
                         val glyph = seasonal[d.id]
                         if (glyph != null) {
-                            HalloweenNavGlyph(glyph, selected, size = 24.dp, tint = tint)
+                            SeasonalNavGlyph(glyph, selected, size = 24.dp, tint = tint)
                         } else {
                             Symbol(glyph = d.glyph, contentDescription = null, size = 24.dp, filled = selected, tint = tint)
                         }

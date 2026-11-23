@@ -572,6 +572,8 @@ private fun RunningStrip(steps: List<BuildStepUi>) {
         }
         if (isHalloween()) {
             PumpkinProgress(progress = { progress }, modifier = Modifier.fillMaxWidth().height(12.dp))
+        } else if (isChristmas()) {
+            PresentsProgress(progress = { progress }, modifier = Modifier.fillMaxWidth().height(12.dp))
         } else {
             LinearProgressIndicator(
                 progress = { progress },

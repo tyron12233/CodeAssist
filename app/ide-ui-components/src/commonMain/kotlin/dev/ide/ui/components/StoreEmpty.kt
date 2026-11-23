@@ -73,7 +73,6 @@ import dev.ide.ui.generated.resources.store_step_submit_title
 import org.jetbrains.compose.resources.stringResource
 import dev.ide.ui.icons.CaSymbols
 import dev.ide.ui.theme.LocalSeason
-import dev.ide.ui.theme.Season
 import dev.ide.ui.theme.Symbol
 import dev.ide.ui.theme.tileShape
 import dev.ide.ui.theme.tonalPair
@@ -111,9 +110,9 @@ fun EmptyStoreHero(
         modifier = modifier.fillMaxWidth().padding(horizontal = 20.dp),
     ) {
         Box(Modifier.clipToBounds()) {
-            if (LocalSeason.current == Season.Halloween) {
-                // The watermark becomes a ghost haunting the empty shelves; faint, like the glyph it replaces.
-                HauntedGhost(
+            if (LocalSeason.current != null) {
+                // The watermark becomes the season's mascot on the empty shelves; faint, like the glyph it replaces.
+                SeasonalMascot(
                     140.dp,
                     Modifier.align(Alignment.BottomEnd).offset(x = 18.dp, y = 22.dp).graphicsLayer { alpha = 0.35f },
                 )

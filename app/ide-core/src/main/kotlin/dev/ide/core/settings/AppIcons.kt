@@ -7,7 +7,7 @@ package dev.ide.core.settings
  * [host] is installed, and applying the choice goes through it.
  */
 interface AppIconHost {
-    /** The icon the launcher shows now, one of [BuiltInSettingsPages.APP_ICON_DEFAULT] / [BuiltInSettingsPages.APP_ICON_PUMPKIN]. */
+    /** The icon the launcher shows now, one of [BuiltInSettingsPages.APP_ICON_DEFAULT], [BuiltInSettingsPages.APP_ICON_PUMPKIN] or [BuiltInSettingsPages.APP_ICON_CHRISTMAS]. */
     fun current(): String
 
     /** Show [id] in the launcher. Idempotent: asking for the icon already shown changes nothing. */

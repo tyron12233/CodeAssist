@@ -711,6 +711,12 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="halloween_put_back">Put it back</string>
     <string name="halloween_keep">Keep it</string>
     <string name="halloween_boo">Boo!</string>
+    <!-- christmas:begin -->
+    <string name="christmas_title">Merry Christmas</string>
+    <string name="christmas_offer">Dress the IDE up for the season: an evergreen theme, warm editor colors and a candle for a caret.</string>
+    <string name="christmas_applied">All wrapped up. You can change any of it in Settings.</string>
+    <string name="christmas_over_title">The holidays are over</string>
+    <!-- christmas:end -->
     <string name="home_resume_title">Pick up where you left off</string>
     <string name="home_account_title">Account and tools</string>
     <string name="home_settings_tools">Settings and tools</string>

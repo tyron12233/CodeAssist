@@ -173,10 +173,10 @@
         </activity>
 
         <!-- The launcher entries. Exactly one is enabled at a time (AndroidAppIcons switches them, enabling
-             the new one before disabling the old so the app is never without a launcher entry); both start
+             the new one before disabling the old so the app is never without a launcher entry); each starts
              MainActivity. The default one carries the original icon and is the one enabled on install, so a
              fresh install, getLaunchIntentForPackage and the store's "Open" all resolve as before. Renaming
-             either alias would orphan users' home screen shortcuts, so the names are permanent. -->
+             any alias would orphan users' home screen shortcuts, so the names are permanent. -->
         <activity-alias
                 android:name=".LauncherDefault"
                 android:targetActivity=".MainActivity"
@@ -196,6 +196,18 @@
                 android:exported="true"
                 android:icon="@mipmap/ic_launcher_pumpkin"
                 android:roundIcon="@mipmap/ic_launcher_pumpkin">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+                android:name=".LauncherChristmas"
+                android:targetActivity=".MainActivity"
+                android:enabled="false"
+                android:exported="true"
+                android:icon="@mipmap/ic_launcher_christmas"
+                android:roundIcon="@mipmap/ic_launcher_christmas">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

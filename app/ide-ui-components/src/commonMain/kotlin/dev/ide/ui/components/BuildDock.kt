@@ -269,6 +269,13 @@ fun BuildDock(
                                 modifier = Modifier.fillMaxWidth().height(8.dp).align(Alignment.TopCenter).padding(horizontal = 12.dp),
                                 gap = 44.dp,
                             )
+                        } else if (isChristmas()) {
+                            // Presents being wrapped along the top edge, parted around the grab notch.
+                            PresentsProgress(
+                                progress = null,
+                                modifier = Modifier.fillMaxWidth().height(8.dp).align(Alignment.TopCenter).padding(horizontal = 12.dp),
+                                gap = 44.dp,
+                            )
                         } else {
                             LinearProgressIndicator(
                                 Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter),

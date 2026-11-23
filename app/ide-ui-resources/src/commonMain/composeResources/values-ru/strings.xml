@@ -1787,6 +1787,12 @@
     <string name="halloween_put_back">Вернуть</string>
     <string name="halloween_keep">Оставить</string>
     <string name="halloween_boo">Бу!</string>
+    <!-- christmas:begin -->
+    <string name="christmas_title">С Рождеством</string>
+    <string name="christmas_offer">Нарядите IDE к празднику: еловая тема, тёплые цвета редактора и свеча вместо курсора.</string>
+    <string name="christmas_applied">Готово. Любую часть можно изменить в настройках.</string>
+    <string name="christmas_over_title">Праздники закончились</string>
+    <!-- christmas:end -->
     <string name="home_resume_title">Продолжите с того места, где остановились</string>
     <string name="home_account_title">Аккаунт и инструменты</string>
     <string name="home_settings_tools">Настройки и инструменты</string>
