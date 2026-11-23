@@ -1142,7 +1142,8 @@ internal fun KotlinResolver.branchAlwaysJumps(branch: KtExpression?): Boolean =
         is KtBlockExpression -> branchAlwaysJumps(b.statements.lastOrNull())
         // A call typed `Nothing` never returns either, and `?: error("…")` / `?: TODO()` is how half of
         // Kotlin spells an early exit. Checked LAST, so the syntactic cases above never pay for an inference.
-        is KtCallExpression -> inferType(b)?.qualifiedName == "kotlin.Nothing"
+        // A `Nothing?` one returns, with `null`.
+        is KtCallExpression -> inferType(b)?.let { it.qualifiedName == "kotlin.Nothing" && !it.nullable } == true
         else -> false
     }
 

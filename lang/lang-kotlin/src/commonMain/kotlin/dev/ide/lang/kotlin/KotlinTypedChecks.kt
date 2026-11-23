@@ -47,6 +47,7 @@ import dev.ide.kotlin.syntax.psi.KtSecondaryConstructor
 import dev.ide.kotlin.syntax.psi.KtSuperTypeCallEntry
 import dev.ide.kotlin.syntax.psi.KtSuperTypeEntry
 import dev.ide.kotlin.syntax.psi.KtThrowExpression
+import dev.ide.kotlin.syntax.psi.KtPostfixExpression
 import dev.ide.kotlin.syntax.psi.KtTokens
 import dev.ide.kotlin.syntax.psi.KtTryExpression
 import dev.ide.kotlin.syntax.psi.KtTypeAlias
@@ -1510,10 +1511,42 @@ internal fun KotlinSemanticChecks.flowNullableLocal(ref: KtNameReferenceExpressi
     if (resolver.smartCastNonNull(ref)) return false
     if (resolver.flowProvenTypes(ref, deep = true).any { !it.nullable }) return false
     // A `x!!` the flow pass does not follow (inside an object's initializer, a condition chain) still smart-casts.
+    // One that runs only sometimes does not: inside a safe call's selector (`a?.f(x!!)` runs it only when `a` is
+    // non-null), or inside one branch of an `if`/`when`, whose dominance the flow pass has already decided.
     val from = (decl as dev.ide.kotlin.syntax.psi.KtNamedDeclaration).nameIdentifier?.textRange?.endOffset ?: return false
-    val before = ref.containingFile.sourceText.subSequence(from, ref.textRange.startOffset.coerceAtLeast(from))
-    if (Regex("(?<![A-Za-z0-9_`])" + Regex.escape(name) + "\\s*!!").containsMatchIn(before)) return false
+    val to = ref.textRange.startOffset
+    var unconditional = false
+    fun visit(e: KtElement) {
+        if (unconditional || e.textRange.endOffset <= from || e.textRange.startOffset >= to) return
+        if (e is KtPostfixExpression && e.operationToken == KtTokens.EXCLEXCL &&
+            (e.baseExpression?.let { unwrapParen(it) } as? KtNameReferenceExpression)?.getReferencedName() == name &&
+            !conditionallyRun(e)
+        ) { unconditional = true; return }
+        var c = e.firstChild
+        while (c != null) { (c as? KtElement)?.let(::visit); c = c.nextSibling }
+    }
+    visit(ref.getStrictParentOfType<KtNamedFunction>() ?: ref.containingFile)
+    if (unconditional) return false
     return !hasUnmodeledNullGuard(ref, name)
+}
+
+/** Whether [e] runs only on some paths through its statement: in a safe call's selector, or in a branch (not the
+ *  condition) of an `if` or `when`. */
+private fun conditionallyRun(e: KtElement): Boolean {
+    var node: KtElement? = e.parent
+    var child: KtElement? = e
+    while (node != null && node !is KtNamedFunction && node !is dev.ide.kotlin.syntax.psi.KtClassOrObject) {
+        when (node) {
+            is KtSafeQualifiedExpression -> if (child != null && child === node.selectorExpression) return true
+            is KtIfExpression -> if (child != null && (child === node.then || child === node.`else`)) return true
+            is dev.ide.kotlin.syntax.psi.KtWhenEntry -> if (child != null && child === node.expression) return true
+            // A lambda or an object's body is what the backstop is for: leave it judged as it was.
+            is KtLambdaExpression, is dev.ide.kotlin.syntax.psi.KtObjectLiteralExpression -> return false
+        }
+        child = node
+        node = node.parent
+    }
+    return false
 }
 
 /**

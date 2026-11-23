@@ -3669,6 +3669,11 @@ internal class KotlinSemanticChecks(
                     .filter { it.name == n }.let { ms -> ms.isNotEmpty() && ms.none { it.isExtension } }
             } == true
         if (!recvType.nullable && !mapRead) return null
+        // A receiver whose type is not known (an unresolved class, or a callee's type variable that inference left
+        // open, as when the call that would fix it does not resolve) has no members to judge the selector by:
+        // whether it takes null is not known, and K2 reports the unresolved name instead.
+        if (!recvType.isTypeParameter && !service.isKnownType(canonicalTypeForCheck(recvType).qualifiedName)) return null
+        if (recvType.isTypeParameter && !resolver.isTypeParameterInScope(recvType.qualifiedName, receiver.textRange.startOffset)) return null
         // An extension DECLARED on a nullable receiver may be called on a nullable value -- that is the whole
         // point of `fun CharSequence?.isNullOrBlank()`, and flagging it underlines the very guard a reader
         // writes to make the next line safe:

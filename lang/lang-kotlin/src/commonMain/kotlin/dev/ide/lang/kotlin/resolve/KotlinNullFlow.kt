@@ -992,7 +992,8 @@ private fun KotlinResolver.callProves(call: KtCallExpression, receiver: KtExpres
     if ((receiver != null && carriesValue(receiver, g)) || args.any { mentionsValue(it.getArgumentExpression(), g) }) {
         if (contractGuarantees(call, receiver, whenTrue = true, g, completion = true)) return true
     }
-    return receiver == null && inferType(call)?.qualifiedName == "kotlin.Nothing"
+    // A `Nothing?` call completes, with `null`; only a `Nothing` one never does.
+    return receiver == null && inferType(call)?.let { it.qualifiedName == "kotlin.Nothing" && !it.nullable } == true
 }
 
 /**
@@ -1037,7 +1038,7 @@ private val DOT_IN_PLACE = setOf("run", "let", "also", "apply", "use")
 private fun KotlinResolver.returnsLambdaResultThatNeverCompletes(call: KtCallExpression): Boolean {
     val body = call.lambdaArguments.singleOrNull()?.getLambdaExpression()?.bodyExpression ?: return false
     val last = body.statements.lastOrNull() ?: return false
-    if (!neverCompletes(last) && !(last is KtCallExpression && inferType(last)?.qualifiedName == "kotlin.Nothing")) return false
+    if (!neverCompletes(last) && !(last is KtCallExpression && inferType(last)?.let { it.qualifiedName == "kotlin.Nothing" && !it.nullable } == true)) return false
     val sym = runCatching { resolveCalleeFunction(call) }.getOrNull() ?: return false
     val ret = sym.type as? KotlinType ?: return false
     if (!ret.isTypeParameter) return false

@@ -2714,6 +2714,19 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
     }
 
+    /** A `x!!` that runs only on some paths (in a safe call's selector, in one branch of an `if`/`when`) does not
+     *  smart cast `x` after its statement; one that always runs does. */
+    @Test
+    fun conditionalNotNullAssertionDoesNotSmartCast() {
+        val bad = "class A\nfun f(x: List<String>?, y: Int?): Int {\n    x?.subList(y!! - 1, y)\n    return y\n}\n" +
+            "fun g(a: Any): String {\n    val q: String? = null\n    when (a) {\n        is A -> q!!\n    }\n    return q\n}"
+        assertEquals(List(2) { KotlinDiagnosticCodes.TYPE_MISMATCH }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = "fun f(y: Int?): Int {\n    y!!\n    return y\n}\n" +
+            "fun g(y: Int?, b: Boolean): Int {\n    if (b) y!! else y!!\n    return y\n}\n" +
+            "fun h(x: String?, y: Int?): Int {\n    x!!.subSequence(y!!, 1)\n    return y\n}"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {
