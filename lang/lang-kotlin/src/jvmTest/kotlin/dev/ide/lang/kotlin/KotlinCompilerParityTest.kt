@@ -2892,6 +2892,21 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
     }
 
+    /** A generic class constructed with nothing to infer its type variables from: no arguments, and no type around
+     *  the call (a statement, an untyped initializer, or a written type of stars only). */
+    @Test
+    fun genericConstructorWithNothingToInferFrom() {
+        val decls = "class C<T>()\nclass D<T>(val x: T? = null)\ninterface SelfI<S : SelfI<S>>\nclass A<S : SelfI<S>>\n" +
+            "fun <T> bar(): C<T> = null!!\nclass G<T> { inner class Inner }\n"
+        val bad = decls + "fun t() {\n    C()\n    val z: C<*> = C()\n    val bz: C<*> = bar()\n}"
+        assertEquals(List(3) { KotlinDiagnosticCodes.CANNOT_INFER_TYPE }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = decls + "fun t() {\n    val a: C<Int> = C()\n    D()\n    val s: A<*> = A()\n    G<Int>().Inner()\n    val l = listOf(C<Int>())\n}"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+        // An integer literal's type is inference's to choose: `exactBound(1, invB)` makes the `1` a Byte.
+        val literal = "class Inv<T>\nfun <T> exactBound(t: T, l: Inv<T>): T = null!!\nfun t(invB: Inv<Byte>) { exactBound(1, invB) }"
+        assertEquals(emptyList(), errors(literal).map { it.code }, "for `$literal`")
+    }
+
     /** A lambda's untyped parameters past the arity of the function type expected of it have nothing to type them. */
     @Test
     fun lambdaParametersPastExpectedArity() {

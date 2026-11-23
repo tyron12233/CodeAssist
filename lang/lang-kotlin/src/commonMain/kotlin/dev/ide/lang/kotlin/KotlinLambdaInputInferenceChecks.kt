@@ -62,6 +62,9 @@ internal fun KotlinSemanticChecks.lambdaInputInferenceCheckers(): List<KotlinChe
             if (resolveReady) reportAll(lambdaParametersPastExpectedArity(psi as KtLambdaExpression, resolver))
         }
     },
+    KotlinChecker(KtCallExpression::class) { psi ->
+        if (resolveReady) reportAll(nothingToInferFrom(psi as KtCallExpression, resolver))
+    },
     KotlinChecker(dev.ide.kotlin.syntax.psi.KtProperty::class) { psi ->
         if (resolveReady) reportAll(genericDelegateNotInferred(psi as dev.ide.kotlin.syntax.psi.KtProperty, resolver))
     },

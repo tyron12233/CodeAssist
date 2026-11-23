@@ -18,6 +18,7 @@ import dev.ide.lang.kotlin.parse.unwrapParen
 import dev.ide.lang.kotlin.resolve.KotlinConstraintSystem
 import dev.ide.lang.kotlin.resolve.KotlinResolver
 import dev.ide.lang.kotlin.resolve.callTargets
+import dev.ide.lang.kotlin.resolve.constructorTypeFqn
 import dev.ide.lang.kotlin.resolve.discardedOrUntypedPosition
 import dev.ide.lang.kotlin.resolve.enclosingCallAndParamIndex
 import dev.ide.lang.kotlin.resolve.expectedLambdaShape
@@ -114,7 +115,9 @@ private fun KotlinSemanticChecks.readKnownArgumentType(e: KtExpression, resolver
     val u = unwrapParen(e)
     val t = when (u) {
         is KtLambdaExpression, is KtCallableReferenceExpression, is KtNamedFunction -> return null
-        is KtConstantExpression -> if (u.text == "null") return null else resolver.inferType(u)
+        // An integer literal's type is the inference's to choose (`1` is a `Byte` where one is wanted): not read off.
+        is KtConstantExpression -> if (u.text == "null" || u.text.firstOrNull()?.let { it.isDigit() || it == '.' } == true) return null
+            else resolver.inferType(u)
         is KtStringTemplateExpression -> resolver.inferType(u)
         // A vararg parameter's written type is its element's; the value is an array of them.
         is KtNameReferenceExpression ->
@@ -181,4 +184,93 @@ internal fun KotlinSemanticChecks.lambdaParametersPastExpectedArity(
             KotlinDiagnosticCodes.CANNOT_INFER_TYPE,
         )
     }
+}
+
+/**
+ * CANNOT_INFER_PARAMETER_TYPE on a generic call with nothing to infer its type variables from: no type arguments,
+ * no value arguments, and nowhere outside the call that constrains it.
+ *  - A constructor of a generic class (`C()`, `java.util.HashMap()`), as a statement, as the initializer of a
+ *    declaration with no written type, or under a written type that gives each of its arguments as a star
+ *    (`val z: C<*> = C()`): once per type parameter of the class.
+ *  - A function whose result alone names its type variables (`fun <T> bar(): C<T>`) under such a star type
+ *    (`val bz: C<*> = bar()`); its other positions are [KotlinResolver.uninferableTypeParameters]'.
+ * Judged for a call whose every target is a constructor of that class, or one function.
+ */
+internal fun KotlinSemanticChecks.nothingToInferFrom(call: KtCallExpression, resolver: KotlinResolver): List<Diagnostic> {
+    if (call.typeArgumentList != null || call.valueArguments.isNotEmpty() || call.lambdaArguments.isNotEmpty()) return emptyList()
+    val callee = call.calleeExpression as? KtNameReferenceExpression ?: return emptyList()
+    val name = callee.getReferencedName()
+    val whole: KtExpression = (call.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === call } ?: call
+    val targets = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+        .distinctBy { t ->
+            val at = ((t.declaration() as? KotlinDomNode)?.psi)?.textRange?.startOffset
+            if (t.origin.fromSource && at != null) Pair(t.origin.file?.toString(), at) else t
+        }
+    if (targets.isEmpty()) return emptyList()
+    val starOnly = starOnlyDeclaredType(whole, resolver)
+    val (variables, resultFqn) = if (targets.all { it.kind == SymbolKind.CONSTRUCTOR }) {
+        if (name.firstOrNull()?.isUpperCase() != true) return emptyList()
+        if (service.typeAliasTargetFqn(name, resolver.fileContext) != null) return emptyList()
+        val q = (call.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === call }
+        // Through a value (`Generic().Inner()`) the receiver supplies type arguments: only a package or type path.
+        if (q != null && !namePath(q.receiverExpression)) return emptyList()
+        val spelled = if (q != null) q.receiverExpression.text + "." + name else name
+        val fqn = resolver.constructorTypeFqn(spelled, callee.textRange.startOffset) ?: return emptyList()
+        // A class declared inside another (an inner class's list carries its outer class's parameters) or in a
+        // block is not judged; a library class only at top level of its package.
+        val psi = (service.sourceClass(fqn)?.node as? KotlinDomNode)?.psi
+        if (psi != null) {
+            if (psi !is dev.ide.kotlin.syntax.psi.KtClass || psi.parent !is dev.ide.kotlin.syntax.psi.KtFile) return emptyList()
+            // A declared bound can be what the variable is inferred from (`A<S : SelfI<S>>` under `A<*>`).
+            if (psi.typeParameters.any { it.extendsBound != null } || psi.typeConstraints.isNotEmpty()) return emptyList()
+        } else {
+            if (service.classTypeParameterBounds(fqn).any { b -> b != null && b.qualifiedName != "java.lang.Object" && b.qualifiedName != "kotlin.Any" }) return emptyList()
+            if (fqn.substringBeforeLast('.').let { pkg -> pkg.isNotEmpty() && pkg.substringAfterLast('.').firstOrNull()?.isUpperCase() == true }) return emptyList()
+        }
+        // A constructor taking no argument is what the call reaches; one with only defaulted parameters may type them.
+        if (targets.none { it.paramTypes.isEmpty() }) return emptyList()
+        if (!discardedOrUntypedPosition(whole) && starOnly != fqn) return emptyList()
+        service.classTypeParameters(fqn) to fqn
+    } else {
+        val sym = targets.singleOrNull()?.takeIf { it.kind == SymbolKind.METHOD } ?: return emptyList()
+        if (sym.typeParameters.isEmpty() || sym.paramTypes.isNotEmpty() || sym.receiverTypeFqn != null || sym.isExtension) return emptyList()
+        if (!sym.origin.fromSource) return emptyList()
+        val fn = (sym.declaration() as? KotlinDomNode)?.psi as? dev.ide.kotlin.syntax.psi.KtNamedFunction ?: return emptyList()
+        if (fn.typeConstraints.isNotEmpty() || fn.typeParameters.any { it.extendsBound != null }) return emptyList()
+        // The result must be the class the declared type names, each variable a whole argument of it.
+        val ret = (fn.typeReference?.typeElement as? dev.ide.kotlin.syntax.psi.KtUserType) ?: return emptyList()
+        val retFqn = service.resolveTypeName(ret.referencedName ?: return emptyList(), resolver.fileContext) ?: return emptyList()
+        if (starOnly != retFqn) return emptyList()
+        val args = ret.typeArguments.map { it.typeReference?.text?.trim() }
+        if (sym.typeParameters.any { it !in args }) return emptyList()
+        sym.typeParameters to retFqn
+    }
+    if (variables.isEmpty() || resultFqn.isEmpty()) return emptyList()
+    val r = callee.textRange
+    return variables.map { tp ->
+        Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Not enough information to infer type variable $tp of '$name'",
+            KotlinDiagnosticCodes.CANNOT_INFER_TYPE,
+        )
+    }
+}
+
+/** A dotted chain of plain names (`java.util`, `Outer`): a package or type path, never a value. */
+private fun namePath(e: KtExpression?): Boolean = when (e) {
+    is KtNameReferenceExpression -> true
+    is dev.ide.kotlin.syntax.psi.KtDotQualifiedExpression -> namePath(e.receiverExpression) && e.selectorExpression is KtNameReferenceExpression
+    else -> false
+}
+
+/** The class a property's written type names when [e] is its initializer and that type gives every argument as a
+ *  star (`val z: C<*> = …`), which constrains nothing; null otherwise. */
+private fun KotlinSemanticChecks.starOnlyDeclaredType(e: KtExpression, resolver: KotlinResolver): String? {
+    val prop = e.parent as? dev.ide.kotlin.syntax.psi.KtProperty ?: return null
+    if (prop.initializer !== e) return null
+    val user = prop.typeReference?.typeElement as? dev.ide.kotlin.syntax.psi.KtUserType ?: return null
+    if (user.qualifier != null) return null
+    val args = user.typeArguments
+    if (args.isEmpty() || args.any { it.projectionKind != dev.ide.kotlin.syntax.psi.KtProjectionKind.STAR }) return null
+    return service.resolveTypeName(user.referencedName ?: return null, resolver.fileContext)
 }
