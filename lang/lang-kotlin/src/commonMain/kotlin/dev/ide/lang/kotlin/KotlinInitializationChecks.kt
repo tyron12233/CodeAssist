@@ -280,52 +280,8 @@ internal object KotlinInitializationChecks {
             else -> false
         }
 
-        /**
-         * A lambda K2 knows is called in place: passed to a function of this file whose contract says
-         * `callsInPlace` for that parameter (a function type with no receiver, so the lambda's scope is
-         * unchanged), or to one of the standard library's in-place functions whose lambda adds no receiver.
-         */
-        private fun calledInPlace(lambda: KtLambdaExpression): Boolean {
-            var arg: KtElement = lambda
-            while (arg.parent is dev.ide.kotlin.syntax.psi.KtParenthesizedExpression || arg.parent is dev.ide.kotlin.syntax.psi.KtLabeledExpression) arg = arg.parent!!
-            val va = arg.parent as? KtValueArgument ?: return false
-            val call = (if (va is KtLambdaArgument) va.parent else va.parent?.parent) as? KtCallExpression ?: return false
-            val callee = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return false
-            val qualified = (call.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === call } != null
-            val declared = file.declarations.filterIsInstance<KtNamedFunction>().filter { it.name == callee }
-            if (declared.isEmpty()) {
-                if (localDeclaresFunction(call, callee)) return false
-                return when (callee) {
-                    "run", "repeat" -> !qualified
-                    "let", "also", "takeIf", "takeUnless" -> qualified
-                    else -> false
-                }
-            }
-            val fn = declared.singleOrNull() ?: return false
-            val params = fn.valueParameters
-            val idx = when {
-                va is KtLambdaArgument -> params.lastIndex
-                va.getArgumentName() != null -> params.indexOfFirst { it.name == va.getArgumentName()?.asName?.identifier }
-                else -> call.valueArgumentList?.arguments?.indexOf(va) ?: -1
-            }
-            val p = params.getOrNull(idx) ?: return false
-            if (p.typeReference?.typeElement.let { it !is KtFunctionType || it.receiverTypeReference != null }) return false
-            val body = fn.bodyBlockExpression ?: return false
-            val contract = body.statements.firstOrNull() as? KtCallExpression ?: return false
-            if ((contract.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() != "contract") return false
-            val pName = p.name ?: return false
-            return Regex("""\bcallsInPlace\s*\(\s*${Regex.escape(pName)}\b""").containsMatchIn(contract.text)
-        }
+        private fun calledInPlace(lambda: KtLambdaExpression): Boolean = calledInPlaceIn(file, lambda)
 
-        private fun localDeclaresFunction(from: KtElement, name: String): Boolean {
-            var node: KtElement? = from.parent
-            while (node != null) {
-                if (node is KtBlockExpression && node.statements.any { it is KtNamedFunction && it.name == name }) return true
-                if (node is KtClassOrObject && node.declarations.any { it is KtNamedFunction && it.name == name }) return true
-                node = node.parent
-            }
-            return false
-        }
     }
 
     // --- INSTANCE_ACCESS_BEFORE_SUPER_CALL -----------------------------------------------------------------
@@ -467,4 +423,51 @@ internal object KotlinInitializationChecks {
         "name", "ordinal", "compareTo", "equals", "hashCode", "toString", "getDeclaringClass", "declaringJavaClass",
         "describeConstable", "finalize", "clone",
     )
+}
+
+/**
+ * A lambda K2 knows is called in place: passed to a function of this file whose contract says
+ * `callsInPlace` for that parameter (a function type with no receiver, so the lambda's scope is
+ * unchanged), or to one of the standard library's in-place functions whose lambda adds no receiver.
+ */
+internal fun calledInPlaceIn(file: KtFile, lambda: KtLambdaExpression): Boolean {
+    var arg: KtElement = lambda
+    while (arg.parent is dev.ide.kotlin.syntax.psi.KtParenthesizedExpression || arg.parent is dev.ide.kotlin.syntax.psi.KtLabeledExpression) arg = arg.parent!!
+    val va = arg.parent as? KtValueArgument ?: return false
+    val call = (if (va is KtLambdaArgument) va.parent else va.parent?.parent) as? KtCallExpression ?: return false
+    val callee = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return false
+    val qualified = (call.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === call } != null
+    val declared = file.declarations.filterIsInstance<KtNamedFunction>().filter { it.name == callee }
+    if (declared.isEmpty()) {
+        if (localDeclaresFunction(call, callee)) return false
+        return when (callee) {
+            "run", "repeat" -> !qualified
+            "let", "also", "takeIf", "takeUnless" -> qualified
+            else -> false
+        }
+    }
+    val fn = declared.singleOrNull() ?: return false
+    val params = fn.valueParameters
+    val idx = when {
+        va is KtLambdaArgument -> params.lastIndex
+        va.getArgumentName() != null -> params.indexOfFirst { it.name == va.getArgumentName()?.asName?.identifier }
+        else -> call.valueArgumentList?.arguments?.indexOf(va) ?: -1
+    }
+    val p = params.getOrNull(idx) ?: return false
+    if (p.typeReference?.typeElement.let { it !is KtFunctionType || it.receiverTypeReference != null }) return false
+    val body = fn.bodyBlockExpression ?: return false
+    val contract = body.statements.firstOrNull() as? KtCallExpression ?: return false
+    if ((contract.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() != "contract") return false
+    val pName = p.name ?: return false
+    return Regex("""\bcallsInPlace\s*\(\s*${Regex.escape(pName)}\b""").containsMatchIn(contract.text)
+}
+
+private fun localDeclaresFunction(from: KtElement, name: String): Boolean {
+    var node: KtElement? = from.parent
+    while (node != null) {
+        if (node is KtBlockExpression && node.statements.any { it is KtNamedFunction && it.name == name }) return true
+        if (node is KtClassOrObject && node.declarations.any { it is KtNamedFunction && it.name == name }) return true
+        node = node.parent
+    }
+    return false
 }

@@ -2073,6 +2073,18 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** A lambda called in place and an object expression's initializers run during the class's initialization: a
+     *  `val` they read before its own initializer has run is UNINITIALIZED_VARIABLE (a `var` read there compiles). */
+    @Test
+    fun uninitializedValReadInPlaceOrInObjectExpression() {
+        val bad = "fun consume(x: Any?) {}\nclass A {\n val b = run { consume(x) }\n val c = object { init { consume(x) } }\n val x = 10\n}"
+        assertEquals(List(2) { KotlinDiagnosticCodes.UNINITIALIZED_VARIABLE }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = "fun consume(x: Any?) {}\nfun capture(f: () -> Unit) {}\nclass A {\n val a = capture { consume(x) }\n" +
+            " val c = object { fun f() = consume(x) }\n val d = run { consume(s) }\n val e = 1.let { x -> consume(x) }\n" +
+            " val x = 10\n var s = true\n}"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** A nested class or an object has no instance of the classes around it: an outer instance member, an `inner`
      *  class of the outer class, or `this@Outer` from inside one is INACCESSIBLE_OUTER_CLASS_RECEIVER. */
     @Test

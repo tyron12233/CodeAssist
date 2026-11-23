@@ -284,6 +284,9 @@ internal class KotlinDefiniteAssignment(resolver: KotlinResolver) {
 internal fun memberReadsBeforeInitialization(
     declarations: List<dev.ide.kotlin.syntax.psi.KtDeclaration>, ctorParams: Set<String>,
     reassigned: MutableList<KtNameReferenceExpression> = ArrayList(),
+    /** Whether a lambda is called in place where it is written (a `callsInPlace` contract): its body then runs
+     *  during the initialization too. */
+    inPlace: (KtLambdaExpression) -> Boolean = { false },
 ): List<KtNameReferenceExpression> {
     val props = declarations.filterIsInstance<KtProperty>().filter { p ->
         p.name != null && p.receiverTypeReference == null && !p.hasModifier(KtTokens.LATEINIT_KEYWORD) &&
@@ -310,11 +313,13 @@ internal fun memberReadsBeforeInitialization(
         }
     }
 
-    fun memberName(ref: KtNameReferenceExpression, locals: Set<String>): String? {
+    fun memberName(ref: KtNameReferenceExpression, locals: Set<String>, inObject: Boolean = false): String? {
         val name = ref.getReferencedName()
         if (name !in names || name in duplicated) return null
         val parent = ref.parent
         if (parent is KtQualifiedExpression && parent.selectorExpression === ref) {
+            // Inside an object expression `this` is the object.
+            if (inObject) return null
             val recv = parent.receiverExpression
             return name.takeIf { parent is KtDotQualifiedExpression && recv is dev.ide.kotlin.syntax.psi.KtThisExpression && recv.getLabelName() == null }
         }
@@ -324,8 +329,17 @@ internal fun memberReadsBeforeInitialization(
         // A local, a loop variable or a catch parameter of that name inside the initializer hides the member.
         val offset = ref.textRange.startOffset
         var node: KtElement? = ref.parent
-        while (node != null && node !is KtClassOrObject && node !is dev.ide.kotlin.syntax.psi.KtFile) {
+        while (node != null && node !is dev.ide.kotlin.syntax.psi.KtFile) {
             when (node) {
+                // An object expression's own member of that name hides the outer one; any other class ends the walk.
+                is KtClassOrObject -> {
+                    if (!(node is dev.ide.kotlin.syntax.psi.KtObjectDeclaration && node.isObjectLiteral())) break
+                    if (node.declarations.any { (it as? dev.ide.kotlin.syntax.psi.KtNamedDeclaration)?.name == name }) return null
+                }
+                // A lambda's parameter (or a component of a destructured one) of that name hides the member.
+                is dev.ide.kotlin.syntax.psi.KtFunctionLiteral -> if (node.valueParameters.any {
+                        it.name == name || it.destructuringDeclaration?.entries?.any { e -> e.name == name } == true
+                    } || (name == "it" && node.valueParameters.isEmpty())) return null
                 is KtBlockExpression -> if (node.statements.any { it is KtProperty && it.name == name && it.textRange.endOffset <= offset }) return null
                 is KtForExpression -> if (node.loopParameter?.name == name) return null
                 is dev.ide.kotlin.syntax.psi.KtCatchClause -> if (node.catchParameter?.name == name) return null
@@ -337,23 +351,43 @@ internal fun memberReadsBeforeInitialization(
 
     fun target(lhs: KtExpression?, locals: Set<String>): String? = targetRef(lhs)?.let { memberName(it, locals) }
 
-    fun reads(e: KtElement?, locals: Set<String>) {
+    // K2 judges a read inside an in-place lambda or an object expression for a `val` only: the same read of a
+    // `var` compiles (`val some = run { println(state) }; var state = true`).
+    val vals = props.filter { !it.isVar }.mapNotNullTo(HashSet()) { it.name }
+
+    fun reads(e: KtElement?, locals: Set<String>, inObject: Boolean = false, deep: Boolean = false) {
         if (e == null) return
         when (e) {
-            is KtLambdaExpression, is KtNamedFunction, is KtObjectLiteralExpression, is KtClassOrObject,
-            is dev.ide.kotlin.syntax.psi.KtTypeReference -> return
+            // A lambda called in place runs here; any other only when something calls it, which is not known.
+            is KtLambdaExpression -> {
+                if (inPlace(e)) reads(e.bodyExpression, locals, inObject, deep = true)
+                return
+            }
+            // An object expression is constructed here: its property initializers and `init` blocks run now (its
+            // functions only when called). One with supertypes has members this cannot list, so it is not entered.
+            is KtObjectLiteralExpression -> {
+                val obj = e.objectDeclaration ?: return
+                if (obj.superTypeListEntries.isNotEmpty()) return
+                for (d in obj.declarations) when (d) {
+                    is KtProperty -> { reads(d.initializer, locals, true, deep = true); reads(d.delegate?.expression, locals, true, deep = true) }
+                    is dev.ide.kotlin.syntax.psi.KtClassInitializer -> reads(d.body, locals, true, deep = true)
+                    else -> {}
+                }
+                return
+            }
+            is KtNamedFunction, is KtClassOrObject, is dev.ide.kotlin.syntax.psi.KtTypeReference -> return
             is KtNameReferenceExpression -> {
-                memberName(e, locals)?.let { if (it !in assigned) out += e }
+                memberName(e, locals, inObject)?.let { if (it !in assigned && (!deep || it in vals)) out += e }
                 return
             }
             // The left side of `x = …` is written, not read.
             is KtBinaryExpression -> if (e.operationToken == KtTokens.EQ && target(e.left, locals) != null) {
-                reads(e.right, locals)
+                reads(e.right, locals, inObject, deep)
                 return
             }
         }
         var c = e.firstChild
-        while (c != null) { reads(c, locals); c = c.nextSibling }
+        while (c != null) { reads(c, locals, inObject, deep); c = c.nextSibling }
     }
 
 
@@ -372,7 +406,7 @@ internal fun memberReadsBeforeInitialization(
         }
         reads(st, locals)
         fun rec(p: KtElement) {
-            if (p is KtLambdaExpression || p is KtNamedFunction || p is KtClassOrObject) return
+            if ((p is KtLambdaExpression && !inPlace(p)) || p is KtNamedFunction || p is KtClassOrObject) return
             if (p is KtBinaryExpression && p.operationToken == KtTokens.EQ) target(p.left, locals)?.let { assigned += it }
             var c = p.firstChild
             while (c != null) { rec(c); c = c.nextSibling }

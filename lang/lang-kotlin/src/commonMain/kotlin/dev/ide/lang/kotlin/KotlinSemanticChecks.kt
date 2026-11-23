@@ -241,7 +241,7 @@ internal class KotlinSemanticChecks(
                 // The file's top-level initialization order is judged once, from its first property.
                 (psi.parent as? KtFile)?.let { file ->
                     if (file.declarations.firstOrNull { it is KtProperty } === psi) {
-                        reportAll(uninitializedMemberReads(memberReadsBeforeInitialization(file.declarations, emptySet())))
+                        reportAll(uninitializedMemberReads(memberReadsBeforeInitialization(file.declarations, emptySet(), inPlace = { calledInPlaceIn(file, it) })))
                     }
                 }
                 report(noTypeNoInitializer(psi))
@@ -511,7 +511,7 @@ internal class KotlinSemanticChecks(
             KotlinPerf.span("sem.initOrder") {
                 val ctorParams = (psi.parent as? KtClassOrObject)?.primaryConstructor?.valueParameters.orEmpty().mapNotNullTo(HashSet()) { it.name }
                 val reassigned = ArrayList<KtNameReferenceExpression>()
-                reportAll(uninitializedMemberReads(memberReadsBeforeInitialization((psi as KtClassBody).declarations, ctorParams, reassigned)))
+                reportAll(uninitializedMemberReads(memberReadsBeforeInitialization((psi as KtClassBody).declarations, ctorParams, reassigned, inPlace = { calledInPlaceIn(psi.containingKtFile, it) })))
                 reportAll(reassigned.map { ref ->
                     val r = ref.textRange
                     Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Val cannot be reassigned", KotlinDiagnosticCodes.VAL_REASSIGN)
