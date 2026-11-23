@@ -2073,6 +2073,20 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** A nested class or an object has no instance of the classes around it: an outer instance member, an `inner`
+     *  class of the outer class, or `this@Outer` from inside one is INACCESSIBLE_OUTER_CLASS_RECEIVER. */
+    @Test
+    fun inaccessibleOuterClassReceiver() {
+        val bad = "class Outer { val p = 1\n fun f() {}\n open inner class Inner\n" +
+            " class Nested { fun g() { f(); val x = p; Inner(); val o = this@Outer } }\n object O : Inner() }"
+        assertEquals(List(5) { KotlinDiagnosticCodes.INACCESSIBLE_OUTER_CLASS_RECEIVER }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = "class Outer { val p = 1\n fun f() {}\n inner class Inner { fun g() { f(); val x = p; Inner() } }\n" +
+            " class Nested { fun f() {}\n fun g() { f(); val o = object { fun h() = f() } } }\n" +
+            " companion object { fun s() {} }\n class N2 { fun g() = s() } }\n" +
+            "enum class E { A, B; object Q { fun v() = values(); val a = A } }"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** Every argument a projected receiver's member cannot take is reported, vararg elements included; a spread
      *  array of the projection's bound is no `Array<out CapturedType(out B)>`. */
     @Test

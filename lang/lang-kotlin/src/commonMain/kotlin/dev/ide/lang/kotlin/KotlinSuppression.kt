@@ -100,6 +100,7 @@ internal object KotlinSuppression {
         "kt.abstractNotImplemented" to setOf("ABSTRACT_MEMBER_NOT_IMPLEMENTED"),
         "kt.nonLocalDestructuringDeclaration" to setOf("NON_LOCAL_DESTRUCTURING_DECLARATION"),
         "kt.infixModifierRequired" to setOf("INFIX_MODIFIER_REQUIRED"),
+        "kt.inaccessibleOuterClassReceiver" to setOf("INACCESSIBLE_OUTER_CLASS_RECEIVER"),
         "kt.confusingBranchCondition" to setOf("CONFUSING_BRANCH_CONDITION_ERROR"),
         "kt.nameForAmbiguousParameter" to setOf("NAME_FOR_AMBIGUOUS_PARAMETER"),
         "kt.abstractClassMemberNotImplemented" to setOf("ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED"),

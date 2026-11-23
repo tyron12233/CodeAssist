@@ -332,6 +332,7 @@ object KotlinDiagnosticCodes {
     const val NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER = "kt.nameInConstraintIsNotATypeParameter"
     /** `a name b` where the `name` it calls is not declared `infix`. */
     const val INFIX_MODIFIER_REQUIRED = "kt.infixModifierRequired"
+    const val INACCESSIBLE_OUTER_CLASS_RECEIVER = "kt.inaccessibleOuterClassReceiver"
     const val CONFUSING_BRANCH_CONDITION = "kt.confusingBranchCondition"
     const val NAME_FOR_AMBIGUOUS_PARAMETER = "kt.nameForAmbiguousParameter"
     /** `val (a, b) = …` outside a block: in a class body or at the top level. */

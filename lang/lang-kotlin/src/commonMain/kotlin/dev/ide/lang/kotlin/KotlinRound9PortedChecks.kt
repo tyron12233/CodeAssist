@@ -52,6 +52,10 @@ internal fun KotlinSemanticChecks.round9PortedCheckers(): List<KotlinChecker> = 
     },
     KotlinChecker(KtNameReferenceExpression::class) { psi ->
         if (resolveReady) report(privateToThisAccess(psi as KtNameReferenceExpression, resolver))
+        if (resolveReady) report(inaccessibleOuterReceiver(psi as KtNameReferenceExpression, resolver))
+    },
+    KotlinChecker(KtThisExpression::class) { psi ->
+        if (resolveReady) report(inaccessibleOuterThis(psi as KtThisExpression, resolver))
     },
     KotlinChecker(KtCallExpression::class) { psi ->
         if (resolveReady) report(functionValueMissingArguments(psi as KtCallExpression, resolver))
