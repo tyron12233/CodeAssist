@@ -158,7 +158,6 @@ include(
     ":agent-mcp",   // Model Context Protocol server: exposes the agent's tools over stdio JSON-RPC to external clients
     ":layout-preview-api",  // owned XML-layout preview: render contracts (RCanvas/RenderNode/Renderer), android-free
     ":layout-preview-impl", // the preview engine: resource value resolver, inflater, built-in renderers, ASM bridge remapper
-    ":realview-layoutlib", // real Android views off-device: layoutlib driven on a plain JVM (the desktop's, or the one embedded on iOS)
     ":android-layout-api", // plugin-facing layout SPI (in-tree, unpublished): render image + view tree, layout model, attribute catalog
     // The platform-free core of the SPI: the symbol model, the DOM, VirtualFile and ContentHash.
     // Multiplatform, because a model that cannot be named from common code cannot be built there.
@@ -217,6 +216,9 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":ide-desktop",
         // The backend as the iOS app runs it: inside the JVM that app embeds, reached over a byte channel.
         ":ide-embedded",
+        // Real Android views off-device: layoutlib driven on a plain JVM (the desktop's, or the one embedded on
+        // iOS). Only :ide-embedded uses it, and its tests render through :ide-core, so it is a shell module too.
+        ":realview-layoutlib",
         // The iOS shell: a Compose `UIViewController` over :ide-ui, the third host beside desktop and
         // Android. It builds only on a machine with Xcode, which is every machine that can target iOS.
         ":ide-ios",
