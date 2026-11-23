@@ -274,3 +274,75 @@ private fun KotlinSemanticChecks.starOnlyDeclaredType(e: KtExpression, resolver:
     if (args.isEmpty() || args.any { it.projectionKind != dev.ide.kotlin.syntax.psi.KtProjectionKind.STAR }) return null
     return service.resolveTypeName(user.referencedName ?: return null, resolver.fileContext)
 }
+
+/**
+ * A lambda with untyped parameters handed to a parameter whose type gives it no function type: `callAny { e -> e }`
+ * for `callAny(arg: Any?)` (also labeled or parenthesized), and `callParam { p -> p }` for `fun <T> callParam(arg: T)`
+ * where nothing else constrains `T`. Nothing types the lambda's parameters: CANNOT_INFER_VALUE_PARAMETER_TYPE on its
+ * last untyped one (where K2 reports it), and for the bare variable CANNOT_INFER_PARAMETER_TYPE on the callee too.
+ * Judged for a call with one candidate and no written type arguments.
+ */
+internal fun KotlinSemanticChecks.lambdaToNonFunctionParameter(
+    lambda: dev.ide.kotlin.syntax.psi.KtLambdaExpression, resolver: KotlinResolver,
+): List<Diagnostic> {
+    val untyped = lambda.valueParameters.lastOrNull()?.takeIf { it.typeReference == null && it.destructuringDeclaration == null }
+        ?: return emptyList()
+    var e: KtExpression = lambda
+    while (true) {
+        val p = e.parent
+        e = when {
+            p is dev.ide.kotlin.syntax.psi.KtParenthesizedExpression -> p
+            p is dev.ide.kotlin.syntax.psi.KtLabeledExpression && p.baseExpression === e -> p
+            else -> break
+        }
+    }
+    val va = e.parent as? dev.ide.kotlin.syntax.psi.KtValueArgument ?: return emptyList()
+    if (va.getArgumentName() != null || va.isSpread) return emptyList()
+    val call = (if (va is KtLambdaArgument) va.parent else va.parent?.parent) as? KtCallExpression ?: return emptyList()
+    if (call.typeArgumentList != null) return emptyList()
+    val callee = call.calleeExpression as? KtNameReferenceExpression ?: return emptyList()
+    val argIndex = call.valueArguments.indexOf(va)
+    if (argIndex < 0) return emptyList()
+    val targets = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+        .distinctBy { t ->
+            val at = ((t.declaration() as? KotlinDomNode)?.psi)?.textRange?.startOffset
+            if (t.origin.fromSource && at != null) Pair(t.origin.file?.toString(), at) else t
+        }
+    val sym = targets.singleOrNull()?.takeIf { it.kind == SymbolKind.METHOD } ?: return emptyList()
+    if (sym.varargParamIndex >= 0 || !sym.origin.fromSource) return emptyList()
+    val slot = resolver.lambdaParamIndex(call, argIndex, sym)
+    val raw = sym.paramTypes.getOrNull(slot) as? KotlinType ?: return emptyList()
+    val names = sym.typeParameters.toSet()
+    val bare = (raw.isTypeParameter || raw.qualifiedName in names) && raw.typeArguments.isEmpty()
+    val anyType = !bare && (raw.qualifiedName == "kotlin.Any" || raw.qualifiedName == "java.lang.Object") && raw.typeArguments.isEmpty()
+    if (!bare && !anyType) return emptyList()
+    val out = ArrayList<Diagnostic>()
+    if (bare) {
+        val tp = raw.qualifiedName
+        // Unbounded, in no other parameter that receives an argument, not in the receiver, and the result (if it names
+        // the variable) where nothing outside the call constrains it.
+        val i = sym.typeParameters.indexOf(tp)
+        if (i < 0) return emptyList()
+        val bound = sym.typeParameterBounds.getOrNull(i) as? KotlinType
+        if (bound != null && bound.qualifiedName != "kotlin.Any") return emptyList()
+        val fn = (sym.declaration() as? KotlinDomNode)?.psi as? dev.ide.kotlin.syntax.psi.KtNamedFunction ?: return emptyList()
+        if (fn.receiverTypeReference != null || fn.typeConstraints.isNotEmpty() || fn.typeParameters.any { it.extendsBound != null }) return emptyList()
+        if (fn.valueParameters.size != call.valueArguments.size) return emptyList()
+        for ((j, other) in fn.valueParameters.withIndex()) {
+            if (j == slot) continue
+            if (other.typeReference?.text?.let { Regex("""\b${Regex.escape(tp)}\b""").containsMatchIn(it) } != false) return emptyList()
+        }
+        val whole: KtExpression = (call.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === call } ?: call
+        val ret = fn.typeReference?.text
+        if (ret != null && Regex("""\b${Regex.escape(tp)}\b""").containsMatchIn(ret) && !discardedOrUntypedPosition(whole)) return emptyList()
+        if (ret == null && !fn.hasBlockBody()) return emptyList()
+        val cr = callee.textRange
+        out += Diagnostic(TextRange(cr.startOffset, cr.endOffset), Severity.ERROR,
+            "Not enough information to infer type variable $tp: a lambda gives it no type", KotlinDiagnosticCodes.CANNOT_INFER_TYPE)
+    }
+    val r = untyped.textRange
+    out += Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+        "Cannot infer type for value parameter '${untyped.name}': the lambda is passed where no function type is expected",
+        KotlinDiagnosticCodes.CANNOT_INFER_TYPE)
+    return out
+}

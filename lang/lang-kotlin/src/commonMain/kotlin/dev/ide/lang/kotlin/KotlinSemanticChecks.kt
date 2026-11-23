@@ -2901,6 +2901,11 @@ internal class KotlinSemanticChecks(
         // failed for another reason) doesn't get blamed here; the span is the offending lambda.
         if (verdicts.all { it is Applicability.LambdaNotApplicable }) {
             val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
+            // A slot of type `Any` takes the lambda; what K2 reports is that nothing types its untyped parameters
+            // (CANNOT_INFER_VALUE_PARAMETER_TYPE, [lambdaToNonFunctionParameter]), not a missing function type.
+            if (candidates.all { c ->
+                    (c.paramTypes.lastOrNull() as? KotlinType)?.qualifiedName.let { it == "kotlin.Any" || it == "java.lang.Object" }
+                }) return null
             val r = (call.valueArguments.lastOrNull() as? KtLambdaArgument)?.textRange ?: return null
             return Pair<Diagnostic, Applicability.TypeBad?>(Diagnostic(
                 TextRange(r.startOffset, r.endOffset), Severity.ERROR,

@@ -2907,6 +2907,17 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), errors(literal).map { it.code }, "for `$literal`")
     }
 
+    /** A lambda with untyped parameters handed where no function type is expected (`Any?`, an unconstrained bare
+     *  type variable): nothing types its parameters. `Any?` still takes the lambda itself. */
+    @Test
+    fun lambdaToNonFunctionParameter() {
+        val decls = "fun callAny(arg: Any?) {}\nfun <T> callParam(arg: T) {}\nfun takeFn(f: (Int) -> Int) {}\n"
+        val bad = decls + "fun t() {\n    callAny { e -> e }\n    callAny(l@{ e -> e })\n    callParam { p -> p }\n}"
+        assertEquals(List(4) { KotlinDiagnosticCodes.CANNOT_INFER_TYPE }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = decls + "fun t() {\n    callAny { }\n    callAny { e: Int -> e }\n    takeFn { x -> x }\n    callParam(1)\n}"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** A lambda's untyped parameters past the arity of the function type expected of it have nothing to type them. */
     @Test
     fun lambdaParametersPastExpectedArity() {
