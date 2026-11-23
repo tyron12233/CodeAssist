@@ -167,6 +167,7 @@ class AndroidApiFloorTest {
             "test", "commonTest", "jvmTest", "androidTest", "desktopTest", "iosTest", "iosSimulatorArm64Test",
             "iosArm64Test", "androidUnitTest", "androidInstrumentedTest", "jvmSharedTest",
             "desktopMain",             // the desktop shell's half of a Compose target: never on a device
+            "desktopPatch",            // :ide-embedded's java.desktop patch, for the JVM inside the iOS app
             "iosMain", "iosArm64Main", "iosSimulatorArm64Main", // no JDK to call
             "nativeMain", "nativeTest",
         )

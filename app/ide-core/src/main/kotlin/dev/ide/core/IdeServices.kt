@@ -5081,7 +5081,7 @@ class IdeServices private constructor(
     private fun libraryPackages(libraryResDirs: List<Path>): List<String> = libraryResDirs.mapNotNull { res ->
         val manifest = res.resolveSibling("AndroidManifest.xml")
         if (!Files.isRegularFile(manifest)) return@mapNotNull null
-        runCatching { Regex("package=\"([^\"]+)\"").find(Files.readString(manifest))?.groupValues?.get(1) }.getOrNull()
+        runCatching { Regex("package=\"([^\"]+)\"").find(manifest.readText())?.groupValues?.get(1) }.getOrNull()
     }.distinct()
 
     /**
@@ -5091,7 +5091,7 @@ class IdeServices private constructor(
     private fun liveLayoutFile(module: Module, file: Path, text: String): Path? = runCatching {
         val dir = workspaceRoot.resolve(".platform/preview/live-layout/${module.name}")
         Files.createDirectories(dir)
-        dir.resolve(file.fileName.toString()).also { Files.writeString(it, text) }
+        dir.resolve(file.fileName.toString()).also { it.writeText(text) }
     }.getOrNull()
 
     /** [node] and its subtree with every id in [aliases] replaced by the name it stands for. */
@@ -5701,7 +5701,7 @@ class IdeServices private constructor(
                         warmedLayoutPreview = key
                     }
                     val started = System.nanoTime()
-                    val text = Files.readString(layout)
+                    val text = layout.readText()
                     val how = if (DeviceMemory.isLow) {
                         synchronized(realViewLock) {
                             previewResourceLinker?.link(
