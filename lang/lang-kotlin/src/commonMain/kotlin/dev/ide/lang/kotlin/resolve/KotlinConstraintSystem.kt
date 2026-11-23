@@ -70,12 +70,22 @@ internal class KotlinConstraintSystem(
     var variableLeftWithoutType = false
         private set
 
+    /** The variables [variableLeftWithoutType] is about. */
+    val variablesLeftWithoutType = LinkedHashSet<String>()
+
     /** Record a contradiction found outside the constraints themselves (a lambda of the wrong arity). */
     fun contradict() {
         hasContradiction = true
     }
 
     val isEmpty: Boolean get() = vars.isEmpty()
+
+    /** Whether the variable [name] has any constraint besides its declared bound: a floor, an exact type, or a
+     *  ceiling the constraints added. One with none has nothing to be inferred from. */
+    fun isConstrained(name: String): Boolean {
+        val v = vars[name] ?: return false
+        return v.exact != null || v.lower.isNotEmpty() || v.upper.any { it !== v.declared }
+    }
 
     fun registerVariable(name: String, upperBound: KotlinType? = null) {
         val v = vars.getOrPut(name) { Var(name) }
@@ -117,7 +127,7 @@ internal class KotlinConstraintSystem(
                 av != null -> {
                     // `T? <: B` holds for null only when B takes null.
                     if (nullableVariableBelowNonNull && a.nullable && !b.nullable && !b.isTypeParameter) {
-                        hasContradiction = true; variableLeftWithoutType = true; return
+                        hasContradiction = true; variableLeftWithoutType = true; variablesLeftWithoutType += av.name; return
                     }
                     if (addBound(av.upper, b)) check(av)
                 }          // a ≤ b
@@ -267,7 +277,7 @@ internal class KotlinConstraintSystem(
 
     /** Note a contradiction against [v]'s declared bound (its upper bound [j] is the one registered). */
     private fun declaredViolated(v: Var, j: Int) {
-        if (v.declared != null && v.upper.getOrNull(j) === v.declared) variableLeftWithoutType = true
+        if (v.declared != null && v.upper.getOrNull(j) === v.declared) { variableLeftWithoutType = true; variablesLeftWithoutType += v.name }
     }
 
     /** One floor-vs-ceiling pair; false once it recorded the FIRST contradiction, which ends the walk. */

@@ -2875,6 +2875,23 @@ class KotlinCompilerParityTest {
         assertEquals(listOf(KotlinDiagnosticCodes.TYPE_MISMATCH), errors(conflict).map { it.code }, "for `$conflict`")
     }
 
+    /** A generic delegate class's type variables are inferred from what the property passes its special functions: one
+     *  they contradict, or leave with nothing but its declared bound, is uninferred (and the functions inapplicable). */
+    @Test
+    fun genericDelegateNotInferred() {
+        val decls = "import kotlin.reflect.KProperty\nopen class A\nclass B\n" +
+            "class MyProperty<R : A, T> { operator fun getValue(thisRef: R, desc: KProperty<*>): T = null!! }\n" +
+            "class Unused<R> { operator fun getValue(t: Any?, p: KProperty<*>): Int = 1\n operator fun setValue(t: Any?, p: KProperty<*>, x: Int) {} }\n" +
+            "class Used<R> { operator fun getValue(t: Any?, p: KProperty<*>): Int = 1\n operator fun setValue(t: Any?, p: KProperty<*>, x: R) {} }\n"
+        val bad = decls + "val B.w: Int by MyProperty()\nvar u: Int by Unused()"
+        assertEquals(
+            List(2) { listOf(KotlinDiagnosticCodes.DELEGATE_SPECIAL_FUNCTION_NONE_APPLICABLE, KotlinDiagnosticCodes.CANNOT_INFER_TYPE) }.flatten(),
+            errors(bad).map { it.code }, "for `$bad`",
+        )
+        val ok = decls + "val A.e: Int by MyProperty()\nvar v: Int by Used()\nvar t: Int by Unused<String>()"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** A lambda's untyped parameters past the arity of the function type expected of it have nothing to type them. */
     @Test
     fun lambdaParametersPastExpectedArity() {
