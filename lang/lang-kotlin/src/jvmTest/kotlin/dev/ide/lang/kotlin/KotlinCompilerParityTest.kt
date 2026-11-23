@@ -2727,6 +2727,22 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
     }
 
+    /** Written type arguments fix a lambda argument's return type before the lambda is analyzed, so the value it
+     *  ends with must fit it (`run<Int> { "" }`); `Unit` takes anything, and without them the type is inferred. */
+    @Test
+    fun lambdaAgainstWrittenTypeArguments() {
+        val bad = "interface I\nclass Foo : I\nclass Bar\nfun <T : I> myRun(action: () -> T): T = action()\n" +
+            "val a = myRun<Foo> { Bar() }\nfun t() { run<Int> { \"\" } }"
+        assertEquals(List(2) { KotlinDiagnosticCodes.TYPE_MISMATCH }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = "fun t() {\n    val s: String = run<String> { \"x\" }\n    run<Unit> { 42 }\n" +
+            "    val l = listOf(1).map<Int, String> { it.toString() }\n    val r = run { \"\" }\n}"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+        // A receiver that binds the callee's type parameter does not outrank the written argument (`I = E`, not `B`).
+        val receiverBound = "interface In<in I>\ninterface B : In<B>\ninterface C<I, T>\nfun <I, T> In<I>.foo(f: () -> C<I, T>) {}\n" +
+            "class E : B\nfun t(c: C<E, Int>, e: E) { e.foo<E, Int> { c } }"
+        assertEquals(emptyList(), errors(receiverBound).map { it.code }, "for `$receiverBound`")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

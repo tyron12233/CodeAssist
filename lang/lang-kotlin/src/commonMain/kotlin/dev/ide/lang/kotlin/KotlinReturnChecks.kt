@@ -22,6 +22,7 @@ import dev.ide.kotlin.syntax.psi.KtValueArgumentList
 import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.kotlin.resolve.KotlinResolver
 import dev.ide.lang.kotlin.resolve.enclosingCallAndParamIndex
+import dev.ide.lang.kotlin.resolve.enclosingClassFqnOf
 import dev.ide.lang.kotlin.resolve.expectedFunctionTypeFor
 import dev.ide.lang.kotlin.resolve.inferType
 import dev.ide.lang.kotlin.resolve.lambdaParamIndex
@@ -91,14 +92,42 @@ private fun KotlinSemanticChecks.fixedLambdaReturnType(lambda: KtLambdaExpressio
     if (!service.isKnownType(ret.qualifiedName)) return null
     // Passed to a call: the callee's own parameter must fix it, or the call's written type arguments.
     resolver.enclosingCallAndParamIndex(lambda)?.let { (call, argIndex) ->
-        if (call.typeArgumentList != null) return ret
         val sym = resolver.resolveCalleeFunction(call) ?: return null
+        if (call.typeArgumentList != null) {
+            val written = writtenLambdaType(call, argIndex, sym, resolver) ?: return null
+            return (service.functionalShape(written)?.returnType as? KotlinType)
+                ?.takeIf { !mentionsAnyTypeParameter(it) && service.isKnownType(it.qualifiedName) }
+        }
         val raw = sym.paramTypes.getOrNull(resolver.lambdaParamIndex(call, argIndex, sym)) as? KotlinType ?: return null
         val open = (sym.typeParameters + listOfNotNull(sym.receiverTypeParam)).toSet()
         val rawRet = service.functionalShape(service.markTypeParameters(raw, open) ?: raw)?.returnType as? KotlinType ?: return null
         if (open.any { resolver.mentionsTypeParam(rawRet, it) }) return null
     }
     return ret
+}
+
+/** The function type of the parameter the lambda at [argIndex] fills, with the call's written type arguments put
+ *  in for the callee's type parameters; null unless every one of them is written. */
+private fun KotlinSemanticChecks.writtenLambdaType(
+    call: KtCallExpression, argIndex: Int, sym: dev.ide.lang.kotlin.symbols.KotlinSymbol, resolver: KotlinResolver,
+): KotlinType? {
+    val written = call.typeArgumentList?.arguments.orEmpty()
+    if (sym.typeParameters.isEmpty() || written.size != sym.typeParameters.size) return null
+    val index = resolver.lambdaParamIndex(call, argIndex, sym)
+    // An extension whose receiver names the callee's type parameters reaches here with them already bound from the
+    // receiver (`In<I>.foo` on an `In<B>` has `I = B`), which the written arguments override: read the declaration.
+    val raw = if (sym.isExtension && (sym.receiverTypeParam != null || sym.receiverTypeArgs.isNotEmpty())) {
+        val fn = (sym.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? KtNamedFunction ?: return null
+        if (fn.containingFile !== call.containingFile) return null
+        val text = fn.valueParameters.getOrNull(index)?.typeReference?.text ?: return null
+        service.typeFromText(text, resolver.fileContext, enclosingClassFqnOf(fn)) ?: return null
+    } else sym.paramTypes.getOrNull(index) as? KotlinType ?: return null
+    val bindings = HashMap<String, KotlinType>()
+    for ((k, name) in sym.typeParameters.withIndex()) {
+        val text = written[k].typeReference?.text ?: return null
+        bindings[name] = service.typeFromText(text, resolver.fileContext, enclosingClassFqnOf(call)) ?: return null
+    }
+    return substituteKeepingNullability(service.markTypeParameters(raw, sym.typeParameters.toSet()) ?: raw, bindings)
 }
 
 /** The function type of the variable [lambda] is assigned to (`f = l@{ … }` with `var f: () -> Int`). */
@@ -136,4 +165,39 @@ internal fun KotlinSemanticChecks.implicitExpressionBodyType(fn: KtNamedFunction
     val t = resolver.inferType(body) ?: return null
     if (mentionsAnyTypeParameter(t) || !service.isKnownType(t.qualifiedName)) return null
     return t
+}
+
+/**
+ * RETURN_TYPE_MISMATCH on the value a lambda argument ends with, where the call's written type arguments fix the
+ * lambda's return type (`run<Int> { "" }`, `myRun<Foo> { Bar() }`): the lambda is analyzed against that type, so
+ * its last expression must fit it (`Unit` takes anything). A call without written type arguments infers the type
+ * from the lambda instead, and a project function whose parameter names no type parameter is judged by
+ * [lambdaArgumentCheckers] already.
+ */
+internal fun KotlinSemanticChecks.lambdaAgainstWrittenTypeArguments(call: KtCallExpression, resolver: KotlinResolver): List<Diagnostic> {
+    if (call.typeArgumentList == null) return emptyList()
+    val out = ArrayList<Diagnostic>()
+    for (arg in call.valueArguments) {
+        val expr = arg.getArgumentExpression() ?: continue
+        var e: KtExpression = unwrapParen(expr)
+        if (e is KtLabeledExpression) e = e.baseExpression?.let { unwrapParen(it) } ?: continue
+        val lambda = e as? KtLambdaExpression ?: continue
+        val sym = resolver.resolveCalleeFunction(call) ?: return emptyList()
+        if (sym.typeParameters.isEmpty()) return emptyList()
+        val argIndex = resolver.enclosingCallAndParamIndex(lambda)?.second ?: continue
+        val raw = sym.paramTypes.getOrNull(resolver.lambdaParamIndex(call, argIndex, sym)) as? KotlinType ?: continue
+        val open = sym.typeParameters.toSet()
+        val rawRet = service.functionalShape(service.markTypeParameters(raw, open) ?: raw)?.returnType as? KotlinType ?: continue
+        // The written type arguments must be what fixes it: a return type that names none is the other check's.
+        if (open.none { resolver.mentionsTypeParam(rawRet, it) }) continue
+        // The written type arguments, and nothing inferred, make the lambda's type.
+        val ft = writtenLambdaType(call, argIndex, sym, resolver) ?: return emptyList()
+        val ret = service.functionalShape(ft)?.returnType as? KotlinType ?: continue
+        if (mentionsAnyTypeParameter(ret) || !service.isKnownType(ret.qualifiedName)) continue
+        val arity = ft.typeArguments.size - 1 - (if (ft.isExtensionFunctionType) 1 else 0)
+        val n = lambda.valueParameters.size
+        if (n != 0 && n != arity) continue
+        lambdaAgainstFunctionType(ft, expr, resolver)?.let { out += it }
+    }
+    return out
 }

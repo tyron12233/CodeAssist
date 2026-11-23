@@ -38,6 +38,7 @@ internal fun KotlinSemanticChecks.lambdaArgumentCheckers(): List<KotlinChecker> 
     KotlinChecker(KtCallExpression::class) { psi ->
         KotlinPerf.span("sem.ported.lambdaArgs") {
             if (resolveReady) reportAll(lambdaArgumentsAgainstFunctionTypes(psi as KtCallExpression, resolver))
+            if (resolveReady) reportAll(lambdaAgainstWrittenTypeArguments(psi as KtCallExpression, resolver))
         }
     },
     // A getter's expression body is what the property's type promises (RETURN_TYPE_MISMATCH): `val x: Int get() = "s"`.
