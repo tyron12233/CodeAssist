@@ -4491,7 +4491,7 @@ internal class KotlinSemanticChecks(
         val fqn = service.resolveTypeName(name, resolver.fileContext) ?: return emptyList()
         val bounds = service.classTypeParameterBounds(fqn)
         if (bounds.isEmpty() || bounds.all { it == null }) return emptyList()
-        return checkArgsAgainstBounds(argList.arguments, bounds, resolver)
+        return checkArgsAgainstBounds(argList.arguments, bounds, resolver, service.classTypeParameters(fqn))
     }
 
     /** As [typeArgumentBoundViolation] but for a call's EXPLICIT type arguments (`g<String>()` where
@@ -4509,11 +4509,13 @@ internal class KotlinSemanticChecks(
             return emptyList()
         }
         // A constructor call (`B<Int>()`) takes its class's type parameters, bounds and all.
+        val constructed = if (callee == null) constructedSourceClass(call, resolver) else null
         val bounds = callee?.let { sourceBounds(it, resolver) ?: it.typeParameterBounds.map { b -> b as? KotlinType } }
-            ?: constructedSourceClass(call, resolver)?.let { service.classTypeParameterBounds(it) }
+            ?: constructed?.let { service.classTypeParameterBounds(it) }
             ?: return emptyList()
         if (bounds.isEmpty() || bounds.all { it == null }) return emptyList()
-        return checkArgsAgainstBounds(args, bounds, resolver)
+        val params = callee?.typeParameters ?: constructed?.let { service.classTypeParameters(it) }.orEmpty()
+        return checkArgsAgainstBounds(args, bounds, resolver, params)
     }
 
     /** A source function's type-parameter bounds as WRITTEN: an unbounded parameter has none (its implicit bound
@@ -4543,9 +4545,47 @@ internal class KotlinSemanticChecks(
         return 0
     }
 
-    internal fun checkArgsAgainstBounds(args: List<KtTypeProjection>, bounds: List<KotlinType?>, resolver: KotlinResolver): List<Diagnostic> {
+    /**
+     * [params] are the declaration's own type parameters, positional with [args]: a bound that names one of them
+     * (`T : Element<K>`) is judged with the written arguments put in (`Element<BetaKey>`), by [KotlinStrictSubtyping],
+     * so only a proven mismatch is reported.
+     */
+    internal fun checkArgsAgainstBounds(
+        args: List<KtTypeProjection>, bounds: List<KotlinType?>, resolver: KotlinResolver, params: List<String> = emptyList(),
+    ): List<Diagnostic> {
         val out = ArrayList<Diagnostic>()
+        // The written arguments, by parameter, where each is a plain known type.
+        val written: Map<String, KotlinType>? = if (params.size != args.size) null else HashMap<String, KotlinType>().also { m ->
+            for ((i, a) in args.withIndex()) {
+                if (a.projectionKind != KtProjectionKind.NONE) continue
+                val t = a.typeReference?.let { service.typeFromText(it.text, resolver.fileContext, enclosingClassFqnOf(it)) } ?: continue
+                // Every part known: an argument naming a type parameter anywhere (`List<T>` in a typealias) is not judged.
+                if (!fullyKnown(t)) continue
+                m[params[i]] = t
+            }
+        }
         args.forEachIndexed { i, proj ->
+            val rawBound = bounds.getOrNull(i)
+            if (rawBound != null && written != null && proj.projectionKind == KtProjectionKind.NONE) {
+                val marked = service.markTypeParameters(rawBound, params.toSet())
+                if (marked != null && mentionsParams(marked, params)) {
+                    val mentioned = params.filter { mentionsParams(marked, listOf(it)) }
+                    val arg = written[params[i]]
+                    if (arg != null && mentioned.all { it in written }) {
+                        val bound = substituteKeepingNullability(marked, written)
+                        if (KotlinStrictSubtyping(service).subtype(arg, bound) == false) {
+                            val r = proj.textRange
+                            out += Diagnostic(
+                                TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+                                "Type argument is not within its bounds: should be a subtype of '${renderType(bound)}'",
+                                KotlinDiagnosticCodes.UPPER_BOUND_VIOLATED,
+                            )
+                        }
+                        return@forEachIndexed
+                    }
+                    // Not every parameter it names has a written argument: the base type alone is judged below.
+                }
+            }
             if (proj.projectionKind == KtProjectionKind.STAR) return@forEachIndexed
             val bound = bounds.getOrNull(i) ?: return@forEachIndexed
             val argRef = proj.typeReference ?: return@forEachIndexed
@@ -4575,6 +4615,15 @@ internal class KotlinSemanticChecks(
         }
         return out
     }
+
+    /** [t] and every type argument in it name known classes (no type parameter, nothing unresolved). */
+    private fun fullyKnown(t: KotlinType): Boolean =
+        !t.isTypeParameter && service.isKnownType(t.qualifiedName) &&
+            t.typeArguments.all { a -> (a as? KotlinType)?.let { isStar(it) || fullyKnown(it) } == true }
+
+    private fun mentionsParams(t: KotlinType, params: List<String>): Boolean =
+        (t.typeArguments.isEmpty() && t.qualifiedName in params) ||
+            t.typeArguments.any { (it as? KotlinType)?.let { a -> mentionsParams(a, params) } == true }
 
     /** Whether [arg] DEFINITELY violates the upper [bound]: a base-type violation provable when [arg]'s
      *  supertype closure is completely known ([KotlinSymbolService.supertypeClosureKnown]), or a nullable arg

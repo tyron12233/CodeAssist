@@ -2073,6 +2073,18 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** A bound that names another type parameter (`T : Element<K>`) is judged with the written argument put in:
+     *  `Container<Alpha, BetaKey>` where `Alpha : Element<AlphaKey>`; one naming a type parameter is not. */
+    @Test
+    fun upperBoundNamingAnotherTypeParameter() {
+        val decls = "sealed interface Key\nclass AlphaKey : Key\nclass BetaKey : Key\nsealed interface Element<K : Key>\n" +
+            "class Alpha : Element<AlphaKey>\nclass Container<T : Element<K>, K : Key>\nclass C<X, Y : X>\n"
+        val bad = decls + "fun f() { Container<Alpha, BetaKey>() }\nval c: Container<Alpha, BetaKey>? = null"
+        assertEquals(List(2) { KotlinDiagnosticCodes.UPPER_BOUND_VIOLATED }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = decls + "fun f() { Container<Alpha, AlphaKey>() }\ntypealias TA<T> = C<Int, List<T>>"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** Explicit API mode: a public API declaration states its visibility, and a callable its inferred type. */
     @Test
     fun explicitApiMode() {
