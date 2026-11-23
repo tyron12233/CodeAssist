@@ -22,9 +22,11 @@ import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.kotlin.resolve.KotlinResolver
+import dev.ide.lang.kotlin.resolve.constructorTypeFqn
 import dev.ide.lang.kotlin.resolve.contextualFunctionType
 import dev.ide.lang.kotlin.resolve.localFunctionsInScope
 import dev.ide.lang.kotlin.resolve.localsAt
+import dev.ide.lang.kotlin.resolve.typeDenotationFqn
 
 /*
  * INACCESSIBLE_OUTER_CLASS_RECEIVER (FirCallResolver / the tower's implicit receivers): a nested class (not
@@ -62,12 +64,55 @@ internal fun KotlinSemanticChecks.inaccessibleOuterReceiver(ref: KtNameReference
         if (service.topLevelByName(name).isNotEmpty()) return null
     }
     if (resolver.fileContext.imports.any { it.alias == name || !it.isStar && it.fqn.substringAfterLast('.') == name }) return null
-    val owner = outerSupplier(ref, resolver) { cls, fqn -> supplies(cls, fqn, name, asConstructor) } ?: return null
+    val (owner, crossed) = outerSupplierCrossing(ref, resolver) { cls, fqn -> supplies(cls, fqn, name, asConstructor) } ?: return null
     val r = ref.textRange
+    // An inner class constructed from its outer class's companion: the constructor has no outer instance to take.
+    val fromCompanion = crossed.singleOrNull()?.let { it is KtObjectDeclaration && it.isCompanion() && it.parent?.parent === owner } == true
+    if (call != null && fromCompanion) return Diagnostic(
+        TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+        "Constructor of inner class '$name' can be called only with a receiver of '${owner.name}'",
+        KotlinDiagnosticCodes.INNER_CLASS_CONSTRUCTOR_NO_RECEIVER,
+    )
     return Diagnostic(
         TextRange(r.startOffset, r.endOffset), Severity.ERROR,
         "'$name' needs an instance of '${owner.name}', which is not available from inside a nested class or an object",
         KotlinDiagnosticCodes.INACCESSIBLE_OUTER_CLASS_RECEIVER,
+    )
+}
+
+/**
+ * INNER_CLASS_CONSTRUCTOR_NO_RECEIVER: an inner class constructed through its outer class's TYPE (`Outer.Inner()`,
+ * `Outer.Inner.InnerInner()`) or by a bare name an import brings into code with no class around it: there is no
+ * instance of the outer class to construct it on. (`Outer().Inner()` has one.)
+ */
+internal fun KotlinSemanticChecks.innerConstructorWithoutReceiver(ref: KtNameReferenceExpression, resolver: KotlinResolver): Diagnostic? {
+    val call = (ref.parent as? KtCallExpression)?.takeIf { it.calleeExpression === ref } ?: return null
+    val name = ref.getReferencedName()
+    if (name.isEmpty() || !name[0].isUpperCase()) return null
+    val dot = (call.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === call }
+    val fqn = if (dot != null) {
+        val outer = resolver.typeDenotationFqn(dot.receiverExpression) ?: return null
+        "$outer.$name"
+    } else {
+        // Bare: only where nothing around the call could supply an outer instance.
+        var node: KtElement? = ref.parent
+        while (node != null && node !is KtFile) {
+            if (node is KtClassOrObject || node is KtLambdaExpression) return null
+            if (node is KtNamedFunction && node.receiverTypeReference != null) return null
+            if (node is KtProperty && node.receiverTypeReference != null) return null
+            node = node.parent
+        }
+        if (resolver.localsAt(ref.textRange.startOffset, name).isNotEmpty()) return null
+        resolver.constructorTypeFqn(name, ref.textRange.startOffset) ?: return null
+    }
+    val cls = (service.sourceClass(fqn)?.node as? KotlinDomNode)?.psi as? KtClass ?: return null
+    if (!cls.isInner()) return null
+    val outer = cls.getStrictParentOfType<KtClassOrObject>() ?: return null
+    val r = ref.textRange
+    return Diagnostic(
+        TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+        "Constructor of inner class '$name' can be called only with a receiver of '${outer.name}'",
+        KotlinDiagnosticCodes.INNER_CLASS_CONSTRUCTOR_NO_RECEIVER,
     )
 }
 
@@ -92,8 +137,14 @@ private enum class Supply { NONE, ACCESSIBLE, INSTANCE, UNKNOWN }
  */
 private fun KotlinSemanticChecks.outerSupplier(
     at: KtElement, resolver: KotlinResolver, supplies: (KtClassOrObject, String?) -> Any,
-): KtClassOrObject? {
+): KtClassOrObject? = outerSupplierCrossing(at, resolver, supplies)?.first
+
+/** [outerSupplier], with the nested classes and objects crossed on the way to it. */
+private fun KotlinSemanticChecks.outerSupplierCrossing(
+    at: KtElement, resolver: KotlinResolver, supplies: (KtClassOrObject, String?) -> Any,
+): Pair<KtClassOrObject, List<KtClassOrObject>>? {
     var cut = false
+    val crossed = ArrayList<KtClassOrObject>()
     var node: KtElement? = at.parent
     while (node != null && node !is KtFile) {
         when (node) {
@@ -113,12 +164,12 @@ private fun KotlinSemanticChecks.outerSupplier(
                     node is dev.ide.kotlin.syntax.psi.KtEnumEntry
                 val fqn = if (transparent) null else node.fqName?.asString()
                 when (val s = supplies(node, fqn)) {
-                    true, Supply.INSTANCE -> return if (cut) node else null
+                    true, Supply.INSTANCE -> return if (cut) node to crossed else null
                     Supply.ACCESSIBLE -> return null
                     Supply.UNKNOWN -> return null
                     else -> {}
                 }
-                if (!transparent && (node is KtObjectDeclaration || (node is KtClass && !node.isInner()))) cut = true
+                if (!transparent && (node is KtObjectDeclaration || (node is KtClass && !node.isInner()))) { cut = true; crossed += node }
             }
         }
         node = node.parent

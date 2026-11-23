@@ -2073,6 +2073,18 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** An inner class constructed through its outer class's type, or from that class's companion, has no outer
+     *  instance: INNER_CLASS_CONSTRUCTOR_NO_RECEIVER. `Outer().Inner()` and a call inside `Outer` have one. */
+    @Test
+    fun innerClassConstructorWithoutReceiver() {
+        val decls = "class Outer { inner class Inner { inner class InnerInner }\n companion object { fun c() { Inner() } }\n fun ok() = Inner() }\n"
+        val bad = decls + "fun f() = Outer.Inner()\nfun g() = Outer.Inner.InnerInner()"
+        assertEquals(List(3) { KotlinDiagnosticCodes.INNER_CLASS_CONSTRUCTOR_NO_RECEIVER }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = "class Outer { inner class Inner { inner class InnerInner }\n fun ok() = Inner()\n class Nested }\n" +
+            "fun f() = Outer().Inner()\nfun g() = Outer().Inner().InnerInner()\nfun h() = Outer.Nested()"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** `x is C<args>` where `x`'s own type already fixes `C`'s arguments to something else cannot be checked at run
      *  time: `MutableList<String> is MutableList<CharSequence>`. One it implies is a plain check. */
     @Test
