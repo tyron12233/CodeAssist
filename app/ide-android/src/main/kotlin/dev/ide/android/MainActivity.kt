@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.webkit.MimeTypeMap
 import android.widget.Toast
@@ -21,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.toArgb
 import dev.ide.core.project.CaprojFormat
 import dev.ide.core.IdeServicesBackend
 import dev.ide.ui.CodeAssistApp
@@ -97,12 +99,19 @@ open class MainActivity : ComponentActivity() {
     /** Whether the UMP consent flow has settled (success or failure). Ads wait for it, see [ADS_STARTUP_DELAY_MS]. */
     private val adConsentResolved = mutableStateOf(false)
 
+    /** Where the system splash put its icon, once it hands over (API 31+); see [handOverSplash]. */
+    private val splashIcon = mutableStateOf<SplashIcon?>(null)
+
+    /** Whether the in-app splash has faded out. */
+    private val splashDone = mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Edge-to-edge with default (auto) bar styles; the system-bar ICON appearance is then driven reactively
         // by the app theme via `PlatformSystemBars` (light icons in dark mode, dark icons in light mode) — a fixed
         // `SystemBarStyle.dark` here forced light icons even in light mode.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) splashScreen.setOnExitAnimationListener(::handOverSplash)
         // Compose resources find their Context through a ContentProvider, and providers only start in the app's
         // main process. The plugin sandbox runs this activity in its own process, where every stringResource()
         // threw "Android context is not initialized" on the first frame; hand the context over directly.
@@ -383,8 +392,8 @@ open class MainActivity : ComponentActivity() {
                 }
                 onDispose { registration?.dispose() }
             }
-            when {
-                b != null -> androidx.compose.foundation.layout.Box {
+            androidx.compose.foundation.layout.Box {
+                if (b != null) androidx.compose.foundation.layout.Box {
                     CodeAssistApp(
                         b,
                         fileActions = fileActions,
@@ -400,11 +409,41 @@ open class MainActivity : ComponentActivity() {
                     // The sandbox looks exactly like the IDE it was started from; say which one this is.
                     if (inSandbox) SandboxBand() else McpBand(b.agent)
                 }
-
-                error != null -> Splash("Failed to start: $error")
-                else -> Splash("Starting CodeAssist…")
+                // Over the app while it composes its first frames, then fades out (see LaunchSplash).
+                if (!splashDone.value) {
+                    LaunchSplash(
+                        systemIcon = splashIcon.value,
+                        ready = b != null,
+                        error = error,
+                        onFinished = {
+                            splashDone.value = true
+                            // Below API 31 the window background is the logo (the starting window's splash);
+                            // left there it would be drawn under the app on every frame.
+                            window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(SplashBackground.toArgb()))
+                        },
+                    )
+                }
             }
         }
+    }
+
+    /**
+     * The system splash is up and our first frame is drawn under it. Read where its icon sits, let
+     * [LaunchSplash] redraw the logo at exactly that spot, and only then take the system's view away, so the
+     * logo never moves or blinks between the two. Without this listener the system removes its splash on our
+     * first frame, wherever its icon was.
+     */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.S)
+    private fun handOverSplash(view: android.window.SplashScreenView) {
+        view.iconView?.takeIf { it.width > 0 }?.let { icon ->
+            val at = IntArray(2)
+            icon.getLocationInWindow(at)
+            val side = icon.width * icon.scaleX
+            splashIcon.value = SplashIcon(at[0] + side / 2f, at[1] + icon.height * icon.scaleY / 2f, side)
+        }
+        // One frame for Compose to redraw at the new spot, one for that frame to reach the screen.
+        val decor = window.decorView
+        decor.postOnAnimation { decor.postOnAnimation { view.remove() } }
     }
 
     /**

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- API 31+: the system splash shows the logo, on the same colour as the in-app splash. MainActivity reads
+         where the system put the icon and hands over to LaunchSplash at that exact spot. -->
+    <style name="Theme.CodeAssist.Launch" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+    </style>
+</resources>

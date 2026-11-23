@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- MainActivity's theme. Below API 31 there is no system splash: the starting window just draws
+         windowBackground, so it carries the logo itself, at the size and place the in-app splash
+         (LaunchSplash) first draws it. MainActivity swaps it for the plain colour once the splash is gone. -->
+    <style name="Theme.CodeAssist.Launch" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash_window</item>
+    </style>
+</resources>

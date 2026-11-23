@@ -2,4 +2,7 @@
 <resources>
     <!-- The Halloween launcher icon's night sky, the same plum as the in-app Halloween card. -->
     <color name="ic_launcher_pumpkin_background">#2E1C38</color>
+    <!-- Behind the launch logo: the system splash, the window, and the in-app splash all use this one colour,
+         so nothing changes on screen when one hands over to the next. -->
+    <color name="splash_background">#0E0E12</color>
 </resources>

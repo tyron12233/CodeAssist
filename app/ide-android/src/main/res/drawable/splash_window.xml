@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The pre-31 starting window: the logo centred at 288dp, the adaptive-icon foreground size the in-app splash
+     uses when there is no system splash to measure (LaunchSplash.DEFAULT_LOGO_SIZE). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splash_background" />
+    <item android:width="288dp" android:height="288dp" android:gravity="center"
+          android:drawable="@drawable/splash_logo" />
+</layer-list>

@@ -5,27 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.webkit.MimeTypeMap
 import androidx.activity.result.contract.ActivityResultContract
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.platform.log.Log
 import dev.ide.ui.backend.TreeNode
 
 /**
  * Small, self-contained host helpers split out of [MainActivity]: the AdMob initializer, the "Save As"
- * document contract, the source-root search, and the boot splash. None of them belong to the activity's
+ * document contract and the source-root search (the boot splash is LaunchSplash). None of them belong to the activity's
  * lifecycle, so they live here to keep [MainActivity] to bootstrap + the Compose host.
  */
 
@@ -77,24 +62,4 @@ internal class ExportDocumentContract : ActivityResultContract<String, android.n
 
     override fun parseResult(resultCode: Int, intent: Intent?): android.net.Uri? =
         intent.takeIf { resultCode == Activity.RESULT_OK }?.data
-}
-
-/** Minimal dark splash shown while the engine boots (before the themed UI is available). */
-@Composable
-internal fun Splash(message: String) {
-    Box(
-        Modifier.fillMaxSize().background(Color(0xFF0E0E12)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            CircularProgressIndicator(color = Color(0xFF8B7BF0))
-            Text(
-                message, color = Color(0xFFB9B9C6), fontSize = 14.sp, textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 32.dp),
-            )
-        }
-    }
 }
