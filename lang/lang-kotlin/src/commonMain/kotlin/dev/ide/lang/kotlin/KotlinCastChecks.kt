@@ -138,7 +138,8 @@ internal object KotlinCastChecks {
      * position (an unbounded `T` is below it), or `Nothing` at a contravariant one. Null when it cannot tell.
      */
     private fun KotlinSemanticChecks.genericTargetErased(user: KtUserType, subject: KotlinType, typeRef: KtTypeReference, resolver: KotlinResolver): Boolean? {
-        if (subject.typeArguments.isNotEmpty() || user.qualifier != null) return null
+        if (subject.typeArguments.isNotEmpty()) return upcastTargetErased(user, subject, typeRef, resolver)
+        if (user.qualifier != null) return null
         if (service.isProjectTypeAlias(user.referencedName ?: return null)) return null
         val base = service.typeFromText(user.referencedName, resolver.fileContext, enclosingClassFqnOf(typeRef)) ?: return null
         if (base.isTypeParameter) return null
@@ -176,6 +177,38 @@ internal object KotlinCastChecks {
             if (!holds) return true
         }
         return false
+    }
+
+    /**
+     * `subject is C<args>` where the subject's class is `C` or inherits it (`MutableList<String> is
+     * MutableList<CharSequence>`): `findStaticallyKnownSubtype` is then the subject's own view of `C`, and the check
+     * is erased when that is not a subtype of the target. Null when either cannot be told; a downcast (`C` below
+     * the subject's class), whose arguments would have to be solved for, is not judged.
+     */
+    private fun KotlinSemanticChecks.upcastTargetErased(user: KtUserType, subject: KotlinType, typeRef: KtTypeReference, resolver: KotlinResolver): Boolean? {
+        if (user.qualifier != null) return null
+        val name = user.referencedName ?: return null
+        if (service.isProjectTypeAlias(name) || typeParameterInScope(typeRef, name) != null) return null
+        val target = service.typeFromText(user.text, resolver.fileContext, enclosingClassFqnOf(typeRef)) ?: return null
+        if (target.isTypeParameter || !service.isKnownType(target.qualifiedName)) return null
+        if (service.sourceClass(target.qualifiedName)?.isLocal == true) return null
+        // Every argument of the target must name known classes (a type parameter there is the other rule's).
+        fun known(t: KotlinType): Boolean = t.qualifiedName == "*" || (!t.isTypeParameter && service.isKnownType(t.qualifiedName) &&
+            t.typeArguments.all { (it as? KotlinType)?.let(::known) == true })
+        if (!target.typeArguments.all { (it as? KotlinType)?.let(::known) == true }) return null
+        if (!subject.typeArguments.all { (it as? KotlinType)?.let(::known) == true }) return null
+        val view: KotlinType = if (subject.qualifiedName == target.qualifiedName) subject.withNullable(false) else {
+            if (!service.supertypeClosureKnown(subject.qualifiedName)) return null
+            val inherits = service.supertypesOf(subject.qualifiedName).any { (it as? KotlinType)?.qualifiedName == target.qualifiedName }
+            if (!inherits) return null
+            val args = service.receiverSupertypeArgs(subject.qualifiedName, subject.typeArguments, target.qualifiedName) ?: return null
+            KotlinType(target.qualifiedName, args)
+        }
+        return when (KotlinStrictSubtyping(service).subtype(view, target.withNullable(false))) {
+            false -> true
+            true -> false
+            null -> null
+        }
     }
 
     private fun userTypeOf(typeRef: KtTypeReference): KtUserType? = when (val el = typeRef.typeElement) {

@@ -2073,6 +2073,16 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** `x is C<args>` where `x`'s own type already fixes `C`'s arguments to something else cannot be checked at run
+     *  time: `MutableList<String> is MutableList<CharSequence>`. One it implies is a plain check. */
+    @Test
+    fun erasedIsCheckAgainstTheSubjectsOwnArguments() {
+        val bad = "fun f(a: MutableList<String>) = a is MutableList<CharSequence>\nfun g(a: List<Any>) = a is List<Number>"
+        assertEquals(List(2) { KotlinDiagnosticCodes.CAST_ERASED }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = "fun f(a: MutableList<String>) = a is MutableList<String>\nfun g(a: List<Int>) = a is List<Number>\nfun h(a: List<Any>) = a is List<*>"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** An `override` overrides nothing when the supertype members of its name all have another parameter list. */
     @Test
     fun overrideWithNoMatchingSignature() {
