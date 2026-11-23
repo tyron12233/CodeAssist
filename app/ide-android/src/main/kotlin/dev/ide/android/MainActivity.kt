@@ -138,7 +138,10 @@ open class MainActivity : ComponentActivity() {
                     session = s; backend = s.backend
                     // Bring the launcher in line with the saved choice. They only disagree after something
                     // reset one and not the other, such as a backup restored onto a fresh install.
-                    s.backend.settings.preference(BuiltInSettingsPages.APP_ICON_KEY)?.let { AppIcons.host?.apply(it) }
+                    // PackageManager binder calls, on every launch with a saved choice: off main.
+                    s.backend.settings.preference(BuiltInSettingsPages.APP_ICON_KEY)?.let { icon ->
+                        launch(Dispatchers.IO) { runCatching { AppIcons.host?.apply(icon) } }
+                    }
                     AndroidFrameMetrics.register(this@MainActivity, s.backend)
                     // A redirect that landed mid-bootstrap now has somewhere to go.
                     deliverAuthRedirect()

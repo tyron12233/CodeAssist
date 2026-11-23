@@ -1420,10 +1420,11 @@ class IdeUiState(
      * session); false on a genuine first open (no session yet).
      */
     suspend fun restoreTabs(): Boolean {
-        val saved = backend.projects.openTabs()
+        // Both read the session file, and this runs on main while the project opens.
+        val saved = withContext(ioDispatcher) { backend.projects.openTabs() }
         // No tabs to restore: respect an intentionally-empty reopen (session file exists → stay empty), and
         // only fall through to a default file on a first open (no session file yet).
-        if (saved.tabs.isEmpty()) return backend.projects.hasSavedSession()
+        if (saved.tabs.isEmpty()) return withContext(ioDispatcher) { backend.projects.hasSavedSession() }
         for (tab in saved.tabs) {
             val name = tab.path.substringAfterLast('/').substringAfterLast('\\')
             runCatching {
