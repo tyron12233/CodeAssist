@@ -261,3 +261,18 @@
 # names now that renaming is on: IntelliJ's XML descriptors and JDOM.
 -keep class org.intellij.** { public protected *; <init>(...); volatile <fields>; }
 -keep class org.jdom.** { public protected *; <init>(...); volatile <fields>; }
+
+# Google Mobile Ads: the ad WebView's internal interface declares View methods that
+# only android.view.View implements. In 3.47.0, R8 renamed three of them and dropped
+# their arguments (measure(II) -> V0()V, getLocationOnScreen([I) -> i0()V,
+# setBackgroundColor(I) -> r()V). The ad views inherit the real View methods, which
+# no longer matched, so the first web-rendered ad that measured itself crashed the
+# app with AbstractMethodError. That was the top crash on 3.47.0; 3.46.0 and 3.48.0
+# built clean with the same R8 and SDK, so it depends on how the build is optimized
+# and can come back. The obfuscated interface name changes between SDK versions, so
+# match every ads interface that declares these methods.
+-keepclassmembers interface com.google.android.gms.internal.ads.** {
+    void measure(int, int);
+    void getLocationOnScreen(int[]);
+    void setBackgroundColor(int);
+}
