@@ -40,10 +40,13 @@ dependencies {
     javalinRun("io.javalin:javalin:6.3.0")
     javalinRun("org.slf4j:slf4j-simple:2.0.16")
 }
-tasks.named<Test>("test") {
-    // The programs are what the run tests interpret, not tests; JavalinHello cannot even be loaded here, its
-    // library being absent from this JVM on purpose, and test discovery fails outright on a class like that.
+// Every test task of the module (`regressionTest` too, which scans the same classes): the programs are what the
+// run tests interpret, not tests; JavalinHello cannot even be loaded here, its library being absent from this
+// JVM on purpose, and test discovery fails outright on a class like that.
+tasks.withType<Test>().configureEach {
     filter { excludeTestsMatching("dev.ide.build.jvm.run.programs.*") }
+}
+tasks.named<Test>("test") {
     doFirst { systemProperty("javalin.run.classpath", javalinRun.asPath) }
 }
 
