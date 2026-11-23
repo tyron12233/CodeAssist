@@ -2073,6 +2073,19 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** Each segment of a qualified inner-class type takes only its own class's type arguments, and a nested or
+     *  inner class named bare inside its outer class is checked as that class. */
+    @Test
+    fun innerClassSegmentTypeArgumentCounts() {
+        val bad = "abstract class A<T> { inner class B { inner class C\n fun f(y: Any) { if (y is B<*>.C) {} } }\n" +
+            " fun g(x: Any) { if (x is B<*>) {} } }\nclass Outer<X> { inner class Inner<Y> { inner class Inner2 } }\n" +
+            "fun e(): Outer<Int>.Inner<String, Int>.Inner2 = null!!"
+        assertEquals(List(3) { KotlinDiagnosticCodes.TYPE_ARGUMENT_COUNT }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = "abstract class A<T> { inner class B { inner class C\n fun f(y: Any) { if (y is A<*>.B.C) {} } } }\n" +
+            "class Outer<X> { inner class Inner<Y> { inner class Inner2 } }\nfun o(): Outer<Int>.Inner<String>.Inner2 = null!!"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** A parameter's annotation reaches the functions around its function, and a setter parameter's the class's
      *  members: a call or a plain `val` there is no compile-time constant. */
     @Test

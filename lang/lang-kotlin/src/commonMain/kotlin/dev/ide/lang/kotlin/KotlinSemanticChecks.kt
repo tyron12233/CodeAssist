@@ -4366,15 +4366,16 @@ internal class KotlinSemanticChecks(
      * — the "expected 0" case is flagged only for SOURCE classes (where the count is read straight from PSI).
      */
     private fun typeArgumentCountMismatch(userType: KtUserType, resolver: KotlinResolver): Diagnostic? {
-        if (userType.qualifier != null || userType.parent is KtUserType) return null // nested/qualified → back off
         val argList = userType.typeArgumentList ?: return null // no `<>` → not a wrong-count case
+        if (userType.qualifier != null || userType.parent is KtUserType) return qualifiedSegmentTypeArgumentCount(userType, argList, resolver)
         val ref = userType.referenceExpression ?: return null
         val name = ref.getReferencedName()
         if (name.isEmpty()) return null
         val ctx = resolver.fileContext
         if (service.isProjectTypeAlias(name)) return null // a typealias has its own (aliased) arity
         if (resolver.isTypeParameterInScope(name, userType.textRange.startOffset)) return null
-        val fqn = service.resolveTypeName(name, ctx) ?: return null
+        // A nested or inner class is named bare inside the class around it.
+        val fqn = service.resolveTypeName(name, ctx, enclosingClassFqnOf(userType)) ?: return null
         if (!service.isKnownType(fqn)) return null // unknown classifier → back off
         // The builtin collections come from `.kotlin_builtins`, which doesn't surface type parameters through
         // the shape index (returns []); their arities are fixed and well-known, so fall back to a hardcoded map
@@ -4386,6 +4387,40 @@ internal class KotlinSemanticChecks(
         // `expected == 0` for a non-source class that isn't a known builtin could be a classpath decode gap → back off.
         if (expected == 0 && !service.isSourceClass(fqn) && fqn !in BUILTIN_TYPE_ARITY) return null
         val r = argList.textRange
+        val msg = if (expected == 0) "Type '$name' does not take type arguments"
+        else "$expected type argument${if (expected == 1) "" else "s"} expected for '$name', but $actual found"
+        return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, msg, KotlinDiagnosticCodes.TYPE_ARGUMENT_COUNT)
+    }
+
+    /**
+     * One segment of a qualified type naming project-source classes (`Outer<A>.Inner<B>.Inner2`), whose type
+     * arguments do not fit its own class: each segment takes only the type parameters its class declares, an
+     * inner class's outer arguments going on the outer segment (`B<*>.C` for an inner `B` of `A<T>` gives `B` an
+     * argument it does not take). A segment the chain does not reach through source classes is not judged.
+     */
+    private fun qualifiedSegmentTypeArgumentCount(segment: KtUserType, argList: dev.ide.kotlin.syntax.psi.KtTypeArgumentList, resolver: KotlinResolver): Diagnostic? {
+        val path = generateSequence(segment) { it.qualifier }.toList().asReversed()
+        val names = path.map { it.referencedName ?: return null }
+        val enclosing = enclosingClassFqnOf(segment)
+        // The head: the shortest prefix that names a source class (anything before it is a package).
+        var fqn: String? = null
+        var head = -1
+        for (i in names.indices) {
+            val r = service.resolveTypeName(names.subList(0, i + 1).joinToString("."), resolver.fileContext, enclosing)
+            if (r != null && service.sourceClass(r) != null) { fqn = r; head = i; break }
+        }
+        if (fqn == null || path.indexOf(segment) < head) return null
+        for (j in head + 1..path.indexOf(segment)) {
+            fqn = "$fqn.${names[j]}"
+            if (service.sourceClass(fqn) == null) return null
+        }
+        if (service.isProjectTypeAlias(names.last())) return null
+        val cls = (service.sourceClass(fqn!!)?.node as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi as? KtClassOrObject ?: return null
+        val expected = (cls as? KtClass)?.typeParameters?.size ?: 0
+        val actual = argList.arguments.size
+        if (actual == expected) return null
+        val r = argList.textRange
+        val name = names[path.indexOf(segment)]
         val msg = if (expected == 0) "Type '$name' does not take type arguments"
         else "$expected type argument${if (expected == 1) "" else "s"} expected for '$name', but $actual found"
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, msg, KotlinDiagnosticCodes.TYPE_ARGUMENT_COUNT)
