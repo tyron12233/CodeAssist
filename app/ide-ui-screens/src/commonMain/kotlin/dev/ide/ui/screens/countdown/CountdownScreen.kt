@@ -72,6 +72,7 @@ import dev.ide.ui.components.drawSparkle
 import dev.ide.ui.components.drawStar
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.back
+import dev.ide.ui.generated.resources.countdown_challenge_label
 import dev.ide.ui.generated.resources.countdown_challenge_not_ready
 import dev.ide.ui.generated.resources.countdown_challenge_note
 import dev.ide.ui.generated.resources.countdown_close
@@ -109,9 +110,9 @@ import kotlin.random.Random
 
 /**
  * The New Year countdown: the night sky the season's stars appear in, and the 31 days of December. A day
- * whose date has come glows; opening it adds a star and shows what was behind it in a sheet, with whatever it
- * leads to (a challenge to solve, a keepsake to try on, the lesson, the Store). New Year's Eve brings the
- * aurora out over the sky.
+ * whose date has come glows; opening it adds a star and shows what was behind it in a sheet: a challenge every
+ * day through the 30th, and on many days a little extra (a tip, a keepsake to try on, the lesson, the Store).
+ * New Year's Eve brings the aurora out over the sky.
  *
  * All state is the [ledger]'s and the color [schemes]'; this screen re-reads both after anything it changes.
  */
@@ -143,7 +144,7 @@ fun CountdownScreen(
         val before = ledger.stars(year).size
         if (ledger.state(day) == DoorState.Ready) {
             ledger.open(day)
-            CountdownDays.of(day).takeIf { it.kind == DayKind.Keepsake }?.payload?.let(schemes::unlockKeepsake)
+            CountdownDays.of(day).bonus?.takeIf { it.kind == DayKind.Keepsake }?.payload?.let(schemes::unlockKeepsake)
         }
         earned = ledger.stars(year).size > before
         shown = day
@@ -391,7 +392,7 @@ private fun DayTile(day: Int, state: DoorState, modifier: Modifier = Modifier, o
         contentAlignment = Alignment.Center,
     ) {
         when (state) {
-            DoorState.Opened -> Canvas(Modifier.fillMaxSize().padding(9.dp)) { drawDayKind(CountdownDays.of(day).kind) }
+            DoorState.Opened -> Canvas(Modifier.fillMaxSize().padding(9.dp)) { drawDayKind(CountdownDays.of(day).iconKind) }
             else -> Text(
                 day.toString(),
                 style = MaterialTheme.typography.titleMedium,
@@ -467,26 +468,69 @@ private fun DaySheet(
             SheetButton(stringResource(Res.string.countdown_close), primary = false, onClick = onClose)
             return@Column
         }
-        if (entry.kind == DayKind.Finale) Fireworks(Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(20.dp)))
+        val bonus = entry.bonus
+        if (bonus?.kind == DayKind.Finale) Fireworks(Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(20.dp)))
+        // The header names the day's main event: the bonus when there is one (a keepsake, the lesson, a tip),
+        // otherwise the challenge.
+        val headTitle = bonus?.title ?: entry.challenge?.title
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Box(Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(WinterNavy), contentAlignment = Alignment.Center) {
-                Canvas(Modifier.size(40.dp)) { drawDayKind(entry.kind) }
+                Canvas(Modifier.size(40.dp)) { drawDayKind(entry.iconKind) }
             }
             Column(Modifier.weight(1f)) {
                 Text(entry.day.toString(), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                Text(stringResource(entry.title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                if (headTitle != null) Text(stringResource(headTitle), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             }
         }
         if (earned) EarnedChip()
-        Text(stringResource(entry.body), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        entry.code?.let { CodeSample(it, entry.codeLanguage) }
-        when (entry.kind) {
-            DayKind.Challenge -> ChallengeAction(backend, entry.challengeDate(year), onSolve)
-            DayKind.Keepsake -> KeepsakeAction(entry, schemes, onSchemeApplied)
-            DayKind.Lesson -> SheetButton(stringResource(Res.string.countdown_open_lesson)) { entry.payload?.let(onOpenLesson) }
-            DayKind.Store -> SheetButton(stringResource(Res.string.countdown_open_store), onClick = onOpenStore)
-            // The finale's own words already say the aurora is out; the fireworks above are its action.
-            DayKind.Finale, DayKind.Tip -> {}
+        if (bonus != null) {
+            Text(stringResource(bonus.body), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            bonus.code?.let { CodeSample(it, bonus.codeLanguage) }
+            when (bonus.kind) {
+                DayKind.Keepsake -> KeepsakeAction(bonus, schemes, onSchemeApplied)
+                DayKind.Lesson -> SheetButton(stringResource(Res.string.countdown_open_lesson)) { bonus.payload?.let(onOpenLesson) }
+                DayKind.Store -> SheetButton(stringResource(Res.string.countdown_open_store), onClick = onOpenStore)
+                // The finale's own words already say the aurora is out; the fireworks above are its action.
+                DayKind.Finale, DayKind.Tip, DayKind.Challenge -> {}
+            }
+        }
+        entry.challenge?.let { challenge ->
+            ChallengeCard(
+                backend = backend,
+                challenge = challenge,
+                date = entry.challengeDate(year),
+                // On a challenge-only day the header already carries its title.
+                showTitle = bonus != null,
+                onSolve = onSolve,
+            )
+        }
+    }
+}
+
+/**
+ * The day's challenge: its name and a line of story, and the way in. Solve is only offered once the Daily
+ * Challenge actually has a problem on that date, so a day can never send someone to an empty challenge.
+ */
+@Composable
+private fun ChallengeCard(backend: IdeBackend, challenge: DayChallenge, date: String, showTitle: Boolean, onSolve: (String) -> Unit) {
+    val ready by produceState<Boolean?>(null, date) {
+        value = backend.challenges.challengesAvailable() &&
+            runCatching { backend.challenges.day(date).scheduled }.getOrDefault(false)
+    }
+    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Canvas(Modifier.size(18.dp)) { drawStar(Offset(size.width / 2f, size.height / 2f), size.width * 0.45f, StarGold) }
+                Text(stringResource(Res.string.countdown_challenge_label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            }
+            if (showTitle) Text(stringResource(challenge.title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(challenge.teaser), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(Res.string.countdown_challenge_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+            when (ready) {
+                true -> SheetButton(stringResource(Res.string.countdown_solve)) { onSolve(date) }
+                false -> Text(stringResource(Res.string.countdown_challenge_not_ready), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                null -> Spacer(Modifier.height(40.dp))
+            }
         }
     }
 }
@@ -528,27 +572,9 @@ private fun EarnedChip() {
     }
 }
 
-/**
- * The challenge day's action. Only offered once the Daily Challenge actually has a problem on that date, so a
- * day can never send someone to an empty challenge.
- */
 @Composable
-private fun ChallengeAction(backend: IdeBackend, date: String, onSolve: (String) -> Unit) {
-    val ready by produceState<Boolean?>(null, date) {
-        value = backend.challenges.challengesAvailable() &&
-            runCatching { backend.challenges.day(date).scheduled }.getOrDefault(false)
-    }
-    Text(stringResource(Res.string.countdown_challenge_note), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
-    when (ready) {
-        true -> SheetButton(stringResource(Res.string.countdown_solve)) { onSolve(date) }
-        false -> Text(stringResource(Res.string.countdown_challenge_not_ready), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-        null -> Spacer(Modifier.height(40.dp))
-    }
-}
-
-@Composable
-private fun KeepsakeAction(entry: CountdownDay, schemes: ColorSchemeStore, onSchemeApplied: () -> Unit) {
-    val scheme = entry.payload?.let(BuiltInColorSchemes::keepsake) ?: return
+private fun KeepsakeAction(bonus: DayBonus, schemes: ColorSchemeStore, onSchemeApplied: () -> Unit) {
+    val scheme = bonus.payload?.let(BuiltInColorSchemes::keepsake) ?: return
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val resolved = remember(scheme, dark) { ResolvedColorScheme(scheme, dark) }
     var applied by remember { mutableStateOf(schemes.activeId() == scheme.id) }
