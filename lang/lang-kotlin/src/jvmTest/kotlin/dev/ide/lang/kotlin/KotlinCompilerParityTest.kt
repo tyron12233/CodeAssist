@@ -2073,6 +2073,16 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** A block body that can fall off the end owes a value of a type-parameter return type too: `T` is no `Unit`. */
+    @Test
+    fun missingReturnForTypeParameterReturnType() {
+        val bad = "fun <T> g(f: () -> List<T>): T {}\nopen class G<T> { open fun f(): T {} }"
+        assertEquals(List(2) { KotlinDiagnosticCodes.MISSING_RETURN }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = "fun <T> g(f: () -> List<T>): T { return f().first() }\nopen class G<T>(val t: T) { open fun f(): T { TODO() } }\n" +
+            "fun <T> h(t: T): T { if (t == null) return t; return t }"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** Each segment of a qualified inner-class type takes only its own class's type arguments, and a nested or
      *  inner class named bare inside its outer class is checked as that class. */
     @Test

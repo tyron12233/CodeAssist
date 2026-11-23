@@ -107,6 +107,7 @@ import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.kotlin.resolve.calleeFunctionOf
 import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.resolve.enclosingClassFqnOf
+import dev.ide.lang.kotlin.resolve.resolveCalleeFunction
 import dev.ide.lang.kotlin.symbols.Builtins
 import dev.ide.lang.kotlin.symbols.DefaultImports
 import dev.ide.lang.kotlin.symbols.FileContext
@@ -1663,8 +1664,16 @@ internal class KotlinSemanticChecks(
             ?: return null
         // `Nothing` is no exception: a `fun f(): Nothing { }` whose body can complete has no value to give back.
         if (declared.qualifiedName == "kotlin.Unit") return null
-        if (declared.isTypeParameter || !service.isKnownType(declared.qualifiedName)) return null
+        // A type parameter is no `Unit` either (`fun <T> f(): T {}` falls off with no `T` to give back); an unknown
+        // type might be a library alias of `Unit`, which this cannot see.
+        val typeParameter = declared.isTypeParameter || (declared.typeArguments.isEmpty() && !declared.nullable &&
+            resolver.isTypeParameterInScope(fn.typeReference!!.text.trim(), fn.textRange.startOffset + 1))
+        if (!typeParameter && !service.isKnownType(declared.qualifiedName)) return null
         val body = fn.bodyBlockExpression ?: return null
+        // With a type-parameter return type a generic call in the body may infer to `Nothing` (`decodeIn(typeFrom)`
+        // with captured arguments), ending the body where reachability does not see it: every call must have a type
+        // known not to be that.
+        if (typeParameter && hasCallOfOpenType(body, resolver)) return null
         if (KotlinControlFlow(resolver).blockLiveness(body) != Liveness.LIVE) return null
         val anchor = fn.nameIdentifier ?: fn.typeReference ?: return null
         val r = anchor.textRange
@@ -1672,6 +1681,27 @@ internal class KotlinSemanticChecks(
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,
             "A 'return' expression required in a function with a block body ('{...}')", KotlinDiagnosticCodes.MISSING_RETURN,
         )
+    }
+
+    /** Whether [body] calls a generic function (whose result inference may make `Nothing`), or something whose type
+     *  is not known or is a type parameter or `Nothing`. */
+    private fun hasCallOfOpenType(body: KtElement, resolver: KotlinResolver): Boolean {
+        var open = false
+        fun visit(e: KtElement) {
+            if (open) return
+            if (e is KtCallExpression) {
+                val callee = runCatching { resolver.resolveCalleeFunction(e) }.getOrNull()
+                // A call through a receiver is typed as the whole `recv.call()`.
+                val whole = (e.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === e } ?: e
+                val t = resolver.inferType(whole)
+                if (callee == null || callee.typeParameters.isNotEmpty() ||
+                    t == null || t.isTypeParameter || t.qualifiedName == "kotlin.Nothing") { open = true; return }
+            }
+            var c = e.firstChild
+            while (c != null) { visit(c); c = c.nextSibling }
+        }
+        visit(body)
+        return open
     }
 
     /** A LOCAL `val`/`var` never referenced anywhere in its declaring block (a warning). Skips `_` and
