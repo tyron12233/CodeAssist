@@ -79,6 +79,9 @@ class KotlinCompilerTestDataSweepTest {
         val strayByCode = HashMap<String, Int>()       // errors in FRONTEND files far from any expected error
         val missByName = HashMap<String, Int>()
         val hitByName = HashMap<String, Int>()
+        // A hit whose paired error of ours stands for that very K2 name (the position-first pairing also credits
+        // an error of another kind on the same line).
+        var exactHits = 0
         var cleanCompiling = 0; var compiling = 0; var crashed = 0; var timedOut = 0
         fun newExec() = Executors.newSingleThreadExecutor { r -> Thread(null, r, "sweep", 64L shl 20).apply { isDaemon = true } }
         // Cases are independent (each gets its own temp dir and analyzer), so they are analyzed on several
@@ -172,12 +175,16 @@ class KotlinCompilerTestDataSweepTest {
                 val ours = errs.toMutableList()
                 val pending = errMarkers.toMutableList()
                 val hitMarkers = HashSet<Marker>()
+                val pairedCodes = HashMap<Marker, MutableSet<String>>()
                 fun pair(matches: (dev.ide.lang.dom.Diagnostic, Marker) -> Boolean) {
                     val itD = ours.iterator()
                     while (itD.hasNext()) {
                         val d = itD.next()
                         val m = pending.firstOrNull { matches(d, it) } ?: errMarkers.firstOrNull { it in hitMarkers && matches(d, it) }
-                        if (m != null) { itD.remove(); pending.remove(m); hitMarkers += m }
+                        if (m != null) {
+                            itD.remove(); pending.remove(m); hitMarkers += m
+                            d.code?.let { c -> pairedCodes.getOrPut(m) { HashSet() } += c }
+                        }
                     }
                 }
                 pair { d, m -> d.range.start - 1 <= m.end && m.start <= maxOf(d.range.end, d.range.start + 1) + 1 || lineOf(d.range.start) == lineOf(m.start) }
@@ -192,6 +199,10 @@ class KotlinCompilerTestDataSweepTest {
                     val hit = m in hitMarkers
                     val names = m.names.filter { severity[it] == "ERROR" }
                     names.forEach { (if (hit) hitByName else missByName).merge(it, 1, Int::plus) }
+                    if (hit) names.forEach { n ->
+                        if (pairedCodes[m].orEmpty().any { c -> KotlinSuppression.K2_NAMES[c]?.contains(n) == true }) exactHits++
+                        else out.append("INEXACT $n ${pairedCodes[m].orEmpty().joinToString(",")} ${case.path}:${lineOf(m.start) + 1}\n")
+                    }
                     if (!hit) out.append("MISS ${names.joinToString(",")} ${case.path}:${lineOf(m.start) + 1}\n    | ${src(m.start)}\n")
                 }
             }
@@ -208,6 +219,7 @@ class KotlinCompilerTestDataSweepTest {
             append("STRAY errors in FRONTEND files (no expected error on the line), by our code:\n${table(strayByCode)}\n")
             val h = hitByName.values.sum(); val mi = missByName.values.sum()
             append("RECALL on expected ERROR markers: $h / ${h + mi}\n")
+            append("EXACT-CODE RECALL (our paired error stands for that K2 name): $exactHits / ${h + mi}\n")
             append(recall.take(60).joinToString("\n") { (n, p) -> "  %5d missed %5d hit  %s".format(p.second, p.first, n) })
             append("\n")
         }
