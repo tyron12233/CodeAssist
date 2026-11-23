@@ -60,6 +60,9 @@ expect fun localHourOfDay(): Int
  */
 expect fun localMonthDay(): Int
 
+/** Today's local year, for the same date-windowed touches as [localMonthDay] (a season that spans the new year). */
+expect fun localYear(): Int
+
 /**
  * A calendar day given as `yyyy-MM-dd`, written the way the app's language writes dates: the weekday, month
  * and day, or with [short] only the abbreviated month and the day. Text that is not such a date comes back

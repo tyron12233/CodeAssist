@@ -35,6 +35,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import dev.ide.ui.holiday.HolidayLedger
+import dev.ide.ui.screens.advent.AdventCardStatus
+import dev.ide.ui.screens.advent.AdventHomeCard
+import dev.ide.ui.theme.LocalSeason
+import dev.ide.ui.theme.Season
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.VcsService
@@ -404,6 +411,20 @@ private fun AppRoute(
             inlayHintsEnabled = state.inlayHintsEnabled,
             onExit = app::exitChallenge,
             onSolved = app::refreshChallenges,
+        )
+
+        Screen.Advent -> dev.ide.ui.screens.advent.AdventScreen(
+            backend = backend,
+            ledger = app.holidayLedger,
+            schemes = app.colorSchemes,
+            onBack = app::exitAdvent,
+            onSolve = { date -> app.openChallenge(date) },
+            onOpenLesson = app::openTrack,
+            onOpenStore = {
+                app.exitAdvent()
+                app.selectHomeTab(HomeTab.Store)
+            },
+            onSchemeApplied = app::reloadColorScheme,
         )
 
         Screen.ChallengeBoard -> ChallengeBoardScreen(
@@ -900,7 +921,9 @@ private fun ProjectPickerRoute(
     val christmas = remember(app) { SeasonalDressUp(app, SeasonalOutfit.Christmas) }
     // At most one card. The season under way wins; failing that, a season that has ended and is still worn.
     val christmasMode = christmas.mode()
-    val halloweenMode = if (christmasMode == null) halloween.mode() else null
+    // The Advent calendar's card, all through the Christmas season (with Seasonal touches on).
+    val adventShown = LocalSeason.current == Season.Christmas
+    val halloweenMode = if (christmasMode == null && !adventShown) halloween.mode() else null
     // Store projects installed here that the store has a newer version of. Asked again when the project
     // list changes (an install, a delete), and memoised by the backend, so showing Home is not a network trip.
     val updates by produceState(emptyList<dev.ide.ui.backend.UiStoreUpdate>(), projects) {
@@ -909,16 +932,28 @@ private fun ProjectPickerRoute(
     ProjectsHomeScreen(
         updates = updates,
         onOpenUpdate = { app.openStoreItem(it.item) },
-        seasonalCard = christmasMode?.let { mode ->
+        seasonalCard = if (christmasMode != null || adventShown) {
             { cardModifier ->
-                ChristmasCard(
-                    mode = mode,
-                    onPrimary = if (mode == SeasonalCardMode.Offer) christmas::dressUp else christmas::putBack,
-                    onSecondary = if (mode == SeasonalCardMode.Applied) christmas::putBack else christmas::dismiss,
-                    modifier = cardModifier,
-                )
+                Column(cardModifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    christmasMode?.let { mode ->
+                        ChristmasCard(
+                            mode = mode,
+                            onPrimary = if (mode == SeasonalCardMode.Offer) christmas::dressUp else christmas::putBack,
+                            onSecondary = if (mode == SeasonalCardMode.Applied) christmas::putBack else christmas::dismiss,
+                        )
+                    }
+                    if (adventShown) {
+                        val ledger = app.holidayLedger
+                        AdventHomeCard(
+                            status = AdventCardStatus.of(ledger),
+                            ornaments = ledger.ornaments(),
+                            starLit = HolidayLedger.DOORS in ledger.opened(),
+                            onOpen = app::openAdvent,
+                        )
+                    }
+                }
             }
-        } ?: halloweenMode?.let { mode ->
+        } else halloweenMode?.let { mode ->
             { cardModifier ->
                 HalloweenCard(
                     mode = mode,

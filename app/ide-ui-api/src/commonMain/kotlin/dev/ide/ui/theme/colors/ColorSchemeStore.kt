@@ -32,11 +32,25 @@ class ColorSchemeStore(
         get(defKey(id))?.takeIf { it.isNotBlank() }?.let { ColorSchemeJson.decode(it, fallbackId = id) }
     }
 
-    /** Presets first, then the ones plugins ship, then the user's — the order the picker shows. */
-    fun all(): List<EditorColorScheme> = BuiltInColorSchemes.all + ContributedColorSchemes.all + userSchemes()
+    /** Presets first, then any keepsakes unlocked, then the ones plugins ship, then the user's — the order the
+     *  picker shows. */
+    fun all(): List<EditorColorScheme> =
+        BuiltInColorSchemes.all + unlockedKeepsakes() + ContributedColorSchemes.all + userSchemes()
 
+    /** The keepsake schemes (see [BuiltInColorSchemes.keepsakes]) this user has unlocked, in unlock order. */
+    fun unlockedKeepsakes(): List<EditorColorScheme> = keepsakeIds().mapNotNull { BuiltInColorSchemes.keepsake(it) }
+
+    /** Add the keepsake [id] to the picker for good. Unknown ids and repeats are ignored. */
+    fun unlockKeepsake(id: String) {
+        if (BuiltInColorSchemes.keepsake(id) == null) return
+        val ids = keepsakeIds()
+        if (id !in ids) set(KEEPSAKES_KEY, (ids + id).joinToString(","))
+    }
+
+    // A keepsake resolves whether or not it is listed: it can only have become active by being unlocked, and
+    // an active id must never fall back to the default because a preference was lost.
     fun byId(id: String): EditorColorScheme? =
-        BuiltInColorSchemes.byId(id) ?: ContributedColorSchemes.byId(id) ?: get(defKey(id))
+        BuiltInColorSchemes.byId(id) ?: BuiltInColorSchemes.keepsake(id) ?: ContributedColorSchemes.byId(id) ?: get(defKey(id))
             ?.takeIf { it.isNotBlank() }
             ?.let { ColorSchemeJson.decode(it, fallbackId = id) }
 
@@ -107,7 +121,10 @@ class ColorSchemeStore(
 
     /** A preset or a plugin's scheme: listed, never stored, never deleted. */
     private fun isReadOnly(id: String): Boolean =
-        BuiltInColorSchemes.byId(id) != null || ContributedColorSchemes.byId(id) != null
+        BuiltInColorSchemes.byId(id) != null || BuiltInColorSchemes.keepsake(id) != null || ContributedColorSchemes.byId(id) != null
+
+    private fun keepsakeIds(): List<String> =
+        get(KEEPSAKES_KEY)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
 
     private fun ids(): List<String> =
         get(IDS_KEY)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
@@ -118,5 +135,6 @@ class ColorSchemeStore(
         const val ACTIVE_KEY = "colorScheme.active"
         const val IDS_KEY = "colorScheme.ids"
         const val DEF_PREFIX = "colorScheme.def."
+        const val KEEPSAKES_KEY = "colorScheme.keepsakes"
     }
 }

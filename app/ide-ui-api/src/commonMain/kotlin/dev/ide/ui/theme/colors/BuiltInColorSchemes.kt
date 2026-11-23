@@ -229,6 +229,91 @@ object BuiltInColorSchemes {
 
     fun byId(id: String): EditorColorScheme? = all.firstOrNull { it.id == id }
 
+    // ---- keepsakes: the schemes an Advent calendar door gives away ----
+    //
+    // Presets like the rest (code, read-only), but not in [all]: a keepsake is listed only once its door has
+    // been opened, which [ColorSchemeStore] decides from the unlocked ids it stores. Once unlocked one stays,
+    // season or not; it was a present.
+
+    /** Ice-blue keywords, mint strings and lilac numbers on a frosted night. */
+    val FROSTED_GLASS = EditorColorScheme(
+        id = "frosted-glass", name = "Frosted Glass", builtIn = true,
+        dark = variant(
+            background = 0xFF101820, caret = 0xFFBFE3F2, selection = 0xFF24384A, currentLine = 0xFF15202A,
+            gutter = 0xFF4E6272, gutterCurrent = 0xFFC4D8E6, gutterBorder = 0xFF1A2733,
+            text = 0xFFD8E6EF, keyword = 0xFF8CC8F0, string = 0xFFB8E0D2, number = 0xFFE0C8F5,
+            comment = 0xFF62788A, annotation = 0xFFA8C0F0, function = 0xFFF0F6FA, type = 0xFF9FD8E8,
+            property = 0xFFB4CFE0, variable = 0xFFD8E6EF, constant = 0xFFE0C8F5, punctuation = 0xFF8FA4B4,
+            label = 0xFFA8C0F0,
+            composable = 0xFFB8E0D2, extension = 0xFFF0F6FA, suspendFn = 0xFFA8C0F0, mutableVar = 0xFFD8E6EF,
+            docComment = 0xFF71889A,
+        ),
+        light = variant(
+            background = 0xFFF5F9FC, caret = 0xFF2A6E9A, selection = 0xFFD3E5F2, currentLine = 0xFFEAF2F8,
+            gutter = 0xFF9AAAB8, gutterCurrent = 0xFF33485A, gutterBorder = 0xFFDCE6EE,
+            text = 0xFF1F2B36, keyword = 0xFF1E6A9E, string = 0xFF2F7A68, number = 0xFF7A4FB0,
+            comment = 0xFF8395A4, annotation = 0xFF3E5CA8, function = 0xFF15212B, type = 0xFF16707F,
+            property = 0xFF3A6078, variable = 0xFF1F2B36, constant = 0xFF7A4FB0, punctuation = 0xFF55687A,
+            label = 0xFF3E5CA8,
+            composable = 0xFF2F7A68, extension = 0xFF15212B, suspendFn = 0xFF3E5CA8, mutableVar = 0xFF1F2B36,
+            docComment = 0xFF7A8C9B,
+        ),
+    )
+
+    /** Ginger keywords, gumdrop strings and candy-cane numbers on warm baked brown, with icing for text. */
+    val GINGERBREAD = EditorColorScheme(
+        id = "gingerbread", name = "Gingerbread", builtIn = true,
+        dark = variant(
+            background = 0xFF1E1712, caret = 0xFFF5E6C8, selection = 0xFF4A3526, currentLine = 0xFF261D17,
+            gutter = 0xFF75604E, gutterCurrent = 0xFFE8D3B5, gutterBorder = 0xFF2D231B,
+            text = 0xFFF0E2CC, keyword = 0xFFE59A5C, keywordBold = true, string = 0xFFA8C97F,
+            number = 0xFFF07F86, comment = 0xFF8A7563, annotation = 0xFFF5C77E, function = 0xFFF5E6C8,
+            type = 0xFFD9B38C, property = 0xFFE0B894, variable = 0xFFF0E2CC, constant = 0xFFF07F86,
+            punctuation = 0xFFB8A08A, label = 0xFFF5C77E,
+            composable = 0xFFA8C97F, extension = 0xFFF5E6C8, suspendFn = 0xFFD9B38C, mutableVar = 0xFFF0E2CC,
+            docComment = 0xFF9C8673,
+        ),
+        light = variant(
+            background = 0xFFFCF5EA, caret = 0xFF8A4B1E, selection = 0xFFF0DCC2, currentLine = 0xFFF6EBDC,
+            gutter = 0xFFB5A08A, gutterCurrent = 0xFF5A3D28, gutterBorder = 0xFFEEE0CC,
+            text = 0xFF33251B, keyword = 0xFFA1501A, keywordBold = true, string = 0xFF4F7A22,
+            number = 0xFFB8323F, comment = 0xFFA08C78, annotation = 0xFF9A6400, function = 0xFF5A2E10,
+            type = 0xFF8A5A2E, property = 0xFF8A4A26, variable = 0xFF33251B, constant = 0xFFB8323F,
+            punctuation = 0xFF6A5444, label = 0xFF9A6400,
+            composable = 0xFF4F7A22, extension = 0xFF5A2E10, suspendFn = 0xFF8A5A2E, mutableVar = 0xFF33251B,
+            docComment = 0xFF8E7A68,
+        ),
+    )
+
+    /** Aurora-green keywords, violet strings and pink numbers across a polar night. */
+    val NORTHERN_LIGHTS = EditorColorScheme(
+        id = "northern-lights", name = "Northern Lights", builtIn = true,
+        dark = variant(
+            background = 0xFF0E1220, caret = 0xFF7CF2C4, selection = 0xFF243150, currentLine = 0xFF141A2B,
+            gutter = 0xFF4D587A, gutterCurrent = 0xFFC4CCE8, gutterBorder = 0xFF1A2135,
+            text = 0xFFDCE2F2, keyword = 0xFF7CF2C4, string = 0xFFB79CFF, number = 0xFFFF9EC7,
+            comment = 0xFF5D6888, annotation = 0xFF6FD3F2, function = 0xFFE9F4FF, type = 0xFF6FD3F2,
+            property = 0xFFA9C2F0, variable = 0xFFDCE2F2, constant = 0xFFFF9EC7, punctuation = 0xFF8A94B4,
+            label = 0xFF6FD3F2,
+            composable = 0xFF7CF2C4, extension = 0xFFE9F4FF, suspendFn = 0xFFB79CFF, mutableVar = 0xFFDCE2F2,
+            docComment = 0xFF6C7798,
+        ),
+        light = variant(
+            background = 0xFFF6F7FC, caret = 0xFF0E8A63, selection = 0xFFD9DEF5, currentLine = 0xFFECEFF8,
+            gutter = 0xFF9AA2BE, gutterCurrent = 0xFF2F3754, gutterBorder = 0xFFDDE1EF,
+            text = 0xFF1C2238, keyword = 0xFF0E7A58, string = 0xFF6A3FC8, number = 0xFFB8326E,
+            comment = 0xFF8790AE, annotation = 0xFF0A6F96, function = 0xFF141A30, type = 0xFF0A6F96,
+            property = 0xFF3D5590, variable = 0xFF1C2238, constant = 0xFFB8326E, punctuation = 0xFF586080,
+            label = 0xFF0A6F96,
+            composable = 0xFF0E7A58, extension = 0xFF141A30, suspendFn = 0xFF6A3FC8, mutableVar = 0xFF1C2238,
+            docComment = 0xFF7B84A2,
+        ),
+    )
+
+    val keepsakes: List<EditorColorScheme> = listOf(FROSTED_GLASS, GINGERBREAD, NORTHERN_LIGHTS)
+
+    fun keepsake(id: String): EditorColorScheme? = keepsakes.firstOrNull { it.id == id }
+
     /**
      * One preset variant, written as the handful of anchors a palette actually names.
      *

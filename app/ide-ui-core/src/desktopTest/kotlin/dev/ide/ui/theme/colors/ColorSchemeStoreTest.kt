@@ -27,6 +27,24 @@ class ColorSchemeStoreTest {
 
     private fun store(prefs: FakePreferences = FakePreferences()) = ColorSchemeStore(prefs::get, prefs::set)
 
+    @Test
+    fun aKeepsakeIsListedOnlyOnceUnlockedAndCannotBeOverwritten() {
+        val prefs = FakePreferences()
+        val store = store(prefs)
+        val id = BuiltInColorSchemes.GINGERBREAD.id
+        kotlin.test.assertTrue(store.all().none { it.id == id })
+        store.unlockKeepsake(id)
+        store.unlockKeepsake(id)
+        store.unlockKeepsake("no-such-keepsake")
+        kotlin.test.assertEquals(listOf(id), store.unlockedKeepsakes().map { it.id })
+        kotlin.test.assertEquals(1, store.all().count { it.id == id })
+        store.setActiveId(id)
+        kotlin.test.assertEquals(id, store.activeId())
+        // A keepsake is a preset: saving over it is refused.
+        store.save(BuiltInColorSchemes.GINGERBREAD.copy(name = "Mine"))
+        kotlin.test.assertEquals("Gingerbread", store.byId(id)?.name)
+    }
+
     private val sample = EditorColorScheme(
         id = "midnight",
         name = "Midnight",

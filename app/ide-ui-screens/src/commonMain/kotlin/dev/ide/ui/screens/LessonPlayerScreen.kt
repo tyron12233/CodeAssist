@@ -302,6 +302,7 @@ private fun InteractiveStep(
     // lesson buffer gets real completion + diagnostics rather than the (unrelated) open project's.
     val editorBackend = remember(backend, step.language) { LessonEditorBackend(backend, step.language) }
     val scope = rememberCoroutineScope()
+    val holiday = dev.ide.ui.holiday.LocalHolidayLedger.current
     var result by remember(step.id) { mutableStateOf<UiExerciseResult?>(null) }
     var running by remember(step.id) { mutableStateOf(false) }
     var hintsShown by remember(step.id) { mutableStateOf(0) }
@@ -424,7 +425,10 @@ private fun InteractiveStep(
                             .getOrElse { UiExerciseResult(passed = false, compiled = false, message = it.message ?: checkFailedMsg) }
                         result = r
                         running = false
-                        if (r.passed) onSolved()
+                        if (r.passed) {
+                            onSolved()
+                            holiday?.record(dev.ide.ui.holiday.HolidayActivity.Lesson)
+                        }
                     }
                 }
             }

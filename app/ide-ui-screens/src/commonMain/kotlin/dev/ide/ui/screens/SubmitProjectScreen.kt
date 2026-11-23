@@ -162,6 +162,7 @@ fun SubmitProjectScreen(
     // Keyed on the project: a different project's icon must not be left attached to this submission.
     var icon by remember(chosen?.rootPath) { mutableStateOf<ByteArray?>(null) }
     var sending by remember { mutableStateOf(false) }
+    val holiday = dev.ide.ui.holiday.LocalHolidayLedger.current
     var message by remember { mutableStateOf<String?>(null) }
     // What went wrong with the SEND, shown next to the button that was pressed. It used to share [message],
     // which is drawn at the top of the form: a publisher at the bottom tapping Submit saw nothing happen,
@@ -608,6 +609,7 @@ fun SubmitProjectScreen(
             return@LaunchedEffect
         }
         message = result.message
+        holiday?.record(dev.ide.ui.holiday.HolidayActivity.Publish)
         // The decision arrives days later, with the app closed, as a notification. Until now the only
         // thing that ever asked for the permission was the first build, so a publisher who had never
         // built could not be told the answer to the one question they were waiting on. Asked here

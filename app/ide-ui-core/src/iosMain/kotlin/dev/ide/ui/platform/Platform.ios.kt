@@ -6,6 +6,7 @@ import platform.Foundation.NSCalendar
 import platform.Foundation.NSCalendarUnitDay
 import platform.Foundation.NSCalendarUnitHour
 import platform.Foundation.NSCalendarUnitMonth
+import platform.Foundation.NSCalendarUnitYear
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateFormatter
 import platform.Foundation.NSLocale
@@ -41,6 +42,9 @@ actual fun localMonthDay(): Int {
     return calendar.component(NSCalendarUnitMonth, fromDate = now).toInt() * 100 +
         calendar.component(NSCalendarUnitDay, fromDate = now).toInt()
 }
+
+actual fun localYear(): Int =
+    NSCalendar.currentCalendar.component(NSCalendarUnitYear, fromDate = NSDate()).toInt()
 
 actual fun formatIsoDay(isoDate: String, short: Boolean): String {
     // Parsed and printed in UTC so the day cannot shift with the device's zone.

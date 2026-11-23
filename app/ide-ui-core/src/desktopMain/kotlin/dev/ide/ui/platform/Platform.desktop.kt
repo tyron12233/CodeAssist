@@ -20,6 +20,8 @@ actual fun localHourOfDay(): Int = java.time.LocalTime.now().hour
 
 actual fun localMonthDay(): Int = java.time.LocalDate.now().let { it.monthValue * 100 + it.dayOfMonth }
 
+actual fun localYear(): Int = java.time.LocalDate.now().year
+
 actual fun formatIsoDay(isoDate: String, short: Boolean): String {
     val date = try {
         java.time.LocalDate.parse(isoDate)

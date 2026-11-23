@@ -163,6 +163,7 @@ private fun Solver(
     }
 
     val scope = rememberCoroutineScope()
+    val holiday = dev.ide.ui.holiday.LocalHolidayLedger.current
     var localRun by remember(problem.id) { mutableStateOf<UiLocalRun?>(null) }
     var running by remember(problem.id) { mutableStateOf(false) }
     var submitting by remember(problem.id) { mutableStateOf(false) }
@@ -248,7 +249,10 @@ private fun Solver(
                     }.getOrElse { UiChallengeVerdict(error = it.message ?: "The judge could not be reached.") }
                     submitting = false
                     verdict = result
-                    if (result.accepted) onSolved()
+                    if (result.accepted) {
+                        onSolved()
+                        holiday?.record(dev.ide.ui.holiday.HolidayActivity.Challenge)
+                    }
                 }
             },
         )

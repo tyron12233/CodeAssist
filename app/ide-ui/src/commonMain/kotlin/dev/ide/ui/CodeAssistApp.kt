@@ -192,6 +192,7 @@ fun CodeAssistApp(
             CompositionLocalProvider(
                 dev.ide.ui.screens.LocalBackendText provides backendText,
                 LocalSeason provides season,
+                dev.ide.ui.holiday.LocalHolidayLedger provides app.holidayLedger,
                 LocalAds provides app.adController,
                 LocalHostFileActions provides fileActions,
                 LocalPluginNavigator provides app::openPluginScreen,
@@ -240,6 +241,8 @@ fun CodeAssistApp(
                                 HalloweenBuildFx(backend = backend)
                                 // Snow and a star on success, frost on failure, gold when a program starts.
                                 ChristmasBuildFx(backend = backend)
+                                // The first successful build of each day hangs an ornament on the tree.
+                                if (season == Season.Christmas) HolidayBuildRecorder(backend, app.holidayLedger)
                             }
                         }
                         AppOverlays(

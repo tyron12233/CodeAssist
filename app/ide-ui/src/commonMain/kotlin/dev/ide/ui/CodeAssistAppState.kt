@@ -1146,6 +1146,31 @@ class CodeAssistAppState(
         screen = Screen.ChallengeBoard
     }
 
+    // ---- Christmas ----
+
+    /**
+     * The Advent calendar and the tree. Its "today" is the device's local date unless a developer has pinned one
+     * with the `seasonal.forceDate` preference (`yyyyMMdd`), which, with `seasonal.force`, shows the season and
+     * its doors on any day of the year.
+     */
+    val holidayLedger: dev.ide.ui.holiday.HolidayLedger = dev.ide.ui.holiday.HolidayLedger(
+        get = { backend.settings.preference(it) },
+        set = { k, v -> backend.settings.setPreference(k, v) },
+        today = {
+            backend.settings.preference(SEASON_DATE_OVERRIDE_KEY)?.trim()?.toIntOrNull()
+                ?: (dev.ide.ui.platform.localYear() * 10_000 + dev.ide.ui.platform.localMonthDay())
+        },
+    )
+
+    fun openAdvent() {
+        screen = Screen.Advent
+    }
+
+    /** Back from the calendar, to Home where it was opened. */
+    fun exitAdvent() {
+        screen = Screen.Projects
+    }
+
     fun exitChallengeBoard() {
         screen = Screen.Projects
         homeTab = HomeTab.Challenges
@@ -1517,6 +1542,7 @@ class CodeAssistAppState(
 
             screen == Screen.ChallengePlayer -> exitChallenge()
             screen == Screen.ChallengeBoard -> exitChallengeBoard()
+            screen == Screen.Advent -> exitAdvent()
 
             screen == Screen.CreateProject -> screen = Screen.Projects
             screen == Screen.ImportProject -> cancelImportPreview()
@@ -1533,6 +1559,9 @@ class CodeAssistAppState(
 
 /** The developer preference that pins a season (see [CodeAssistAppState.calendarSeason]). */
 internal const val SEASON_OVERRIDE_KEY = "seasonal.force"
+
+/** The developer preference that pins the holiday calendar's date (see [CodeAssistAppState.holidayLedger]). */
+internal const val SEASON_DATE_OVERRIDE_KEY = "seasonal.forceDate"
 
 /**
  * Creates (and remembers) the [CodeAssistAppState] for this composition, tied to a scope that is cancelled

@@ -134,6 +134,7 @@ fun LessonBanner(
     val step = state.step
     val ads = rememberAds()
     val scope = rememberCoroutineScope()
+    val holiday = dev.ide.ui.holiday.LocalHolidayLedger.current
     val c = MaterialTheme.colorScheme
 
     var collapsed by remember { mutableStateOf(false) }
@@ -183,7 +184,10 @@ fun LessonBanner(
                 .getOrElse { UiExerciseResult(passed = false, compiled = false, message = it.message ?: checkFailedMsg) }
             result = r
             running = false
-            if (r.passed) state.allowAdvance(true)
+            if (r.passed) {
+                state.allowAdvance(true)
+                holiday?.record(dev.ide.ui.holiday.HolidayActivity.Lesson)
+            }
             // A result is worth reading: unfold the banner to show it.
             collapsed = false
         }
