@@ -509,6 +509,12 @@ internal fun KotlinResolver.inferBranchUnion(branches: List<KtExpression?>): Kot
                 if (lambda.valueParameters.isEmpty()) shape
                 else (inferLambdaResult(lambda) as? KotlinType)?.let { r -> service.typeByFqn(shape.qualifiedName, shape.typeArguments.dropLast(1) + r) } ?: shape
             } else inferType(e)) ?: return null // an unknown branch → can't confidently unify
+        // So is one typed by a class nothing declares, or by a type variable of some callee that inference left
+        // open (`pending[j]` on an unresolved `ArrayList<E>`): joining it would make `Any` of what is not known.
+        // (A function type is known by its shape: `kotlin.FunctionN` is synthetic, not declared.)
+        if (if (t.isTypeParameter) !isTypeParameterInScope(t.qualifiedName, e.textRange.startOffset)
+            else !service.isKnownType(canonicalTypeForCheck(t).qualifiedName) &&
+                !dev.ide.lang.kotlin.symbols.TypeRendering.isFunctionType(t.qualifiedName)) return null
         // A branch that never completes (`throw`, `return`, `TODO()`) adds nothing to the result.
         if (t.qualifiedName == "kotlin.Nothing" && !t.nullable) continue
         if (e is KtConstantExpression || (e is dev.ide.kotlin.syntax.psi.KtPrefixExpression && e.baseExpression is KtConstantExpression)) literal = true

@@ -2743,6 +2743,20 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), errors(receiverBound).map { it.code }, "for `$receiverBound`")
     }
 
+    /** `T?` stays nullable whatever `T` is bound to, so a call declaring a nullable result is nullable at the call site
+     *  (`nul(1)` for `fun <T> nul(x: T): T?`, `l.first()` on a `List<String?>`, `m.get(k)`); and `a?.b == x` being
+     *  true, with `x` non-null, makes `a` non-null. */
+    @Test
+    fun nullableResultThroughSubstitution() {
+        val bad = "fun <T> nul(x: T): T? = null\nfun t(l: List<String?>, m: Map<String, Int>) {\n" +
+            "    val a: Int = nul(1)\n    val e: String = l.first()\n    val g: Int = m.get(\"a\")\n}"
+        assertEquals(List(3) { KotlinDiagnosticCodes.TYPE_MISMATCH }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = "object Tok { val ID = Any() }\nclass T(val type: Any, val text: String)\n" +
+            "fun f(toks: List<T>, i: Int): String {\n    val nameTok = toks.getOrNull(i + 1)\n" +
+            "    if (nameTok?.type == Tok.ID) return nameTok.text\n    val a: Int = listOf(1).first()\n    return \"\"\n}"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     private fun codes(code: String): List<String?> = errors(code).map { it.code }
 
     private fun clean(code: String) {

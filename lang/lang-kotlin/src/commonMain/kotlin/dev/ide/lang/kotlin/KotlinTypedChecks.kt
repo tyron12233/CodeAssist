@@ -325,6 +325,18 @@ internal fun KotlinSemanticChecks.isMapRead(e: KtArrayAccessExpression, resolver
     return canonicalName(bt).let { it == "kotlin.collections.Map" || it == "kotlin.collections.MutableMap" }
 }
 
+/** Whether every function [call] can resolve to is a Kotlin declaration whose written return type is nullable. A
+ *  Java method's nullability comes from annotations the model reads differently, and a result nullable only
+ *  through an inferred type argument is inference's opinion; neither is taken. */
+private fun KotlinSemanticChecks.declaresNullableResult(call: KtCallExpression, resolver: KotlinResolver): Boolean {
+    val targets = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+    if (targets.isEmpty()) return false
+    return targets.all { sym ->
+        sym.kind == SymbolKind.METHOD && (sym.type as? KotlinType)?.nullable == true &&
+            sym.declaringClassFqn?.let { service.isJavaType(it) } != true
+    }
+}
+
 /** Whether [value]'s nullable type can be trusted: no guard this model cannot follow stands in front of it. */
 internal fun KotlinSemanticChecks.reliablyNullable(value: KtExpression, resolver: KotlinResolver): Boolean {
     return when (val e = unwrapParen(value)) {
@@ -334,6 +346,10 @@ internal fun KotlinSemanticChecks.reliablyNullable(value: KtExpression, resolver
             resolver.inferType(receiver)?.nullable == true && reliablyNullable(receiver, resolver)
         }
         is KtBinaryExpressionWithTypeRHS -> e.operationReference.text.trim() == "as?"
+        // A call's result is never smart cast: a return type its callee writes nullable (`fun f(): T?`, `Map.get`)
+        // is the type of the value.
+        is KtCallExpression -> declaresNullableResult(e, resolver)
+        is KtDotQualifiedExpression -> (e.selectorExpression as? KtCallExpression)?.let { declaresNullableResult(it, resolver) } == true
         is KtArrayAccessExpression -> {
             // `map[key]` on a real Map. Anything else with a nullable `get` may be a user operator.
             isMapRead(e, resolver) &&

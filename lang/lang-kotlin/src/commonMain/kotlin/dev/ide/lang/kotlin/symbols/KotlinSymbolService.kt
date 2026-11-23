@@ -3593,6 +3593,8 @@ class KotlinSymbolService(
             var bound = bindings[kt.qualifiedName] ?: return kt
             // `T & Any` keeps its non-null half through the substitution: `String?` for `T` is `String` there.
             if (kt.definitelyNonNull) (bound as? KotlinType)?.let { bound = it.definitelyNotNull() }
+            // `T?` stays nullable whatever `T` is: `T?` with `T = Int` is `Int?`.
+            else if (kt.nullable) (bound as? KotlinType)?.takeIf { !it.nullable }?.let { bound = it.withNullable(true) }
             return if (kt.projection.isEmpty()) bound else (bound as? KotlinType)?.withProjection(kt.projection)
                 ?: bound
         }

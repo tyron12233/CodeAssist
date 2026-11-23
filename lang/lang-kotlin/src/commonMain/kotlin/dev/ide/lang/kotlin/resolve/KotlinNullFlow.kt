@@ -1358,7 +1358,19 @@ private fun KotlinResolver.equalsNonNull(binary: KtBinaryExpression, g: Goal): B
     val (lit, other) = when {
         isNonNullLiteral(r) -> r to l
         isNonNullLiteral(l) -> l to r
-        else -> return false
+        // `a?.b == X.Y` with a non-null `X.Y`: equal to a non-null value, the left is not null either. A comparand
+        // whose type is not known at all (its library is not on the path) is not taken for a nullable one: what
+        // is wrong there is the unresolved name, which is reported as such.
+        else -> {
+            if (!g.deep) return false
+            fun nonNull(e: KtExpression?): Boolean {
+                if (e == null || (stripAll(e) as? KtConstantExpression)?.text == "null") return false
+                val t = inferType(e) ?: return true
+                if (!t.isTypeParameter && !service.isKnownType(canonicalTypeForCheck(t).qualifiedName)) return true
+                return !t.nullable && !t.isTypeParameter && t.qualifiedName != "kotlin.Nothing"
+            }
+            return (nonNull(r) && valueProves(l, g)) || (nonNull(l) && valueProves(r, g))
+        }
     }
     if (valueProves(other, g)) return true
     return when (lit?.text) {
