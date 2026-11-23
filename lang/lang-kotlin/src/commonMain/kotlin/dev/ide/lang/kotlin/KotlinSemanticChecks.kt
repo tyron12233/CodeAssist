@@ -310,6 +310,15 @@ internal class KotlinSemanticChecks(
         KotlinChecker(dev.ide.kotlin.syntax.psi.KtModifierList::class) { psi ->
             KotlinPerf.span("sem.annotations") { reportAll(KotlinModifierChecks.repeatedAnnotations(psi as dev.ide.kotlin.syntax.psi.KtModifierList)) }
         },
+        KotlinChecker(KtProperty::class) { psi ->
+            if (!(psi as KtProperty).isLocal) reportAll(KotlinModifierChecks.propertyRepeatedAnnotations(psi))
+        },
+        KotlinChecker(dev.ide.kotlin.syntax.psi.KtParameter::class) { psi ->
+            psi as dev.ide.kotlin.syntax.psi.KtParameter
+            if (psi.hasValOrVar() && psi.parent?.parent is dev.ide.kotlin.syntax.psi.KtPrimaryConstructor) {
+                reportAll(KotlinModifierChecks.propertyRepeatedAnnotations(psi))
+            }
+        },
         KotlinChecker(KtFunctionLiteral::class) { psi ->
             KotlinPerf.span("sem.lambda") { reportAll(unusedLambdaParameters(psi as KtFunctionLiteral)) }
         },

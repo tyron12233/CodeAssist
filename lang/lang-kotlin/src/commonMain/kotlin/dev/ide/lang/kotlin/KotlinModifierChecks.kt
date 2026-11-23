@@ -508,6 +508,9 @@ internal object KotlinModifierChecks {
      * and is not `@Repeatable`. Entries with the same text are already reported as repeated modifiers.
      */
     fun repeatedAnnotations(list: dev.ide.kotlin.syntax.psi.KtModifierList): List<Diagnostic> {
+        // A property's annotations, its accessors' and its setter parameter's are judged together by
+        // [propertyRepeatedAnnotations], by the element each one lands on.
+        if (propertyAnnotationOwner(list) != null) return emptyList()
         val entries = list.annotationEntries
         if (entries.size < 2) return emptyList()
         val file = list.containingFile
@@ -521,6 +524,80 @@ internal object KotlinModifierChecks {
                 out += diag(e, "This annotation is not repeatable", KotlinDiagnosticCodes.DECLARATION_SHAPE)
             }
             earlier += e
+        }
+        return out
+    }
+
+    /** The property (or primary-constructor property) whose annotation sites [list] is one of, or null. */
+    private fun propertyAnnotationOwner(list: dev.ide.kotlin.syntax.psi.KtModifierList): KtElement? {
+        return when (val owner = list.parent) {
+            is dev.ide.kotlin.syntax.psi.KtProperty -> owner.takeIf { !it.isLocal }
+            is dev.ide.kotlin.syntax.psi.KtPropertyAccessor -> owner.parent as? dev.ide.kotlin.syntax.psi.KtProperty
+            is dev.ide.kotlin.syntax.psi.KtParameter -> when {
+                owner.hasValOrVar() && owner.parent?.parent is dev.ide.kotlin.syntax.psi.KtPrimaryConstructor -> owner
+                (owner.parent?.parent as? dev.ide.kotlin.syntax.psi.KtPropertyAccessor)?.isSetter == true ->
+                    owner.parent?.parent?.parent as? dev.ide.kotlin.syntax.psi.KtProperty
+                else -> null
+            }
+            else -> null
+        }
+    }
+
+    private enum class Site { PARAM, PROPERTY, FIELD, GETTER, SETTER, SETTER_PARAM, DELEGATE, RECEIVER }
+
+    /**
+     * REPEATED_ANNOTATION across the elements a property's annotations land on, as K2 places them: `@get:A` on
+     * the property and `@A` on its getter are one getter's two annotations, and an unprefixed `@A` goes to the
+     * constructor parameter of a primary-constructor property, else the property, else the field, by what `A`'s
+     * targets allow. For an accessor the property's prefixed annotations come first; for the setter parameter its
+     * own do (the later ones are reported). Judged for this file's own non-repeatable annotation classes.
+     */
+    fun propertyRepeatedAnnotations(owner: KtElement): List<Diagnostic> {
+        val file = owner.containingFile as? KtFile ?: return emptyList()
+        val ctorParam = owner as? dev.ide.kotlin.syntax.psi.KtParameter
+        val prop = owner as? dev.ide.kotlin.syntax.psi.KtProperty
+        val ownEntries = (ctorParam?.modifierList ?: prop?.modifierList)?.annotationEntries.orEmpty()
+        val getter = prop?.getter
+        val setter = prop?.setter
+        val setterParam = setter?.valueParameters?.firstOrNull()
+        val bySite = LinkedHashMap<Site, MutableList<dev.ide.kotlin.syntax.psi.KtAnnotationEntry>>()
+        fun add(site: Site, e: dev.ide.kotlin.syntax.psi.KtAnnotationEntry) { bySite.getOrPut(site) { ArrayList() } += e }
+        fun siteOf(e: dev.ide.kotlin.syntax.psi.KtAnnotationEntry): Site? = when (e.useSiteTarget?.trim()) {
+            "param" -> Site.PARAM; "property" -> Site.PROPERTY; "field" -> Site.FIELD; "get" -> Site.GETTER
+            "set" -> Site.SETTER; "setparam" -> Site.SETTER_PARAM; "delegate" -> Site.DELEGATE; "receiver" -> Site.RECEIVER
+            null, "" -> {
+                val targets = allowedTargetsOf(e, file)
+                when {
+                    targets == null -> null
+                    ctorParam != null && T.VALUE_PARAMETER in targets -> Site.PARAM
+                    T.PROPERTY in targets -> Site.PROPERTY
+                    T.FIELD in targets -> Site.FIELD
+                    else -> null
+                }
+            }
+            else -> null
+        }
+        val propertySites = ownEntries.map { it to siteOf(it) }
+        // Setter parameter: its own annotations, then the property's `@setparam:` ones.
+        setterParam?.modifierList?.annotationEntries.orEmpty().forEach { add(Site.SETTER_PARAM, it) }
+        for ((e, site) in propertySites) if (site != null && site != Site.GETTER && site != Site.SETTER) add(site, e)
+        // Accessors: the property's `@get:`/`@set:` ones, then the accessor's own.
+        for ((e, site) in propertySites) if (site == Site.GETTER || site == Site.SETTER) add(site, e)
+        getter?.modifierList?.annotationEntries.orEmpty().forEach { add(Site.GETTER, it) }
+        setter?.modifierList?.annotationEntries.orEmpty().forEach { add(Site.SETTER, it) }
+        val out = ArrayList<Diagnostic>()
+        for ((_, entries) in bySite) {
+            val seen = HashMap<String, MutableList<dev.ide.kotlin.syntax.psi.KtAnnotationEntry>>()
+            for (e in entries) {
+                val name = e.typeReference?.text ?: continue
+                val earlier = seen.getOrPut(name) { ArrayList() }
+                // The very same text twice in one list is reported as a repeated modifier instead.
+                val sameTextSameList = earlier.any { it.parent === e.parent && it.text.trim() == e.text.trim() }
+                if (earlier.isNotEmpty() && !sameTextSameList && isNonRepeatableOwnAnnotation(e, file)) {
+                    out += diag(e, "This annotation is not repeatable", KotlinDiagnosticCodes.DECLARATION_SHAPE)
+                }
+                earlier += e
+            }
         }
         return out
     }

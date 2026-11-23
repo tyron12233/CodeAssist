@@ -2073,6 +2073,18 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** A non-repeatable annotation is judged per element it lands on: `@get:Ann` on a property and `@Ann` on its getter
+     *  are one getter's two, and an unprefixed `@Ann` on a constructor property is its parameter's. */
+    @Test
+    fun repeatedAnnotationAcrossUseSiteTargets() {
+        val bad = "annotation class Ann(val x: Int = 0)\n@get:Ann(10)\nval a: String\n    @Ann(20) get() = \"\"\n" +
+            "class A(@param:Ann @Ann val x: Int) { @Ann @field:Ann @property:Ann val b: Int = 0 }"
+        assertEquals(List(3) { KotlinDiagnosticCodes.DECLARATION_SHAPE }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = "annotation class Ann(val x: Int = 0)\n@get:Ann(10)\nval a: String get() = \"\"\n" +
+            "class A(@param:Ann @property:Ann val x: Int) { @Ann @field:Ann val b: Int = 0 }"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** A bound that names another type parameter (`T : Element<K>`) is judged with the written argument put in:
      *  `Container<Alpha, BetaKey>` where `Alpha : Element<AlphaKey>`; one naming a type parameter is not. */
     @Test
