@@ -12,6 +12,10 @@ dependencies {
     // bundles org.ow2.asm itself — so bundling our own copies would clash. Keep the versions aligned with
     // `agp` / `asm` in gradle/libs.versions.toml.
     compileOnly("com.android.tools.build:gradle-api:9.2.1")
+    // AGP's own APK signer, on its classpath at build time: re-signs the APK after the toolchain dex is added.
+    compileOnly("com.android.tools.build:apksig:9.2.1")
+    // AGP's archive editor, also on its classpath: adds the toolchain dex to the APK the way AGP packages dex.
+    compileOnly("com.android:zipflinger:9.2.1")
     compileOnly("org.ow2.asm:asm:9.7")
     compileOnly("org.ow2.asm:asm-commons:9.7")
     compileOnly("org.ow2.asm:asm-tree:9.7") // ClassNode/MethodNode — body-replacement passes
@@ -41,6 +45,10 @@ gradlePlugin {
         create("kotlincArt") {
             id = "dev.ide.kotlinc-art"
             implementationClass = "dev.ide.build.kotlinc.KotlincArtPlugin"
+        }
+        create("toolchainSplit") {
+            id = "dev.ide.toolchain-split"
+            implementationClass = "dev.ide.build.split.ToolchainSplitPlugin"
         }
     }
 }

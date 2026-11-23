@@ -12,6 +12,27 @@ pluginManagement {
 }
 plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+    // Build-wide AGP settings; used here only for how R8 runs (below). Same version as AGP in libs.versions.toml.
+    id("com.android.settings") version "9.2.1"
+}
+
+// R8 runs in its own JVM with its own heap, so the Gradle daemon keeps its 3 GB (gradle.properties) and the
+// extra memory exists only while a minified build shrinks. 5 GB holds R8 with the toolchain outside its
+// input (dev.ide.toolchain-split): measured 154s, 11% of it GC, peak 4.7 GB. The root build script turns
+// horizontal class merging off with a system property of the daemon, which a separate JVM never sees, so
+// it is passed again here.
+android {
+    execution {
+        profiles {
+            create("isolatedR8") {
+                r8 {
+                    runInSeparateProcess = true
+                    jvmOptions += listOf("-Xmx5g", "-Dcom.android.tools.r8.disableHorizontalClassMerging=true")
+                }
+            }
+        }
+        defaultProfile = "isolatedR8"
+    }
 }
 
 dependencyResolutionManagement {

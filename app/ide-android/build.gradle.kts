@@ -24,6 +24,8 @@ plugins {
     // ALL — see buildSrc dev.ide.build.kotlinc). No-op until the device spike (KotlinCompilerArtSpikeTest)
     // discovers the first breakage and a pass is added to ArtPatchPasses.
     id("dev.ide.kotlinc-art")
+    // Takes the bundled toolchain out of R8's input for minified builds (see the toolchainSplit block).
+    id("dev.ide.toolchain-split")
     // Firebase, for push notifications. Declared but NOT applied here: the plugin fails the build when
     // google-services.json is missing, and a contributor cloning this repo has no reason to hold our
     // Firebase config. It is applied below only when that file exists; with it absent FirebaseApp never
@@ -631,6 +633,30 @@ gradle.taskGraph.whenReady {
         "This signed release has no real AdMob id for: ${missing.joinToString()}. Put them in ads.properties at " +
             "the repo root (see ads.properties.example), or pass -Pcodeassist.testAdsInRelease=true to ship " +
             "Google's test ads on purpose."
+    )
+}
+
+// --- Toolchain outside R8 ------------------------------------------------------------------------------
+// The minified builds keep the bundled toolchain out of R8: R8 only sees it on its classpath, and it is
+// dexed on its own. These packages are kept by name anyway (proguard-rules.pro), so R8 had little to do to
+// them, but reading and tracing them was about half of R8's time and more heap than a 3 GB daemon has.
+// Generated keep rules protect what the toolchain uses in the rest of the app.
+toolchainSplit {
+    buildTypes.addAll("release", "profile")
+    d8Version.set("9.5.29") // = the root build script's R8 pin, which AGP shrinks the rest of the app with
+    desugarConfigVersion.set(libs.versions.desugarJdkLibs)
+    packages.addAll(
+        "org/jetbrains/kotlin/",      // the unshaded K2 compiler, Analysis API and compiler plugins
+        "com/intellij/",              // the IntelliJ platform it runs on
+        "org/intellij/",
+        "org/jetbrains/org/",         // IntelliJ's relocated ASM
+        "org/jetbrains/concurrency/",
+        "one/util/streamex/",
+        "it/unimi/dsi/fastutil/",
+        "org/eclipse/",               // JDT/ecj, Eclipse core, OSGi, JGit
+        "com/android/tools/r8/",      // the in-process D8/R8
+        "org/benf/cfr/",              // the decompiler
+        "com/sun/jna/",
     )
 }
 
