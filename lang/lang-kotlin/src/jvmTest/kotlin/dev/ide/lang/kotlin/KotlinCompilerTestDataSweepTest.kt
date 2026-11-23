@@ -187,7 +187,13 @@ class KotlinCompilerTestDataSweepTest {
                         }
                     }
                 }
-                pair { d, m -> d.range.start - 1 <= m.end && m.start <= maxOf(d.range.end, d.range.start + 1) + 1 || lineOf(d.range.start) == lineOf(m.start) }
+                // Where several markers share a line, an error of ours first takes one of ITS kind there, so the
+                // pairing is not decided by marker order (`@A1(12)` carries WRONG_ANNOTATION_TARGET and
+                // TOO_MANY_ARGUMENTS, and each of our two errors should meet its own).
+                fun near(d: dev.ide.lang.dom.Diagnostic, m: Marker) =
+                    d.range.start - 1 <= m.end && m.start <= maxOf(d.range.end, d.range.start + 1) + 1 || lineOf(d.range.start) == lineOf(m.start)
+                pair { d, m -> near(d, m) && m.names.any { n -> KotlinSuppression.K2_NAMES[d.code]?.contains(n) == true } }
+                pair { d, m -> near(d, m) }
                 pair { d, m -> m.names.any { it in (SAME_KIND[d.code] ?: emptySet()) } }
                 pair { d, m -> kotlin.math.abs(lineOf(d.range.start) - lineOf(m.start)) <= 2 }
                 for (d in ours) {
