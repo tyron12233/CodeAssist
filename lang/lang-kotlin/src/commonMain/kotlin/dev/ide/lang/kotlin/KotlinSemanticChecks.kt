@@ -194,7 +194,8 @@ internal class KotlinSemanticChecks(
             psi as KtNameReferenceExpression
             KotlinPerf.span("sem.nameRef") {
                 if (resolveReady) {
-                    val unresolved = unresolvedMember(psi, resolver) ?: unresolvedBareReference(psi, resolver) ?: nestedThroughTypeAlias(psi, resolver)
+                    val unresolved = unresolvedMember(psi, resolver) ?: uninitializedParameterRead(psi)
+                        ?: unresolvedBareReference(psi, resolver) ?: nestedThroughTypeAlias(psi, resolver)
                     report(unresolved)
                     // Only when the reference DOES resolve: a class used as a value must be initialized
                     // (`GridCells.Fixed` → `GridCells.Fixed(2)`), and a function name used as a value must be
@@ -1713,6 +1714,57 @@ internal class KotlinSemanticChecks(
         }
         visit(body)
         return open
+    }
+
+    /**
+     * UNINITIALIZED_PARAMETER: a parameter's default value reading a LATER parameter of the same function
+     * (`fun foo(x: Int = y, y: Int)`). The later one is in scope there but has no value yet.
+     */
+    private fun uninitializedParameterRead(ref: KtNameReferenceExpression): Diagnostic? {
+        val parent = ref.parent
+        if (parent is KtQualifiedExpression && parent.selectorExpression === ref) return null
+        if (parent is KtCallExpression && parent.calleeExpression === ref) return null
+        // `System::nanoTime` names a member, and `f(x = 1)` a parameter of the callee: neither reads a value here.
+        if (parent is KtCallableReferenceExpression || parent is KtValueArgumentName) return null
+        val name = ref.getReferencedName()
+        val offset = ref.textRange.startOffset
+        // Outward to the parameter whose default value this is, through lambdas and local functions inside it
+        // (they read the same scope), stopping where something nearer declares the name.
+        var node: KtElement? = ref.parent
+        while (node != null && node !is KtFile) {
+            when (node) {
+                is KtClassOrObject -> return null
+                is KtFunctionLiteral -> if (node.valueParameters.any { it.name == name } || (name == "it" && node.valueParameters.isEmpty())) return null
+                is KtBlockExpression -> if (node.statements.any { (it as? KtNamedDeclaration)?.name == name && it.textRange.endOffset <= offset }) return null
+                is KtNamedFunction -> if (node.valueParameters.any { it.name == name && !(it.defaultValue?.textRange?.contains(offset) ?: false) }) {
+                    // A parameter of a local function, read in its body.
+                    if (node.bodyExpression?.textRange?.contains(offset) == true) return null
+                }
+                is KtParameter -> {
+                    val default = node.defaultValue
+                    if (default != null && default.textRange.contains(offset)) {
+                        val list = node.parent as? KtParameterList
+                        val owner = list?.parent
+                        if (list != null && (owner is KtNamedFunction || owner is KtPrimaryConstructor || owner is KtSecondaryConstructor)) {
+                            val params = list.parameters
+                            val at = params.indexOf(node)
+                            // Itself or a later parameter: in scope, not yet initialized.
+                            if (params.drop(at).any { it.name == name }) {
+                                val r = ref.textRange
+                                return Diagnostic(
+                                    TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+                                    "Parameter '$name' is uninitialized here", KotlinDiagnosticCodes.UNINITIALIZED_VARIABLE,
+                                )
+                            }
+                            // An earlier parameter (or anything else) answers to the name here.
+                            if (params.take(at).any { it.name == name }) return null
+                        }
+                    }
+                }
+            }
+            node = node.parent
+        }
+        return null
     }
 
     /** A LOCAL `val`/`var` never referenced anywhere in its declaring block (a warning). Skips `_` and

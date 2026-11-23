@@ -2073,6 +2073,17 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** A default value may read only EARLIER parameters: itself or a later one is in scope but uninitialized
+     *  (UNINITIALIZED_PARAMETER), also from a lambda or a local function inside the default value. */
+    @Test
+    fun defaultValueReadingALaterParameter() {
+        val bad = "fun foo(x: Int = y, y: Int = x): Int = x + y\nfun bar(x: () -> Int = { y }, y: Int) {}\nclass A(a: Int = a)"
+        assertEquals(List(3) { KotlinDiagnosticCodes.UNINITIALIZED_VARIABLE }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = "val z = 3\nfun foo(x: Int = 1, y: Int = x, i: Int = z): Int = x + y + i\nfun bar(x: (Int) -> Int = { y -> y }, y: Int) {}\n" +
+            "object S { fun nanoTime(): Long = 0 }\nclass E(private val nanoTime: () -> Long = S::nanoTime)\nfun g(a: Int) = a\nfun h(b: Int = g(a = 1), a: Int = 2) = b"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** An enum entry written as a type is ENUM_ENTRY_AS_TYPE, and IS_ENUM_ENTRY in an `is` check, not unresolved. */
     @Test
     fun enumEntryUsedAsType() {

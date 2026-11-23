@@ -153,7 +153,7 @@ internal object KotlinSuppression {
         "kt.valReassign" to setOf("VAL_REASSIGNMENT", "VAL_REASSIGNMENT_VIA_BACKING_FIELD"),
         "kt.uninitializedVariable" to setOf("UNINITIALIZED_VARIABLE", "UNINITIALIZED_PARAMETER", "UNINITIALIZED_ENUM_ENTRY"),
         "kt.mustBeInitialized" to setOf("MUST_BE_INITIALIZED", "MUST_BE_INITIALIZED_OR_BE_ABSTRACT", "MUST_BE_INITIALIZED_OR_BE_FINAL", "MUST_BE_INITIALIZED_OR_FINAL_OR_ABSTRACT"),
-        "kt.conflictingDeclaration" to setOf("CONFLICTING_OVERLOADS", "REDECLARATION", "PACKAGE_OR_CLASSIFIER_REDECLARATION"),
+        "kt.conflictingDeclaration" to setOf("CONFLICTING_OVERLOADS", "REDECLARATION", "PACKAGE_OR_CLASSIFIER_REDECLARATION", "CLASSIFIER_REDECLARATION"),
         "kt.nothingToOverride" to setOf("NOTHING_TO_OVERRIDE"),
         "kt.overrideRequired" to setOf("VIRTUAL_MEMBER_HIDDEN"),
         "kt.overridingFinal" to setOf("OVERRIDING_FINAL_MEMBER"),
