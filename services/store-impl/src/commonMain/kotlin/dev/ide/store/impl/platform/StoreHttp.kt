@@ -61,6 +61,22 @@ internal expect class StoreHttp(connectTimeoutMs: Int, readTimeoutMs: Int) {
     ): HttpReply
 
     /**
+     * [request], reading a 2xx body one line at a time as it arrives and handing each to [onLine].
+     *
+     * For a server that streams newline-delimited JSON (the judge reports each step this way). The returned
+     * reply's [HttpReply.body] is empty for a 2xx, because the lines already went to [onLine], and the whole
+     * error body otherwise. A platform without a streaming socket may deliver every line at the end instead;
+     * the lines and their order are the same either way.
+     */
+    fun requestLines(
+        method: String,
+        url: String,
+        headers: Map<String, String>,
+        body: String?,
+        onLine: (String) -> Unit,
+    ): HttpReply
+
+    /**
      * GET [url] straight to the file at [intoPath], hashing as it goes rather than in a second pass.
      *
      * [limitBytes] is a ceiling on what is written: a body over it leaves no file behind, because a

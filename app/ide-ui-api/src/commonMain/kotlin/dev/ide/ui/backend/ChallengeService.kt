@@ -1,5 +1,8 @@
 package dev.ide.ui.backend
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+
 /**
  * The daily coding challenge seam.
  *
@@ -198,6 +201,49 @@ data class UiLocalRun(
     val passed: Boolean get() = compiled && outcomes.isNotEmpty() && outcomes.all { it.passed }
 }
 
+/** The judge's steps, in the order it takes them. */
+enum class UiJudgeStep(val wire: String) {
+    Claim("claim"), Load("load"), Boot("boot"), Compile("compile"), Tests("tests"), Measure("measure"), Record("record");
+
+    companion object {
+        fun of(wire: String): UiJudgeStep? = entries.firstOrNull { it.wire == wire }
+    }
+}
+
+enum class UiJudgeStepState { Waiting, Running, Done, Failed }
+
+/**
+ * Where one step of a judgement stands.
+ *
+ * [detail] is what the judge said about it, keyed as it sent it: `compilerMs` (compile); `total`, `passed`
+ * and `jvmReadyMs` (tests); `sizes`, `counted`, `n`, `ops`, `index`, `of`, `jvmReadyMs` and `measured` (measure).
+ */
+data class UiJudgeStepStatus(
+    val step: UiJudgeStep,
+    val state: UiJudgeStepState = UiJudgeStepState.Waiting,
+    /** The step's own duration on the server, once it has finished. */
+    val ms: Long? = null,
+    /** When the device heard the step start (epoch ms), so a running step can show a live timer. */
+    val startedAtMs: Long? = null,
+    val detail: Map<String, String> = emptyMap(),
+)
+
+/**
+ * A judgement in progress, step by step, as [ChallengeService.judging] reports it.
+ *
+ * [live] is false when the judge cannot report steps as it goes (an older server, or a platform whose socket
+ * delivers the answer all at once): the display then shows the steps as one indeterminate wait.
+ */
+data class UiJudgeProgress(
+    val language: UiChallengeLanguage,
+    val steps: List<UiJudgeStepStatus> = UiJudgeStep.entries.map { UiJudgeStepStatus(it) },
+    val startedAtMs: Long = 0,
+    val live: Boolean = false,
+    val finished: Boolean = false,
+) {
+    fun of(step: UiJudgeStep): UiJudgeStepStatus = steps.first { it.step == step }
+}
+
 interface ChallengeService {
     fun challengesAvailable(): Boolean = false
 
@@ -222,6 +268,13 @@ interface ChallengeService {
         source: String,
         problem: UiChallengeProblem,
     ): UiLocalRun = UiLocalRun()
+
+    /**
+     * The submission being judged, step by step, while [submit] runs, and the last one's steps after it
+     * returns (with [UiJudgeProgress.finished] set) so the verdict can show how it was reached. Null before
+     * the first submission.
+     */
+    val judging: StateFlow<UiJudgeProgress?> get() = MutableStateFlow(null)
 
     /** Sends the solution for judging. The server decides; this call only reports what it decided. */
     suspend fun submit(date: String, language: UiChallengeLanguage, source: String): UiChallengeVerdict =

@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiChallengeProblem
 import dev.ide.ui.backend.UiChallengeVerdict
 import dev.ide.ui.backend.UiGrowthPoint
+import dev.ide.ui.backend.UiJudgeProgress
 import dev.ide.ui.components.BottomSheet
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.challenge_back_to_code
@@ -90,6 +91,8 @@ fun ChallengeResultSheet(
     problem: UiChallengeProblem,
     onDismiss: () -> Unit,
     onBackToTab: () -> Unit,
+    /** The steps that produced [verdict], shown folded under it; null when they are not known. */
+    judged: UiJudgeProgress? = null,
 ) {
     BottomSheet(visible = verdict != null, onDismiss = onDismiss, heightFraction = 0.82f) {
         val result = verdict ?: return@BottomSheet
@@ -106,6 +109,8 @@ fun ChallengeResultSheet(
             } else {
                 result.message?.takeIf { it.isNotBlank() }?.let { FailureDetail(it, result) }
             }
+
+            if (judged != null && result.error == null) JudgeReceipt(judged)
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(

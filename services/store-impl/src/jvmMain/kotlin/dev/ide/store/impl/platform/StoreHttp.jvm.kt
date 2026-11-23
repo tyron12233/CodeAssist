@@ -35,6 +35,34 @@ internal actual class StoreHttp actual constructor(
         HttpReply(0, "", e.message ?: "Network unavailable")
     }
 
+    actual fun requestLines(
+        method: String,
+        url: String,
+        headers: Map<String, String>,
+        body: String?,
+        onLine: (String) -> Unit,
+    ): HttpReply = try {
+        val conn = open(url, method, headers)
+        if (body != null) {
+            conn.doOutput = true
+            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+        }
+        val code = conn.responseCode
+        if (code in 200..299) {
+            conn.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    if (line.isNotBlank()) onLine(line)
+                }
+            }
+            HttpReply(code, "")
+        } else {
+            HttpReply(code, conn.errorStream?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty())
+        }
+    } catch (e: Exception) {
+        HttpReply(0, "", e.message ?: "Network unavailable")
+    }
+
     actual fun download(
         url: String,
         headers: Map<String, String>,

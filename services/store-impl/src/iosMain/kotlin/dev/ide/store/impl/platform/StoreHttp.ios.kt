@@ -50,6 +50,20 @@ internal actual class StoreHttp actual constructor(
         },
     )
 
+    /** NSURLSession's data task answers once, so the lines arrive together at the end, in order. */
+    actual fun requestLines(
+        method: String,
+        url: String,
+        headers: Map<String, String>,
+        body: String?,
+        onLine: (String) -> Unit,
+    ): HttpReply {
+        val reply = request(method, url, headers, body)
+        if (!reply.ok) return reply
+        reply.body.lineSequence().filter { it.isNotBlank() }.forEach(onLine)
+        return HttpReply(reply.status, "")
+    }
+
     actual fun request(
         method: String,
         url: String,

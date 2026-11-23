@@ -2,9 +2,11 @@ package dev.ide.core.backend
 
 import dev.ide.core.BackendContext
 import dev.ide.core.IdeServices
+import dev.ide.lang.hints.InlayHintKind
 import dev.ide.model.impl.rootPath
 import dev.ide.platform.JsonReader
 import dev.ide.store.DailyChallengeService
+import dev.ide.store.DailyJudgeEvent
 import dev.ide.store.DailyLanguage
 import dev.ide.store.StoreResult
 import dev.ide.ui.backend.ChallengeService
@@ -24,14 +26,20 @@ import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiFoldRegion
 import dev.ide.ui.backend.UiGrowthPoint
-import dev.ide.lang.hints.InlayHintKind
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiInlayKind
 import dev.ide.ui.backend.UiInlayPart
+import dev.ide.ui.backend.UiJudgeProgress
+import dev.ide.ui.backend.UiJudgeStep
+import dev.ide.ui.backend.UiJudgeStepState
 import dev.ide.ui.backend.UiLocalRun
 import dev.ide.ui.backend.UiSampleOutcome
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -59,6 +67,9 @@ internal class ChallengeBackend(
 
     override fun challengesAvailable(): Boolean = remote.challengesAvailable()
 
+    private val judgingFlow = MutableStateFlow<UiJudgeProgress?>(null)
+    override val judging: StateFlow<UiJudgeProgress?> = judgingFlow.asStateFlow()
+
     override suspend fun day(date: String?): UiChallengeDay = withContext(Dispatchers.IO) {
         when (val r = remote.day(date)) {
             is StoreResult.Ok -> r.value.toUi()
@@ -84,7 +95,16 @@ internal class ChallengeBackend(
         language: UiChallengeLanguage,
         source: String,
     ): UiChallengeVerdict = withContext(Dispatchers.IO) {
-        when (val r = remote.submit(date, language.toStore(), source)) {
+        judgingFlow.value = UiJudgeProgress(language = language, startedAtMs = System.currentTimeMillis())
+        val r = remote.submit(date, language.toStore(), source) { event -> judgingFlow.update { it?.apply(event) } }
+        // Steps the judge never reached stay Waiting; one it was in the middle of when the answer came is over.
+        judgingFlow.update { p ->
+            p?.copy(
+                finished = true,
+                steps = p.steps.map { if (it.state == UiJudgeStepState.Running) it.copy(state = UiJudgeStepState.Done) else it },
+            )
+        }
+        when (r) {
             is StoreResult.Ok -> r.value.toUi()
             // A refusal is not a verdict. Showing it as one would tell a solver their correct answer was
             // wrong because their connection dropped.
@@ -573,3 +593,30 @@ private fun parseInstantMs(text: String?): Long {
         runCatching { java.time.Instant.parse(text).toEpochMilli() }.getOrDefault(0L)
     }
 }
+
+/** Folds one of the judge's step reports into the progress the screen shows. */
+private fun UiJudgeProgress.apply(event: DailyJudgeEvent): UiJudgeProgress {
+    val step = UiJudgeStep.of(event.step) ?: return this
+    val now = System.currentTimeMillis()
+    return copy(
+        live = true,
+        steps = steps.map { s ->
+            if (s.step != step) return@map s
+            when (event.state) {
+                "start" -> s.copy(state = UiJudgeStepState.Running, startedAtMs = now, detail = s.detail + event.detail)
+                // Each measured size replaces the last in the detail; the series is kept as well, so the
+                // display can draw every size measured so far.
+                "progress" -> {
+                    val series = event.detail["ops"]?.let { ops ->
+                        mapOf("opsSeries" to (s.detail["opsSeries"]?.let { "$it,$ops" } ?: ops))
+                    }.orEmpty()
+                    s.copy(detail = s.detail + event.detail + series)
+                }
+                "done" -> s.copy(state = UiJudgeStepState.Done, ms = event.ms, detail = s.detail + event.detail)
+                "fail" -> s.copy(state = UiJudgeStepState.Failed, ms = event.ms, detail = s.detail + event.detail)
+                else -> s
+            }
+        },
+    )
+}
+

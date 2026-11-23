@@ -195,6 +195,18 @@ data class DailyVerdict(
     val accepted: Boolean get() = verdict == "accepted"
 }
 
+/**
+ * One step of a judgement as the judge reports it while it works: [step] is claim, load, boot, compile, tests,
+ * measure or record; [state] is start, progress, done or fail. [ms] is the step's own duration, on done and
+ * fail. [detail] carries what the step knows (tests passed, the JVM's start-up, a measured size), as text.
+ */
+data class DailyJudgeEvent(
+    val step: String,
+    val state: String,
+    val ms: Long? = null,
+    val detail: Map<String, String> = emptyMap(),
+)
+
 /** When the solve clock started, as the server sees it. */
 data class DailySession(val startedAt: String?, val serverNow: String?)
 
@@ -226,6 +238,14 @@ interface DailyChallengeService {
      */
     fun submit(date: String, language: DailyLanguage, source: String): StoreResult<DailyVerdict> =
         StoreResult.Unavailable("Challenges are not configured")
+
+    /** [submit], reporting each step to [onEvent] as the judge takes it. The verdict is the same. */
+    fun submit(
+        date: String,
+        language: DailyLanguage,
+        source: String,
+        onEvent: (DailyJudgeEvent) -> Unit,
+    ): StoreResult<DailyVerdict> = submit(date, language, source)
 
     object Unsupported : DailyChallengeService
 }

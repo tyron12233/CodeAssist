@@ -2922,6 +2922,43 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="challenge_running">Running</string>
     <string name="challenge_run_examples">Run examples</string>
     <string name="challenge_judging">Judging</string>
+    <!-- judge-progress:begin -->
+    <string name="judge_title">Judging your solution</string>
+    <string name="judge_subtitle">Hidden tests run on a fresh server, not on your phone.</string>
+    <string name="judge_not_live">The judge is working. This build shows the steps once it answers.</string>
+    <string name="judge_hide">Hide</string>
+    <string name="judge_steps_title">How it was judged</string>
+    <string name="judge_total">Total %1$s</string>
+    <string name="judge_step_claim">Checking your attempt</string>
+    <string name="judge_step_load">Loading hidden tests</string>
+    <string name="judge_step_boot">Starting a sandbox VM</string>
+    <string name="judge_step_compile">Compiling with %1$s</string>
+    <string name="judge_step_tests">Running hidden tests</string>
+    <string name="judge_step_measure">Measuring how it scales</string>
+    <string name="judge_step_record">Saving your result</string>
+    <string name="judge_short_boot">Starting VM</string>
+    <string name="judge_short_compile">Compiling</string>
+    <string name="judge_short_tests">Testing</string>
+    <string name="judge_short_measure">Measuring</string>
+    <string name="judge_short_record">Saving</string>
+    <string name="judge_detail_attempt">Attempt %1$d</string>
+    <string name="judge_detail_practice">Practice run, not ranked</string>
+    <string name="judge_detail_tests_loaded">%1$d hidden tests</string>
+    <string name="judge_detail_vm">%1$d vCPUs, fresh for this submission</string>
+    <string name="judge_detail_compile_running">Starting the JVM and the compiler</string>
+    <string name="judge_detail_compiled">The compiler ran for %1$s</string>
+    <string name="judge_detail_compile_failed">Did not compile</string>
+    <string name="judge_detail_jvm_starting">Starting a JVM</string>
+    <string name="judge_detail_jvm_ready">JVM ready in %1$s, running %2$d tests</string>
+    <string name="judge_detail_tests_done">%1$d of %2$d passed</string>
+    <string name="judge_detail_tests_failed">Failed a hidden test</string>
+    <string name="judge_detail_counting_jvm">Starting a counting JVM: every operation is counted</string>
+    <string name="judge_detail_timing">Timing each size</string>
+    <string name="judge_detail_size">Size %1$s (%2$d of %3$d): %4$s operations</string>
+    <string name="judge_detail_measured">%1$d sizes measured</string>
+    <string name="judge_detail_measure_failed">Too few sizes finished to measure</string>
+    <string name="judge_detail_saved">Added to your history</string>
+    <!-- judge-progress:end -->
     <string name="challenge_submit">Submit</string>
     <!-- Daily challenge verdict sheet -->
     <string name="challenge_keep_improving">Keep improving</string>

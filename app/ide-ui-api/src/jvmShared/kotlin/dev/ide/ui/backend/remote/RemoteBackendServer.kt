@@ -40,7 +40,7 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
 
     private suspend fun s0(t: dev.ide.ui.backend.IdeBackend, member: Int, i: RemoteIn, o: RemoteOut) {
         when (member) {
-            15 -> { val r = t.project; w285(o, r) }
+            15 -> { val r = t.project; w287(o, r) }
             else -> error("IdeBackend has no member $member that is called")
         }
     }
@@ -157,11 +157,11 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
             5 -> { val a0 = dev.ide.ui.backend.UiChallengeLanguage.entries[i.int()]; val a1 = i.str(); val r = t.folds(a0, a1); o.list(r) { e92 -> w104(o, e92) } }
             6 -> { val a0 = dev.ide.ui.backend.UiChallengeLanguage.entries[i.int()]; val a1 = i.str(); val a2 = i.int(); val a3 = i.int(); val r = t.hints(a0, a1, a2, a3); o.list(r) { e93 -> w105(o, e93) } }
             7 -> { val a0 = dev.ide.ui.backend.UiChallengeLanguage.entries[i.int()]; val r = t.indexing(a0); o.bool(r) }
-            8 -> { val a0 = dev.ide.ui.backend.UiChallengeLanguage.entries[i.int()]; val r = t.prepare(a0); o.bool(r) }
-            9 -> { val r = t.profile(); w107(o, r) }
-            10 -> { val a0 = dev.ide.ui.backend.UiChallengeLanguage.entries[i.int()]; val a1 = i.str(); val a2 = r100(i); val r = t.run(a0, a1, a2); w110(o, r) }
-            11 -> { val a0 = i.opt { i.str() }; val r = t.start(a0); o.bool(r) }
-            12 -> { val a0 = i.str(); val a1 = dev.ide.ui.backend.UiChallengeLanguage.entries[i.int()]; val a2 = i.str(); val r = t.submit(a0, a1, a2); w112(o, r) }
+            9 -> { val a0 = dev.ide.ui.backend.UiChallengeLanguage.entries[i.int()]; val r = t.prepare(a0); o.bool(r) }
+            10 -> { val r = t.profile(); w109(o, r) }
+            11 -> { val a0 = dev.ide.ui.backend.UiChallengeLanguage.entries[i.int()]; val a1 = i.str(); val a2 = r100(i); val r = t.run(a0, a1, a2); w112(o, r) }
+            12 -> { val a0 = i.opt { i.str() }; val r = t.start(a0); o.bool(r) }
+            13 -> { val a0 = i.str(); val a1 = dev.ide.ui.backend.UiChallengeLanguage.entries[i.int()]; val a2 = i.str(); val r = t.submit(a0, a1, a2); w114(o, r) }
             else -> error("ChallengeService has no member $member that is called")
         }
     }
@@ -169,52 +169,52 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
     private suspend fun s6(t: dev.ide.ui.backend.CustomizationService, member: Int, i: RemoteIn, o: RemoteOut) {
         when (member) {
             0 -> { val a0 = i.str(); t.clearScopedSymbols(a0) }
-            1 -> { val r = t.defaultMacros(); o.list(r) { e94 -> w114(o, e94) } }
-            2 -> { val r = t.defaultSymbols(); o.list(r) { e95 -> w115(o, e95) } }
+            1 -> { val r = t.defaultMacros(); o.list(r) { e94 -> w116(o, e94) } }
+            2 -> { val r = t.defaultSymbols(); o.list(r) { e95 -> w117(o, e95) } }
             3 -> { val a0 = i.str(); val r = t.exportScope(a0); o.string(r) }
             4 -> { val a0 = i.str(); val a1 = i.str(); val r = t.importScope(a0, a1); o.bool(r) }
             5 -> { val r = t.macroVariables(); o.list(r) { e96 -> o.string(e96) } }
             6 -> { val a0 = i.str(); val r = t.previewMacro(a0); o.string(r) }
             7 -> { val a0 = i.str(); val r = t.scopeAvailable(a0); o.bool(r) }
-            8 -> { val a0 = i.str(); val r = t.scopedMacros(a0); o.list(r) { e97 -> w114(o, e97) } }
-            9 -> { val a0 = i.str(); val r = t.scopedSymbols(a0); o.opt(r) { n98 -> o.list(n98) { e99 -> w115(o, e99) } } }
-            10 -> { val a0 = i.str(); val a1 = i.list { r114(i) }; t.setScopedMacros(a0, a1) }
-            11 -> { val a0 = i.str(); val a1 = i.list { r115(i) }; t.setScopedSymbols(a0, a1) }
-            12 -> { val a0 = i.str(); val a1 = i.list { r115(i) }; val r = t.suggestSymbols(a0, a1); o.list(r) { e100 -> w115(o, e100) } }
-            13 -> { val r = t.symbolKeys(); o.list(r) { e101 -> w115(o, e101) } }
+            8 -> { val a0 = i.str(); val r = t.scopedMacros(a0); o.list(r) { e97 -> w116(o, e97) } }
+            9 -> { val a0 = i.str(); val r = t.scopedSymbols(a0); o.opt(r) { n98 -> o.list(n98) { e99 -> w117(o, e99) } } }
+            10 -> { val a0 = i.str(); val a1 = i.list { r116(i) }; t.setScopedMacros(a0, a1) }
+            11 -> { val a0 = i.str(); val a1 = i.list { r117(i) }; t.setScopedSymbols(a0, a1) }
+            12 -> { val a0 = i.str(); val a1 = i.list { r117(i) }; val r = t.suggestSymbols(a0, a1); o.list(r) { e100 -> w117(o, e100) } }
+            13 -> { val r = t.symbolKeys(); o.list(r) { e101 -> w117(o, e101) } }
             else -> error("CustomizationService has no member $member that is called")
         }
     }
 
     private suspend fun s7(t: dev.ide.ui.backend.DependencyService, member: Int, i: RemoteIn, o: RemoteOut) {
         when (member) {
-            0 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val a3 = i.list { i.str() }; val a4 = i.opt { i.str() }; val r = t.addDependency(a0, a1, a2, a3, a4); w116(o, r) }
-            1 -> { val a0 = i.str(); val a1 = i.list { i.str() }; val r = t.addFirebase(a0, a1); w116(o, r) }
-            2 -> { val a0 = i.str(); val a1 = i.list { i.str() }; val r = t.addGooglePlayServices(a0, a1); w116(o, r) }
-            3 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.addLocalLibrary(a0, a1, a2); w116(o, r) }
-            4 -> { val a0 = i.str(); val a1 = i.str(); val r = t.addMissingLibraries(a0, a1); w116(o, r) }
-            5 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val a3 = i.opt { i.str() }; val r = t.addModuleDependency(a0, a1, a2, a3); w116(o, r) }
-            6 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.opt { i.str() }; val r = t.addPlatform(a0, a1, a2); w116(o, r) }
+            0 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val a3 = i.list { i.str() }; val a4 = i.opt { i.str() }; val r = t.addDependency(a0, a1, a2, a3, a4); w118(o, r) }
+            1 -> { val a0 = i.str(); val a1 = i.list { i.str() }; val r = t.addFirebase(a0, a1); w118(o, r) }
+            2 -> { val a0 = i.str(); val a1 = i.list { i.str() }; val r = t.addGooglePlayServices(a0, a1); w118(o, r) }
+            3 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.addLocalLibrary(a0, a1, a2); w118(o, r) }
+            4 -> { val a0 = i.str(); val a1 = i.str(); val r = t.addMissingLibraries(a0, a1); w118(o, r) }
+            5 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val a3 = i.opt { i.str() }; val r = t.addModuleDependency(a0, a1, a2, a3); w118(o, r) }
+            6 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.opt { i.str() }; val r = t.addPlatform(a0, a1, a2); w118(o, r) }
             7 -> { val a0 = i.str(); val a1 = i.str(); val r = t.addRepository(a0, a1); o.bool(r) }
-            8 -> { val a0 = i.str(); val a1 = i.str(); val r = t.artifactSearch(a0, a1); w117(o, r) }
+            8 -> { val a0 = i.str(); val a1 = i.str(); val r = t.artifactSearch(a0, a1); w119(o, r) }
             9 -> { val a0 = i.str(); val a1 = i.str(); val r = t.availableVersions(a0, a1); o.list(r) { e102 -> o.string(e102) } }
-            10 -> { val a0 = i.str(); val a1 = i.str(); val r = t.cachedVersions(a0, a1); o.list(r) { e103 -> w119(o, e103) } }
+            10 -> { val a0 = i.str(); val a1 = i.str(); val r = t.cachedVersions(a0, a1); o.list(r) { e103 -> w121(o, e103) } }
             11 -> { t.clearMissingLibraryOutcome() }
             12 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.deleteCachedVersion(a0, a1, a2); o.bool(r) }
-            13 -> { val r = t.dependencyModules(); o.list(r) { e104 -> w120(o, e104) } }
+            13 -> { val r = t.dependencyModules(); o.list(r) { e104 -> w122(o, e104) } }
             15 -> { val a0 = i.str(); val r = t.localLibraryCandidates(a0); o.list(r) { e105 -> o.string(e105) } }
             16 -> { val a0 = i.str(); val r = t.localLibraryDropDir(a0); o.opt(r) { n106 -> o.string(n106) } }
-            17 -> { val a0 = i.str(); val a1 = i.str(); val r = t.missingLibraries(a0, a1); o.list(r) { e107 -> w124(o, e107) } }
-            20 -> { val a0 = i.str(); val r = t.moduleDependencies(a0); o.opt(r) { n108 -> w125(o, n108) } }
+            17 -> { val a0 = i.str(); val a1 = i.str(); val r = t.missingLibraries(a0, a1); o.list(r) { e107 -> w126(o, e107) } }
+            20 -> { val a0 = i.str(); val r = t.moduleDependencies(a0); o.opt(r) { n108 -> w127(o, n108) } }
             21 -> { val a0 = i.str(); val r = t.moduleDependencyTargets(a0); o.list(r) { e109 -> o.string(e109) } }
             22 -> { val a0 = i.str(); val a1 = i.str(); val r = t.removeDependency(a0, a1); o.bool(r) }
             23 -> { val a0 = i.str(); val r = t.removeRepository(a0); o.bool(r) }
-            24 -> { val r = t.repositories(); o.list(r) { e110 -> w128(o, e110) } }
+            24 -> { val r = t.repositories(); o.list(r) { e110 -> w130(o, e110) } }
             25 -> { t.retryDependencyResolution() }
-            26 -> { val a0 = i.str(); val a1 = i.str(); val r = t.searchArtifacts(a0, a1); o.list(r) { e111 -> w118(o, e111) } }
-            27 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.list { i.str() }; val r = t.setDependencyExclusions(a0, a1, a2); w116(o, r) }
+            26 -> { val a0 = i.str(); val a1 = i.str(); val r = t.searchArtifacts(a0, a1); o.list(r) { e111 -> w120(o, e111) } }
+            27 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.list { i.str() }; val r = t.setDependencyExclusions(a0, a1, a2); w118(o, r) }
             28 -> { t.startPendingDependencyResolution() }
-            29 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val a3 = i.str(); val a4 = i.list { i.str() }; val r = t.updateDependency(a0, a1, a2, a3, a4); w116(o, r) }
+            29 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val a3 = i.str(); val a4 = i.list { i.str() }; val r = t.updateDependency(a0, a1, a2, a3, a4); w118(o, r) }
             else -> error("DependencyService has no member $member that is called")
         }
     }
@@ -228,7 +228,7 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
             4 -> { val a0 = i.int(); t.dismissError(a0) }
             6 -> { val r = t.exportLogs(); o.opt(r) { n113 -> o.string(n113) } }
             7 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = i.int(); val a4 = i.str(); val a5 = dev.ide.ui.backend.UiSeverity.entries[i.int()]; val r = t.falseErrorReport(a0, a1, a2, a3, a4, a5); o.opt(r) { n114 -> o.string(n114) } }
-            8 -> { val r = t.recentLogs(); o.list(r) { e115 -> w130(o, e115) } }
+            8 -> { val r = t.recentLogs(); o.list(r) { e115 -> w132(o, e115) } }
             9 -> { val a0 = i.str(); val a1 = i.long(); val a2 = i.map({ i.str() }, { i.str() }); t.recordPerf(a0, a1, a2) }
             10 -> { val a0 = i.str(); val r = t.saveFalseErrorReport(a0); o.opt(r) { n116 -> o.string(n116) } }
             11 -> { val a0 = i.bool(); t.setAnalyticsConsent(a0) }
@@ -239,43 +239,43 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
 
     private suspend fun s9(t: dev.ide.ui.backend.EditorService, member: Int, i: RemoteIn, o: RemoteOut) {
         when (member) {
-            0 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = i.int(); val r = t.actionsAt(a0, a1, a2, a3); o.list(r) { e117 -> w131(o, e117) } }
+            0 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = i.int(); val r = t.actionsAt(a0, a1, a2, a3); o.list(r) { e117 -> w133(o, e117) } }
             1 -> { val a0 = i.str(); val a1 = i.str(); val r = t.analyze(a0, a1); o.list(r) { e118 -> w90(o, e118) } }
-            2 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = i.int(); val a4 = i.int(); val r = t.applyAction(a0, a1, a2, a3, a4); w132(o, r) }
+            2 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = i.int(); val a4 = i.int(); val r = t.applyAction(a0, a1, a2, a3, a4); w134(o, r) }
             3 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.breadcrumbAt(a0, a1, a2); o.list(r) { e119 -> o.string(e119) } }
             4 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.caretContext(a0, a1, a2); o.opt(r) { n120 -> w1(o, n120) } }
             5 -> { val a0 = i.str(); val a1 = i.str(); val r = t.codeFolds(a0, a1); o.list(r) { e121 -> w104(o, e121) } }
             6 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.complete(a0, a1, a2); w93(o, r) }
             7 -> { val a0 = i.str(); val a1 = i.str(); t.completionAccepted(a0, a1) }
-            8 -> { val a0 = i.str(); val a1 = i.str(); val r = t.decorations(a0, a1); w133(o, r) }
-            9 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.definitionAt(a0, a1, a2); o.opt(r) { n122 -> w136(o, n122) } }
+            8 -> { val a0 = i.str(); val a1 = i.str(); val r = t.decorations(a0, a1); w135(o, r) }
+            9 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.definitionAt(a0, a1, a2); o.opt(r) { n122 -> w138(o, n122) } }
             11 -> { val a0 = i.str(); val a1 = i.str(); t.documentLoaded(a0, a1) }
             12 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = i.int(); val r = t.expandSelection(a0, a1, a2, a3); o.opt(r) { n123 -> w98(o, n123) } }
-            14 -> { val a0 = i.str(); val a1 = i.str(); val r = t.fileStructure(a0, a1); o.list(r) { e124 -> w137(o, e124) } }
+            14 -> { val a0 = i.str(); val a1 = i.str(); val r = t.fileStructure(a0, a1); o.list(r) { e124 -> w139(o, e124) } }
             15 -> { val a0 = i.str(); val a1 = i.str(); val r = t.formatDocument(a0, a1); o.list(r) { e125 -> w7(o, e125) } }
             16 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = i.int(); val r = t.formatRange(a0, a1, a2, a3); o.list(r) { e126 -> w7(o, e126) } }
             17 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = i.int(); val r = t.hintsAt(a0, a1, a2, a3); o.list(r) { e127 -> w105(o, e127) } }
-            18 -> { val a0 = i.str(); val a1 = i.str(); val r = t.implementationLocationOf(a0, a1); o.opt(r) { n128 -> w136(o, n128) } }
-            19 -> { val a0 = i.str(); val a1 = i.str(); val r = t.inheritorMarkers(a0, a1); o.list(r) { e129 -> w138(o, e129) } }
-            20 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.bool(); val r = t.libraryContent(a0, a1, a2); o.opt(r) { n130 -> w140(o, n130) } }
-            21 -> { val a0 = i.str(); val r = t.localHistory(a0); o.list(r) { e131 -> w141(o, e131) } }
+            18 -> { val a0 = i.str(); val a1 = i.str(); val r = t.implementationLocationOf(a0, a1); o.opt(r) { n128 -> w138(o, n128) } }
+            19 -> { val a0 = i.str(); val a1 = i.str(); val r = t.inheritorMarkers(a0, a1); o.list(r) { e129 -> w140(o, e129) } }
+            20 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.bool(); val r = t.libraryContent(a0, a1, a2); o.opt(r) { n130 -> w142(o, n130) } }
+            21 -> { val a0 = i.str(); val r = t.localHistory(a0); o.list(r) { e131 -> w143(o, e131) } }
             22 -> { val a0 = i.str(); val a1 = i.long(); val r = t.localHistoryText(a0, a1); o.opt(r) { n132 -> o.string(n132) } }
-            23 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.navigationOptions(a0, a1, a2); o.list(r) { e133 -> w142(o, e133) } }
-            24 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = dev.ide.ui.backend.UiNavKind.entries[i.int()]; val r = t.navigationTargets(a0, a1, a2, a3); o.list(r) { e134 -> w143(o, e134) } }
+            23 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.navigationOptions(a0, a1, a2); o.list(r) { e133 -> w144(o, e133) } }
+            24 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = dev.ide.ui.backend.UiNavKind.entries[i.int()]; val r = t.navigationTargets(a0, a1, a2, a3); o.list(r) { e134 -> w145(o, e134) } }
             25 -> { val a0 = i.opt { i.str() }; t.onActiveEditorChanged(a0) }
             26 -> { val a0 = i.str(); t.onFileClosed(a0) }
             27 -> { val a0 = i.str(); t.onFileOpened(a0) }
             28 -> { val a0 = i.str(); val a1 = i.int(); val a2 = i.int(); t.onSelectionChanged(a0, a1, a2) }
             29 -> { val a0 = i.str(); val a1 = i.str(); val r = t.optimizeImports(a0, a1); o.list(r) { e135 -> w7(o, e135) } }
-            30 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.prepareRename(a0, a1, a2); o.opt(r) { n136 -> w144(o, n136) } }
-            31 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.quickDocAt(a0, a1, a2); o.opt(r) { n137 -> w145(o, n137) } }
-            33 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = i.str(); val r = t.rename(a0, a1, a2, a3); w146(o, r) }
-            34 -> { val a0 = i.str(); val a1 = i.str(); val r = t.resourceSwatches(a0, a1); o.list(r) { e138 -> w147(o, e138) } }
+            30 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.prepareRename(a0, a1, a2); o.opt(r) { n136 -> w146(o, n136) } }
+            31 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.quickDocAt(a0, a1, a2); o.opt(r) { n137 -> w147(o, n137) } }
+            33 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = i.str(); val r = t.rename(a0, a1, a2, a3); w148(o, r) }
+            34 -> { val a0 = i.str(); val a1 = i.str(); val r = t.resourceSwatches(a0, a1); o.list(r) { e138 -> w149(o, e138) } }
             35 -> { val a0 = i.str(); val a1 = i.str(); t.saveFile(a0, a1) }
-            36 -> { val a0 = i.str(); val a1 = i.str(); val r = t.semanticTokens(a0, a1); o.list(r) { e139 -> w178(o, e139) } }
-            37 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.signatureHelp(a0, a1, a2); o.opt(r) { n140 -> w179(o, n140) } }
+            36 -> { val a0 = i.str(); val a1 = i.str(); val r = t.semanticTokens(a0, a1); o.list(r) { e139 -> w180(o, e139) } }
+            37 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.signatureHelp(a0, a1, a2); o.opt(r) { n140 -> w181(o, n140) } }
             38 -> { val a0 = i.str(); val a1 = i.str(); t.updateDocument(a0, a1) }
-            39 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.usageHighlights(a0, a1, a2); o.opt(r) { n141 -> o.list(n141) { e142 -> w182(o, e142) } } }
+            39 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.usageHighlights(a0, a1, a2); o.opt(r) { n141 -> o.list(n141) { e142 -> w184(o, e142) } } }
             else -> error("EditorService has no member $member that is called")
         }
     }
@@ -290,47 +290,47 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
             5 -> { val a0 = i.str(); val a1 = i.str(); val r = t.createFileSmart(a0, a1); o.opt(r) { n148 -> o.string(n148) } }
             6 -> { val a0 = i.str(); val a1 = i.str(); val a2 = dev.ide.ui.backend.UiNewFileTemplate.entries[i.int()]; val r = t.createSourceFile(a0, a1, a2); o.opt(r) { n149 -> o.string(n149) } }
             7 -> { val a0 = i.str(); val r = t.deletePath(a0); o.bool(r) }
-            8 -> { val a0 = i.list { i.str() }; val r = t.deletePaths(a0); w183(o, r) }
+            8 -> { val a0 = i.list { i.str() }; val r = t.deletePaths(a0); w185(o, r) }
             9 -> { val a0 = dev.ide.ui.backend.TreeViewMode.entries[i.int()]; val r = t.expandedTreeState(a0); o.opt(r) { n150 -> o.list(n150) { e151 -> o.string(e151) } } }
-            11 -> { val a0 = dev.ide.ui.backend.TreeViewMode.entries[i.int()]; val r = t.fileTree(a0); w184(o, r) }
-            12 -> { val a0 = i.str(); val r = t.listDirectory(a0); o.list(r) { e152 -> w186(o, e152) } }
+            11 -> { val a0 = dev.ide.ui.backend.TreeViewMode.entries[i.int()]; val r = t.fileTree(a0); w186(o, r) }
+            12 -> { val a0 = i.str(); val r = t.listDirectory(a0); o.list(r) { e152 -> w188(o, e152) } }
             13 -> { val a0 = i.str(); val r = t.moduleNameForFile(a0); o.opt(r) { n153 -> o.string(n153) } }
             14 -> { val a0 = i.str(); val a1 = i.str(); val r = t.movePath(a0, a1); o.opt(r) { n154 -> o.string(n154) } }
             15 -> { val a0 = i.str(); val r = t.readFile(a0); o.string(r) }
-            16 -> { val a0 = i.str(); val a1 = i.str(); val r = t.renamePath(a0, a1); w146(o, r) }
+            16 -> { val a0 = i.str(); val a1 = i.str(); val r = t.renamePath(a0, a1); w148(o, r) }
             17 -> { val a0 = dev.ide.ui.backend.TreeViewMode.entries[i.int()]; val a1 = i.list { i.str() }; t.saveExpandedTreeState(a0, a1) }
             18 -> { val r = t.supportsUndo; o.bool(r) }
-            19 -> { val a0 = dev.ide.ui.backend.UiTransferKind.entries[i.int()]; val a1 = i.list { r187(i) }; val a2 = i.str(); val r = t.transferPaths(a0, a1, a2); w188(o, r) }
-            20 -> { val a0 = i.str(); val r = t.undoFileOperation(a0); w189(o, r) }
+            19 -> { val a0 = dev.ide.ui.backend.UiTransferKind.entries[i.int()]; val a1 = i.list { r189(i) }; val a2 = i.str(); val r = t.transferPaths(a0, a1, a2); w190(o, r) }
+            20 -> { val a0 = i.str(); val r = t.undoFileOperation(a0); w191(o, r) }
             else -> error("FileService has no member $member that is called")
         }
     }
 
     private suspend fun s11(t: dev.ide.ui.backend.IconService, member: Int, i: RemoteIn, o: RemoteOut) {
         when (member) {
-            0 -> { val a0 = r190(i); val a1 = i.list { r199(i) }; val r = t.applyAppIcon(a0, a1); w200(o, r) }
-            1 -> { val a0 = i.str(); val a1 = r197(i); val r = t.composeIconArtwork(a0, a1); o.opt(r) { n155 -> w201(o, n155) } }
-            2 -> { val a0 = i.opt { i.str() }; val r = t.composeIcons(a0); o.list(r) { e156 -> w202(o, e156) } }
-            3 -> { val a0 = i.str(); val a1 = r203(i); val r = t.copyResource(a0, a1); w200(o, r) }
-            4 -> { val a0 = r204(i); val a1 = i.str(); val a2 = i.str(); val r = t.existingResource(a0, a1, a2); o.opt(r) { n157 -> o.string(n157) } }
-            5 -> { val a0 = i.str(); val a1 = i.str(); val a2 = r197(i); val r = t.iconArtwork(a0, a1, a2); o.opt(r) { n158 -> w201(o, n158) } }
-            6 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = r205(i); val r = t.iconInsertion(a0, a1, a2, a3); o.list(r) { e159 -> w7(o, e159) } }
-            7 -> { val r = t.iconRepositories(); o.list(r) { e160 -> w208(o, e160) } }
-            8 -> { val a0 = i.str(); val a1 = i.str(); val r = t.iconUsages(a0, a1); o.list(r) { e161 -> w143(o, e161) } }
-            9 -> { val a0 = i.str(); val a1 = i.str(); val a2 = r197(i); val a3 = r203(i); val r = t.importIcon(a0, a1, a2, a3); w200(o, r) }
-            10 -> { val a0 = i.bytes(); val a1 = i.str(); val a2 = r203(i); val r = t.importRaster(a0, a1, a2); w200(o, r) }
-            11 -> { val a0 = i.str(); val a1 = r203(i); val r = t.importSvg(a0, a1); w200(o, r) }
-            12 -> { val r = t.importTargets(); o.list(r) { e162 -> w204(o, e162) } }
-            13 -> { val a0 = i.opt { i.str() }; val r = t.launcherIcon(a0); o.opt(r) { n163 -> w209(o, n163) } }
-            14 -> { val a0 = i.str(); val r = t.loadRepository(a0); w210(o, r) }
-            15 -> { val a0 = r190(i); val r = t.planAppIcon(a0); o.opt(r) { n164 -> w211(o, n164) } }
-            16 -> { val a0 = r190(i); val r = t.previewAppIcon(a0); o.opt(r) { n165 -> w213(o, n165) } }
-            17 -> { val a0 = i.str(); val a1 = i.opt { i.long() }; val r = t.previewSvg(a0, a1); o.opt(r) { n166 -> w201(o, n166) } }
-            18 -> { val a0 = i.opt { i.str() }; val r = t.projectIcons(a0); o.list(r) { e167 -> w214(o, e167) } }
-            19 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.renameIcon(a0, a1, a2); w146(o, r) }
-            20 -> { val a0 = i.str(); val r = t.resourceArtwork(a0); o.opt(r) { n168 -> w201(o, n168) } }
+            0 -> { val a0 = r192(i); val a1 = i.list { r201(i) }; val r = t.applyAppIcon(a0, a1); w202(o, r) }
+            1 -> { val a0 = i.str(); val a1 = r199(i); val r = t.composeIconArtwork(a0, a1); o.opt(r) { n155 -> w203(o, n155) } }
+            2 -> { val a0 = i.opt { i.str() }; val r = t.composeIcons(a0); o.list(r) { e156 -> w204(o, e156) } }
+            3 -> { val a0 = i.str(); val a1 = r205(i); val r = t.copyResource(a0, a1); w202(o, r) }
+            4 -> { val a0 = r206(i); val a1 = i.str(); val a2 = i.str(); val r = t.existingResource(a0, a1, a2); o.opt(r) { n157 -> o.string(n157) } }
+            5 -> { val a0 = i.str(); val a1 = i.str(); val a2 = r199(i); val r = t.iconArtwork(a0, a1, a2); o.opt(r) { n158 -> w203(o, n158) } }
+            6 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = r207(i); val r = t.iconInsertion(a0, a1, a2, a3); o.list(r) { e159 -> w7(o, e159) } }
+            7 -> { val r = t.iconRepositories(); o.list(r) { e160 -> w210(o, e160) } }
+            8 -> { val a0 = i.str(); val a1 = i.str(); val r = t.iconUsages(a0, a1); o.list(r) { e161 -> w145(o, e161) } }
+            9 -> { val a0 = i.str(); val a1 = i.str(); val a2 = r199(i); val a3 = r205(i); val r = t.importIcon(a0, a1, a2, a3); w202(o, r) }
+            10 -> { val a0 = i.bytes(); val a1 = i.str(); val a2 = r205(i); val r = t.importRaster(a0, a1, a2); w202(o, r) }
+            11 -> { val a0 = i.str(); val a1 = r205(i); val r = t.importSvg(a0, a1); w202(o, r) }
+            12 -> { val r = t.importTargets(); o.list(r) { e162 -> w206(o, e162) } }
+            13 -> { val a0 = i.opt { i.str() }; val r = t.launcherIcon(a0); o.opt(r) { n163 -> w211(o, n163) } }
+            14 -> { val a0 = i.str(); val r = t.loadRepository(a0); w212(o, r) }
+            15 -> { val a0 = r192(i); val r = t.planAppIcon(a0); o.opt(r) { n164 -> w213(o, n164) } }
+            16 -> { val a0 = r192(i); val r = t.previewAppIcon(a0); o.opt(r) { n165 -> w215(o, n165) } }
+            17 -> { val a0 = i.str(); val a1 = i.opt { i.long() }; val r = t.previewSvg(a0, a1); o.opt(r) { n166 -> w203(o, n166) } }
+            18 -> { val a0 = i.opt { i.str() }; val r = t.projectIcons(a0); o.list(r) { e167 -> w216(o, e167) } }
+            19 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.renameIcon(a0, a1, a2); w148(o, r) }
+            20 -> { val a0 = i.str(); val r = t.resourceArtwork(a0); o.opt(r) { n168 -> w203(o, n168) } }
             21 -> { val a0 = i.str(); val r = t.resourceBytes(a0); o.opt(r) { n169 -> o.bytes(n169) } }
-            22 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.searchIcons(a0, a1, a2); o.list(r) { e170 -> w202(o, e170) } }
+            22 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.searchIcons(a0, a1, a2); o.list(r) { e170 -> w204(o, e170) } }
             else -> error("IconService has no member $member that is called")
         }
     }
@@ -338,12 +338,12 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
     private suspend fun s12(t: dev.ide.ui.backend.LearnService, member: Int, i: RemoteIn, o: RemoteOut) {
         when (member) {
             0 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val r = t.accept(a0, a1); o.opt(r) { n171 -> o.string(n171) } }
-            1 -> { val r = t.account(); o.opt(r) { n172 -> w216(o, n172) } }
+            1 -> { val r = t.account(); o.opt(r) { n172 -> w218(o, n172) } }
             2 -> { val a0 = i.str(); val a1 = i.str(); val r = t.analyze(a0, a1); o.list(r) { e173 -> w90(o, e173) } }
-            3 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.opt { i.str() }; val r = t.answer(a0, a1, a2); w218(o, r) }
-            4 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val a2 = i.str(); val a3 = i.str(); val a4 = i.opt { i.str() }; val a5 = i.opt { i.str() }; val r = t.askQuestion(a0, a1, a2, a3, a4, a5); w218(o, r) }
-            5 -> { val r = t.catalog(); w219(o, r) }
-            6 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.check(a0, a1, a2); w223(o, r) }
+            3 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.opt { i.str() }; val r = t.answer(a0, a1, a2); w220(o, r) }
+            4 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val a2 = i.str(); val a3 = i.str(); val a4 = i.opt { i.str() }; val a5 = i.opt { i.str() }; val r = t.askQuestion(a0, a1, a2, a3, a4, a5); w220(o, r) }
+            5 -> { val r = t.catalog(); w221(o, r) }
+            6 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.check(a0, a1, a2); w225(o, r) }
             7 -> { val r = t.communityAvailable(); o.bool(r) }
             8 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val r = t.complete(a0, a1, a2); w93(o, r) }
             9 -> { val a0 = i.str(); val a1 = i.str(); val r = t.deleteMine(a0, a1); o.opt(r) { n174 -> o.string(n174) } }
@@ -351,27 +351,27 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
             11 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.int(); val a3 = i.int(); val r = t.hints(a0, a1, a2, a3); o.list(r) { e176 -> w105(o, e176) } }
             12 -> { val a0 = i.str(); val r = t.indexing(a0); o.bool(r) }
             13 -> { val r = t.learnAvailable(); o.bool(r) }
-            14 -> { val a0 = i.str(); val r = t.lesson(a0); o.opt(r) { n177 -> w224(o, n177) } }
+            14 -> { val a0 = i.str(); val r = t.lesson(a0); o.opt(r) { n177 -> w226(o, n177) } }
             15 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.likeSolution(a0, a1); o.opt(r) { n178 -> o.string(n178) } }
             16 -> { val a0 = i.str(); val a1 = i.str(); t.markStepComplete(a0, a1) }
             17 -> { val a0 = i.str(); val r = t.openWorkspace(a0); o.bool(r) }
             18 -> { val a0 = i.str(); val r = t.prepare(a0); o.bool(r) }
             19 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.opt { i.str() }; val r = t.prepareStep(a0, a1, a2); o.opt(r) { n179 -> o.string(n179) } }
-            20 -> { val r = t.progress(); w235(o, r) }
-            21 -> { val a0 = i.str(); val r = t.publicProfile(a0); o.opt(r) { n180 -> w236(o, n180) } }
+            20 -> { val r = t.progress(); w237(o, r) }
+            21 -> { val a0 = i.str(); val r = t.publicProfile(a0); o.opt(r) { n180 -> w238(o, n180) } }
             22 -> { val a0 = i.str(); val a1 = i.int(); t.recordVisit(a0, a1) }
             23 -> { val r = t.refreshCatalog(); o.bool(r) }
             24 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val a3 = i.opt { i.str() }; val r = t.report(a0, a1, a2, a3); o.opt(r) { n181 -> o.string(n181) } }
-            25 -> { val r = t.reportQueue(); o.opt(r) { n182 -> o.list(n182) { e183 -> w237(o, e183) } } }
+            25 -> { val r = t.reportQueue(); o.opt(r) { n182 -> o.list(n182) { e183 -> w239(o, e183) } } }
             26 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.resolveReport(a0, a1); o.opt(r) { n184 -> o.string(n184) } }
-            27 -> { val r = t.resume(); o.opt(r) { n185 -> w238(o, n185) } }
+            27 -> { val r = t.resume(); o.opt(r) { n185 -> w240(o, n185) } }
             28 -> { val a0 = i.bool(); val r = t.setShareSolutions(a0); o.opt(r) { n186 -> o.string(n186) } }
             29 -> { val r = t.shareSolutions(); o.bool(r) }
-            30 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.solutions(a0, a1, a2); o.opt(r) { n187 -> w239(o, n187) } }
+            30 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.solutions(a0, a1, a2); o.opt(r) { n187 -> w241(o, n187) } }
             31 -> { val r = t.syncProgress(); o.bool(r) }
-            32 -> { val a0 = i.str(); val r = t.thread(a0); o.opt(r) { n188 -> w242(o, n188) } }
+            32 -> { val a0 = i.str(); val r = t.thread(a0); o.opt(r) { n188 -> w244(o, n188) } }
             33 -> { val a0 = i.str(); val r = t.threadCount(a0); o.int(r) }
-            34 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val r = t.threads(a0, a1); o.opt(r) { n189 -> o.list(n189) { e190 -> w244(o, e190) } } }
+            34 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val r = t.threads(a0, a1); o.opt(r) { n189 -> o.list(n189) { e190 -> w246(o, e190) } } }
             35 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.vote(a0, a1); o.opt(r) { n191 -> o.string(n191) } }
             else -> error("LearnService has no member $member that is called")
         }
@@ -379,34 +379,34 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
 
     private suspend fun s13(t: dev.ide.ui.backend.ModuleService, member: Int, i: RemoteIn, o: RemoteOut) {
         when (member) {
-            0 -> { val a0 = i.str(); val a1 = i.str(); val r = t.acceptToolchainWarning(a0, a1); w245(o, r) }
-            1 -> { val a0 = i.str(); val a1 = i.str(); val r = t.addModuleFeature(a0, a1); w245(o, r) }
+            0 -> { val a0 = i.str(); val a1 = i.str(); val r = t.acceptToolchainWarning(a0, a1); w247(o, r) }
+            1 -> { val a0 = i.str(); val a1 = i.str(); val r = t.addModuleFeature(a0, a1); w247(o, r) }
             2 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val a3 = dev.ide.ui.backend.UiSourceRootRole.entries[i.int()]; val r = t.addSourceRoot(a0, a1, a2, a3); o.opt(r) { n192 -> o.string(n192) } }
             3 -> { val a0 = i.str(); val a1 = i.str(); val r = t.addSourceSet(a0, a1); o.bool(r) }
-            4 -> { val a0 = i.str(); val r = t.appIdentity(a0); o.opt(r) { n193 -> w246(o, n193) } }
-            5 -> { val a0 = r247(i); val r = t.applyAppRename(a0); w248(o, r) }
-            6 -> { val r = t.availableModuleTypes(); o.list(r) { e194 -> w249(o, e194) } }
-            7 -> { val r = t.configurableModules(); o.list(r) { e195 -> w257(o, e195) } }
-            8 -> { val a0 = i.str(); val r = t.configureKotlin(a0); w245(o, r) }
-            9 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.opt { i.str() }; val a3 = i.map({ i.str() }, { i.map({ i.str() }, { i.any() }) }); val a4 = i.str(); val r = t.createModule(a0, a1, a2, a3, a4); w245(o, r) }
+            4 -> { val a0 = i.str(); val r = t.appIdentity(a0); o.opt(r) { n193 -> w248(o, n193) } }
+            5 -> { val a0 = r249(i); val r = t.applyAppRename(a0); w250(o, r) }
+            6 -> { val r = t.availableModuleTypes(); o.list(r) { e194 -> w251(o, e194) } }
+            7 -> { val r = t.configurableModules(); o.list(r) { e195 -> w259(o, e195) } }
+            8 -> { val a0 = i.str(); val r = t.configureKotlin(a0); w247(o, r) }
+            9 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.opt { i.str() }; val a3 = i.map({ i.str() }, { i.map({ i.str() }, { i.any() }) }); val a4 = i.str(); val r = t.createModule(a0, a1, a2, a3, a4); w247(o, r) }
             10 -> { val a0 = i.str(); val a1 = i.str(); val r = t.createProguardFile(a0, a1); o.opt(r) { n196 -> o.string(n196) } }
-            11 -> { val a0 = i.str(); val a1 = i.str(); val r = t.fixToolchainWarning(a0, a1); w245(o, r) }
-            12 -> { val a0 = i.str(); val r = t.getBuildFeatures(a0); o.opt(r) { n197 -> w258(o, n197) } }
-            13 -> { val a0 = i.str(); val r = t.getCompilerPlugins(a0); o.opt(r) { n198 -> w260(o, n198) } }
-            14 -> { val a0 = i.str(); val r = t.getModuleConfig(a0); o.opt(r) { n199 -> w262(o, n199) } }
-            15 -> { val a0 = i.str(); val r = t.getPackagingOptions(a0); o.opt(r) { n200 -> w268(o, n200) } }
+            11 -> { val a0 = i.str(); val a1 = i.str(); val r = t.fixToolchainWarning(a0, a1); w247(o, r) }
+            12 -> { val a0 = i.str(); val r = t.getBuildFeatures(a0); o.opt(r) { n197 -> w260(o, n197) } }
+            13 -> { val a0 = i.str(); val r = t.getCompilerPlugins(a0); o.opt(r) { n198 -> w262(o, n198) } }
+            14 -> { val a0 = i.str(); val r = t.getModuleConfig(a0); o.opt(r) { n199 -> w264(o, n199) } }
+            15 -> { val a0 = i.str(); val r = t.getPackagingOptions(a0); o.opt(r) { n200 -> w270(o, n200) } }
             16 -> { val a0 = i.str(); val r = t.isKotlinConfigured(a0); o.bool(r) }
-            17 -> { val a0 = i.str(); val r = t.missingProguardFiles(a0); o.list(r) { e201 -> w270(o, e201) } }
+            17 -> { val a0 = i.str(); val r = t.missingProguardFiles(a0); o.list(r) { e201 -> w272(o, e201) } }
             18 -> { val a0 = i.str(); val r = t.moduleSourceSets(a0); o.list(r) { e202 -> o.string(e202) } }
-            19 -> { val a0 = r247(i); val r = t.previewAppRename(a0); w271(o, r) }
+            19 -> { val a0 = r249(i); val r = t.previewAppRename(a0); w273(o, r) }
             20 -> { val a0 = i.str(); val r = t.removeModule(a0); o.bool(r) }
             21 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.removeSourceRoot(a0, a1, a2); o.bool(r) }
-            22 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.bool(); val r = t.setBuildFeature(a0, a1, a2); w245(o, r) }
-            23 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.bool(); val r = t.setCompilerPlugin(a0, a1, a2); w245(o, r) }
+            22 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.bool(); val r = t.setBuildFeature(a0, a1, a2); w247(o, r) }
+            23 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.bool(); val r = t.setCompilerPlugin(a0, a1, a2); w247(o, r) }
             24 -> { val a0 = i.str(); val a1 = i.str(); val a2 = dev.ide.ui.backend.UiSourceSetScope.entries[i.int()]; val r = t.setSourceSetScope(a0, a1, a2); o.bool(r) }
-            25 -> { val r = t.toolchainWarnings(); o.list(r) { e203 -> w272(o, e203) } }
-            26 -> { val a0 = i.str(); val a1 = r273(i); val r = t.updateModuleConfig(a0, a1); w245(o, r) }
-            27 -> { val a0 = i.str(); val a1 = r269(i); val a2 = r269(i); val a3 = i.list { i.str() }; val r = t.updatePackagingOptions(a0, a1, a2, a3); w245(o, r) }
+            25 -> { val r = t.toolchainWarnings(); o.list(r) { e203 -> w274(o, e203) } }
+            26 -> { val a0 = i.str(); val a1 = r275(i); val r = t.updateModuleConfig(a0, a1); w247(o, r) }
+            27 -> { val a0 = i.str(); val a1 = r271(i); val a2 = r271(i); val a3 = i.list { i.str() }; val r = t.updatePackagingOptions(a0, a1, a2, a3); w247(o, r) }
             else -> error("ModuleService has no member $member that is called")
         }
     }
@@ -423,13 +423,13 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
 
     private suspend fun s15(t: dev.ide.ui.backend.PreviewService, member: Int, i: RemoteIn, o: RemoteOut) {
         when (member) {
-            0 -> { val a0 = i.str(); val a1 = i.str(); val r = t.colorResources(a0, a1); o.list(r) { e204 -> w280(o, e204) } }
+            0 -> { val a0 = i.str(); val a1 = i.str(); val r = t.colorResources(a0, a1); o.list(r) { e204 -> w282(o, e204) } }
             1 -> { val a0 = i.str(); val r = t.composePreviewReady(a0); o.bool(r) }
-            2 -> { val a0 = i.str(); val a1 = i.str(); val r = t.composePreviews(a0, a1); o.list(r) { e205 -> w281(o, e205) } }
-            3 -> { val a0 = i.str(); val a1 = i.str(); val r = t.drawablePreview(a0, a1); o.opt(r) { n206 -> w150(o, n206) } }
+            2 -> { val a0 = i.str(); val a1 = i.str(); val r = t.composePreviews(a0, a1); o.list(r) { e205 -> w283(o, e205) } }
+            3 -> { val a0 = i.str(); val a1 = i.str(); val r = t.drawablePreview(a0, a1); o.opt(r) { n206 -> w152(o, n206) } }
             4 -> { val a0 = i.str(); val a1 = i.str(); val r = t.isLiveLiteralEdit(a0, a1); o.bool(r) }
             6 -> { val a0 = i.str(); val r = t.resourceImageBytes(a0); o.opt(r) { n207 -> o.bytes(n207) } }
-            7 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.runComposePreview(a0, a1, a2); w284(o, r) }
+            7 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.runComposePreview(a0, a1, a2); w286(o, r) }
             else -> error("PreviewService has no member $member that is called")
         }
     }
@@ -438,38 +438,38 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
         when (member) {
             0 -> { val r = t.backupProjects(); o.opt(r) { n208 -> o.string(n208) } }
             1 -> { val a0 = i.str(); val r = t.clearStorageCategory(a0); o.bool(r) }
-            2 -> { val r = t.compatibilityInfo(); o.opt(r) { n209 -> w286(o, n209) } }
-            3 -> { val r = t.convertToNative(); w287(o, r) }
-            4 -> { val a0 = i.str(); val a1 = i.map({ i.str() }, { i.str() }); val r = t.createProject(a0, a1); w288(o, r) }
+            2 -> { val r = t.compatibilityInfo(); o.opt(r) { n209 -> w288(o, n209) } }
+            3 -> { val r = t.convertToNative(); w289(o, r) }
+            4 -> { val a0 = i.str(); val a1 = i.map({ i.str() }, { i.str() }); val r = t.createProject(a0, a1); w290(o, r) }
             5 -> { val a0 = i.str(); val r = t.deleteProject(a0); o.bool(r) }
             6 -> { t.discardProjectArchive() }
-            7 -> { val a0 = i.str(); val r = t.exportGradleProject(a0); o.opt(r) { n210 -> w289(o, n210) } }
-            8 -> { val a0 = i.str(); val r = t.exportPlan(a0); o.opt(r) { n211 -> w290(o, n211) } }
-            9 -> { val a0 = i.str(); val a1 = r292(i); val r = t.exportProject(a0, a1); o.opt(r) { n212 -> o.string(n212) } }
-            10 -> { val a0 = i.str(); val r = t.extractProjectArchive(a0); o.opt(r) { n213 -> w293(o, n213) } }
+            7 -> { val a0 = i.str(); val r = t.exportGradleProject(a0); o.opt(r) { n210 -> w291(o, n210) } }
+            8 -> { val a0 = i.str(); val r = t.exportPlan(a0); o.opt(r) { n211 -> w292(o, n211) } }
+            9 -> { val a0 = i.str(); val a1 = r294(i); val r = t.exportProject(a0, a1); o.opt(r) { n212 -> o.string(n212) } }
+            10 -> { val a0 = i.str(); val r = t.extractProjectArchive(a0); o.opt(r) { n213 -> w295(o, n213) } }
             11 -> { val r = t.hasLegacyData(); o.bool(r) }
             12 -> { val r = t.hasSavedSession(); o.bool(r) }
             13 -> { val a0 = i.str(); val r = t.imageBytes(a0); o.opt(r) { n214 -> o.bytes(n214) } }
             14 -> { val a0 = i.str(); val r = t.importDestination(a0); o.opt(r) { n215 -> o.string(n215) } }
-            15 -> { val a0 = i.str(); val r = t.importExternalProject(a0); w288(o, r) }
-            16 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val r = t.importPackage(a0, a1); w288(o, r) }
+            15 -> { val a0 = i.str(); val r = t.importExternalProject(a0); w290(o, r) }
+            16 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val r = t.importPackage(a0, a1); w290(o, r) }
             17 -> { val a0 = i.str(); val r = t.inspectProjectFolder(a0); o.int(r.ordinal) }
             18 -> { val a0 = i.str(); val r = t.openProject(a0); o.bool(r) }
-            19 -> { val r = t.openTabs(); w295(o, r) }
-            20 -> { val a0 = i.str(); val r = t.previewImportPackage(a0); o.opt(r) { n216 -> w297(o, n216) } }
-            22 -> { val a0 = i.str(); val r = t.projectIcon(a0); o.opt(r) { n217 -> w148(o, n217) } }
+            19 -> { val r = t.openTabs(); w297(o, r) }
+            20 -> { val a0 = i.str(); val r = t.previewImportPackage(a0); o.opt(r) { n216 -> w299(o, n216) } }
+            22 -> { val a0 = i.str(); val r = t.projectIcon(a0); o.opt(r) { n217 -> w150(o, n217) } }
             23 -> { val r = t.projectRenameSupported; o.bool(r) }
-            24 -> { val r = t.projectTemplates(); o.list(r) { e218 -> w300(o, e218) } }
-            25 -> { val r = t.projects(); o.list(r) { e219 -> w285(o, e219) } }
+            24 -> { val r = t.projectTemplates(); o.list(r) { e218 -> w302(o, e218) } }
+            25 -> { val r = t.projects(); o.list(r) { e219 -> w287(o, e219) } }
             26 -> { val r = t.projectsRootPath(); o.opt(r) { n220 -> o.string(n220) } }
             27 -> { val a0 = i.str(); val a1 = i.str(); val r = t.renameProject(a0, a1); o.bool(r) }
-            28 -> { val r = t.revertToGradle(); w287(o, r) }
-            29 -> { val a0 = r295(i); t.saveOpenTabs(a0) }
-            30 -> { val a0 = i.str(); val r = t.setKmpTarget(a0); w306(o, r) }
-            31 -> { val r = t.storageReport(); o.opt(r) { n221 -> w307(o, n221) } }
+            28 -> { val r = t.revertToGradle(); w289(o, r) }
+            29 -> { val a0 = r297(i); t.saveOpenTabs(a0) }
+            30 -> { val a0 = i.str(); val r = t.setKmpTarget(a0); w308(o, r) }
+            31 -> { val r = t.storageReport(); o.opt(r) { n221 -> w309(o, n221) } }
             32 -> { val r = t.storageRootPath(); o.opt(r) { n222 -> o.string(n222) } }
-            33 -> { val r = t.syncProject(); w306(o, r) }
-            34 -> { val r = t.unrecognizedProjectInfo(); o.opt(r) { n223 -> w310(o, n223) } }
+            33 -> { val r = t.syncProject(); w308(o, r) }
+            34 -> { val r = t.unrecognizedProjectInfo(); o.opt(r) { n223 -> w312(o, n223) } }
             else -> error("ProjectService has no member $member that is called")
         }
     }
@@ -477,15 +477,15 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
     private suspend fun s17(t: dev.ide.ui.backend.SdkService, member: Int, i: RemoteIn, o: RemoteOut) {
         when (member) {
             0 -> { val a0 = i.str(); t.acceptSdkLicense(a0) }
-            1 -> { val r = t.androidSourcesInfo(); o.opt(r) { n224 -> w311(o, n224) } }
+            1 -> { val r = t.androidSourcesInfo(); o.opt(r) { n224 -> w313(o, n224) } }
             2 -> { val a0 = i.str(); t.cancelSdkDownload(a0) }
             3 -> { t.clearSdkDownloads() }
             4 -> { val r = t.downloadAndroidSources(); o.string(r) }
             5 -> { val a0 = i.int(); val r = t.downloadJdkSources(a0); o.string(r) }
             6 -> { val a0 = i.str(); val r = t.installSdkPackage(a0); o.string(r) }
-            7 -> { val r = t.jdkInfo(); o.opt(r) { n225 -> w312(o, n225) } }
+            7 -> { val r = t.jdkInfo(); o.opt(r) { n225 -> w314(o, n225) } }
             8 -> { val a0 = i.str(); val r = t.sdkLicenseText(a0); o.opt(r) { n226 -> o.string(n226) } }
-            10 -> { val r = t.sdkPackages(); o.list(r) { e227 -> w316(o, e227) } }
+            10 -> { val r = t.sdkPackages(); o.list(r) { e227 -> w318(o, e227) } }
             11 -> { val r = t.sdkProjectPlatformLevels(); o.list(r.toList()) { e228 -> o.int(e228) } }
             else -> error("SdkService has no member $member that is called")
         }
@@ -493,10 +493,10 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
 
     private suspend fun s18(t: dev.ide.ui.backend.SearchService, member: Int, i: RemoteIn, o: RemoteOut) {
         when (member) {
-            0 -> { val a0 = i.str(); val a1 = r317(i); val a2 = i.int(); val r = t.findInFiles(a0, a1, a2); o.list(r) { e229 -> w318(o, e229) } }
+            0 -> { val a0 = i.str(); val a1 = r319(i); val a2 = i.int(); val r = t.findInFiles(a0, a1, a2); o.list(r) { e229 -> w320(o, e229) } }
             2 -> { t.reindex() }
-            3 -> { val a0 = i.str(); val a1 = i.int(); val r = t.searchMembers(a0, a1); o.list(r) { e230 -> w323(o, e230) } }
-            4 -> { val a0 = i.str(); val a1 = i.int(); val r = t.searchSymbols(a0, a1); o.list(r) { e231 -> w323(o, e231) } }
+            3 -> { val a0 = i.str(); val a1 = i.int(); val r = t.searchMembers(a0, a1); o.list(r) { e230 -> w325(o, e230) } }
+            4 -> { val a0 = i.str(); val a1 = i.int(); val r = t.searchSymbols(a0, a1); o.list(r) { e231 -> w325(o, e231) } }
             else -> error("SearchService has no member $member that is called")
         }
     }
@@ -504,34 +504,34 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
     private suspend fun s19(t: dev.ide.ui.backend.SettingsService, member: Int, i: RemoteIn, o: RemoteOut) {
         when (member) {
             1 -> { val r = t.canRestartApplication(); o.bool(r) }
-            2 -> { val a0 = i.str(); val r = t.checkLanguageServerCommand(a0); w325(o, r) }
-            3 -> { val a0 = i.str(); val r = t.codeStyle(a0); w326(o, r) }
+            2 -> { val a0 = i.str(); val r = t.checkLanguageServerCommand(a0); w327(o, r) }
+            3 -> { val a0 = i.str(); val r = t.codeStyle(a0); w328(o, r) }
             4 -> { val a0 = i.str(); t.deleteLanguageServer(a0) }
             5 -> { val a0 = i.str(); val r = t.deletePluginLeftover(a0); o.bool(r) }
-            6 -> { val a0 = i.str(); val a1 = r326(i); val r = t.formatStylePreview(a0, a1); o.string(r) }
-            7 -> { val r = t.inspections(); o.list(r) { e232 -> w327(o, e232) } }
+            6 -> { val a0 = i.str(); val a1 = r328(i); val r = t.formatStylePreview(a0, a1); o.string(r) }
+            7 -> { val r = t.inspections(); o.list(r) { e232 -> w329(o, e232) } }
             8 -> { val a0 = i.str(); val a1 = i.str(); val r = t.invokeSettingAction(a0, a1); o.opt(r) { n233 -> o.string(n233) } }
-            9 -> { val r = t.languageServerPresets(); o.list(r) { e234 -> w328(o, e234) } }
-            10 -> { val r = t.languageServers(); o.list(r) { e235 -> w328(o, e235) } }
+            9 -> { val r = t.languageServerPresets(); o.list(r) { e234 -> w330(o, e234) } }
+            10 -> { val r = t.languageServers(); o.list(r) { e235 -> w330(o, e235) } }
             11 -> { val r = t.languageServersSupported(); o.bool(r) }
             12 -> { val a0 = i.str(); val r = t.openPluginApp(a0); o.bool(r) }
             13 -> { val a0 = i.str(); val r = t.openPluginAppInfo(a0); o.bool(r) }
-            14 -> { val r = t.pendingPluginChanges(); o.list(r) { e236 -> w329(o, e236) } }
-            15 -> { val r = t.pluginCatalog(); o.list(r) { e237 -> w330(o, e237) } }
-            16 -> { val r = t.pluginDownloads(); w332(o, r) }
-            17 -> { val r = t.pluginLeftovers(); o.list(r) { e238 -> w334(o, e238) } }
+            14 -> { val r = t.pendingPluginChanges(); o.list(r) { e236 -> w331(o, e236) } }
+            15 -> { val r = t.pluginCatalog(); o.list(r) { e237 -> w332(o, e237) } }
+            16 -> { val r = t.pluginDownloads(); w334(o, r) }
+            17 -> { val r = t.pluginLeftovers(); o.list(r) { e238 -> w336(o, e238) } }
             18 -> { val a0 = i.str(); val r = t.preference(a0); o.opt(r) { n239 -> o.string(n239) } }
             19 -> { val a0 = i.str(); t.reenableInspection(a0) }
             20 -> { t.restartApplication() }
-            21 -> { val a0 = r328(i); val r = t.saveLanguageServer(a0); o.opt(r) { n240 -> o.string(n240) } }
-            22 -> { val a0 = i.str(); val a1 = r326(i); t.setCodeStyle(a0, a1) }
+            21 -> { val a0 = r330(i); val r = t.saveLanguageServer(a0); o.opt(r) { n240 -> o.string(n240) } }
+            22 -> { val a0 = i.str(); val a1 = r328(i); t.setCodeStyle(a0, a1) }
             23 -> { val a0 = i.str(); val a1 = i.bool(); val a2 = dev.ide.ui.backend.UiSeverity.entries[i.int()]; t.setInspection(a0, a1, a2) }
             24 -> { val a0 = i.str(); val a1 = i.bool(); t.setPluginConsent(a0, a1) }
             25 -> { val a0 = i.str(); val a1 = i.bool(); t.setPluginEnabled(a0, a1) }
             26 -> { val a0 = i.str(); val a1 = i.str(); t.setPreference(a0, a1) }
             27 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); t.setSetting(a0, a1, a2) }
-            28 -> { val r = t.settings(); w335(o, r) }
-            29 -> { val r = t.settingsPages(); o.list(r) { e241 -> w336(o, e241) } }
+            28 -> { val r = t.settings(); w337(o, r) }
+            29 -> { val r = t.settingsPages(); o.list(r) { e241 -> w338(o, e241) } }
             30 -> { val a0 = i.str(); val a1 = i.str(); val r = t.writeSharedFile(a0, a1); o.opt(r) { n242 -> o.string(n242) } }
             else -> error("SettingsService has no member $member that is called")
         }
@@ -539,14 +539,14 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
 
     private suspend fun s20(t: dev.ide.ui.backend.SigningService, member: Int, i: RemoteIn, o: RemoteOut) {
         when (member) {
-            0 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.opt { i.str() }; val r = t.assignSigning(a0, a1, a2); w245(o, r) }
-            1 -> { val a0 = r346(i); val r = t.createKeystore(a0); w347(o, r) }
+            0 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.opt { i.str() }; val r = t.assignSigning(a0, a1, a2); w247(o, r) }
+            1 -> { val a0 = r348(i); val r = t.createKeystore(a0); w349(o, r) }
             2 -> { val a0 = i.str(); val r = t.deleteKeystore(a0); o.bool(r) }
-            3 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val a3 = i.str(); val a4 = i.str(); val r = t.importKeystore(a0, a1, a2, a3, a4); w347(o, r) }
-            4 -> { val r = t.keystores(); o.list(r) { e243 -> w348(o, e243) } }
+            3 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val a3 = i.str(); val a4 = i.str(); val r = t.importKeystore(a0, a1, a2, a3, a4); w349(o, r) }
+            4 -> { val r = t.keystores(); o.list(r) { e243 -> w350(o, e243) } }
             5 -> { val r = t.signableModules(); o.list(r) { e244 -> o.string(e244) } }
-            6 -> { val a0 = i.str(); val r = t.signingAssignments(a0); o.opt(r) { n245 -> w349(o, n245) } }
-            7 -> { val a0 = i.str(); val a1 = i.str(); val r = t.validateKeystore(a0, a1); w351(o, r) }
+            6 -> { val a0 = i.str(); val r = t.signingAssignments(a0); o.opt(r) { n245 -> w351(o, n245) } }
+            7 -> { val a0 = i.str(); val a1 = i.str(); val r = t.validateKeystore(a0, a1); w353(o, r) }
             else -> error("SigningService has no member $member that is called")
         }
     }
@@ -556,33 +556,33 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
             0 -> { val r = t.accountDeletionAvailable(); o.bool(r) }
             1 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val a2 = i.bool(); val r = t.approveSubmission(a0, a1, a2); o.opt(r) { n246 -> o.string(n246) } }
             2 -> { val r = t.authProviders(); o.list(r) { e247 -> o.string(e247) } }
-            4 -> { val r = t.availableUpdates(); o.list(r) { e248 -> w355(o, e248) } }
+            4 -> { val r = t.availableUpdates(); o.list(r) { e248 -> w357(o, e248) } }
             5 -> { val a0 = i.str(); val r = t.avatarFile(a0); o.opt(r) { n249 -> o.string(n249) } }
             6 -> { val a0 = i.str(); val r = t.beginSignIn(a0); o.opt(r) { n250 -> o.string(n250) } }
-            7 -> { val r = t.catalog(); w357(o, r) }
+            7 -> { val r = t.catalog(); w359(o, r) }
             8 -> { val a0 = i.str(); t.completeSignIn(a0) }
             9 -> { val r = t.deleteAccount(); o.opt(r) { n251 -> o.string(n251) } }
             10 -> { val a0 = i.str(); val r = t.deleteMyReview(a0); o.bool(r) }
             11 -> { val a0 = i.str(); val a1 = i.str(); val r = t.deleteReply(a0, a1); o.opt(r) { n252 -> o.string(n252) } }
             12 -> { val a0 = i.str(); val a1 = i.str(); val r = t.deleteSubmission(a0, a1); o.opt(r) { n253 -> o.string(n253) } }
-            13 -> { val a0 = i.opt { i.str() }; val a1 = i.bool(); val r = t.feed(a0, a1); o.opt(r) { n254 -> w359(o, n254) } }
+            13 -> { val a0 = i.opt { i.str() }; val a1 = i.bool(); val r = t.feed(a0, a1); o.opt(r) { n254 -> w361(o, n254) } }
             14 -> { val a0 = i.str(); val r = t.handleAvailable(a0); o.opt(r) { n255 -> o.bool(n255) } }
-            15 -> { val a0 = i.str(); val a1 = i.map({ i.str() }, { i.str() }); val r = t.install(a0, a1); w381(o, r) }
+            15 -> { val a0 = i.str(); val a1 = i.map({ i.str() }, { i.str() }); val r = t.install(a0, a1); w383(o, r) }
             17 -> { val a0 = i.str(); val r = t.isLiked(a0); o.bool(r) }
             18 -> { val r = t.isModerator(); o.bool(r) }
             19 -> { val r = t.launchNotificationEnabled(); o.bool(r) }
             20 -> { val r = t.likedItems(); o.list(r.toList()) { e256 -> o.string(e256) } }
             21 -> { val a0 = i.str(); val r = t.listingSlugForProject(a0); o.opt(r) { n257 -> o.string(n257) } }
-            22 -> { val a0 = i.str(); val r = t.localChanges(a0); o.opt(r) { n258 -> w383(o, n258) } }
-            23 -> { val a0 = i.str(); val r = t.mergeUpdate(a0); w384(o, r) }
+            22 -> { val a0 = i.str(); val r = t.localChanges(a0); o.opt(r) { n258 -> w385(o, n258) } }
+            23 -> { val a0 = i.str(); val r = t.mergeUpdate(a0); w386(o, r) }
             24 -> { val r = t.moderationAvailable(); o.bool(r) }
-            25 -> { val r = t.myProfile(); o.opt(r) { n259 -> w385(o, n259) } }
-            26 -> { val r = t.myPublishedItems(); o.list(r) { e260 -> w386(o, e260) } }
-            27 -> { val r = t.mySubmissions(); o.list(r) { e261 -> w387(o, e261) } }
-            28 -> { val r = t.openReports(); o.list(r) { e262 -> w388(o, e262) } }
+            25 -> { val r = t.myProfile(); o.opt(r) { n259 -> w387(o, n259) } }
+            26 -> { val r = t.myPublishedItems(); o.list(r) { e260 -> w388(o, e260) } }
+            27 -> { val r = t.mySubmissions(); o.list(r) { e261 -> w389(o, e261) } }
+            28 -> { val r = t.openReports(); o.list(r) { e262 -> w390(o, e262) } }
             29 -> { val a0 = i.str(); val r = t.packFailure(a0); o.opt(r) { n263 -> o.string(n263) } }
-            30 -> { val a0 = i.str(); val r = t.packProject(a0); o.opt(r) { n264 -> w389(o, n264) } }
-            31 -> { val a0 = i.str(); val r = t.publisherProfile(a0); o.opt(r) { n265 -> w390(o, n265) } }
+            30 -> { val a0 = i.str(); val r = t.packProject(a0); o.opt(r) { n264 -> w391(o, n264) } }
+            31 -> { val a0 = i.str(); val r = t.publisherProfile(a0); o.opt(r) { n265 -> w392(o, n265) } }
             32 -> { val a0 = i.str(); val a1 = i.int(); val a2 = i.opt { i.str() }; val r = t.rate(a0, a1, a2); o.opt(r) { n266 -> o.string(n266) } }
             33 -> { val a0 = i.str(); t.recordInstall(a0) }
             34 -> { val r = t.refreshAuthProviders(); o.list(r) { e267 -> o.string(e267) } }
@@ -591,14 +591,14 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
             37 -> { val a0 = i.str(); val a1 = dev.ide.ui.backend.UiReportReason.entries[i.int()]; val a2 = i.opt { i.str() }; val r = t.reportItem(a0, a1, a2); o.opt(r) { n270 -> o.string(n270) } }
             38 -> { val a0 = i.str(); val a1 = i.str(); val a2 = dev.ide.ui.backend.UiReportReason.entries[i.int()]; val a3 = i.opt { i.str() }; val r = t.reportReview(a0, a1, a2, a3); o.opt(r) { n271 -> o.string(n271) } }
             39 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.resolveReport(a0, a1); o.opt(r) { n272 -> o.string(n272) } }
-            40 -> { val r = t.reviewQueue(); w391(o, r) }
-            41 -> { val a0 = i.str(); val a1 = dev.ide.ui.backend.UiReviewSort.entries[i.int()]; val a2 = i.int(); val a3 = i.int(); val r = t.reviews(a0, a1, a2, a3); w397(o, r) }
+            40 -> { val r = t.reviewQueue(); w393(o, r) }
+            41 -> { val a0 = i.str(); val a1 = dev.ide.ui.backend.UiReviewSort.entries[i.int()]; val a2 = i.int(); val a3 = i.int(); val r = t.reviews(a0, a1, a2, a3); w399(o, r) }
             42 -> { val r = t.reviewsAvailable(); o.bool(r) }
             43 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.opt { i.str() }; val a3 = i.opt { i.str() }; val a4 = i.opt { i.str() }; val r = t.saveProfile(a0, a1, a2, a3, a4); o.opt(r) { n273 -> o.string(n273) } }
             44 -> { val a0 = i.str(); val r = t.screenshotFile(a0); o.opt(r) { n274 -> o.string(n274) } }
-            45 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val r = t.search(a0, a1); o.list(r) { e275 -> w356(o, e275) } }
-            46 -> { val r = t.searchCategories(); o.list(r) { e276 -> w366(o, e276) } }
-            47 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val a2 = i.int(); val a3 = i.int(); val r = t.searchPage(a0, a1, a2, a3); w399(o, r) }
+            45 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val r = t.search(a0, a1); o.list(r) { e275 -> w358(o, e275) } }
+            46 -> { val r = t.searchCategories(); o.list(r) { e276 -> w368(o, e276) } }
+            47 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val a2 = i.int(); val a3 = i.int(); val r = t.searchPage(a0, a1, a2, a3); w401(o, r) }
             48 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.setFollowing(a0, a1); o.opt(r) { n277 -> o.string(n277) } }
             49 -> { val a0 = i.bool(); val r = t.setLaunchNotification(a0); o.opt(r) { n278 -> o.string(n278) } }
             50 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.setLike(a0, a1); o.opt(r) { n279 -> o.string(n279) } }
@@ -607,13 +607,13 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
             53 -> { val r = t.storeAvailable(); o.bool(r) }
             54 -> { val a0 = i.str(); val r = t.submissionImageFile(a0); o.opt(r) { n281 -> o.string(n281) } }
             55 -> { val r = t.submissionsAvailable(); o.bool(r) }
-            56 -> { val a0 = r400(i); val a1 = r389(i); val r = t.submit(a0, a1); w401(o, r) }
+            56 -> { val a0 = r402(i); val a1 = r391(i); val r = t.submit(a0, a1); w403(o, r) }
             57 -> { val r = t.submitCategories(); o.list(r) { e282 -> o.string(e282.first); o.string(e282.second) } }
-            58 -> { val a0 = i.str(); val a1 = i.str(); val r = t.translateListing(a0, a1); w402(o, r) }
-            59 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.translateReview(a0, a1, a2); w402(o, r) }
+            58 -> { val a0 = i.str(); val a1 = i.str(); val r = t.translateListing(a0, a1); w404(o, r) }
+            59 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.translateReview(a0, a1, a2); w404(o, r) }
             60 -> { val r = t.translationAvailable(); o.bool(r) }
-            61 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.update(a0, a1); w381(o, r) }
-            62 -> { val a0 = i.str(); val r = t.updateFor(a0); o.opt(r) { n283 -> w355(o, n283) } }
+            61 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.update(a0, a1); w383(o, r) }
+            62 -> { val a0 = i.str(); val r = t.updateFor(a0); o.opt(r) { n283 -> w357(o, n283) } }
             63 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.bool(); val r = t.voteReview(a0, a1, a2); o.opt(r) { n284 -> o.string(n284) } }
             64 -> { val a0 = i.str(); val a1 = i.str(); val r = t.withdrawSubmission(a0, a1); o.bool(r) }
             else -> error("StoreService has no member $member that is called")
@@ -622,55 +622,55 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
 
     private suspend fun s22(t: dev.ide.ui.backend.VcsService, member: Int, i: RemoteIn, o: RemoteOut) {
         when (member) {
-            0 -> { val r = t.abortMerge(); w403(o, r) }
-            3 -> { val r = t.addDefaultIgnores(); w403(o, r) }
-            4 -> { val a0 = i.str(); val a1 = i.str(); val r = t.addRemote(a0, a1); w403(o, r) }
+            0 -> { val r = t.abortMerge(); w405(o, r) }
+            3 -> { val r = t.addDefaultIgnores(); w405(o, r) }
+            4 -> { val a0 = i.str(); val a1 = i.str(); val r = t.addRemote(a0, a1); w405(o, r) }
             5 -> { val a0 = i.str(); val r = t.baseText(a0); o.opt(r) { n285 -> o.string(n285) } }
-            6 -> { val a0 = i.str(); val r = t.blame(a0); o.list(r) { e286 -> o.opt(e286) { n287 -> w407(o, n287) } } }
-            7 -> { val a0 = i.bool(); val r = t.branches(a0); o.list(r) { e288 -> w408(o, e288) } }
+            6 -> { val a0 = i.str(); val r = t.blame(a0); o.list(r) { e286 -> o.opt(e286) { n287 -> w409(o, n287) } } }
+            7 -> { val a0 = i.bool(); val r = t.branches(a0); o.list(r) { e288 -> w410(o, e288) } }
             8 -> { t.cancelSignIn() }
-            9 -> { val a0 = i.str(); val r = t.checkoutBranch(a0); w403(o, r) }
-            10 -> { val a0 = i.str(); val r = t.clearHostCredentials(a0); w403(o, r) }
-            11 -> { val a0 = i.str(); val a1 = i.str(); val r = t.cloneRepository(a0, a1); w403(o, r) }
-            12 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.commit(a0, a1); w403(o, r) }
-            13 -> { val a0 = i.str(); val r = t.commitDetail(a0); o.opt(r) { n289 -> w409(o, n289) } }
-            14 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val a2 = i.bool(); val r = t.createBranch(a0, a1, a2); w403(o, r) }
-            15 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.createPullRequest(a0, a1, a2); w403(o, r) }
+            9 -> { val a0 = i.str(); val r = t.checkoutBranch(a0); w405(o, r) }
+            10 -> { val a0 = i.str(); val r = t.clearHostCredentials(a0); w405(o, r) }
+            11 -> { val a0 = i.str(); val a1 = i.str(); val r = t.cloneRepository(a0, a1); w405(o, r) }
+            12 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.commit(a0, a1); w405(o, r) }
+            13 -> { val a0 = i.str(); val r = t.commitDetail(a0); o.opt(r) { n289 -> w411(o, n289) } }
+            14 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val a2 = i.bool(); val r = t.createBranch(a0, a1, a2); w405(o, r) }
+            15 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.createPullRequest(a0, a1, a2); w405(o, r) }
             16 -> { val r = t.credentialHosts(); o.list(r) { e290 -> o.string(e290) } }
             17 -> { val r = t.defaultBranch(); o.opt(r) { n291 -> o.string(n291) } }
-            18 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.deleteBranch(a0, a1); w403(o, r) }
+            18 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.deleteBranch(a0, a1); w405(o, r) }
             19 -> { val r = t.deviceAuthSupported(); o.bool(r) }
-            20 -> { val a0 = i.str(); val a1 = i.bool(); val a2 = i.opt { i.str() }; val r = t.diff(a0, a1, a2); o.opt(r) { n292 -> w412(o, n292) } }
-            21 -> { val a0 = i.list { i.str() }; val r = t.discard(a0); w403(o, r) }
-            22 -> { val r = t.fetch(); w403(o, r) }
-            23 -> { val a0 = i.str(); val a1 = i.int(); val r = t.forgeRepositories(a0, a1); o.list(r) { e293 -> w413(o, e293) } }
-            24 -> { val r = t.identity(); w414(o, r) }
-            25 -> { val r = t.initRepository(); w403(o, r) }
-            26 -> { val a0 = i.int(); val a1 = i.int(); val a2 = i.opt { i.str() }; val r = t.log(a0, a1, a2); o.list(r) { e294 -> w410(o, e294) } }
-            27 -> { val a0 = i.list { i.str() }; val r = t.markResolved(a0); w403(o, r) }
-            28 -> { val a0 = i.str(); val r = t.mergeBranch(a0); w403(o, r) }
-            29 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.bool(); val r = t.publishToForge(a0, a1, a2); w403(o, r) }
-            30 -> { val r = t.pull(); w403(o, r) }
-            31 -> { val r = t.pullRequests(); o.list(r) { e295 -> w415(o, e295) } }
-            32 -> { val a0 = i.bool(); val r = t.push(a0); w403(o, r) }
+            20 -> { val a0 = i.str(); val a1 = i.bool(); val a2 = i.opt { i.str() }; val r = t.diff(a0, a1, a2); o.opt(r) { n292 -> w414(o, n292) } }
+            21 -> { val a0 = i.list { i.str() }; val r = t.discard(a0); w405(o, r) }
+            22 -> { val r = t.fetch(); w405(o, r) }
+            23 -> { val a0 = i.str(); val a1 = i.int(); val r = t.forgeRepositories(a0, a1); o.list(r) { e293 -> w415(o, e293) } }
+            24 -> { val r = t.identity(); w416(o, r) }
+            25 -> { val r = t.initRepository(); w405(o, r) }
+            26 -> { val a0 = i.int(); val a1 = i.int(); val a2 = i.opt { i.str() }; val r = t.log(a0, a1, a2); o.list(r) { e294 -> w412(o, e294) } }
+            27 -> { val a0 = i.list { i.str() }; val r = t.markResolved(a0); w405(o, r) }
+            28 -> { val a0 = i.str(); val r = t.mergeBranch(a0); w405(o, r) }
+            29 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.bool(); val r = t.publishToForge(a0, a1, a2); w405(o, r) }
+            30 -> { val r = t.pull(); w405(o, r) }
+            31 -> { val r = t.pullRequests(); o.list(r) { e295 -> w417(o, e295) } }
+            32 -> { val a0 = i.bool(); val r = t.push(a0); w405(o, r) }
             33 -> { t.refresh() }
-            34 -> { val r = t.remotes(); o.list(r) { e296 -> w416(o, e296) } }
-            35 -> { val a0 = i.str(); val r = t.removeRemote(a0); w403(o, r) }
-            36 -> { val a0 = i.str(); val a1 = i.str(); val r = t.renameBranch(a0, a1); w403(o, r) }
-            37 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.saveHostCredentials(a0, a1, a2); w403(o, r) }
-            38 -> { val a0 = i.str(); val r = t.setActiveAccount(a0); w403(o, r) }
-            39 -> { val a0 = i.str(); val a1 = i.str(); val r = t.setIdentity(a0, a1); w403(o, r) }
-            41 -> { val a0 = i.str(); val r = t.signInWithToken(a0); w403(o, r) }
-            42 -> { val a0 = i.str(); val r = t.signOut(a0); w403(o, r) }
-            43 -> { val a0 = i.list { i.str() }; val r = t.stage(a0); w403(o, r) }
+            34 -> { val r = t.remotes(); o.list(r) { e296 -> w418(o, e296) } }
+            35 -> { val a0 = i.str(); val r = t.removeRemote(a0); w405(o, r) }
+            36 -> { val a0 = i.str(); val a1 = i.str(); val r = t.renameBranch(a0, a1); w405(o, r) }
+            37 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.saveHostCredentials(a0, a1, a2); w405(o, r) }
+            38 -> { val a0 = i.str(); val r = t.setActiveAccount(a0); w405(o, r) }
+            39 -> { val a0 = i.str(); val a1 = i.str(); val r = t.setIdentity(a0, a1); w405(o, r) }
+            41 -> { val a0 = i.str(); val r = t.signInWithToken(a0); w405(o, r) }
+            42 -> { val a0 = i.str(); val r = t.signOut(a0); w405(o, r) }
+            43 -> { val a0 = i.list { i.str() }; val r = t.stage(a0); w405(o, r) }
             44 -> { t.startSignIn() }
-            45 -> { val a0 = i.int(); val a1 = i.bool(); val r = t.stashApply(a0, a1); w403(o, r) }
-            46 -> { val a0 = i.int(); val r = t.stashDrop(a0); w403(o, r) }
-            47 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.stashPush(a0, a1); w403(o, r) }
-            48 -> { val r = t.stashes(); o.list(r) { e297 -> w423(o, e297) } }
+            45 -> { val a0 = i.int(); val a1 = i.bool(); val r = t.stashApply(a0, a1); w405(o, r) }
+            46 -> { val a0 = i.int(); val r = t.stashDrop(a0); w405(o, r) }
+            47 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.stashPush(a0, a1); w405(o, r) }
+            48 -> { val r = t.stashes(); o.list(r) { e297 -> w425(o, e297) } }
             50 -> { val r = t.supported(); o.bool(r) }
             51 -> { val r = t.underVersionControl(); o.bool(r) }
-            52 -> { val a0 = i.list { i.str() }; val r = t.unstage(a0); w403(o, r) }
+            52 -> { val a0 = i.list { i.str() }; val r = t.unstage(a0); w405(o, r) }
             else -> error("VcsService has no member $member that is called")
         }
     }
@@ -694,6 +694,10 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
             3 -> backend.build.buildState
             7 -> backend.build.permissionRequest
             9 -> backend.build.runConsole
+            else -> null
+        }
+        5 -> when (member) {
+            8 -> backend.challenges.judging
             else -> null
         }
         7 -> when (member) {
@@ -777,50 +781,53 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
                 7 -> { val v = value as dev.ide.ui.backend.UiPermissionRequest?; o.opt(v) { n302 -> w85(o, n302) } }
                 9 -> { val v = value as dev.ide.ui.backend.RunConsoleUi?; o.opt(v) { n303 -> w86(o, n303) } }
             }
+            5 -> when (member) {
+                8 -> { val v = value as dev.ide.ui.backend.UiJudgeProgress?; o.opt(v) { n304 -> w107(o, n304) } }
+            }
             7 -> when (member) {
-                14 -> { val v = value as dev.ide.ui.backend.DepsResolveState; w121(o, v) }
+                14 -> { val v = value as dev.ide.ui.backend.DepsResolveState; w123(o, v) }
                 18 -> { val v = value as kotlin.Int; o.int(v) }
-                19 -> { val v = value as dev.ide.ui.backend.UiAddResult?; o.opt(v) { n304 -> w116(o, n304) } }
+                19 -> { val v = value as dev.ide.ui.backend.UiAddResult?; o.opt(v) { n305 -> w118(o, n305) } }
             }
             8 -> when (member) {
-                5 -> { val v = value as dev.ide.ui.backend.UiError?; o.opt(v) { n305 -> w129(o, n305) } }
+                5 -> { val v = value as dev.ide.ui.backend.UiError?; o.opt(v) { n306 -> w131(o, n306) } }
             }
             9 -> when (member) {
-                10 -> { val v = value as kotlin.collections.Set<kotlin.String>; o.list(v.toList()) { e306 -> o.string(e306) } }
-                13 -> { val v = value as kotlin.collections.Map<kotlin.String, kotlin.collections.List<dev.ide.ui.backend.UiTextEdit>>; o.map(v, { k307 -> o.string(k307) }, { v308 -> o.list(v308) { e309 -> w7(o, e309) } }) }
+                10 -> { val v = value as kotlin.collections.Set<kotlin.String>; o.list(v.toList()) { e307 -> o.string(e307) } }
+                13 -> { val v = value as kotlin.collections.Map<kotlin.String, kotlin.collections.List<dev.ide.ui.backend.UiTextEdit>>; o.map(v, { k308 -> o.string(k308) }, { v309 -> o.list(v309) { e310 -> w7(o, e310) } }) }
                 32 -> { val v = value as kotlin.Int; o.int(v) }
             }
             10 -> when (member) {
                 10 -> { val v = value as kotlin.Int; o.int(v) }
             }
             14 -> when (member) {
-                4 -> { val v = value as kotlin.collections.List<dev.ide.ui.backend.UiNotification>; o.list(v) { e310 -> w274(o, e310) } }
+                4 -> { val v = value as kotlin.collections.List<dev.ide.ui.backend.UiNotification>; o.list(v) { e311 -> w276(o, e311) } }
                 5 -> { val v = value as kotlin.Int; o.int(v) }
             }
             15 -> when (member) {
-                5 -> { val v = value as dev.ide.ui.backend.PreviewProgress?; o.opt(v) { n311 -> w283(o, n311) } }
+                5 -> { val v = value as dev.ide.ui.backend.PreviewProgress?; o.opt(v) { n312 -> w285(o, n312) } }
             }
             16 -> when (member) {
                 21 -> { val v = value as kotlin.Int; o.int(v) }
             }
             17 -> when (member) {
-                9 -> { val v = value as dev.ide.ui.backend.UiSdkManagerState; w313(o, v) }
+                9 -> { val v = value as dev.ide.ui.backend.UiSdkManagerState; w315(o, v) }
             }
             18 -> when (member) {
-                1 -> { val v = value as dev.ide.ui.backend.IndexUiStatus; w319(o, v) }
+                1 -> { val v = value as dev.ide.ui.backend.IndexUiStatus; w321(o, v) }
             }
             19 -> when (member) {
-                0 -> { val v = value as kotlin.collections.List<dev.ide.ui.backend.UiAutoDisabledInspection>; o.list(v) { e312 -> w324(o, e312) } }
+                0 -> { val v = value as kotlin.collections.List<dev.ide.ui.backend.UiAutoDisabledInspection>; o.list(v) { e313 -> w326(o, e313) } }
             }
             21 -> when (member) {
-                3 -> { val v = value as dev.ide.ui.backend.UiStoreAuthState; w353(o, v) }
-                16 -> { val v = value as kotlin.collections.Map<kotlin.String, dev.ide.ui.backend.UiInstallProgress>; o.map(v, { k313 -> o.string(k313) }, { v314 -> w382(o, v314) }) }
+                3 -> { val v = value as dev.ide.ui.backend.UiStoreAuthState; w355(o, v) }
+                16 -> { val v = value as kotlin.collections.Map<kotlin.String, dev.ide.ui.backend.UiInstallProgress>; o.map(v, { k314 -> o.string(k314) }, { v315 -> w384(o, v315) }) }
             }
             22 -> when (member) {
-                1 -> { val v = value as kotlin.collections.List<dev.ide.ui.backend.UiVcsAccount>; o.list(v) { e315 -> w405(o, e315) } }
-                2 -> { val v = value as dev.ide.ui.backend.UiVcsActivity; w406(o, v) }
-                40 -> { val v = value as dev.ide.ui.backend.UiVcsSignIn; w417(o, v) }
-                49 -> { val v = value as dev.ide.ui.backend.UiVcsStatus; w424(o, v) }
+                1 -> { val v = value as kotlin.collections.List<dev.ide.ui.backend.UiVcsAccount>; o.list(v) { e316 -> w407(o, e316) } }
+                2 -> { val v = value as dev.ide.ui.backend.UiVcsActivity; w408(o, v) }
+                40 -> { val v = value as dev.ide.ui.backend.UiVcsSignIn; w419(o, v) }
+                49 -> { val v = value as dev.ide.ui.backend.UiVcsStatus; w426(o, v) }
             }
         }
     }

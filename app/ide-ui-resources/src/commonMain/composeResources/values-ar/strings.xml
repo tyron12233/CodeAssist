@@ -2929,6 +2929,43 @@
     <string name="challenge_running">جارٍ التشغيل</string>
     <string name="challenge_run_examples">تشغيل الأمثلة</string>
     <string name="challenge_judging">جارٍ التقييم</string>
+    <!-- judge-progress:begin -->
+    <string name="judge_title">جارٍ تقييم حلّك</string>
+    <string name="judge_subtitle">تعمل الاختبارات المخفية على خادم جديد، لا على هاتفك.</string>
+    <string name="judge_not_live">المقيّم يعمل. يعرض هذا الإصدار الخطوات عند وصول الرد.</string>
+    <string name="judge_hide">إخفاء</string>
+    <string name="judge_steps_title">كيف جرى التقييم</string>
+    <string name="judge_total">الإجمالي %1$s</string>
+    <string name="judge_step_claim">التحقق من محاولتك</string>
+    <string name="judge_step_load">تحميل الاختبارات المخفية</string>
+    <string name="judge_step_boot">تشغيل جهاز افتراضي معزول</string>
+    <string name="judge_step_compile">الترجمة باستخدام %1$s</string>
+    <string name="judge_step_tests">تشغيل الاختبارات المخفية</string>
+    <string name="judge_step_measure">قياس كيف يتوسع الحل</string>
+    <string name="judge_step_record">حفظ نتيجتك</string>
+    <string name="judge_short_boot">تشغيل الجهاز</string>
+    <string name="judge_short_compile">الترجمة</string>
+    <string name="judge_short_tests">الاختبار</string>
+    <string name="judge_short_measure">القياس</string>
+    <string name="judge_short_record">الحفظ</string>
+    <string name="judge_detail_attempt">المحاولة %1$d</string>
+    <string name="judge_detail_practice">تدريب، بلا ترتيب</string>
+    <string name="judge_detail_tests_loaded">%1$d اختبارًا مخفيًا</string>
+    <string name="judge_detail_vm">%1$d معالجات افتراضية، جديدة لهذا الإرسال</string>
+    <string name="judge_detail_compile_running">تشغيل JVM والمترجم</string>
+    <string name="judge_detail_compiled">استغرق المترجم %1$s</string>
+    <string name="judge_detail_compile_failed">لم تنجح الترجمة</string>
+    <string name="judge_detail_jvm_starting">تشغيل JVM</string>
+    <string name="judge_detail_jvm_ready">JVM جاهزة خلال %1$s، تشغيل %2$d اختبارًا</string>
+    <string name="judge_detail_tests_done">نجح %1$d من %2$d</string>
+    <string name="judge_detail_tests_failed">فشل في اختبار مخفي</string>
+    <string name="judge_detail_counting_jvm">تشغيل JVM للعدّ: تُعدّ كل عملية</string>
+    <string name="judge_detail_timing">توقيت كل حجم</string>
+    <string name="judge_detail_size">الحجم %1$s (%2$d من %3$d): %4$s عملية</string>
+    <string name="judge_detail_measured">قيس %1$d أحجام</string>
+    <string name="judge_detail_measure_failed">اكتمل عدد قليل جدًا من الأحجام للقياس</string>
+    <string name="judge_detail_saved">أُضيف إلى سجلّك</string>
+    <!-- judge-progress:end -->
     <string name="challenge_submit">إرسال</string>
     <!-- Daily challenge verdict sheet -->
     <string name="challenge_keep_improving">واصل التحسين</string>

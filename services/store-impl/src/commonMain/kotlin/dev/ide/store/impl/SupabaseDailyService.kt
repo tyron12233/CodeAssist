@@ -5,6 +5,7 @@ import dev.ide.platform.JsonWriter
 import dev.ide.store.DailyBoard
 import dev.ide.store.DailyChallengeService
 import dev.ide.store.DailyDay
+import dev.ide.store.DailyJudgeEvent
 import dev.ide.store.DailyHistoryEntry
 import dev.ide.store.DailyLanguage
 import dev.ide.store.DailyLanguageMaterial
@@ -98,6 +99,74 @@ class SupabaseDailyService(
             // The judge explains refusals in words meant for a person, so they are shown as sent.
             StoreResult.Failed(JsonReader.str(root, "message") ?: "The judge refused that submission.", r.status)
         }
+    }
+
+    override fun submit(
+        date: String,
+        language: DailyLanguage,
+        source: String,
+        onEvent: (DailyJudgeEvent) -> Unit,
+    ): StoreResult<DailyVerdict> {
+        if (judge.isBlank()) return StoreResult.Unavailable("Judging is not configured in this build")
+        val token = accounts.bearer() ?: return StoreResult.Failed("Sign in to submit")
+
+        val body = JsonWriter.obj("date" to date, "language" to language.wire, "source" to source)
+        var outcome: StoreResult<DailyVerdict>? = null
+        val r = judgeHttp.requestLines(
+            method = "POST",
+            url = "$judge/api/judge",
+            headers = mapOf(
+                "Content-Type" to "application/json",
+                // Asks for the steps as they happen. A judge that predates streaming ignores it and
+                // answers with the single verdict object, which is read below as the last line.
+                "Accept" to "application/x-ndjson, application/json",
+                "Authorization" to "Bearer $token",
+            ),
+            body = body,
+        ) { line ->
+            val root = JsonReader.parseOrNull(line) ?: return@requestLines
+            when (JsonReader.str(root, "type")) {
+                "step" -> parseJudgeEvent(root)?.let { event ->
+                    try { onEvent(event) } catch (_: Exception) { /* a display problem never loses a verdict */ }
+                }
+                "result" -> outcome = StoreResult.Ok(parseVerdict(JsonReader.obj(root)?.get("outcome")))
+                // The status line was already sent as 200, so a refusal arrives as a line with its real status.
+                "error" -> outcome = StoreResult.Failed(
+                    JsonReader.str(root, "message") ?: "The judge refused that submission.",
+                    JsonReader.int(root, "status"),
+                )
+                null -> if (JsonReader.str(root, "verdict") != null) outcome = StoreResult.Ok(parseVerdict(root))
+            }
+        }
+        if (r.error != null) return StoreResult.Unavailable(r.error)
+        if (r.status !in 200..299) {
+            val root = JsonReader.parseOrNull(r.body)
+            return StoreResult.Failed(JsonReader.str(root, "message") ?: "The judge refused that submission.", r.status)
+        }
+        // A stream cut before its last line: the judgement may still have been recorded, so say so rather
+        // than call it a failure of the solution.
+        return outcome ?: StoreResult.Failed(
+            "The connection to the judge closed before the verdict arrived. Check your history in a moment: it may have been recorded.",
+        )
+    }
+
+    private fun parseJudgeEvent(root: Any?): DailyJudgeEvent? {
+        val step = JsonReader.str(root, "step") ?: return null
+        val state = JsonReader.str(root, "state") ?: return null
+        val detail = JsonReader.obj(JsonReader.obj(root)?.get("detail"))
+            ?.entries
+            ?.mapNotNull { (k, v) -> if (k is String && v != null) k to plain(v) else null }
+            ?.toMap()
+            .orEmpty()
+        val ms = JsonReader.long(root, "ms", -1).takeIf { it >= 0 }
+        return DailyJudgeEvent(step, state, ms, detail)
+    }
+
+    /** JSON numbers come back as doubles; 706.0 should read as 706. */
+    private fun plain(v: Any): String = when (v) {
+        is Double -> if (v == kotlin.math.floor(v) && kotlin.math.abs(v) < 1e15) v.toLong().toString() else v.toString()
+        is Float -> plain(v.toDouble())
+        else -> v.toString()
     }
 
     // -------------------------------------------------------------------------------------------------
