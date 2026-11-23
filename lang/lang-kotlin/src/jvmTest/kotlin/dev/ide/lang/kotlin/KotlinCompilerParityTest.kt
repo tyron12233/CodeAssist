@@ -2073,6 +2073,17 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** An `override` overrides nothing when the supertype members of its name all have another parameter list. */
+    @Test
+    fun overrideWithNoMatchingSignature() {
+        val decls = "interface I { fun foo(s: String)\n fun bar(a: String)\n fun bar(a: Boolean)\n fun baz(a: Int = 1)\n fun qux(vararg a: String) }\n"
+        val bad = decls + "abstract class A : I { override fun foo() {}\n override fun bar(a: Int) {}\n override fun baz(a: String) {}\n override fun qux(a: String) {} }"
+        assertEquals(List(4) { KotlinDiagnosticCodes.NOTHING_TO_OVERRIDE }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = decls + "interface G<T> { fun g(t: T) }\nabstract class A : I, G<Int> { override fun foo(s: String) {}\n override fun bar(a: Boolean) {}\n" +
+            " override fun baz(a: Int) {}\n override fun qux(vararg a: String) {}\n override fun g(t: Int) {} }"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** A non-repeatable annotation is judged per element it lands on: `@get:Ann` on a property and `@Ann` on its getter
      *  are one getter's two, and an unprefixed `@Ann` on a constructor property is its parameter's. */
     @Test

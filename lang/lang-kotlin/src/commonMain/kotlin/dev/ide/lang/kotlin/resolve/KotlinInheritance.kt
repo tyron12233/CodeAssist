@@ -150,6 +150,10 @@ fun KotlinResolver.inheritanceProblems(cls: KtClassOrObject, concrete: Boolean):
         val sameName = byName[name].orEmpty()
         if (member.hasModifier(KtTokens.OVERRIDE_KEYWORD)) {
             if (closureFullyEnumerable && sameName.isEmpty()) overridesNothing += member // `override` but nothing carries this name
+            // Something carries the name, but no declaration of it can be what this overrides: a different
+            // parameter list (count, vararg, a type that provably differs, an extension receiver or not), or a
+            // property where only functions carry the name (and the reverse).
+            else if (closureFullyEnumerable && noSupertypeMemberFits(member, sameName, cls)) overridesNothing += member
             else suspendMismatchedOverride(member, sameName)?.let { suspendMismatch += member to it }
             val shaped = sameShapeMembers(member, sameName)
             // Final in EVERY supertype that carries it: one open declaration is enough to make it overridable.
@@ -399,6 +403,38 @@ private fun KotlinResolver.supertypeBindings(cls: KtClassOrObject, declFqn: Stri
 /** The [sameName] members [member] could be overriding: same kind, and for a function the same arity + param
  *  simple-type names. Loose only in the safe direction — a substituted generic parameter spells differently
  *  and so drops out, leaving the caller with nothing to report. */
+/** Whether none of [sameName] can be the member [member] overrides; any candidate that might be answers false. */
+private fun KotlinResolver.noSupertypeMemberFits(member: KtCallableDeclaration, sameName: List<KotlinSymbol>, cls: KtClassOrObject): Boolean {
+    if (member is KtProperty) return sameName.all { it.kind == SymbolKind.METHOD }
+    val fn = member as? KtNamedFunction ?: return false
+    if (fn.typeParameters.isNotEmpty()) return false
+    val functions = sameName.filter { it.kind == SymbolKind.METHOD }
+    if (functions.isEmpty()) return true
+    val params = fn.valueParameters
+    val varargAt = params.indexOfFirst { it.isVarArg }
+    val owner = cls.fqName?.asString()
+    fun typesMayMatch(written: dev.ide.kotlin.syntax.psi.KtTypeReference?, candidate: KotlinType): Boolean {
+        if (candidate.isTypeParameter || !service.isKnownType(candidate.qualifiedName)) return true
+        val mine = written?.text?.let { service.typeFromText(it, fileContext, owner) } ?: return true
+        if (mine.isTypeParameter || !service.isKnownType(mine.qualifiedName)) return true
+        val a = dev.ide.lang.kotlin.symbols.Builtins.kotlinTypeFor(mine.qualifiedName) ?: mine.qualifiedName
+        val b = dev.ide.lang.kotlin.symbols.Builtins.kotlinTypeFor(candidate.qualifiedName) ?: candidate.qualifiedName
+        if (a != b) return false
+        if (mine.typeArguments.size != candidate.typeArguments.size) return false
+        return true
+    }
+    return functions.none { f ->
+        if (f.isExtension != (fn.receiverTypeReference != null)) return@none false
+        if (f.paramTypes.size != params.size) return@none false
+        if (f.varargParamIndex != varargAt) return@none false
+        if (f.typeParameters.isNotEmpty()) return@none true
+        params.indices.all { i ->
+            val cp = f.paramTypes[i] as? KotlinType ?: return@all true
+            typesMayMatch(params[i].typeReference, cp)
+        }
+    }
+}
+
 private fun KotlinResolver.sameShapeMembers(
     member: KtCallableDeclaration,
     sameName: List<KotlinSymbol>
