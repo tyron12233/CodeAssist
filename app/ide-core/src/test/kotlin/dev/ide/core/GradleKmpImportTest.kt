@@ -714,4 +714,18 @@ class GradleKmpImportTest {
             GradleImport.parseOptIns(script),
         )
     }
+
+    /** `explicitApi()` / `explicitApiWarning()`, the `ExplicitApiMode` property and `-Xexplicit-api=` all set the
+     *  module's explicit API mode; a commented-out one does not. */
+    @Test
+    fun explicitApiModeIsReadFromTheScript() {
+        assertEquals("strict", GradleImport.parseExplicitApi("kotlin {\n    explicitApi()\n}"))
+        assertEquals("warning", GradleImport.parseExplicitApi("kotlin { explicitApiWarning() }"))
+        assertEquals("strict", GradleImport.parseExplicitApi("kotlin { explicitApi = ExplicitApiMode.Strict }"))
+        assertEquals("warning", GradleImport.parseExplicitApi("kotlin { explicitApi = ExplicitApiMode.Warning }"))
+        assertEquals(null, GradleImport.parseExplicitApi("kotlin { explicitApi = ExplicitApiMode.Disabled }"))
+        assertEquals("strict", GradleImport.parseExplicitApi("""kotlin { compilerOptions { freeCompilerArgs.add("-Xexplicit-api=strict") } }"""))
+        assertEquals(null, GradleImport.parseExplicitApi("kotlin {\n    // explicitApi()\n}"))
+        assertEquals(null, GradleImport.parseExplicitApi("kotlin { jvmToolchain(17) }"))
+    }
 }

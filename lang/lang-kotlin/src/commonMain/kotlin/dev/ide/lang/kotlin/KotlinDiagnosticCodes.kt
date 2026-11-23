@@ -332,6 +332,12 @@ object KotlinDiagnosticCodes {
     const val NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER = "kt.nameInConstraintIsNotATypeParameter"
     /** `a name b` where the `name` it calls is not declared `infix`. */
     const val INFIX_MODIFIER_REQUIRED = "kt.infixModifierRequired"
+    /** Explicit API mode: a public API declaration without a visibility modifier (error in strict mode). */
+    const val NO_EXPLICIT_VISIBILITY_IN_API_MODE = "kt.explicitApiVisibility"
+    const val NO_EXPLICIT_VISIBILITY_IN_API_MODE_WARNING = "kt.explicitApiVisibilityWarning"
+    /** Explicit API mode: a public API callable whose type is inferred (error in strict mode). */
+    const val NO_EXPLICIT_RETURN_TYPE_IN_API_MODE = "kt.explicitApiReturnType"
+    const val NO_EXPLICIT_RETURN_TYPE_IN_API_MODE_WARNING = "kt.explicitApiReturnTypeWarning"
     const val INACCESSIBLE_OUTER_CLASS_RECEIVER = "kt.inaccessibleOuterClassReceiver"
     const val CONFUSING_BRANCH_CONDITION = "kt.confusingBranchCondition"
     const val NAME_FOR_AMBIGUOUS_PARAMETER = "kt.nameForAmbiguousParameter"

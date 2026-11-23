@@ -50,9 +50,11 @@ class IncrementalSemanticAnalysis(
     private val apiContext: () -> dev.ide.lang.resolve.ApiLevelContext? = { null },
     /** The module's missing-permission check inputs (an Android module's manifest + SDK levels); null skips it. */
     private val permissionContext: () -> dev.ide.lang.resolve.PermissionContext? = { null },
+    /** The module's explicit API mode (`kotlin { explicitApi() }`). */
+    private val explicitApiMode: () -> KotlinExplicitApiMode = { KotlinExplicitApiMode.DISABLED },
 ) {
 
-    private val checks = KotlinSemanticChecks(service, apiContext, permissionContext)
+    private val checks = KotlinSemanticChecks(service, apiContext, permissionContext, explicitApiMode)
 
     // The read-only checker set, driven over each declaration's subtree in one walk (see KotlinCheckerDriver).
     // Built once: the checkers are stateless beyond the per-pass caches [checks] clears in resetPassCaches.

@@ -44,6 +44,9 @@ internal fun KotlinSemanticChecks.round9PortedCheckers(): List<KotlinChecker> = 
     KotlinChecker(dev.ide.kotlin.syntax.psi.KtWhenConditionInRange::class) { psi ->
         report(confusingBranchCondition((psi as dev.ide.kotlin.syntax.psi.KtWhenConditionInRange).rangeExpression, psi))
     },
+    KotlinChecker(dev.ide.kotlin.syntax.psi.KtDeclaration::class) { psi ->
+        reportAll(explicitApiDiagnostics(psi as dev.ide.kotlin.syntax.psi.KtDeclaration, explicitApiModeThisPass()))
+    },
     KotlinChecker(dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration::class) { psi ->
         report(nonLocalDestructuring(psi as dev.ide.kotlin.syntax.psi.KtDestructuringDeclaration))
     },

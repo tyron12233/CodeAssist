@@ -42,6 +42,9 @@ class KotlinCompilerTestDataSweepTest {
         /** The diagnostics a `// DIAGNOSTICS: -NAME` directive turns off, which the file then does not mark. */
         val disabled: Set<String>,
         val inferenceHelpers: Boolean = false,
+        /** The explicit API mode the compiler's test runner gives the case: `// EXPLICIT_API_MODE: X`, or strict
+         *  for everything under `testsWithExplicitApi/`. */
+        val explicitApi: KotlinExplicitApiMode = KotlinExplicitApiMode.DISABLED,
     )
 
     /** Whether every K2 diagnostic our [code] can stand for is turned off for the case, as the compiler's test
@@ -106,7 +109,7 @@ class KotlinCompilerTestDataSweepTest {
                     if (case.checkType) src.resolve("_CheckTypeHelpers.kt").toFile().writeText(CHECK_TYPE_HELPERS)
                     if (case.inferenceHelpers) src.resolve("_InferenceHelpers.kt").toFile().writeText(INFERENCE_HELPERS)
                     val future = exec.submit<List<Pair<String, List<dev.ide.lang.dom.Diagnostic>>>> {
-                        val a = KotlinSourceAnalyzer(fakeContext(src, jars))
+                        val a = KotlinSourceAnalyzer(fakeContext(src, jars)).also { it.explicitApiMode = { case.explicitApi } }
                         try {
                             stripped.map { (name, s) ->
                                 val doc = SnippetDoc(s.first, DiskFile(src.resolve(name)))
@@ -249,7 +252,13 @@ class KotlinCompilerTestDataSweepTest {
         // helper calls would otherwise all report it.
         if (checkType) disabled += "UNDERSCORE_USAGE_WITHOUT_BACKTICKS"
         val inferenceHelpers = Regex("""^// ?INFERENCE_HELPERS""", RegexOption.MULTILINE).containsMatchIn(text)
-        return Case(rel, stage, files.map { (n, t) -> sanitize(n) to t }, checkType, disabled, inferenceHelpers) to null
+        val explicitApi = when (Regex("""^// ?EXPLICIT_API_MODE: *(\w+)""", RegexOption.MULTILINE).find(text)?.groupValues?.get(1)?.uppercase()) {
+            "STRICT" -> KotlinExplicitApiMode.STRICT
+            "WARNING" -> KotlinExplicitApiMode.WARNING
+            "DISABLED" -> KotlinExplicitApiMode.DISABLED
+            else -> if (rel.startsWith("testsWithExplicitApi/")) KotlinExplicitApiMode.STRICT else KotlinExplicitApiMode.DISABLED
+        }
+        return Case(rel, stage, files.map { (n, t) -> sanitize(n) to t }, checkType, disabled, inferenceHelpers, explicitApi) to null
     }
 
     private fun sanitize(name: String) = name.trimStart('/').replace("..", "_")
@@ -408,7 +417,7 @@ class KotlinCompilerTestDataSweepTest {
         ) + PORTED_DECLARATION_K2_NAMES + ROUND6_K2_NAMES + INHERITANCE_CLASH_K2_NAMES + ROUND7_K2_NAMES + ROUND8_K2_NAMES
         val SKIP_DIRECTIVE = Regex(
             """^// ?(MODULE|LANGUAGE|API_VERSION|ALLOW_KOTLIN_PACKAGE|WITH_REFLECT|TARGET_PLATFORM|TARGET_BACKEND|JDK_KIND|""" +
-                """LANGUAGE_VERSION|OPT_IN|WITH_COROUTINES|FULL_JDK|LANGUAGE_FEATURE_TOGGLED|EXPLICIT_API_MODE|JVM_TARGET|""" +
+                """LANGUAGE_VERSION|OPT_IN|WITH_COROUTINES|FULL_JDK|LANGUAGE_FEATURE_TOGGLED|JVM_TARGET|""" +
                 """WITH_KOTLIN_JVM_ANNOTATIONS|LATEST_LV_DIFFERENCE|COMPILER_ARGUMENTS|IGNORE_FIR_DIAGNOSTICS|STDLIB_JDK8|""" +
                 """JSPECIFY_STATE|NULLABILITY_ANNOTATIONS|JVM_DEFAULT_MODE|NO_STDLIB|DISABLE_JAVA_FACADE|IGNORE_REVERSED_RESOLVE|""" +
                 """ENABLE_JVM_PREVIEW|WITH_PLATFORM_LIBS|JVM_EXPOSE_BOXED|SKIP_KT_DUMP|PLATFORM_DEPENDANT_METADATA)\b""",

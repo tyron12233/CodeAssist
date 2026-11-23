@@ -2073,6 +2073,24 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** Explicit API mode: a public API declaration states its visibility, and a callable its inferred type. */
+    @Test
+    fun explicitApiMode() {
+        val code = "class Foo { fun bar() = 1\n public val x = 2\n private fun p() = 3\n override fun toString(): String = \"\" }\n" +
+            "internal class I { fun i() = 1 }\npublic data class D(val a: Int)\npublic fun ok(): Int { val local = 1; return local }"
+        val strict = analyzerErrors(code) { it.explicitApiMode = { KotlinExplicitApiMode.STRICT } }
+        assertEquals(
+            listOf(
+                KotlinDiagnosticCodes.NO_EXPLICIT_VISIBILITY_IN_API_MODE, // class Foo
+                KotlinDiagnosticCodes.NO_EXPLICIT_VISIBILITY_IN_API_MODE, // fun bar
+                KotlinDiagnosticCodes.NO_EXPLICIT_RETURN_TYPE_IN_API_MODE, // bar's type
+                KotlinDiagnosticCodes.NO_EXPLICIT_RETURN_TYPE_IN_API_MODE, // x's type
+            ),
+            strict.map { it.code }.sortedBy { it != KotlinDiagnosticCodes.NO_EXPLICIT_VISIBILITY_IN_API_MODE }, "for `$code`",
+        )
+        assertEquals(emptyList(), errors(code).map { it.code }, "explicit API mode off: `$code`")
+    }
+
     /** A block body that can fall off the end owes a value of a type-parameter return type too: `T` is no `Unit`. */
     @Test
     fun missingReturnForTypeParameterReturnType() {
@@ -2665,10 +2683,13 @@ class KotlinCompilerParityTest {
         assertEquals(expected.toList(), errors.map { it.code }, "for `$code`: $errors")
     }
 
-    private fun errors(code: String): List<Diagnostic> = runBlocking {
+    private fun errors(code: String): List<Diagnostic> = analyzerErrors(code) {}
+
+    /** [errors] with the analyzer [configure]d first, as the host would (its explicit API mode, say). */
+    private fun analyzerErrors(code: String, configure: (KotlinSourceAnalyzer) -> Unit): List<Diagnostic> = runBlocking {
         val text = "package demo\n$code\n"
         val src = tempProject(mapOf("Use.kt" to text))
-        val a = KotlinSourceAnalyzer(fakeContext(src, listOf(stdlibJarPath())))
+        val a = KotlinSourceAnalyzer(fakeContext(src, listOf(stdlibJarPath()))).also(configure)
         val doc = SnippetDoc(text, DiskFile(src.resolve("Use.kt")))
         a.incrementalParser.parseFull(doc)
         a.analyze(doc.file).diagnostics.filter { it.severity == Severity.ERROR && it.code != KotlinDiagnosticCodes.SYNTAX }

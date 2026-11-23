@@ -130,6 +130,8 @@ object GradleImport {
         val composeResources: ComposeResourcesSpec? = null,
         /** Kotlin opt-in markers the script applies module-wide (see [parseOptIns]). */
         val optIns: List<String> = emptyList(),
+        /** The script's explicit API mode, `"strict"` or `"warning"`, or null (see [parseExplicitApi]). */
+        val explicitApi: String? = null,
         /** `defaultConfig`'s `buildConfigField`s. */
         val buildConfigFields: List<BuildConfigFieldSpec> = emptyList(),
         /** Whether AGP would generate `BuildConfig` for the module (its `buildFeatures`, its fields, the AGP default). */
@@ -492,6 +494,7 @@ object GradleImport {
             composeResources = if (kmp == null || COMPOSE_MP_PLUGIN !in plugins) null
             else composeResources(build, dir, gradlePath, kmp, context),
             optIns = parseOptIns(build),
+            explicitApi = parseExplicitApi(build),
             buildConfigFields = defaultBuildConfigFields,
             // As AGP decides it: the KMP Android-library plugin never generates one; otherwise the module's own
             // `buildFeatures.buildConfig`, else on when it declares fields, else the project's default.
@@ -619,6 +622,24 @@ object GradleImport {
      * `compilerOptions { optIn.add("x") }` / `optIn.addAll(…)`, and `-opt-in=x` / `-Xopt-in=x` compiler args.
      * Matched case-sensitively, so the `@OptIn(…)` annotation on a DSL call is not mistaken for one.
      */
+    /**
+     * The explicit API mode a module script turns on: `explicitApi()` or `explicitApi = ExplicitApiMode.Strict` is
+     * strict, `explicitApiWarning()` or `ExplicitApiMode.Warning` warns, as does `-Xexplicit-api=strict|warning`
+     * among the compiler arguments. Null when the script sets none (or turns it off).
+     */
+    internal fun parseExplicitApi(build: String): String? {
+        val text = GradleScript.stripComments(build)
+        Regex("""["']-Xexplicit-api=(strict|warning|disable)["']""").find(text)?.let { m ->
+            return m.groupValues[1].takeIf { it != "disable" }
+        }
+        Regex("""\bExplicitApiMode\.(Strict|Warning|Disabled)\b""").find(text)?.let { m ->
+            return when (m.groupValues[1]) { "Strict" -> "strict"; "Warning" -> "warning"; else -> null }
+        }
+        if (Regex("""\bexplicitApiWarning\s*\(\s*\)""").containsMatchIn(text)) return "warning"
+        if (Regex("""\bexplicitApi\s*\(\s*\)""").containsMatchIn(text)) return "strict"
+        return null
+    }
+
     internal fun parseOptIns(build: String): List<String> {
         val text = GradleScript.stripComments(build)
         val out = LinkedHashSet<String>()

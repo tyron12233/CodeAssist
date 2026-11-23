@@ -179,6 +179,8 @@ import dev.ide.lang.jdt.JdtSourceAnalyzer
 import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.lang.jdt.rename.JdtRename
 import dev.ide.lang.jdt.synthetic.SyntheticJavaSource
+import dev.ide.lang.kotlin.KotlinExplicitApiMode
+import dev.ide.lang.kotlin.build.KotlinFacet
 import dev.ide.lang.kotlin.KotlinLanguageBackend
 import dev.ide.lang.kotlin.KotlinPackageRewrite
 import dev.ide.lang.kotlin.KotlinSourceAnalyzer
@@ -2578,6 +2580,17 @@ class IdeServices private constructor(
      * own, its Android library modules', and every AAR's on its classpath (a library may declare the permission
      * its API needs). Re-read at most every couple of seconds, since the check asks once per call it looks at.
      */
+    /** The module [id]'s explicit API mode as its Kotlin facet holds it now (`kotlin { explicitApi() }`). */
+    private fun explicitApiMode(id: ModuleId): KotlinExplicitApiMode {
+        val module = store.workspace.projects.asSequence().flatMap { it.modules.asSequence() }.firstOrNull { it.id == id }
+            ?: return KotlinExplicitApiMode.DISABLED
+        return when (module.facets.get(KotlinFacet.KEY)?.explicitApi) {
+            "strict" -> KotlinExplicitApiMode.STRICT
+            "warning" -> KotlinExplicitApiMode.WARNING
+            else -> KotlinExplicitApiMode.DISABLED
+        }
+    }
+
     private fun permissionContext(id: ModuleId): PermissionContext? {
         val now = System.nanoTime()
         permissionContexts[id]?.let { (at, ctx) -> if (now - at < PERMISSION_CONTEXT_TTL_NANOS) return ctx }
@@ -2713,6 +2726,7 @@ class IdeServices private constructor(
                     it.javaMemberLocator = { fqn, member, paramTypes -> javaSourceTarget(module, fqn, member, paramTypes) }
                     it.apiContext = { apiLevelContext(module.id) }
                     it.permissionContext = { permissionContext(module.id) }
+                    it.explicitApiMode = { explicitApiMode(module.id) }
                     it.extensionCacheDir = store.rootPath.resolve(".platform/caches/kotlin-ext")
                     // Lowered Compose-preview declarations persist across launches, so the first preview after
                     // a reopen decodes instead of re-running overload resolution over the reachable closure.

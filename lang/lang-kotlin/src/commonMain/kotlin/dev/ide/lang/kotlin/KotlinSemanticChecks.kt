@@ -141,6 +141,8 @@ internal class KotlinSemanticChecks(
     /** The module's missing-permission check inputs (an Android module's declared permissions + SDK levels),
      *  read each pass; null skips the check. */
     private val permissionContext: () -> dev.ide.lang.resolve.PermissionContext? = { null },
+    /** The module's explicit API mode, read each pass. */
+    internal val explicitApiMode: () -> KotlinExplicitApiMode = { KotlinExplicitApiMode.DISABLED },
 ) {
 
     private val apiLevelCheck = KotlinApiLevelCheck(service)
@@ -1726,7 +1728,15 @@ internal class KotlinSemanticChecks(
 
     /** Reset the per-pass caches (PSI-keyed, so they must not survive a reparse). Called at the start of each
      *  analyze pass by [IncrementalSemanticAnalysis.diagnostics]. */
-    fun resetPassCaches() { blockUsageMemo.clear(); round7Memo.clear(); round8Memo.clear(); round9Memo.clear() }
+    fun resetPassCaches() {
+        blockUsageMemo.clear(); round7Memo.clear(); round8Memo.clear(); round9Memo.clear()
+        passExplicitApiMode = null
+    }
+
+    /** [explicitApiMode] read once per pass: the host answers from its project model, not per declaration. */
+    private var passExplicitApiMode: KotlinExplicitApiMode? = null
+    internal fun explicitApiModeThisPass(): KotlinExplicitApiMode =
+        passExplicitApiMode ?: explicitApiMode().also { passExplicitApiMode = it }
 
     /** The per-pass tables of the ninth round of ported rules ([Round9Memo]). */
     internal val round9Memo = Round9Memo()

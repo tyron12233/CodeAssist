@@ -31,6 +31,11 @@ data class KotlinFacet(
      */
     val optIns: List<String> = emptyList(),
     /**
+     * The module's explicit API mode, `"strict"` or `"warning"` (`kotlin { explicitApi() }` / `explicitApiWarning()`,
+     * `-Xexplicit-api=…`), or null when it is off: public API declarations must then state their visibility and type.
+     */
+    val explicitApi: String? = null,
+    /**
      * Every target of a Kotlin Multiplatform module, not only the one it builds: the module's live source sets,
      * dependencies and facets are [activeTarget]'s, and each target records what it adds on top of [shared], so the
      * module can be switched to another target natively (no build scripts to re-read) and a project converted from
@@ -110,6 +115,7 @@ object KotlinFacetCodec : FacetCodec<KotlinFacet> {
     override fun encode(facet: KotlinFacet): Map<String, Any?> = buildMap {
         if (facet.commonSourceRoots.isNotEmpty()) put("commonSourceRoots", facet.commonSourceRoots)
         if (facet.optIns.isNotEmpty()) put("optIns", facet.optIns)
+        facet.explicitApi?.let { put("explicitApi", it) }
         if (facet.targets.isNotEmpty()) {
             facet.activeTarget?.let { put("activeTarget", it) }
             put("shared", buildMap {
@@ -140,6 +146,7 @@ object KotlinFacetCodec : FacetCodec<KotlinFacet> {
     override fun decode(values: Map<String, Any?>): KotlinFacet = KotlinFacet(
         commonSourceRoots = (values["commonSourceRoots"] as? List<*>).orEmpty().mapNotNull { it as? String },
         optIns = (values["optIns"] as? List<*>).orEmpty().mapNotNull { it as? String },
+        explicitApi = (values["explicitApi"] as? String)?.takeIf { it == "strict" || it == "warning" },
         targets = (values["targets"] as? List<*>).orEmpty().filterIsInstance<Map<*, *>>().mapNotNull { t ->
             KmpTarget(
                 name = t["name"] as? String ?: return@mapNotNull null,

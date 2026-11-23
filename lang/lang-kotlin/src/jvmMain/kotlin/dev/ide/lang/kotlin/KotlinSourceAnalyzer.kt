@@ -174,6 +174,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     @Volatile
     var apiContext: () -> dev.ide.lang.resolve.ApiLevelContext? = { null }
 
+    /** Injected by the host: the module's explicit API mode (`kotlin { explicitApi() }`), read each pass so a
+     *  build-script edit applies on the next analysis. */
+    @Volatile
+    var explicitApiMode: () -> KotlinExplicitApiMode = { KotlinExplicitApiMode.DISABLED }
+
     /** Injected by the host for an Android module: its declared permissions + SDK levels, for the
      *  missing-permission check. Read on every pass, so a manifest edit applies. */
     @Volatile
@@ -591,6 +596,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             ::sharedCachesFor,
             apiContext = { apiContext() },
             permissionContext = { permissionContext() },
+            explicitApiMode = { explicitApiMode() },
         )
     }
     private val incrementalAnalysis by incrementalAnalysisLazy

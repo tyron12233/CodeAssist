@@ -251,7 +251,7 @@ class GradleProjectImporter : ProjectImporter {
      */
     private fun kotlinFacet(spec: GradleImport.ModuleSpec): ExternalFacet? {
         val sets = spec.kmp?.sourceSets.orEmpty().filter { it.common }.map { "src/${it.name}/kotlin" }
-        if (sets.isEmpty() && spec.optIns.isEmpty()) return null
+        if (sets.isEmpty() && spec.optIns.isEmpty() && spec.explicitApi == null) return null
         // The plugin generates `commonMain`'s Res accessors INTO commonMain, so common code can import them. Left
         // platform-side, the common half of the compilation cannot see `Res` at all.
         val common = if (sets.isEmpty()) sets
@@ -259,7 +259,7 @@ class GradleProjectImporter : ProjectImporter {
             ComposeResourcesFacet.GENERATED_KOTLIN_ROOT.takeIf { spec.composeResources != null },
             KotlinBuildConfigFacet.GENERATED_KOTLIN_ROOT.takeIf { spec.kotlinBuildConfig != null },
         )
-        val facet = KotlinFacet(commonSourceRoots = common, optIns = spec.optIns)
+        val facet = KotlinFacet(commonSourceRoots = common, optIns = spec.optIns, explicitApi = spec.explicitApi)
         return ExternalFacet(KotlinFacetCodec.tomlTable, KotlinFacetCodec.encode(facet))
     }
 
