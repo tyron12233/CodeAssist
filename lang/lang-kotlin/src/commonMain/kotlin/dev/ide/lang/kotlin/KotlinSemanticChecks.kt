@@ -399,7 +399,8 @@ internal class KotlinSemanticChecks(
                         if (other != null) report(other)
                         else if (resolveReady) {
                             // K2 reports every argument a projected receiver's member cannot take.
-                            reportAll(memberProjectedOut(psi, resolver) + projectedArgumentMismatch(psi, resolver))
+                            reportAll(memberProjectedOut(psi, resolver) + projectedArgumentMismatch(psi, resolver) +
+                                inferenceContradiction(psi, resolver))
                         }
                     }
                 }

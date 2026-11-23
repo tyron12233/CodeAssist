@@ -1609,7 +1609,9 @@ class KotlinCompilerParityTest {
     @Test
     fun lambdaMayDeclareTheReceiverAsParameter() {
         clean("val l2: String.() -> String = { x: String -> \"\" }\nval l4: String.() -> String = { x -> x }\nval l6: String.(Int) -> String = { x: String, y -> \"\" }")
-        assertCodes("val l: () -> String = { x -> \"\" }", KotlinDiagnosticCodes.LAMBDA_PARAMETERS)
+        // Past a function type's arity a parameter has nothing to type it either (K2's CANNOT_INFER_VALUE_PARAMETER_TYPE,
+        // `functionTypeInitializerTypeMismatch.kt`).
+        assertCodes("val l: () -> String = { x -> \"\" }", KotlinDiagnosticCodes.LAMBDA_PARAMETERS, KotlinDiagnosticCodes.CANNOT_INFER_TYPE)
     }
 
     /** A companion's member function imported beside a nested class of the same name does not conflict with it. */
@@ -2851,6 +2853,39 @@ class KotlinCompilerParityTest {
         val ok = "object Tok { val ID = Any() }\nclass T(val type: Any, val text: String)\n" +
             "fun f(toks: List<T>, i: Int): String {\n    val nameTok = toks.getOrNull(i + 1)\n" +
             "    if (nameTok?.type == Tok.ID) return nameTok.text\n    val a: Int = listOf(1).first()\n    return \"\"\n}"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
+    /** A generic call whose argument contradicts its own type variable (`T : CharSequence` from a `List<Int>`,
+     *  `T?` below `Int`): the argument is a mismatch, and the variable is left uninferred on the callee where nothing
+     *  outside the call constrains it. `Int? <: T?` asks only `Int <: T`. */
+    @Test
+    fun genericCallArgumentContradictsItsTypeVariable() {
+        val decls = "interface In<in T>\ninterface A<T>\ninterface Out<out T>\nfun <T : CharSequence> foo(list: List<T>) {}\n" +
+            "fun <T : Any> doIn(i: In<T?>) {}\nfun <T> both(a: A<T>, aN: A<T?>): T = null!!\nfun <T> withOut(a: A<T>, o: Out<T?>): T = null!!\n"
+        val bad = decls + "fun t(list: List<Int>, i: In<Int>) {\n    foo(list)\n    doIn(i)\n}"
+        assertEquals(
+            listOf(KotlinDiagnosticCodes.TYPE_MISMATCH, KotlinDiagnosticCodes.CANNOT_INFER_TYPE, KotlinDiagnosticCodes.TYPE_MISMATCH, KotlinDiagnosticCodes.CANNOT_INFER_TYPE),
+            errors(bad).map { it.code }, "for `$bad`",
+        )
+        val ok = decls + "fun t(s: List<String>, a: A<Int>, aN: A<Int?>, o: Out<Int?>) {\n    foo(s)\n    val x = both(a, aN)\n    val y = withOut(a, o)\n}"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+        // Two arguments' bounds disagreeing: the variable is fixed from one, only the other argument is the mismatch.
+        val conflict = decls + "interface P\nclass Q : P\nclass R : P\nfun <T> bar(o: Out<T>, i: In<T>) {}\nfun t(o: Out<Q>, i: In<R>) {\n    bar(o, i)\n}"
+        assertEquals(listOf(KotlinDiagnosticCodes.TYPE_MISMATCH), errors(conflict).map { it.code }, "for `$conflict`")
+    }
+
+    /** A lambda's untyped parameters past the arity of the function type expected of it have nothing to type them. */
+    @Test
+    fun lambdaParametersPastExpectedArity() {
+        val decls = "fun foo0(f: () -> String) = f\nfun foo1(f: (Int) -> String) = f\nfun <T : (Int) -> Unit> sel(a: T, b: T) = a\n"
+        val bad = decls + "fun t() {\n    foo1 { x, y -> \"\" }\n    val f: () -> Int = { it -> 1 }\n}"
+        assertEquals(
+            listOf(KotlinDiagnosticCodes.CANNOT_INFER_TYPE, KotlinDiagnosticCodes.CANNOT_INFER_TYPE),
+            errors(bad).map { it.code }.filter { it == KotlinDiagnosticCodes.CANNOT_INFER_TYPE }, "for `$bad`",
+        )
+        // A slot typed by a type variable takes its shape from inference, which this does not follow.
+        val ok = decls + "fun t() {\n    foo1 { x -> \"\" }\n    foo0 { \"\" }\n    sel({ x -> }, { y -> })\n}"
         assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
     }
 

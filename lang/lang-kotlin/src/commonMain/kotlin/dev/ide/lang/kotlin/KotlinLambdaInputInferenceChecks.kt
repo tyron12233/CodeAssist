@@ -59,6 +59,7 @@ internal fun KotlinSemanticChecks.lambdaInputInferenceCheckers(): List<KotlinChe
     KotlinChecker(KtLambdaExpression::class) { psi ->
         KotlinPerf.span("sem.ported.expectedParamType") {
             if (resolveReady) reportAll(expectedParameterTypeMismatches(psi as KtLambdaExpression, resolver))
+            if (resolveReady) reportAll(lambdaParametersPastExpectedArity(psi as KtLambdaExpression, resolver))
         }
     },
     KotlinChecker(KtCallExpression::class) { psi ->

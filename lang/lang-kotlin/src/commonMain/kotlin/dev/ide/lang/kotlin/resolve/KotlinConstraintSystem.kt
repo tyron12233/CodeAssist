@@ -31,7 +31,13 @@ import dev.ide.lang.resolve.TypeRef
  * a call the compiler accepts. Faithful invariant/contravariant checking would need projections the model
  * doesn't retain.
  */
-internal class KotlinConstraintSystem(private val service: KotlinSymbolService) {
+internal class KotlinConstraintSystem(
+    private val service: KotlinSymbolService,
+    /** Whether a variable's own `?` is read: a nullable variable below a non-null type (`T? <: Int`, which null
+     *  itself breaks) is a contradiction, and `Int? <: T?` asks only `Int <: T`. Off for overload resolution, whose
+     *  expected-type constraints this model reads loosely; on where a single candidate's own arguments are judged. */
+    private val nullableVariableBelowNonNull: Boolean = false,
+) {
 
     private class Var(val name: String) {
         val lower = ArrayList<KotlinType>()
@@ -54,6 +60,14 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
 
     /** True once an unsatisfiable constraint was seen — the candidate is INAPPLICABLE. */
     var hasContradiction = false
+        private set
+
+    /** Why the contradiction arose, where it says what K2 then does with the variable: a floor above the variable's
+     *  DECLARED bound (`T : CharSequence` given an `Int`), or a constraint impossible at a nullable variable itself
+     *  (`T? <: Int`). Either leaves the variable with no type it may take, which K2 reports as uninferred; two
+     *  bounds from different arguments disagreeing does not (the variable is fixed from one, the other argument is
+     *  the mismatch). */
+    var variableLeftWithoutType = false
         private set
 
     /** Record a contradiction found outside the constraints themselves (a lambda of the wrong arity). */
@@ -96,9 +110,15 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
             when {
                 bv != null && av != null -> {} // variable <: variable: skip (rare; both stay open, fixation handles)
                 bv != null -> {
-                    if (addBound(bv.lower, a)) check(bv)
+                    // `X <: T?` asks only `X!! <: T`: the `?` already takes null.
+                    val floor = if (nullableVariableBelowNonNull && b.nullable && a.nullable) a.withNullable(false) else a
+                    if (addBound(bv.lower, floor)) check(bv)
                 }          // b ≥ a
                 av != null -> {
+                    // `T? <: B` holds for null only when B takes null.
+                    if (nullableVariableBelowNonNull && a.nullable && !b.nullable && !b.isTypeParameter) {
+                        hasContradiction = true; variableLeftWithoutType = true; return
+                    }
                     if (addBound(av.upper, b)) check(av)
                 }          // a ≤ b
                 else -> checkConcrete(
@@ -236,13 +256,18 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
                 val nLo = v.lower.size
                 val nHi = v.upper.size
                 // Every pair an earlier round didn't cover: new floors × all ceilings, then old floors × new ones.
-                for (i in loDone until nLo) for (j in 0 until nHi) if (!checkPair(v.lower[i], v.upper[j])) return
-                for (i in 0 until loDone) for (j in hiDone until nHi) if (!checkPair(v.lower[i], v.upper[j])) return
+                for (i in loDone until nLo) for (j in 0 until nHi) if (!checkPair(v.lower[i], v.upper[j])) { declaredViolated(v, j); return }
+                for (i in 0 until loDone) for (j in hiDone until nHi) if (!checkPair(v.lower[i], v.upper[j])) { declaredViolated(v, j); return }
                 loDone = nLo; hiDone = nHi
             }
         } finally {
             v.checking = false
         }
+    }
+
+    /** Note a contradiction against [v]'s declared bound (its upper bound [j] is the one registered). */
+    private fun declaredViolated(v: Var, j: Int) {
+        if (v.declared != null && v.upper.getOrNull(j) === v.declared) variableLeftWithoutType = true
     }
 
     /** One floor-vs-ceiling pair; false once it recorded the FIRST contradiction, which ends the walk. */
