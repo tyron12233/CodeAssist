@@ -340,6 +340,8 @@ object KotlinDiagnosticCodes {
     const val NO_EXPLICIT_RETURN_TYPE_IN_API_MODE_WARNING = "kt.explicitApiReturnTypeWarning"
     const val INACCESSIBLE_OUTER_CLASS_RECEIVER = "kt.inaccessibleOuterClassReceiver"
     const val INNER_CLASS_CONSTRUCTOR_NO_RECEIVER = "kt.innerClassConstructorNoReceiver"
+    const val ENUM_ENTRY_AS_TYPE = "kt.enumEntryAsType"
+    const val IS_ENUM_ENTRY = "kt.isEnumEntry"
     const val CONFUSING_BRANCH_CONDITION = "kt.confusingBranchCondition"
     const val NAME_FOR_AMBIGUOUS_PARAMETER = "kt.nameForAmbiguousParameter"
     /** `val (a, b) = …` outside a block: in a class body or at the top level. */

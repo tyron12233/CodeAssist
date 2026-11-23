@@ -62,7 +62,29 @@ internal fun KotlinSemanticChecks.unresolvedQualifiedType(userType: KtUserType, 
     // A nested classifier of a supertype is not reached through the subclass's name, but a supertype the model
     // does not hold completely could still be what the code means; only a fully known chain is judged.
     if (!service.supertypeClosureKnown(outer)) return null
+    enumEntryAsType(userType, ref, outer, name, resolver)?.let { return it }
     return unresolved(ref, name)
+}
+
+/**
+ * ENUM_ENTRY_AS_TYPE / IS_ENUM_ENTRY: `Color.RED` written as a type names an enum ENTRY, a value, not a class;
+ * in an `is` check K2 words it as IS_ENUM_ENTRY.
+ */
+private fun KotlinSemanticChecks.enumEntryAsType(
+    userType: KtUserType, ref: KtNameReferenceExpression, outer: String, name: String, resolver: KotlinResolver,
+): Diagnostic? {
+    if (name !in resolver.enumConstantNames(outer)) return null
+    val typeRef = generateSequence<KtElement>(userType) { (it.parent as? KtElement)?.takeIf { p -> p is KtUserType || p is dev.ide.kotlin.syntax.psi.KtNullableType || p is dev.ide.kotlin.syntax.psi.KtTypeReference } }
+        .lastOrNull() as? dev.ide.kotlin.syntax.psi.KtTypeReference
+    val inIs = typeRef != null && (typeRef.parent is dev.ide.kotlin.syntax.psi.KtIsExpression || typeRef.parent is dev.ide.kotlin.syntax.psi.KtWhenConditionIsPattern)
+    val r = ref.textRange
+    return if (inIs) Diagnostic(
+        TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+        "'is' over enum entry is prohibited, use comparison instead", KotlinDiagnosticCodes.IS_ENUM_ENTRY,
+    ) else Diagnostic(
+        TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+        "Use of enum entry names as types is prohibited, use enum type instead", KotlinDiagnosticCodes.ENUM_ENTRY_AS_TYPE,
+    )
 }
 
 /**

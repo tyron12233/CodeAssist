@@ -142,6 +142,8 @@ internal object KotlinSuppression {
         "kt.explicitApiReturnTypeWarning" to setOf("NO_EXPLICIT_RETURN_TYPE_IN_API_MODE_WARNING"),
         "kt.inaccessibleOuterClassReceiver" to setOf("INACCESSIBLE_OUTER_CLASS_RECEIVER"),
         "kt.innerClassConstructorNoReceiver" to setOf("INNER_CLASS_CONSTRUCTOR_NO_RECEIVER"),
+        "kt.enumEntryAsType" to setOf("ENUM_ENTRY_AS_TYPE"),
+        "kt.isEnumEntry" to setOf("IS_ENUM_ENTRY"),
         "kt.confusingBranchCondition" to setOf("CONFUSING_BRANCH_CONDITION_ERROR"),
         "kt.nameForAmbiguousParameter" to setOf("NAME_FOR_AMBIGUOUS_PARAMETER"),
         "kt.abstractClassMemberNotImplemented" to setOf("ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED"),

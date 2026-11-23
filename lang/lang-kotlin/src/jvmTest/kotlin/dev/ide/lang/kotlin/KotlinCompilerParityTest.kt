@@ -2073,6 +2073,18 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** An enum entry written as a type is ENUM_ENTRY_AS_TYPE, and IS_ENUM_ENTRY in an `is` check, not unresolved. */
+    @Test
+    fun enumEntryUsedAsType() {
+        val code = "enum class Color { RED, GREEN }\nfun f(c: Color.RED): Color.GREEN? = null\nfun g(x: Any) = x is Color.RED"
+        assertEquals(
+            listOf(KotlinDiagnosticCodes.ENUM_ENTRY_AS_TYPE, KotlinDiagnosticCodes.ENUM_ENTRY_AS_TYPE, KotlinDiagnosticCodes.IS_ENUM_ENTRY),
+            errors(code).map { it.code }, "for `$code`",
+        )
+        val ok = "enum class Color { RED; class Nested }\nfun f(c: Color, n: Color.Nested) = c == Color.RED"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** An inner class constructed through its outer class's type, or from that class's companion, has no outer
      *  instance: INNER_CLASS_CONSTRUCTOR_NO_RECEIVER. `Outer().Inner()` and a call inside `Outer` have one. */
     @Test
