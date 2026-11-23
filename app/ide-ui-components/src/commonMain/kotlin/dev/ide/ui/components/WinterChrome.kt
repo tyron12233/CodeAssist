@@ -31,16 +31,17 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * The Christmas touches outside the editor: snow behind Home and a snowman on empty states. Like the Halloween
+ * The winter touches outside the editor: snow behind Home and a snowman on empty states. Like the Halloween
  * ones, each checks [LocalSeason] itself, so a call site adds it unconditionally.
  */
 
-/** True during Christmas with Seasonal touches on. */
+/** True during the winter season with Seasonal touches on. */
 @Composable
-fun isChristmas(): Boolean = LocalSeason.current == Season.Christmas
+fun isWinter(): Boolean = LocalSeason.current == Season.Winter
 
 /**
- * Light snow falling behind the Home screen and a low drift of snowy hills along its bottom edge. Kept faint so
+ * Light snow falling behind the Home screen, a low drift of snowy hills along its bottom edge and, on a dark
+ * theme, a faint aurora along the top. Kept faint so
  * nothing in front of it loses contrast.
  *
  * The flakes move on a slow tick (about 12 updates a second) rather than every frame, on their own layer, the
@@ -48,11 +49,11 @@ fun isChristmas(): Boolean = LocalSeason.current == Season.Christmas
  * animations off the snow holds still.
  */
 @Composable
-fun ChristmasBackdrop(modifier: Modifier = Modifier) {
-    if (!isChristmas()) return
+fun WinterBackdrop(modifier: Modifier = Modifier) {
+    if (!isWinter()) return
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val flake = if (dark) Color.White.copy(alpha = 0.16f) else Color(0xFF8DA39A).copy(alpha = 0.22f)
-    val hills = if (dark) Color.White.copy(alpha = 0.035f) else Color(0xFF6E8A7E).copy(alpha = 0.07f)
+    val flake = if (dark) Color.White.copy(alpha = 0.16f) else Color(0xFF8D98B3).copy(alpha = 0.22f)
+    val hills = if (dark) Color.White.copy(alpha = 0.035f) else Color(0xFF6E7A9A).copy(alpha = 0.07f)
     val fall = remember { mutableFloatStateOf(0f) }
     val flakes = remember { snowOf(Random(1225), BACKDROP_FLAKES) }
     val motion = rememberCoroutineScope().coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f
@@ -66,8 +67,10 @@ fun ChristmasBackdrop(modifier: Modifier = Modifier) {
         }
     }
     Canvas(modifier.fillMaxSize().graphicsLayer()) {
-        drawSnowHills(rise = 0.09f, color = hills)
         val t = fall.floatValue
+        // A faint aurora along the top on a dark theme, swaying with the same slow clock as the snow.
+        if (dark) drawAurora(top = 0f, height = size.height * 0.2f, phase = t * 2f, strength = 0.35f)
+        drawSnowHills(rise = 0.09f, color = hills)
         val unit = 1.dp.toPx()
         for (f in flakes) {
             // Each flake falls the full height once per cycle at its own speed, from its own start, and wraps.
@@ -79,7 +82,7 @@ fun ChristmasBackdrop(modifier: Modifier = Modifier) {
 }
 
 /**
- * A snowman, gently rocking: the empty-state illustration at Christmas. A soft ground shadow keeps it standing
+ * A snowman, gently rocking: the empty-state illustration in winter. A soft ground shadow keeps it standing
  * on a light background as well as a dark one.
  */
 @Composable
@@ -104,14 +107,14 @@ fun FrostySnowman(size: Dp, modifier: Modifier = Modifier) {
 }
 
 /**
- * The season's empty-state mascot, if it has one: the ghost at Halloween, the snowman at Christmas, nothing on
+ * The season's empty-state mascot, if it has one: the ghost at Halloween, the snowman in winter, nothing on
  * an ordinary day.
  */
 @Composable
 fun SeasonalMascot(size: Dp, modifier: Modifier = Modifier) {
     when (LocalSeason.current) {
         Season.Halloween -> HauntedGhost(size, modifier)
-        Season.Christmas -> FrostySnowman(size, modifier)
+        Season.Winter -> FrostySnowman(size, modifier)
         null -> {}
     }
 }

@@ -269,9 +269,9 @@ fun BuildDock(
                                 modifier = Modifier.fillMaxWidth().height(8.dp).align(Alignment.TopCenter).padding(horizontal = 12.dp),
                                 gap = 44.dp,
                             )
-                        } else if (isChristmas()) {
-                            // Presents being wrapped along the top edge, parted around the grab notch.
-                            PresentsProgress(
+                        } else if (isWinter()) {
+                            // Stars lighting up along the top edge, parted around the grab notch.
+                            StarlightProgress(
                                 progress = null,
                                 modifier = Modifier.fillMaxWidth().height(8.dp).align(Alignment.TopCenter).padding(horizontal = 12.dp),
                                 gap = 44.dp,

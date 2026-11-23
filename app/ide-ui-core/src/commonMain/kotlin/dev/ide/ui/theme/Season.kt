@@ -8,7 +8,7 @@ import dev.ide.ui.platform.localMonthDay
  * year, so the touches come back on their own without a release; the user can turn all of them off with
  * Settings → Appearance → Seasonal touches.
  *
- * A window may run across the new year ([from] later in the year than [through]), as Christmas does.
+ * A window may run across the new year ([from] later in the year than [through]), as winter does.
  */
 enum class Season(
     /** First day, as `month * 100 + day`. */
@@ -20,10 +20,10 @@ enum class Season(
     Halloween(from = 1024, through = 1107),
 
     /**
-     * The end of November through Epiphany (Jan 6): it opens a few days ahead of the Advent calendar's first
-     * door on December 1 and stays up through the new year.
+     * Winter, holiday-neutral: the end of November through January 6. It opens a few days ahead of the New Year
+     * countdown's first day on December 1 and stays up for the first week of the new year.
      */
-    Christmas(from = 1128, through = 106),
+    Winter(from = 1128, through = 106),
     ;
 
     fun contains(monthDay: Int): Boolean =

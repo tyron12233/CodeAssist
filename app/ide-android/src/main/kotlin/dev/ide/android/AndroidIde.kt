@@ -1159,7 +1159,7 @@ object AndroidIde {
             // Home's one-off cards: nothing to recover into a sandbox, and no season to dress it up for.
             default("legacy.recovery.seen", "true")
             default("seasonal.halloween.answeredAt", System.currentTimeMillis().toString())
-            default("seasonal.christmas.answeredAt", System.currentTimeMillis().toString())
+            default("seasonal.winter.answeredAt", System.currentTimeMillis().toString())
             default("analytics.consent", "denied")
             default("settings.${dev.ide.core.settings.BuiltInSettingsPages.BUILD_RUNTIME}.${dev.ide.core.settings.BuiltInSettingsPages.SEPARATE_PROCESS}", "false")
             if (pluginId != null) {

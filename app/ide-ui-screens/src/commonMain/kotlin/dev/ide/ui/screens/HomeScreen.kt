@@ -63,10 +63,10 @@ private val HalloweenTabs = mapOf(
     HomeTab.Learn.name to SeasonalGlyph.WitchHat,
 )
 
-/** The tabs that wear a Christmas glyph, by tab id. */
-private val ChristmasTabs = mapOf(
-    HomeTab.Projects.name to SeasonalGlyph.Tree,
-    HomeTab.Store.name to SeasonalGlyph.Gift,
+/** The tabs that wear a winter glyph, by tab id. */
+private val WinterTabs = mapOf(
+    HomeTab.Projects.name to SeasonalGlyph.Snowflake,
+    HomeTab.Store.name to SeasonalGlyph.Snowman,
     HomeTab.Learn.name to SeasonalGlyph.Star,
 )
 
@@ -124,7 +124,7 @@ fun HomeScreen(
     // A season dresses three of the tabs up; the labels, and so what a screen reader says, stay the same.
     val seasonal = when (LocalSeason.current) {
         Season.Halloween -> HalloweenTabs
-        Season.Christmas -> ChristmasTabs
+        Season.Winter -> WinterTabs
         null -> emptyMap()
     }
     // Each tab's saved UI state (its scroll position above all), kept while another tab is shown, so going

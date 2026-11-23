@@ -202,12 +202,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-                android:name=".LauncherChristmas"
+                android:name=".LauncherSnowflake"
                 android:targetActivity=".MainActivity"
                 android:enabled="false"
                 android:exported="true"
-                android:icon="@mipmap/ic_launcher_christmas"
-                android:roundIcon="@mipmap/ic_launcher_christmas">
+                android:icon="@mipmap/ic_launcher_snowflake"
+                android:roundIcon="@mipmap/ic_launcher_snowflake">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

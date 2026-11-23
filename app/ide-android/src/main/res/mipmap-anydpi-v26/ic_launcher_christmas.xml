@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- The Christmas launcher icon (Settings > Appearance > App icon). No monochrome layer, for the same reason as
-     the pumpkin: a themed-icon silhouette would lose the lights. -->
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_christmas_background" />
-    <foreground android:drawable="@drawable/ic_launcher_christmas_foreground" />
-</adaptive-icon>

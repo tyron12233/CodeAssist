@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The winter launcher icon (Settings > Appearance > App icon). No monochrome layer, for the same reason as
+     the pumpkin: a themed-icon silhouette would lose the glow. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_snowflake_background" />
+    <foreground android:drawable="@drawable/ic_launcher_snowflake_foreground" />
+</adaptive-icon>

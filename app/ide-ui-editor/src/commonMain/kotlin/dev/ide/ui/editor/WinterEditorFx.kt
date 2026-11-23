@@ -17,8 +17,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
-import dev.ide.ui.components.ChristmasLightColors
-import dev.ide.ui.components.drawBulb
+import dev.ide.ui.components.WinterLightColors
+import dev.ide.ui.components.drawFairyLight
 import dev.ide.ui.components.drawSnowDot
 import dev.ide.ui.platform.nowMillis
 import kotlinx.coroutines.delay
@@ -27,7 +27,7 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * The editor's Christmas touches: light snow over an idle editor that settles along its top edge, a string of
+ * The editor's winter touches: light snow over an idle editor that settles along its top edge, a string of
  * lights down the gutter's edge, and icicles under error squiggles. The lights and icicles are static and drawn
  * in the code layer (which must not animate); the snow is an overlay of its own, on a single tween, so the code
  * is never redrawn for it and an idle editor that has finished snowing costs nothing.
@@ -134,13 +134,13 @@ internal fun DrawScope.drawSnowCap(depth: Float, color: Color) {
 
 // ---- lights down the gutter ----
 
-/** A bulb hangs on every this-many document lines. */
+/** A light hangs on every this-many document lines. */
 internal const val LIGHT_EVERY_LINES = 4
 
 /**
- * A string of lights down the gutter's right edge at [x]: a wire swagging gently between bulbs, one bulb per
+ * A string of fairy lights down the gutter's right edge at [x]: a wire swagging gently between lights, one per
  * entry of [bulbs] (a document line and the y of its middle), each in its own color cycling with the line so a
- * bulb keeps its color as the code scrolls. Static, and quiet: the bulbs glow a little, they do not twinkle.
+ * light keeps its color as the code scrolls. Static, and quiet: the lights glow a little, they do not twinkle.
  */
 internal fun DrawScope.gutterLights(x: Float, bulbs: List<Pair<Int, Float>>, lineHeight: Float, wire: Color) {
     val stroke = Stroke(width = 1.dp.toPx())
@@ -155,11 +155,11 @@ internal fun DrawScope.gutterLights(x: Float, bulbs: List<Pair<Int, Float>>, lin
         quadraticTo(x - sag, (lastY + size.height) / 2f, x, size.height)
     }
     drawPath(path, wire, style = stroke)
-    val bulb = (lineHeight * 0.34f).coerceAtMost(9.dp.toPx())
+    val r = (lineHeight * 0.11f).coerceIn(1.5.dp.toPx(), 3.dp.toPx())
     for ((line, y) in bulbs) {
-        val color = ChristmasLightColors[(line / LIGHT_EVERY_LINES) % ChristmasLightColors.size]
-        // Hanging into the gutter, pointing left, so no bulb ever sits over code.
-        drawBulb(Offset(x, y), bulb, color.copy(alpha = 0.85f), glow = 0.7f, angle = 180f)
+        val color = WinterLightColors[(line / LIGHT_EVERY_LINES) % WinterLightColors.size]
+        // On the wire, which swags into the gutter, so no light ever sits over code.
+        drawFairyLight(Offset(x, y), r, color.copy(alpha = 0.85f), glow = 0.7f)
     }
 }
 

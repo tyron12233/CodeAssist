@@ -153,7 +153,7 @@ internal fun DrawScope.drawEditor(
      *  range (caret/handles reflect it); this only grows the highlight. */
     animatedSelection: Pair<Int, Int>? = null,
     /** The season the editor is dressed for: Halloween hangs slime drips under error squiggles ([slimeDrips]),
-     *  Christmas hangs icicles there ([icicles]) and strings lights down the gutter's edge ([gutterLights]). All
+     *  winter hangs icicles there ([icicles]) and strings lights down the gutter's edge ([gutterLights]). All
      *  static: this is the code layer, which must not animate. */
     season: Season? = null,
     /** The x where the code area begins on screen. [gutterWidth] remains the origin the text is laid out from;
@@ -471,7 +471,7 @@ internal fun DrawScope.drawEditor(
                 val v0 = rawToVisual(line, c0)
                 val v1 = rawToVisual(line, c1)
                 val drips = season == Season.Halloween && seg.severity == UiSeverity.Error
-                val ice = season == Season.Christmas && seg.severity == UiSeverity.Error
+                val ice = season == Season.Winter && seg.severity == UiSeverity.Error
                 if (!wrap) {
                     val x0 = textLeft + layout.getHorizontalPosition(v0, usePrimaryDirection = true)
                     if (longLine && x0 > clipRight) break
@@ -611,8 +611,8 @@ internal fun DrawScope.drawEditor(
                 ),
             )
         }
-        // A hairline at the gutter's right edge separates it from the code area; at Christmas, a string of lights.
-        if (season == Season.Christmas) {
+        // A hairline at the gutter's right edge separates it from the code area; in winter, a string of fairy lights.
+        if (season == Season.Winter) {
             gutterLights(gutterWidth, visibleLines.filter { it % LIGHT_EVERY_LINES == 0 }.map { it to lineTop(it) + lineH / 2f }, lineH, colors.gutterBorder)
         } else {
             drawLine(colors.gutterBorder, Offset(gutterWidth, 0f), Offset(gutterWidth, size.height), strokeWidth = 1f)

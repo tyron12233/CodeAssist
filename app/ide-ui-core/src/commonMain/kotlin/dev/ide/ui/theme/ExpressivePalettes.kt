@@ -287,86 +287,86 @@ private val PumpkinDark = darkColorScheme(
     errorContainer = Color(0xFF93000A), onErrorContainer = Color(0xFFFFDAD6),
 )
 
-// ---- Evergreen / winter night: the third COMPLETE scheme, for Christmas ----
+// ---- Aurora / winter night: the third COMPLETE scheme, for the winter season ----
 //
-// Like Pumpkin, the season is in the ground as much as the accent. In dark, a deep pine-black night with a
-// soft fir green as the primary, gold candlelight as the secondary and a cranberry tertiary; in light, a warm
-// snowy cream with a deep pine primary. Kept muted on purpose: it is meant to be lived in all day, not to
-// look like wrapping paper. Source colors: primary #2E7D55, secondary #C9A24A, tertiary #A2303F.
+// Like Pumpkin, the season is in the ground as much as the accent. In dark, a deep navy night with an aurora
+// teal as the primary, a soft violet as the secondary and star gold as the tertiary; in light, a cool clear
+// paper with a deep teal primary. Kept calm on purpose: it is meant to be lived in for weeks. Source colors:
+// primary #6FE0C8, secondary #B9A6FF, tertiary #F2CF7A, a navy neutral.
 
-private val EvergreenLight = lightColorScheme(
-    primary = Color(0xFF1F6B45), onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFC2EBCB), onPrimaryContainer = Color(0xFF00210F),
-    inversePrimary = Color(0xFF8FD4A4),
-    secondary = Color(0xFF6E5B1E), onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFF9E09A), onSecondaryContainer = Color(0xFF231B00),
-    tertiary = Color(0xFFA2303F), onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = Color(0xFFFFDADB), onTertiaryContainer = Color(0xFF40000D),
-    background = Color(0xFFFBF9F3),
-    onBackground = Color(0xFF1B1C18),
-    surface = Color(0xFFFBF9F3),
-    onSurface = Color(0xFF1B1C18),
-    surfaceVariant = Color(0xFFE6E2D6),
-    onSurfaceVariant = Color(0xFF49463C),
-    surfaceTint = Color(0xFF1F6B45),
-    inverseSurface = Color(0xFF31302B),
-    inverseOnSurface = Color(0xFFF4F0E8),
-    outline = Color(0xFF7A766B),
-    outlineVariant = Color(0xFFCBC6B9),
+private val AuroraLight = lightColorScheme(
+    primary = Color(0xFF0E7A6A), onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFA6F2DF), onPrimaryContainer = Color(0xFF00201B),
+    inversePrimary = Color(0xFF6FE0C8),
+    secondary = Color(0xFF5B4BB0), onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFE5DEFF), onSecondaryContainer = Color(0xFF170064),
+    tertiary = Color(0xFF7A5C00), onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFFFDF9A), onTertiaryContainer = Color(0xFF261A00),
+    background = Color(0xFFF7F8FD),
+    onBackground = Color(0xFF191C24),
+    surface = Color(0xFFF7F8FD),
+    onSurface = Color(0xFF191C24),
+    surfaceVariant = Color(0xFFDFE2EE),
+    onSurfaceVariant = Color(0xFF444857),
+    surfaceTint = Color(0xFF0E7A6A),
+    inverseSurface = Color(0xFF2E3039),
+    inverseOnSurface = Color(0xFFF0F0FA),
+    outline = Color(0xFF747888),
+    outlineVariant = Color(0xFFC4C7D4),
     scrim = Color(0xFF000000),
-    surfaceBright = Color(0xFFFBF9F3),
-    surfaceDim = Color(0xFFDDD9CF),
+    surfaceBright = Color(0xFFF7F8FD),
+    surfaceDim = Color(0xFFD8DAE4),
     surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFF6F3EB),
-    surfaceContainer = Color(0xFFF0EDE5),
-    surfaceContainerHigh = Color(0xFFEBE8DF),
-    surfaceContainerHighest = Color(0xFFE5E2D9),
+    surfaceContainerLow = Color(0xFFF1F3FA),
+    surfaceContainer = Color(0xFFECEEF6),
+    surfaceContainerHigh = Color(0xFFE6E8F0),
+    surfaceContainerHighest = Color(0xFFE0E2EB),
     error = Color(0xFFBA1A1A), onError = Color(0xFFFFFFFF),
     errorContainer = Color(0xFFFFDAD6), onErrorContainer = Color(0xFF410002),
 )
 
-private val EvergreenDark = darkColorScheme(
-    primary = Color(0xFF8FD4A4), onPrimary = Color(0xFF00391F),
-    primaryContainer = Color(0xFF145234), onPrimaryContainer = Color(0xFFABF0C0),
-    inversePrimary = Color(0xFF2A6B47),
-    secondary = Color(0xFFE3C47A), onSecondary = Color(0xFF3E2E00),
-    secondaryContainer = Color(0xFF594400), onSecondaryContainer = Color(0xFFFFE08F),
-    tertiary = Color(0xFFFFB3B5), onTertiary = Color(0xFF680019),
-    tertiaryContainer = Color(0xFF8C1D2E), onTertiaryContainer = Color(0xFFFFDADA),
-    background = Color(0xFF0F1512),
-    onBackground = Color(0xFFDEE4DE),
-    surface = Color(0xFF0F1512),
-    onSurface = Color(0xFFDEE4DE),
-    surfaceVariant = Color(0xFF404943),
-    onSurfaceVariant = Color(0xFFBFC9C1),
-    surfaceTint = Color(0xFF8FD4A4),
-    inverseSurface = Color(0xFFDEE4DE),
-    inverseOnSurface = Color(0xFF2C322E),
-    outline = Color(0xFF89938B),
-    outlineVariant = Color(0xFF404943),
+private val AuroraDark = darkColorScheme(
+    primary = Color(0xFF6FE0C8), onPrimary = Color(0xFF00382F),
+    primaryContainer = Color(0xFF005045), onPrimaryContainer = Color(0xFF8FF7DF),
+    inversePrimary = Color(0xFF006B5C),
+    secondary = Color(0xFFB9A6FF), onSecondary = Color(0xFF2A1A6B),
+    secondaryContainer = Color(0xFF413284), onSecondaryContainer = Color(0xFFE5DEFF),
+    tertiary = Color(0xFFF2CF7A), onTertiary = Color(0xFF3E2E00),
+    tertiaryContainer = Color(0xFF594400), onTertiaryContainer = Color(0xFFFFE08F),
+    background = Color(0xFF0E1424),
+    onBackground = Color(0xFFDFE3F0),
+    surface = Color(0xFF0E1424),
+    onSurface = Color(0xFFDFE3F0),
+    surfaceVariant = Color(0xFF3F4759),
+    onSurfaceVariant = Color(0xFFBFC6DA),
+    surfaceTint = Color(0xFF6FE0C8),
+    inverseSurface = Color(0xFFDFE3F0),
+    inverseOnSurface = Color(0xFF2B3142),
+    outline = Color(0xFF8990A4),
+    outlineVariant = Color(0xFF3F4759),
     scrim = Color(0xFF000000),
-    surfaceBright = Color(0xFF343B36),
-    surfaceDim = Color(0xFF0F1512),
-    surfaceContainerLowest = Color(0xFF0A0F0C),
-    surfaceContainerLow = Color(0xFF171D19),
-    surfaceContainer = Color(0xFF1B211D),
-    surfaceContainerHigh = Color(0xFF252B27),
-    surfaceContainerHighest = Color(0xFF303632),
+    surfaceBright = Color(0xFF333A4D),
+    surfaceDim = Color(0xFF0E1424),
+    surfaceContainerLowest = Color(0xFF090E1B),
+    surfaceContainerLow = Color(0xFF151B2C),
+    surfaceContainer = Color(0xFF192031),
+    surfaceContainerHigh = Color(0xFF232A3C),
+    surfaceContainerHighest = Color(0xFF2E3547),
     error = Color(0xFFFFB4AB), onError = Color(0xFF690005),
     errorContainer = Color(0xFF93000A), onErrorContainer = Color(0xFFFFDAD6),
 )
 
 /** The fixed expressive [ColorScheme] for an [accent] in the given mode (the non-dynamic fallback). */
 fun expressiveColorScheme(accent: CaAccent, dark: Boolean): ColorScheme {
-    // Lime, Pumpkin and Evergreen carry their own neutrals (see above) and return early; the rest share one ramp.
+    // Lime, Pumpkin and Aurora carry their own neutrals (see above) and return early; the rest share one ramp.
     if (accent == CaAccent.Lime) return if (dark) LimeDark else LimeLight
     if (accent == CaAccent.Pumpkin) return if (dark) PumpkinDark else PumpkinLight
-    if (accent == CaAccent.Evergreen) return if (dark) EvergreenDark else EvergreenLight
+    if (accent == CaAccent.Aurora) return if (dark) AuroraDark else AuroraLight
     val roles = when (accent) {
         CaAccent.Violet -> if (dark) VioletDark else VioletLight
         CaAccent.Teal -> if (dark) TealDark else TealLight
         CaAccent.Orange -> if (dark) OrangeDark else OrangeLight
-        CaAccent.Lime, CaAccent.Pumpkin, CaAccent.Evergreen -> error("handled above")
+        CaAccent.Lime, CaAccent.Pumpkin, CaAccent.Aurora -> error("handled above")
     }
     return (if (dark) NeutralDark else NeutralLight).withAccent(roles)
 }

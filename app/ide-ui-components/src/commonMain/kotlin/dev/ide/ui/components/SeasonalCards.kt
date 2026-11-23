@@ -26,10 +26,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.generated.resources.Res
-import dev.ide.ui.generated.resources.christmas_applied
-import dev.ide.ui.generated.resources.christmas_offer
-import dev.ide.ui.generated.resources.christmas_over_title
-import dev.ide.ui.generated.resources.christmas_title
+import dev.ide.ui.generated.resources.winter_applied
+import dev.ide.ui.generated.resources.winter_offer
+import dev.ide.ui.generated.resources.winter_over_title
+import dev.ide.ui.generated.resources.winter_title
 import dev.ide.ui.generated.resources.halloween_applied
 import dev.ide.ui.generated.resources.halloween_dress_up
 import dev.ide.ui.generated.resources.halloween_keep
@@ -108,21 +108,21 @@ fun HalloweenCard(
 }
 
 /**
- * The Christmas card on Home: the same three modes as [HalloweenCard], on a winter night of its own, with a
- * lit fir and snow on the ground.
+ * The winter card on Home: the same three modes as [HalloweenCard], on a winter night of its own, with the
+ * northern lights over snowy hills and a big snowflake.
  */
 @Composable
-fun ChristmasCard(
+fun WinterCard(
     mode: SeasonalCardMode,
     onPrimary: () -> Unit,
     onSecondary: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val title = stringResource(if (mode == SeasonalCardMode.SeasonOver) Res.string.christmas_over_title else Res.string.christmas_title)
+    val title = stringResource(if (mode == SeasonalCardMode.SeasonOver) Res.string.winter_over_title else Res.string.winter_title)
     val body = stringResource(
         when (mode) {
-            SeasonalCardMode.Offer -> Res.string.christmas_offer
-            SeasonalCardMode.Applied -> Res.string.christmas_applied
+            SeasonalCardMode.Offer -> Res.string.winter_offer
+            SeasonalCardMode.Applied -> Res.string.winter_applied
             SeasonalCardMode.SeasonOver -> Res.string.halloween_over_body
         },
     )
@@ -145,21 +145,26 @@ fun ChristmasCard(
         secondary = secondary,
         onPrimary = onPrimary,
         onSecondary = onSecondary,
-        palette = ChristmasPalette,
+        palette = WinterPalette,
         modifier = modifier,
         corner = {
             Canvas(Modifier.size(40.dp, 28.dp)) {
-                drawSnowflake(Offset(size.width * 0.72f, size.height * 0.4f), size.height * 0.32f, ChristmasSnow.copy(alpha = 0.35f), 12f)
-                drawSnowflake(Offset(size.width * 0.25f, size.height * 0.7f), size.height * 0.18f, ChristmasSnow.copy(alpha = 0.22f))
+                drawSkyStar(Offset(size.width * 0.72f, size.height * 0.38f), size.height * 0.3f, StarGold.copy(alpha = 0.8f))
+                drawSkyStar(Offset(size.width * 0.25f, size.height * 0.72f), size.height * 0.18f, WinterSnow.copy(alpha = 0.6f))
             }
         },
         background = {
             // Snow on the ground along the bottom edge, behind the text.
-            Canvas(Modifier.fillMaxSize()) { drawSnowHills(rise = 0.22f, color = Color(0xFF2B3A33), back = Color(0xFF22302A)) }
+            Canvas(Modifier.fillMaxSize()) {
+                drawAurora(top = 0f, height = size.height * 0.55f, phase = 0.6f, strength = 0.9f)
+                drawSnowHills(rise = 0.22f, color = Color(0xFF2A3550), back = Color(0xFF212B44))
+            }
         },
         art = {
             Canvas(Modifier.size(56.dp)) {
-                drawFirTree(Offset(size.width / 2f, size.height * 0.98f), size.height * 0.98f, lights = 1f, lightPhase = 0.8f)
+                val c = Offset(size.width / 2f, size.height / 2f)
+                drawCircle(Brush.radialGradient(listOf(AuroraTeal.copy(alpha = 0.28f), AuroraTeal.copy(alpha = 0f)), c, size.minDimension * 0.55f), size.minDimension * 0.55f, c)
+                drawSnowflake(c, size.minDimension * 0.42f, WinterSnow, 8f)
             }
         },
     )
@@ -181,10 +186,10 @@ private val HalloweenPalette = SeasonCardPalette(
     button = Color(0xFFFF9A3C), onButton = Color(0xFF2A1400),
 )
 
-private val ChristmasPalette = SeasonCardPalette(
-    top = Color(0xFF173528), bottom = Color(0xFF0D1A14),
-    text = Color(0xFFF4F1E8), body = Color(0xFFC9D6CC),
-    button = ChristmasGold, onButton = Color(0xFF2B2100),
+private val WinterPalette = SeasonCardPalette(
+    top = WinterNavyTop, bottom = WinterNavy,
+    text = Color(0xFFF2F4FA), body = Color(0xFFC3CADF),
+    button = AuroraTeal, onButton = Color(0xFF00382F),
 )
 
 @Composable

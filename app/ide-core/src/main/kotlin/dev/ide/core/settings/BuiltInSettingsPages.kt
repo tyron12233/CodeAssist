@@ -35,7 +35,7 @@ object BuiltInSettingsPages {
     const val APP_ICON_KEY = "settings.$APPEARANCE.$APP_ICON"
     const val APP_ICON_DEFAULT = "default"
     const val APP_ICON_PUMPKIN = "pumpkin"
-    const val APP_ICON_CHRISTMAS = "christmas"
+    const val APP_ICON_SNOWFLAKE = "snowflake"
 
     /** Full preference key of [REOPEN_LAST_PROJECT]. */
     const val REOPEN_LAST_PROJECT_KEY = "settings.$APPEARANCE.$REOPEN_LAST_PROJECT"
@@ -205,7 +205,7 @@ object BuiltInSettingsPages {
                     SettingControl.Choice.Option(IdeSettings.ACCENT_TEAL, "Teal"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_ORANGE, "Orange (Legacy)"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_PUMPKIN, "Pumpkin"),
-                    SettingControl.Choice.Option(IdeSettings.ACCENT_EVERGREEN, "Evergreen"),
+                    SettingControl.Choice.Option(IdeSettings.ACCENT_AURORA, "Aurora"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_CUSTOM, "Custom"),
                     // App themes plugins ship, after the IDE's own. Read per call, so a plugin's appear once its
                     // UI has loaded, and go when it is turned off.
@@ -226,7 +226,7 @@ object BuiltInSettingsPages {
                     options = listOf(
                         SettingControl.Choice.Option(APP_ICON_DEFAULT, "Default"),
                         SettingControl.Choice.Option(APP_ICON_PUMPKIN, "Pumpkin"),
-                        SettingControl.Choice.Option(APP_ICON_CHRISTMAS, "Christmas tree"),
+                        SettingControl.Choice.Option(APP_ICON_SNOWFLAKE, "Snowflake"),
                     ),
                 )
             },
@@ -247,7 +247,7 @@ object BuiltInSettingsPages {
             ),
             SettingControl.Toggle(
                 "seasonal", "Seasonal touches",
-                "Small decorations around holidays, like bats after a successful build at Halloween or snow at Christmas. Your theme and editor only change if you choose to dress up",
+                "Small decorations around holidays, like bats after a successful build at Halloween or snow in winter. Your theme and editor only change if you choose to dress up",
                 default = d.seasonalTouches,
             ),
             SettingControl.Toggle(

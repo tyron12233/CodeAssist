@@ -19,11 +19,11 @@ internal data class SeasonalOutfit(
 ) {
     companion object {
         val Halloween = SeasonalOutfit(Season.Halloween, accent = "pumpkin", scheme = "pumpkin", caret = "candle")
-        val Christmas = SeasonalOutfit(Season.Christmas, accent = "evergreen", scheme = "evergreen", caret = "candle")
+        val Winter = SeasonalOutfit(Season.Winter, accent = "aurora", scheme = "polar-night", caret = "candle")
 
         fun of(season: Season): SeasonalOutfit = when (season) {
             Season.Halloween -> Halloween
-            Season.Christmas -> Christmas
+            Season.Winter -> Winter
         }
     }
 }

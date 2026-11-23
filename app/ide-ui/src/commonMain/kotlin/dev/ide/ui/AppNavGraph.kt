@@ -4,7 +4,7 @@ import dev.ide.ui.screens.HomeAiTab
 import dev.ide.ui.ext.HomeTabContext
 import dev.ide.ui.ext.HomeTabContribution
 import dev.ide.ui.ext.HomeTabRegistry
-import dev.ide.ui.components.ChristmasCard
+import dev.ide.ui.components.WinterCard
 import dev.ide.ui.components.HalloweenCard
 import dev.ide.ui.components.SeasonalCardMode
 import dev.ide.ui.generated.resources.home_account
@@ -38,8 +38,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import dev.ide.ui.holiday.HolidayLedger
-import dev.ide.ui.screens.advent.AdventCardStatus
-import dev.ide.ui.screens.advent.AdventHomeCard
+import dev.ide.ui.screens.countdown.CountdownCardStatus
+import dev.ide.ui.screens.countdown.CountdownHomeCard
 import dev.ide.ui.theme.LocalSeason
 import dev.ide.ui.theme.Season
 import dev.ide.ui.backend.FileActions
@@ -413,15 +413,15 @@ private fun AppRoute(
             onSolved = app::refreshChallenges,
         )
 
-        Screen.Advent -> dev.ide.ui.screens.advent.AdventScreen(
+        Screen.Countdown -> dev.ide.ui.screens.countdown.CountdownScreen(
             backend = backend,
             ledger = app.holidayLedger,
             schemes = app.colorSchemes,
-            onBack = app::exitAdvent,
+            onBack = app::exitCountdown,
             onSolve = { date -> app.openChallenge(date) },
             onOpenLesson = app::openTrack,
             onOpenStore = {
-                app.exitAdvent()
+                app.exitCountdown()
                 app.selectHomeTab(HomeTab.Store)
             },
             onSchemeApplied = app::reloadColorScheme,
@@ -918,12 +918,12 @@ private fun ProjectPickerRoute(
     val backend = app.backend
     var notificationsVisible by remember { mutableStateOf(false) }
     val halloween = remember(app) { SeasonalDressUp(app, SeasonalOutfit.Halloween) }
-    val christmas = remember(app) { SeasonalDressUp(app, SeasonalOutfit.Christmas) }
+    val winter = remember(app) { SeasonalDressUp(app, SeasonalOutfit.Winter) }
     // At most one card. The season under way wins; failing that, a season that has ended and is still worn.
-    val christmasMode = christmas.mode()
-    // The Advent calendar's card, all through the Christmas season (with Seasonal touches on).
-    val adventShown = LocalSeason.current == Season.Christmas
-    val halloweenMode = if (christmasMode == null && !adventShown) halloween.mode() else null
+    val winterMode = winter.mode()
+    // The New Year countdown's card, all through the winter season (with Seasonal touches on).
+    val countdownShown = LocalSeason.current == Season.Winter
+    val halloweenMode = if (winterMode == null && !countdownShown) halloween.mode() else null
     // Store projects installed here that the store has a newer version of. Asked again when the project
     // list changes (an install, a delete), and memoised by the backend, so showing Home is not a network trip.
     val updates by produceState(emptyList<dev.ide.ui.backend.UiStoreUpdate>(), projects) {
@@ -932,23 +932,23 @@ private fun ProjectPickerRoute(
     ProjectsHomeScreen(
         updates = updates,
         onOpenUpdate = { app.openStoreItem(it.item) },
-        seasonalCard = if (christmasMode != null || adventShown) {
+        seasonalCard = if (winterMode != null || countdownShown) {
             { cardModifier ->
                 Column(cardModifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    christmasMode?.let { mode ->
-                        ChristmasCard(
+                    winterMode?.let { mode ->
+                        WinterCard(
                             mode = mode,
-                            onPrimary = if (mode == SeasonalCardMode.Offer) christmas::dressUp else christmas::putBack,
-                            onSecondary = if (mode == SeasonalCardMode.Applied) christmas::putBack else christmas::dismiss,
+                            onPrimary = if (mode == SeasonalCardMode.Offer) winter::dressUp else winter::putBack,
+                            onSecondary = if (mode == SeasonalCardMode.Applied) winter::putBack else winter::dismiss,
                         )
                     }
-                    if (adventShown) {
+                    if (countdownShown) {
                         val ledger = app.holidayLedger
-                        AdventHomeCard(
-                            status = AdventCardStatus.of(ledger),
-                            ornaments = ledger.ornaments(),
-                            starLit = HolidayLedger.DOORS in ledger.opened(),
-                            onOpen = app::openAdvent,
+                        CountdownHomeCard(
+                            status = CountdownCardStatus.of(ledger),
+                            stars = ledger.stars(),
+                            auroraOut = HolidayLedger.DOORS in ledger.opened(),
+                            onOpen = app::openCountdown,
                         )
                     }
                 }

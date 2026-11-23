@@ -8,7 +8,7 @@ import dev.ide.core.settings.BuiltInSettingsPages
 
 /**
  * Switches the launcher icon by enabling one of the manifest's activity-aliases (`.LauncherDefault`,
- * `.LauncherPumpkin`, `.LauncherChristmas`) and disabling the others. Both target [MainActivity], so the app itself is the same
+ * `.LauncherPumpkin`, `.LauncherSnowflake`) and disabling the others. Both target [MainActivity], so the app itself is the same
  * whichever icon is showing.
  *
  * Known launcher behavior, which is why Settings warns about it: the launcher picks the change up after a few
@@ -27,12 +27,12 @@ class AndroidAppIcons(context: Context) : AppIconHost {
         context,
         "${MainActivity::class.java.`package`!!.name}." + when (id) {
             BuiltInSettingsPages.APP_ICON_PUMPKIN -> "LauncherPumpkin"
-            BuiltInSettingsPages.APP_ICON_CHRISTMAS -> "LauncherChristmas"
+            BuiltInSettingsPages.APP_ICON_SNOWFLAKE -> "LauncherSnowflake"
             else -> "LauncherDefault"
         },
     )
 
-    private val all = listOf(BuiltInSettingsPages.APP_ICON_DEFAULT, BuiltInSettingsPages.APP_ICON_PUMPKIN, BuiltInSettingsPages.APP_ICON_CHRISTMAS)
+    private val all = listOf(BuiltInSettingsPages.APP_ICON_DEFAULT, BuiltInSettingsPages.APP_ICON_PUMPKIN, BuiltInSettingsPages.APP_ICON_SNOWFLAKE)
 
     /** Whether [id]'s alias is enabled, counting "default state" as what the manifest declares. */
     private fun enabled(id: String): Boolean = when (pm.getComponentEnabledSetting(alias(id))) {

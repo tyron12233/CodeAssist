@@ -13,17 +13,26 @@ class HolidayLedgerTest {
     private val ledger = HolidayLedger(prefs::get, { k, v -> prefs[k] = v }, { today })
 
     @Test
-    fun doorsUnlockDayByDayAndStayOpenAfterChristmas() {
+    fun daysUnlockOneByOneAndStayOpenAfterNewYear() {
         assertEquals(0, ledger.unlockedThrough(20261128))
         assertEquals(3, ledger.daysUntilFirstDoor(20261128))
         assertEquals(1, ledger.daysUntilFirstDoor(20261130))
         assertEquals(1, ledger.unlockedThrough(20261201))
         assertEquals(17, ledger.unlockedThrough(20261217))
         assertEquals(25, ledger.unlockedThrough(20261225))
-        assertEquals(25, ledger.unlockedThrough(20261231))
-        assertEquals(25, ledger.unlockedThrough(20270106))
+        assertEquals(31, ledger.unlockedThrough(20261231))
+        assertEquals(31, ledger.unlockedThrough(20270101))
+        assertEquals(31, ledger.unlockedThrough(20270106))
         assertEquals(0, ledger.unlockedThrough(20270107))
         assertEquals(0, ledger.unlockedThrough(20260615))
+    }
+
+    @Test
+    fun theDaysToTheNewYearCountDownThroughDecember() {
+        assertEquals(31, ledger.daysToNewYear(20261201))
+        assertEquals(1, ledger.daysToNewYear(20261231))
+        assertNull(ledger.daysToNewYear(20261130))
+        assertNull(ledger.daysToNewYear(20270101))
     }
 
     @Test
@@ -48,39 +57,39 @@ class HolidayLedgerTest {
     }
 
     @Test
-    fun eachActivityHangsAtMostOneOrnamentADay() {
+    fun eachActivityAddsAtMostOneStarADay() {
         ledger.open(1)
-        ledger.open(2) // same day: no second Door ornament
+        ledger.open(2) // same day: no second Door star
         ledger.record(HolidayActivity.Build)
         assertNull(ledger.record(HolidayActivity.Build))
         today = 20261206
         ledger.record(HolidayActivity.Build)
         assertEquals(
             listOf(
-                Ornament(HolidayActivity.Door, 20261205),
-                Ornament(HolidayActivity.Build, 20261205),
-                Ornament(HolidayActivity.Build, 20261206),
+                SkyStar(HolidayActivity.Door, 20261205),
+                SkyStar(HolidayActivity.Build, 20261205),
+                SkyStar(HolidayActivity.Build, 20261206),
             ),
-            ledger.ornaments(),
+            ledger.stars(),
         )
     }
 
     @Test
-    fun nothingIsRecordedOutOfSeasonAndTheTreeHasARoof() {
+    fun nothingIsRecordedOutOfSeasonAndTheSkyHasRoom() {
         today = 20260701
         assertNull(ledger.record(HolidayActivity.Lesson))
-        assertTrue(ledger.ornaments(2026).isEmpty())
+        assertTrue(ledger.stars(2026).isEmpty())
         today = 20261128
         var day = 20261128
         repeat(60) {
             for (a in HolidayActivity.entries) ledger.record(a, day)
             day = if (day % 100 == 30 && day % 10_000 / 100 == 11) 20261201 else day + 1
         }
-        assertEquals(HolidayLedger.TREE_CAPACITY, ledger.ornaments(2026).size)
+        assertEquals(HolidayLedger.SKY_CAPACITY, ledger.stars(2026).size)
     }
 
     @Test
-    fun eachSeasonKeepsItsOwnCalendar() {
+    fun eachSeasonKeepsItsOwnCountdown() {
         ledger.open(3)
         today = 20271203
         assertEquals(emptySet(), ledger.opened())
@@ -90,8 +99,8 @@ class HolidayLedgerTest {
     @Test
     fun aDamagedPreferenceReadsAsNothing() {
         prefs["holiday.2026.opened"] = "3,x,,99,-1,4"
-        prefs["holiday.2026.ornaments"] = "door:20261203,bogus,unknown:20261204,build:notaday"
+        prefs["holiday.2026.stars"] = "door:20261203,bogus,unknown:20261204,build:notaday"
         assertEquals(setOf(3, 4), ledger.opened())
-        assertEquals(listOf(Ornament(HolidayActivity.Door, 20261203)), ledger.ornaments())
+        assertEquals(listOf(SkyStar(HolidayActivity.Door, 20261203)), ledger.stars())
     }
 }

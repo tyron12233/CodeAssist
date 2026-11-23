@@ -1146,10 +1146,10 @@ class CodeAssistAppState(
         screen = Screen.ChallengeBoard
     }
 
-    // ---- Christmas ----
+    // ---- Winter ----
 
     /**
-     * The Advent calendar and the tree. Its "today" is the device's local date unless a developer has pinned one
+     * The New Year countdown and the sky. Its "today" is the device's local date unless a developer has pinned one
      * with the `seasonal.forceDate` preference (`yyyyMMdd`), which, with `seasonal.force`, shows the season and
      * its doors on any day of the year.
      */
@@ -1162,12 +1162,12 @@ class CodeAssistAppState(
         },
     )
 
-    fun openAdvent() {
-        screen = Screen.Advent
+    fun openCountdown() {
+        screen = Screen.Countdown
     }
 
     /** Back from the calendar, to Home where it was opened. */
-    fun exitAdvent() {
+    fun exitCountdown() {
         screen = Screen.Projects
     }
 
@@ -1542,7 +1542,7 @@ class CodeAssistAppState(
 
             screen == Screen.ChallengePlayer -> exitChallenge()
             screen == Screen.ChallengeBoard -> exitChallengeBoard()
-            screen == Screen.Advent -> exitAdvent()
+            screen == Screen.Countdown -> exitCountdown()
 
             screen == Screen.CreateProject -> screen = Screen.Projects
             screen == Screen.ImportProject -> cancelImportPreview()
@@ -1583,7 +1583,7 @@ internal fun accentOf(settings: UiSettings): CaAccent = when (settings.accent) {
     UiAccent.Orange -> CaAccent.Orange
     UiAccent.Violet -> CaAccent.Violet
     UiAccent.Pumpkin -> CaAccent.Pumpkin
-    UiAccent.Evergreen -> CaAccent.Evergreen
+    UiAccent.Aurora -> CaAccent.Aurora
     else -> CaAccent.Lime
 }
 

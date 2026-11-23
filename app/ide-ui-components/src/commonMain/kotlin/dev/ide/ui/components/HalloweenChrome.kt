@@ -126,20 +126,20 @@ fun HauntedGhost(size: Dp, modifier: Modifier = Modifier) {
 }
 
 /**
- * The empty-state illustration: [HauntedGhost] during Halloween, [FrostySnowman] at Christmas, [fallback] (the
+ * The empty-state illustration: [HauntedGhost] during Halloween, [FrostySnowman] in winter, [fallback] (the
  * screen's usual glyph) on every other day.
  */
 @Composable
 fun SeasonalEmptyArt(size: Dp, modifier: Modifier = Modifier, fallback: @Composable () -> Unit) {
     when (LocalSeason.current) {
         Season.Halloween -> HauntedGhost(size, modifier)
-        Season.Christmas -> FrostySnowman(size, modifier)
+        Season.Winter -> FrostySnowman(size, modifier)
         null -> Box(modifier) { fallback() }
     }
 }
 
-/** The glyphs nav destinations wear for a season: Halloween's three, then Christmas's three. */
-enum class SeasonalGlyph { Pumpkin, Bat, WitchHat, Tree, Gift, Star }
+/** The glyphs nav destinations wear for a season: Halloween's three, then winter's three. */
+enum class SeasonalGlyph { Pumpkin, Bat, WitchHat, Snowflake, Snowman, Star }
 
 /**
  * A seasonal nav glyph at [size], drawn where the destination's usual glyph would be. Selected, it is in full
@@ -171,21 +171,15 @@ fun SeasonalNavGlyph(glyph: SeasonalGlyph, selected: Boolean, size: Dp, tint: Co
                 tint,
                 band = if (selected) Color(0xFFFF9A3C) else tint.copy(alpha = 0.45f),
             )
-            // Christmas: the fir is in full color when selected and in the tint otherwise, like the pumpkin;
-            // the gift and the star take the tint, with a gold accent only when selected.
-            SeasonalGlyph.Tree -> if (selected) {
-                drawFirTree(Offset(c.x, c.y + s * 0.47f), s * 0.98f, lights = 1f, lightPhase = 0.8f)
-            } else {
-                drawFirTree(Offset(c.x, c.y + s * 0.47f), s * 0.98f, fir = tint, shade = tint.copy(alpha = 0.75f), star = tint)
+            // Winter: the snowflake and the star take the theme's tint when not selected and a color of their own
+            // when selected; the snowman is snow either way, dimmed when not selected.
+            SeasonalGlyph.Snowflake -> drawSnowflake(c, s * 0.44f, if (selected) AuroraTeal else tint, 10f)
+            SeasonalGlyph.Snowman -> {
+                if (!selected) drawContext.canvas.saveLayer(Rect(Offset.Zero, this.size), dimmed)
+                drawSnowman(Offset(c.x, c.y + s * 0.47f), s * 0.98f, outline = tint.copy(alpha = 0.5f))
+                if (!selected) drawContext.canvas.restore()
             }
-            SeasonalGlyph.Gift -> drawGift(
-                Offset(c.x, c.y + s * 0.08f),
-                s * 0.78f,
-                s * 0.72f,
-                wrap = tint,
-                ribbon = if (selected) ChristmasGold else tint.copy(alpha = 0.45f),
-            )
-            SeasonalGlyph.Star -> drawStar(Offset(c.x, c.y + s * 0.04f), s * 0.46f, if (selected) ChristmasGold else tint)
+            SeasonalGlyph.Star -> drawStar(Offset(c.x, c.y + s * 0.04f), s * 0.46f, if (selected) StarGold else tint)
         }
     }
 }

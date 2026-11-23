@@ -41,10 +41,10 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * The Christmas build and run moments, the counterpart of [HalloweenBuildFx], kept quiet on purpose: a soft
- * fall of snow and a gold star when a build succeeds, a breath of frost along the bottom edge when one fails,
- * the progress bar as a row of presents being wrapped, a small fir whose lights twinkle while the build runs,
- * and a shimmer of gold when a program starts.
+ * The winter build and run moments, the counterpart of [HalloweenBuildFx], kept quiet on purpose: a soft fall of
+ * snow and a gold star when a build succeeds, a breath of frost along the bottom edge when one fails, the
+ * progress bar as a row of stars lighting up, a slowly turning snowflake while the build runs, and a shimmer of
+ * gold when a program starts.
  *
  * The same rules as Halloween's: one-shot moments are a single [Animatable] tween, so the platform animation
  * scale applies and with animations off nothing is drawn; looping ones fall back to a still frame when
@@ -56,8 +56,8 @@ import kotlin.random.Random
  * nothing outside the season or between moments.
  */
 @Composable
-fun ChristmasBuildFx(backend: IdeBackend, modifier: Modifier = Modifier) {
-    if (!isChristmas()) return
+fun WinterBuildFx(backend: IdeBackend, modifier: Modifier = Modifier) {
+    if (!isWinter()) return
     Box(modifier.fillMaxSize()) {
         BuildSucceededSnow(backend)
         BuildFailedFrost(backend)
@@ -105,7 +105,7 @@ private fun BoxScope.BuildSucceededSnow(backend: IdeBackend) {
 internal fun SnowAndStar(seed: Int, progress: () -> Float, modifier: Modifier = Modifier) {
     val flakes = remember(seed) { burstOf(Random(seed * 6151 + 3)) }
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val snow = if (dark) ChristmasSnow else Color(0xFFB9CBC3)
+    val snow = if (dark) WinterSnow else Color(0xFFB9CBC3)
     Canvas(
         modifier
             .fillMaxSize()
@@ -129,7 +129,7 @@ internal fun SnowAndStar(seed: Int, progress: () -> Float, modifier: Modifier = 
         if (fade > 0f) {
             val r = minOf(unit * 0.07f, 34.dp.toPx())
             val c = Offset(size.width / 2f, size.height + r * 2f - (size.height * 0.28f + r * 2f) * rise)
-            drawStar(c, r * fade.coerceAtLeast(0.6f), ChristmasGold.copy(alpha = fade), glow = fade, rotation = (1f - rise) * -40f)
+            drawStar(c, r * fade.coerceAtLeast(0.6f), StarGold.copy(alpha = fade), glow = fade, rotation = (1f - rise) * -40f)
         }
     }
 }
@@ -258,23 +258,10 @@ internal fun GoldShimmer(seed: Int, progress: () -> Float, modifier: Modifier = 
             if (t <= 0f || t >= 1f) continue
             val a = sin(t * PI.toFloat())
             val c = Offset(g.x * size.width, g.y * size.height * 0.3f + unit * 0.04f)
-            drawCircle(Brush.radialGradient(listOf(ChristmasGold.copy(alpha = 0.35f * a), ChristmasGold.copy(alpha = 0f)), c, unit * 0.05f), unit * 0.05f, c)
-            drawSparkle(c, unit * g.scale * (0.6f + 0.4f * a), ChristmasGold.copy(alpha = a))
+            drawCircle(Brush.radialGradient(listOf(StarGold.copy(alpha = 0.35f * a), StarGold.copy(alpha = 0f)), c, unit * 0.05f), unit * 0.05f, c)
+            drawSparkle(c, unit * g.scale * (0.6f + 0.4f * a), StarGold.copy(alpha = a))
         }
     }
-}
-
-/** A four-pointed glint: two thin crossed diamonds. */
-internal fun DrawScope.drawSparkle(center: Offset, radius: Float, color: Color) {
-    val path = androidx.compose.ui.graphics.Path().apply {
-        moveTo(center.x, center.y - radius)
-        quadraticTo(center.x, center.y, center.x + radius, center.y)
-        quadraticTo(center.x, center.y, center.x, center.y + radius)
-        quadraticTo(center.x, center.y, center.x - radius, center.y)
-        quadraticTo(center.x, center.y, center.x, center.y - radius)
-        close()
-    }
-    drawPath(path, color)
 }
 
 private class Glint(val x: Float, val y: Float, val start: Float, val scale: Float)
@@ -285,31 +272,31 @@ private fun glintsOf(r: Random): List<Glint> = List(10) { i ->
 }
 
 // ---------------------------------------------------------------------------
-// Presents progress
+// Starlight progress
 // ---------------------------------------------------------------------------
 
 /**
- * A build progress bar drawn as a row of small presents that get wrapped in turn: [progress] fills them left to
- * right, or, when null, a wave of wrapping travels along the row. Unwrapped boxes are plain outlines in the
- * theme's faint ink, so the bar reads on any theme. Sized from the height it is given, so it takes the footprint
- * of the bar it replaces; [gap] leaves an empty stretch in the middle (the dock's grab notch sits there).
+ * A build progress bar drawn as a row of small stars that light up in turn: [progress] lights them left to
+ * right, or, when null, a glow travels along the row. Unlit stars are faint outlines in the theme's ink, so the
+ * bar reads on any theme. Sized from the height it is given, so it takes the footprint of the bar it replaces;
+ * [gap] leaves an empty stretch in the middle (the dock's grab notch sits there).
  */
 @Composable
-fun PresentsProgress(progress: (() -> Float)?, modifier: Modifier = Modifier, gap: Dp = 0.dp) {
-    val dim = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f)
+fun StarlightProgress(progress: (() -> Float)?, modifier: Modifier = Modifier, gap: Dp = 0.dp) {
+    val dim = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
     val chase: State<Float>? = if (progress == null && motionIsAnimated()) {
-        rememberInfiniteTransition(label = "presentsChase").animateFloat(
+        rememberInfiniteTransition(label = "starChase").animateFloat(
             initialValue = 0f,
             targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(PRESENTS_CHASE_MS, easing = LinearEasing), RepeatMode.Restart),
-            label = "presentsChaseHead",
+            animationSpec = infiniteRepeatable(tween(STAR_CHASE_MS, easing = LinearEasing), RepeatMode.Restart),
+            label = "starChaseHead",
         )
     } else null
     Canvas(modifier) {
         val slots = pumpkinSlots(size.width, size.height, gap.toPx())
         if (slots.isEmpty()) return@Canvas
         for ((i, cx) in slots.withIndex()) {
-            val wrapped = when {
+            val lit = when {
                 progress != null -> (progress() * slots.size - i).coerceIn(0f, 1f)
                 chase != null -> {
                     val head = chase.value * (slots.size + 3) - 1.5f
@@ -317,53 +304,49 @@ fun PresentsProgress(progress: (() -> Float)?, modifier: Modifier = Modifier, ga
                 }
                 else -> 0.6f
             }
-            drawWrappingPresent(Offset(cx, size.height / 2f), size.height, wrapped, i, dim)
+            val c = Offset(cx, size.height / 2f)
+            val r = size.height * 0.55f
+            drawStar(c, r, dim)
+            if (lit > 0f) drawStar(c, r, StarColors[i % StarColors.size].copy(alpha = lit), glow = lit * 0.8f)
         }
     }
 }
 
-/** One present [height] tall: a faint box, with the wrapped one (in its turn's color) faded in by [wrapped]. */
-private fun DrawScope.drawWrappingPresent(center: Offset, height: Float, wrapped: Float, index: Int, dim: Color) {
-    val w = height * 1.05f
-    drawGift(center, w, height, wrap = dim, ribbon = dim)
-    if (wrapped <= 0f) return
-    val wrap = WrapColors[index % WrapColors.size]
-    val ribbon = if (wrap == ChristmasGold) ChristmasCranberry else ChristmasGold
-    drawGift(center, w, height, wrap = wrap.copy(alpha = wrapped), ribbon = ribbon.copy(alpha = wrapped))
-}
-
-private val WrapColors = listOf(ChristmasCranberry, ChristmasFir, ChristmasGold, Color(0xFF5B8FB9))
+private val StarColors = listOf(StarGold, AuroraTeal, StarGold, AuroraViolet)
 
 // ---------------------------------------------------------------------------
-// Fir status glyph
+// Snowflake status glyph
 // ---------------------------------------------------------------------------
 
 /**
- * The Christmas build status glyph: while the build runs, a small fir whose lights twinkle; when it finishes,
- * the star on top pops once before handing back to [glyph]. [finishing] is 0..1 through that pop, or null
+ * The winter build status glyph: while the build runs, a snowflake that slowly turns; when it finishes, a gold
+ * star pops in its place once before handing back to [glyph]. [finishing] is 0..1 through that pop, or null
  * while running.
  */
 @Composable
-internal fun ChristmasBuildGlyph(running: Boolean, finishing: Float?, size: Dp) {
-    val twinkle: State<Float>? = if (running && motionIsAnimated()) {
-        rememberInfiniteTransition(label = "firLights").animateFloat(
+internal fun WinterBuildGlyph(running: Boolean, finishing: Float?, size: Dp) {
+    val turn: State<Float>? = if (running && motionIsAnimated()) {
+        rememberInfiniteTransition(label = "flakeTurn").animateFloat(
             initialValue = 0f,
-            targetValue = (2 * PI).toFloat(),
-            animationSpec = infiniteRepeatable(tween(TWINKLE_MS, easing = LinearEasing), RepeatMode.Restart),
-            label = "firLightsPhase",
+            targetValue = 60f,
+            animationSpec = infiniteRepeatable(tween(TURN_MS, easing = LinearEasing), RepeatMode.Restart),
+            label = "flakeTurnAngle",
         )
     } else null
-    Canvas(Modifier.size(size)) { drawFirGlyph(twinkle?.value ?: 1f, finishing) }
+    val color = AuroraTeal
+    Canvas(Modifier.size(size)) { drawSnowflakeGlyph(color, turn?.value ?: 0f, finishing) }
 }
 
-/** The fir filling this canvas, lights at [phase] (radians), and the star's pop at [pop] (0..1) if set. */
-internal fun DrawScope.drawFirGlyph(phase: Float, pop: Float?) {
-    val h = size.minDimension
-    drawFirTree(Offset(size.width / 2f, size.height * 0.98f), h * 0.96f, lights = 1f, lightPhase = phase)
-    if (pop != null) {
-        val c = Offset(size.width / 2f, size.height * 0.98f - h * 0.96f * 0.88f)
+/** The snowflake filling this canvas at [angle] degrees, or, when [pop] is set (0..1), the star's pop. */
+internal fun DrawScope.drawSnowflakeGlyph(color: Color, angle: Float, pop: Float?) {
+    val c = Offset(size.width / 2f, size.height / 2f)
+    val r = size.minDimension * 0.44f
+    if (pop == null) {
+        drawSnowflake(c, r, color, angle)
+    } else {
         val swell = sin(pop * PI.toFloat())
-        drawStar(c, h * 0.1f * (1f + swell * 0.9f), ChristmasGold, glow = swell)
+        drawSnowflake(c, r * (1f - pop), color.copy(alpha = 1f - pop), angle)
+        drawStar(c, r * 0.8f * (0.6f + swell * 0.6f), StarGold.copy(alpha = (pop * 3f).coerceAtMost(1f)), glow = swell)
     }
 }
 
@@ -372,8 +355,8 @@ private fun easeOutCubic(t: Float): Float = 1f - (1f - t) * (1f - t) * (1f - t)
 private const val SNOW_BURST_MS = 2600
 private const val FROST_MS = 1800
 private const val SHIMMER_MS = 1400
-private const val PRESENTS_CHASE_MS = 1600
-private const val TWINKLE_MS = 2200
+private const val STAR_CHASE_MS = 1600
+private const val TURN_MS = 3000
 /** The latest a flake may start falling, as a fraction of the burst. */
 private const val MAX_FLAKE_DELAY = 0.35f
 /** How much of the shimmer one glint lasts. */

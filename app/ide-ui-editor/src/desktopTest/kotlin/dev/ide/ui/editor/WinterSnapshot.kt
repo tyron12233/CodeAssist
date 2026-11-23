@@ -20,18 +20,18 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import dev.ide.ui.components.ChristmasBackdrop
-import dev.ide.ui.components.ChristmasCard
-import dev.ide.ui.components.ChristmasCranberry
-import dev.ide.ui.components.ChristmasGold
-import dev.ide.ui.components.ChristmasLightColors
+import dev.ide.ui.components.WinterBackdrop
+import dev.ide.ui.components.WinterCard
+import dev.ide.ui.components.AuroraViolet
+import dev.ide.ui.components.StarGold
+import dev.ide.ui.components.WinterLightColors
 import dev.ide.ui.components.FrostySnowman
 import dev.ide.ui.components.SeasonalCardMode
 import dev.ide.ui.components.SeasonalGlyph
 import dev.ide.ui.components.SeasonalNavGlyph
-import dev.ide.ui.components.drawBulb
-import dev.ide.ui.components.drawGift
-import dev.ide.ui.components.drawOrnament
+import dev.ide.ui.components.drawFairyLight
+import dev.ide.ui.components.drawFirework
+import dev.ide.ui.components.drawSkyStar
 import dev.ide.ui.components.drawSnowflake
 import dev.ide.ui.components.drawStar
 import dev.ide.ui.theme.CaAccent
@@ -45,47 +45,46 @@ import kotlin.test.assertTrue
 import org.jetbrains.skia.EncodedImageFormat
 
 /**
- * The Christmas art, off-screen: the Home card in its three modes over the Evergreen theme, the nav glyphs
+ * The winter art, off-screen: the Home card in its three modes over the Aurora theme, the nav glyphs
  * selected and not, the small drawings, the snowman, and the Home backdrop. Art is right or wrong by eye, so the
  * value here is the PNG; the assertion only catches a blank frame.
  */
-class ChristmasSnapshot {
+class WinterSnapshot {
 
     @OptIn(ExperimentalComposeUiApi::class)
     @Test
-    fun theChristmasArtRenders() {
+    fun theWinterArtRenders() {
         for (dark in listOf(true, false)) {
             val scene = ImageComposeScene(width = 822, height = 1700, density = Density(2f)) {
-                CodeAssistTheme(dark = dark, accent = CaAccent.Evergreen, editorColorScheme = BuiltInColorSchemes.EVERGREEN) {
-                    CompositionLocalProvider(LocalSeason provides Season.Christmas) {
+                CodeAssistTheme(dark = dark, accent = CaAccent.Aurora, editorColorScheme = BuiltInColorSchemes.POLAR_NIGHT) {
+                    CompositionLocalProvider(LocalSeason provides Season.Winter) {
                         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                            ChristmasBackdrop()
+                            WinterBackdrop()
                             Column(
                                 Modifier.fillMaxSize().padding(20.dp),
                                 verticalArrangement = Arrangement.spacedBy(16.dp),
                             ) {
-                                for (mode in SeasonalCardMode.entries) ChristmasCard(mode, onPrimary = {}, onSecondary = {})
+                                for (mode in SeasonalCardMode.entries) WinterCard(mode, onPrimary = {}, onSecondary = {})
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                                     val tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    for (glyph in listOf(SeasonalGlyph.Tree, SeasonalGlyph.Gift, SeasonalGlyph.Star)) {
+                                    for (glyph in listOf(SeasonalGlyph.Snowflake, SeasonalGlyph.Snowman, SeasonalGlyph.Star)) {
                                         for (selected in listOf(true, false)) SeasonalNavGlyph(glyph, selected, size = 40.dp, tint = tint)
                                     }
                                 }
                                 Canvas(Modifier.fillMaxWidth().height(90.dp)) {
                                     val h = size.height
-                                    drawSnowflake(Offset(h * 0.5f, h * 0.5f), h * 0.4f, ChristmasLightColors[4], 10f)
-                                    drawStar(Offset(h * 1.5f, h * 0.5f), h * 0.35f, ChristmasGold, glow = 1f)
-                                    drawGift(Offset(h * 2.5f, h * 0.55f), h * 0.7f)
-                                    drawGift(Offset(h * 3.4f, h * 0.6f), h * 0.55f, wrap = ChristmasLightColors[2], ribbon = ChristmasCranberry, lift = 0.6f)
-                                    for (i in 0 until 4) drawOrnament(Offset(h * (4.3f + i * 0.55f), h * 0.55f), h * 0.2f, ChristmasLightColors[i])
-                                    for (i in 0 until 5) drawBulb(Offset(h * (6.6f + i * 0.35f), h * 0.2f), h * 0.22f, ChristmasLightColors[i])
+                                    drawSnowflake(Offset(h * 0.5f, h * 0.5f), h * 0.4f, WinterLightColors[4], 10f)
+                                    drawStar(Offset(h * 1.5f, h * 0.5f), h * 0.35f, StarGold, glow = 1f)
+                                    drawFirework(Offset(h * 2.6f, h * 0.5f), h * 0.45f, 0.5f, StarGold, seed = 2)
+                                    for (i in 0 until 4) drawSkyStar(Offset(h * (3.6f + i * 0.5f), h * 0.5f), h * 0.18f, WinterLightColors[i])
+                                    for (i in 0 until 5) drawFairyLight(Offset(h * (5.8f + i * 0.35f), h * 0.5f), h * 0.06f, WinterLightColors[i])
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                                     FrostySnowman(96.dp)
                                     FrostySnowman(56.dp)
-                                    // The editor's touches on the Evergreen scheme's paper: gutter lights, icicles
+                                    // The editor's touches on the Polar Night scheme's paper: gutter lights, icicles
                                     // under an error squiggle, and snow mid-fall with its cap half settled.
-                                    val paper = if (dark) Color(0xFF111814) else Color(0xFFFBF9F3)
+                                    val paper = if (dark) Color(0xFF0E1424) else Color(0xFFF7F8FD)
                                     val border = if (dark) Color(0xFF2C3A32) else Color(0xFFD9D4C6)
                                     val error = if (dark) Color(0xFFFF6B6B) else Color(0xFFD32F2F)
                                     Canvas(Modifier.size(220.dp, 180.dp).background(paper)) {
@@ -106,7 +105,7 @@ class ChristmasSnapshot {
             }
             scene.render()
             val png = scene.render(16_000_000L).encodeToData(EncodedImageFormat.PNG)!!.bytes
-            val name = "christmas-${if (dark) "dark" else "light"}.png"
+            val name = "winter-${if (dark) "dark" else "light"}.png"
             File(OUT, name).writeBytes(png)
             assertTrue(png.size > 20_000, "$name should render more than a blank frame")
             scene.close()

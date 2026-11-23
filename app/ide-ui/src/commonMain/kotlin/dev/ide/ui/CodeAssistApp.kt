@@ -2,7 +2,7 @@ package dev.ide.ui
 
 import dev.ide.ui.platform.AppLanguage
 import dev.ide.ui.components.BuildSuccessBats
-import dev.ide.ui.components.ChristmasBuildFx
+import dev.ide.ui.components.WinterBuildFx
 import dev.ide.ui.components.HalloweenBuildFx
 import dev.ide.ui.theme.LocalSeason
 import dev.ide.ui.theme.Season
@@ -240,9 +240,9 @@ fun CodeAssistApp(
                                 // Boo on a failed build, candy when a program starts; nothing outside the season.
                                 HalloweenBuildFx(backend = backend)
                                 // Snow and a star on success, frost on failure, gold when a program starts.
-                                ChristmasBuildFx(backend = backend)
-                                // The first successful build of each day hangs an ornament on the tree.
-                                if (season == Season.Christmas) HolidayBuildRecorder(backend, app.holidayLedger)
+                                WinterBuildFx(backend = backend)
+                                // The first successful build of each day adds a star to the sky.
+                                if (season == Season.Winter) HolidayBuildRecorder(backend, app.holidayLedger)
                             }
                         }
                         AppOverlays(

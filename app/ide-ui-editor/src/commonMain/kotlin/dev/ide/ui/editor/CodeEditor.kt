@@ -333,7 +333,7 @@ private fun CodeEditorContent(
         val caret = interaction.caretContent
         embers.spawn(caret.x, caret.y - metrics.lineHeight * 0.15f, flameTime.floatValue)
     }
-    // The seasonal overlays (Halloween's cobweb, ghost and slime drips; Christmas's snow, lights and icicles),
+    // The seasonal overlays (Halloween's cobweb, ghost and slime drips; winter's snow, lights and icicles),
     // only during their season, with Seasonal touches on.
     val season = LocalSeason.current
     val halloween = season == Season.Halloween
@@ -1430,10 +1430,10 @@ private fun CodeEditorContent(
             background = drawColors.background,
             modifier = Modifier.matchParentSize(),
         )
-        // Christmas: light snow over an idle editor, settling along its top edge until the next keystroke.
+        // Winter: light snow over an idle editor, settling along its top edge until the next keystroke.
         EditorSnowfall(
             activity = activity,
-            enabled = season == Season.Christmas,
+            enabled = season == Season.Winter,
             background = drawColors.background,
             modifier = Modifier.matchParentSize(),
         )

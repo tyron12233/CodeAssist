@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 /**
- * Hangs a Build ornament when a build is seen running and then succeeding. The ledger keeps it to one a day,
+ * Adds a Build star when a build is seen running and then succeeding. The ledger keeps it to one a day,
  * so this can fire on every build. Draws nothing.
  */
 @Composable
