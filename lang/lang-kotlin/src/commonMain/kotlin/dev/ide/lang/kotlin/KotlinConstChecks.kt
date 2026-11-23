@@ -157,8 +157,13 @@ internal object KotlinConstChecks {
                 }
                 // A lambda may have a receiver whose members the tree cannot see.
                 is KtFunctionLiteral -> return null
-                // A parameter's annotations and default value see a scope of their own.
-                is KtParameter -> return null
+                // A parameter's annotations see the declarations around its function: a call there reaches them
+                // (`fun f(@A(f(1)) x: Int)`), and a setter parameter's annotation sees the class's members. Which
+                // other names a function parameter's annotation sees is not settled here.
+                is KtParameter -> {
+                    val accessor = node.parent?.parent is dev.ide.kotlin.syntax.psi.KtPropertyAccessor
+                    if (node.name == name || (!wantFunction && !accessor)) return null
+                }
                 // A function's parameters are in scope in its body, not in the annotations written on it.
                 is KtFunction -> if (!wantFunction && prev is KtExpression) node.valueParameters.firstOrNull { it.name == name }?.let { return it }
                 is dev.ide.kotlin.syntax.psi.KtPropertyAccessor -> if (node.valueParameters.any { it.name == name }) return null

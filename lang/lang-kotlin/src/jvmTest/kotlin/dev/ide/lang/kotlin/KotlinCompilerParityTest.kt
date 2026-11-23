@@ -2073,6 +2073,18 @@ class KotlinCompilerParityTest {
         assertEquals(emptyList(), jdkErrors(any).map { it.code }, "for `$any`")
     }
 
+    /** A parameter's annotation reaches the functions around its function, and a setter parameter's the class's
+     *  members: a call or a plain `val` there is no compile-time constant. */
+    @Test
+    fun annotationArgumentOnParameterMustBeConst() {
+        val bad = "annotation class Anno(val x: Int)\nfun function(@Anno(function(24)) param: Int) = 1\n" +
+            "class C { val prop = 1\n var p: Int = 0\n set(@Anno(prop) value) {} }"
+        assertEquals(List(2) { KotlinDiagnosticCodes.NOT_CONSTANT }, errors(bad).map { it.code }, "for `$bad`")
+        val ok = "annotation class Anno(val x: Int)\nconst val K = 1\nfun function(@Anno(K) param: Int) = 1\n" +
+            "class C { var p: Int = 0\n set(@Anno(K) value) {} }"
+        assertEquals(emptyList(), errors(ok).map { it.code }, "for `$ok`")
+    }
+
     /** A delegate whose `getValue`/`setValue` none can take the property's call: a `thisRef` its owner is not (a
      *  top-level property passes `null`), or a `setValue` value parameter the property's type does not fit. */
     @Test
