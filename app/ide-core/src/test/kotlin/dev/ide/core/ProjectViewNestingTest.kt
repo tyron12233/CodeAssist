@@ -93,6 +93,51 @@ class ProjectViewNestingTest {
         }
     }
 
+    /**
+     * A folder created outside every content root (the project root, a module's root, `src/`, `src/main/`) shows in
+     * the Project view. It used to land on disk but never be drawn, so New Folder there seemed to do nothing.
+     * Modules and roots are still drawn once, as themselves, and `build/` stays with the build-outputs node.
+     */
+    @Test
+    fun newFoldersOutsideContentRootsShowInTheProjectView() {
+        withTempDir("ide-tree-plain-folders") { dir ->
+            IdeServices.bootstrapDemo(dir).use { ide ->
+                val backend = IdeServicesBackend(ide)
+                val appDir = assertNotNull(ide.moduleRoot(ide.modules().first { it.name == "app" }))
+                val created = listOf(
+                    ide.workspaceRoot.toString() to "docs",
+                    appDir.toString() to "libs",
+                    appDir.resolve("src").toString() to "shared",
+                    appDir.resolve("src/main").toString() to "notes",
+                ).map { (parent, name) -> assertNotNull(backend.files.createDirectory(parent, name), "create $name") }
+                // A file inside a plain folder is listed under it too.
+                Files.createDirectories(appDir.resolve("build/intermediates"))
+                val docsReadme = ide.workspaceRoot.resolve("docs/README.md")
+                docsReadme.toFile().writeText("# docs\n")
+
+                val tree = backend.files.fileTree(TreeViewMode.Project)
+                val nodes = flatten(tree)
+                for (path in created) {
+                    val node = assertNotNull(nodes.firstOrNull { it.dirPath == path }, "$path is drawn")
+                    assertEquals(NodeKind.Folder, node.kind)
+                }
+                val docs = tree.child("docs")
+                assertEquals(listOf("README.md"), docs.children.map { it.name })
+                val app = tree.children.first { it.kind == NodeKind.Module && it.name == "app" }
+                assertEquals(NodeKind.Folder, app.child("libs").kind)
+                assertEquals(NodeKind.Folder, app.child("src").child("shared").kind)
+                assertEquals(NodeKind.Folder, app.child("src").child("main").child("notes").kind)
+
+                // The module is not drawn a second time as a folder of the root, nor a root as a folder of its parent.
+                assertNull(tree.children.firstOrNull { it.kind == NodeKind.Folder && it.name == "app" })
+                assertEquals(1, nodes.count { it.dirPath == appDir.resolve("src/main/java").toString() })
+                // `build/` is left to the build-outputs node.
+                assertNull(app.children.firstOrNull { it.name == "build" })
+            }
+            dir.toFile().deleteRecursively()
+        }
+    }
+
     /** The All Files view draws the same folders one row each, with the roots' icons and no packages. */
     @Test
     fun allFilesViewNestsTheSameFoldersWithoutMergingThem() {
