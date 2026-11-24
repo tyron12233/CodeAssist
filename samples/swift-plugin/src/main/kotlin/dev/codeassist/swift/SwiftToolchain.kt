@@ -43,6 +43,14 @@ class SwiftToolchain(
     val resourceDir: Path get() = root.resolve("usr/lib/swift")
     val moduleCache: Path get() = home.resolve("module-cache")
 
+    /**
+     * CodeAssist's SwiftUI engine as a module (`SwiftUI`), beside its library `libSwiftUI.so` in the native library
+     * directory: a preview compiles only the user's code against it (tools/swift-sdk/build_swiftui.sh).
+     */
+    val swiftUIModules: Path get() = root.resolve("swiftui")
+    val hasSwiftUI: Boolean get() = reg.nativeLibrary("SwiftUI")?.let { Files.isRegularFile(it) } == true &&
+        Files.isRegularFile(swiftUIModules.resolve("SwiftUI.swiftmodule"))
+
     /** The compiler. Null when this build of the plugin carries no toolchain for the device's ABI. */
     val frontend: Path? get() = reg.nativeLibrary("swiftfrontend")?.takeIf { Files.isRegularFile(it) }
     private val libDir: Path? get() = reg.nativeLibraryDir
@@ -112,7 +120,12 @@ class SwiftToolchain(
         }
 
     /** `swift-frontend -frontend -interpret`: compiles [files] as module [moduleName] and runs it in the JIT. */
-    fun interpretCommand(files: List<Path>, moduleName: String, programArgs: List<String> = emptyList()): List<String> {
+    fun interpretCommand(
+        files: List<Path>,
+        moduleName: String,
+        programArgs: List<String> = emptyList(),
+        withSwiftUI: Boolean = false,
+    ): List<String> {
         val compiler = frontend ?: error(NO_TOOLCHAIN)
         val libs = libDir ?: error(NO_TOOLCHAIN)
         return buildList {
@@ -125,6 +138,7 @@ class SwiftToolchain(
             add("-module-cache-path"); add(moduleCache.toString())
             // Where the JIT finds the runtime a program loads (libswiftCore.so, libFoundation.so, ...).
             add("-L"); add(libs.toString())
+            if (withSwiftUI) { add("-I"); add(swiftUIModules.toString()) }
             // The diagnostics go to a console that shows text, not a terminal that draws colours.
             add("-no-color-diagnostics")
             if (programArgs.isNotEmpty()) { add("--"); addAll(programArgs) }
@@ -183,7 +197,7 @@ class SwiftToolchain(
         const val VERSION = "6.4.3"
 
         /** Bumped whenever the staged layout changes for the same Swift version, so the device unpacks afresh. */
-        private const val LAYOUT = 1
+        private const val LAYOUT = 2
         private const val STAMP = "$VERSION/$LAYOUT"
 
         /** The plugin's minSdk: what a program may assume of the device. */
