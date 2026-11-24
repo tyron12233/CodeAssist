@@ -35,12 +35,14 @@ class StoreInstaller(
         val version: String? = null,
         /** The catalog's monotonic version code, recorded with an install so an update can be recognised. */
         val versionCode: Int = 0,
+        /** The plugins the project needs to open, from the catalog row. */
+        val requiredPlugins: List<String> = emptyList(),
     ) {
         companion object {
             /** The payload a catalog row describes, or null when it has nothing to download. */
             fun of(item: dev.ide.store.RemoteStoreItem): Payload? {
                 val path = item.storagePath ?: return null
-                return Payload(item.id, path, item.sha256, item.sizeBytes, item.title, item.version, item.versionCode)
+                return Payload(item.id, path, item.sha256, item.sizeBytes, item.title, item.version, item.versionCode, item.requiredPlugins)
             }
         }
     }

@@ -1950,6 +1950,8 @@
     <string name="store_hero_installs">установок</string>
     <string name="store_hero_download">загрузка</string>
     <string name="store_install_project">Установить проект</string>
+    <string name="store_get_plugin">Получить %1$s</string>
+    <string name="store_needs_plugin_hint">Для открытия нужен плагин %1$s. Получите его, перезапустите CodeAssist, затем установите проект здесь.</string>
     <string name="store_open_in_editor">Открыть в редакторе</string>
     <string name="store_item_reviews">Отзывов: %1$d</string>
     <string name="store_item_tab_overview">Обзор</string>

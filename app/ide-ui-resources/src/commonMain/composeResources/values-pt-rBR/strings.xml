@@ -1938,6 +1938,8 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="store_hero_installs">instalações</string>
     <string name="store_hero_download">download</string>
     <string name="store_install_project">Instalar projeto</string>
+    <string name="store_get_plugin">Obter %1$s</string>
+    <string name="store_needs_plugin_hint">Precisa do plugin %1$s para abrir. Obtenha-o, reinicie o CodeAssist e depois instale aqui.</string>
     <string name="store_open_in_editor">Abrir no editor</string>
     <string name="store_item_reviews">%1$d avaliações</string>
     <string name="store_item_tab_overview">Visão geral</string>

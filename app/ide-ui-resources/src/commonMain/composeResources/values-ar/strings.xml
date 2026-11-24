@@ -981,6 +981,8 @@
     <string name="store_hero_installs">عمليات تثبيت</string>
     <string name="store_hero_download">تنزيل</string>
     <string name="store_install_project">تثبيت المشروع</string>
+    <string name="store_get_plugin">احصل على %1$s</string>
+    <string name="store_needs_plugin_hint">يحتاج إلى إضافة %1$s ليُفتح. احصل عليها، وأعد تشغيل CodeAssist، ثم ثبّته من هنا.</string>
     <string name="store_open_in_editor">فتح في المحرر</string>
     <string name="store_item_reviews">‏%1$d مراجعة</string>
     <string name="store_item_tab_overview">نظرة عامة</string>

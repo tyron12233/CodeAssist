@@ -379,6 +379,7 @@ class SupabaseStoreSource(
                 updatedAt = JsonReader.str(v, "updatedAt"),
                 screenshots = JsonReader.strings(v, "screenshots"),
                 iconPath = JsonReader.str(v, "iconPath"),
+                requiredPlugins = JsonReader.strings(v, "requiredPlugins"),
             )
         }
 

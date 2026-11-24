@@ -267,6 +267,11 @@ data class StoreSubmissionRequest(
     val version: String = "1.0.0",
     val changelog: String? = null,
     /**
+     * The installed plugins the project needs to open, worked out by the IDE from the project rather than
+     * asked for. Sent with the version, so a device without one is offered the plugin before the install.
+     */
+    val requiredPlugins: List<String> = emptyList(),
+    /**
      * Whether the listing fields above are an EDIT to the item, rather than a repeat of what it says.
      *
      * Only meaningful with [itemSlug] set. A new version does not rewrite its listing by itself: the text

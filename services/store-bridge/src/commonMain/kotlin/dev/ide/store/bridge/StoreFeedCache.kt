@@ -129,6 +129,7 @@ class StoreFeedCache(
                     title = item.title,
                     version = item.version,
                     versionCode = item.versionCode,
+                    requiredPlugins = item.requiredPlugins,
                 )
             }
         }

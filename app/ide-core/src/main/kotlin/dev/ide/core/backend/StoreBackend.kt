@@ -493,7 +493,7 @@ internal class StoreBackend(
         draft: dev.ide.ui.backend.UiSubmissionDraft,
         packaged: dev.ide.ui.backend.UiPackagedProject,
     ): dev.ide.ui.backend.UiSubmitResult = withContext(storeIo) {
-        val result = submissionState.submit(draft, packaged)
+        val result = submissionState.submit(draft, packaged, requiredPluginsOf(packaged.rootPath))
         result.submission?.let { sub ->
             // Remember which listing this project belongs to, so the next publish of it offers an update
             // rather than a second listing. Here because this is the only place that holds both halves:
@@ -739,8 +739,34 @@ internal class StoreBackend(
         val payload = feedCache.payload(id)
             ?: withContext(storeIo) { storeUpdates.current(id)?.let(StoreInstaller.Payload::of) }
             ?: return UiStoreInstallResult(false, "That project has nothing to download yet")
+        // The screens offer the plugin first; this is for any other way in (a link, an older screen). The
+        // download would only be a project this IDE cannot open.
+        missingPlugins(payload.requiredPlugins).firstOrNull()?.let { missing ->
+            return UiStoreInstallResult(false, "This project needs the '$missing' plugin. Get it under Plugins, then install.")
+        }
         return installPayload(payload)
     }
+
+    /** Which of [ids] this device does not have, built in or installed, turned on or off. */
+    private fun missingPlugins(ids: List<String>): List<String> {
+        if (ids.isEmpty()) return emptyList()
+        val present = ctx.manager?.env?.pluginCatalog?.all?.mapTo(HashSet()) { it.id } ?: return emptyList()
+        return ids.filterNot { it in present }
+    }
+
+    /**
+     * The installed plugins the project at [rootPath] needs, when it is the open project (the submit screen
+     * publishes the open project). Empty when it is not open: there is no model to read them from, and a
+     * listing that says nothing is no worse than one from before this was recorded.
+     */
+    private fun requiredPluginsOf(rootPath: String): List<String> = runCatching {
+        val services = ctx.servicesOrNull ?: return emptyList()
+        val env = ctx.manager?.env ?: return emptyList()
+        val open = services.workspaceRoot.toRealPath()
+        if (java.nio.file.Paths.get(rootPath).toRealPath() != open) return emptyList()
+        val installed = env.installedPlugins.mapTo(HashSet()) { it.manifest.id }
+        dev.ide.core.plugins.RequiredPlugins.of(services.store.workspace.projects, env.platform.extensions, installed)
+    }.getOrDefault(emptyList())
 
     /** Unpack [payload] into a new project folder, and remember it (and its baseline) as this item's install. */
     private suspend fun installPayload(payload: StoreInstaller.Payload): UiStoreInstallResult {

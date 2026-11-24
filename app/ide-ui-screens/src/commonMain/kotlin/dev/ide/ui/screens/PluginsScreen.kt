@@ -211,6 +211,8 @@ fun PluginsScreen(
     onOpenUrl: ((String) -> Unit)? = null,
     /** The tab to open on; null picks Installed when anything is installed, else Get plugins. */
     startTab: PluginsTab? = null,
+    /** The plugin the Get tab leads with, outlined: the one something the user wanted needs. */
+    focusPlugin: String? = null,
 ) {
     var plugins by remember { mutableStateOf(backend.settings.pluginCatalog()) }
     // Read from the backend rather than tracked as "the user touched something here": it also covers a
@@ -227,7 +229,7 @@ fun PluginsScreen(
     // The plugin whose consent dialog is open. Nothing loads while this is unanswered.
     var asking by remember { mutableStateOf<UiPluginInfo?>(null) }
     // The plugin the Get tab leads with: one another plugin's page asked for.
-    var getFocus by remember { mutableStateOf<String?>(null) }
+    var getFocus by remember { mutableStateOf(focusPlugin) }
     // What the published plugins are called, for naming a plugin another one uses by more than its id. Fetched
     // only when some plugin here uses one this device does not have.
     val wantsNames = plugins.any { it.missingRequired.isNotEmpty() || it.missingOptional.isNotEmpty() }

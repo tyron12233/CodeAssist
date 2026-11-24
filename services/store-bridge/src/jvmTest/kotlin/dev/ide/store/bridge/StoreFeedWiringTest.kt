@@ -233,6 +233,34 @@ class StoreFeedWiringTest {
         assertEquals("file", item.iconId, "no published icon must still leave a usable glyph fallback")
     }
 
+    /**
+     * The plugins a project needs reach the UI model and the install payload: the store page offers them
+     * before the install, and the engine refuses an install that would unpack a project it cannot open.
+     */
+    @Test
+    fun thePluginsAProjectNeedsReachTheUiModelAndThePayload() {
+        val json = """
+        {"version":3,"mode":"sparse","storeState":{"publishedProjectCount":1},
+         "sections":[{"type":"catalogue","id":"everything","title":"All","order":"recency","items":[
+           {"id":"flutterapp","kind":"community","title":"Flutter app","summary":"s","category":"android",
+            "storagePath":"flutterapp/1.0.0/p.zip","requiredPlugins":["dev.codeassist.dart"]}
+         ]}]}
+        """.trimIndent()
+        val feed = assertNotNull(StoreFeedParser.parse(json))
+        assertEquals(listOf("dev.codeassist.dart"), feed.allItems.single().requiredPlugins, "the parser dropped it")
+        val item = StoreFeedMapper.toUi(feed, emptyMap()).sections.filterIsInstance<UiFeedSection.Catalogue>().single().items.single()
+        assertEquals(listOf("dev.codeassist.dart"), item.requiredPlugins)
+        assertEquals(listOf("dev.codeassist.dart"), StoreInstaller.Payload.of(feed.allItems.single())?.requiredPlugins)
+    }
+
+    /** Nearly every project needs no plugin, and the key is absent for it: that reads as an empty list. */
+    @Test
+    fun aProjectThatNeedsNoPluginSaysSo() {
+        val feed = assertNotNull(StoreFeedParser.parse(fixture("explore-sparse.json")))
+        assertTrue(feed.allItems.isNotEmpty())
+        assertTrue(feed.allItems.all { it.requiredPlugins.isEmpty() })
+    }
+
     /** A project that published no icon says so, rather than reporting an empty path. */
     @Test
     fun anItemWithNoPublishedIconHasNoIconPath() {

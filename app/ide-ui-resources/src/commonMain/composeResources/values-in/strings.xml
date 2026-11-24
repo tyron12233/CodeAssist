@@ -1828,6 +1828,8 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="store_hero_installs">pemasangan</string>
     <string name="store_hero_download">unduhan</string>
     <string name="store_install_project">Pasang proyek</string>
+    <string name="store_get_plugin">Dapatkan %1$s</string>
+    <string name="store_needs_plugin_hint">Memerlukan plugin %1$s untuk dibuka. Dapatkan plugin itu, mulai ulang CodeAssist, lalu pasang di sini.</string>
     <string name="store_open_in_editor">Buka di editor</string>
     <string name="store_item_reviews">%1$d ulasan</string>
     <string name="store_item_tab_overview">Ringkasan</string>

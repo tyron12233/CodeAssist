@@ -236,6 +236,9 @@ class CodeAssistAppState(
         private set
     var pluginsStartTab: dev.ide.ui.screens.PluginsTab? by mutableStateOf(null)
         private set
+    /** The plugin the Get tab leads with, when a store project that needs it sent the user there. */
+    var pluginsFocus: String? by mutableStateOf(null)
+        private set
 
     /** Where the Settings and Tools hub returns on Back: the picker (opened with no project) or the editor. */
     var hubReturn: Screen by mutableStateOf(Screen.Editor)
@@ -644,6 +647,19 @@ class CodeAssistAppState(
     }
 
     /**
+     * The Plugins screen on its Get tab, leading with [pluginId], back to where the user was: a store project's
+     * page, whose install waits for that plugin. Back returns to the page, which then offers the install.
+     */
+    fun openGetPlugin(pluginId: String) {
+        pluginsReturn = screen
+        pluginsStartTab = dev.ide.ui.screens.PluginsTab.Get
+        pluginsFocus = pluginId
+        // As for Home's card: a Back through the hub lands on Home, never on an editor with nothing open.
+        hubReturn = Screen.Projects
+        screen = Screen.Plugins
+    }
+
+    /**
      * The Plugins screen on its Installed tab, back to Home: where a "plugin was turned off after it crashed"
      * or "started without plugins" notification leads, so the user can see which and turn it back on.
      */
@@ -658,6 +674,7 @@ class CodeAssistAppState(
     fun resetPluginsEntry() {
         pluginsReturn = Screen.Hub
         pluginsStartTab = null
+        pluginsFocus = null
     }
 
     /** Open Settings (the hub), remembering [from] as its Back destination. */
@@ -781,6 +798,15 @@ class CodeAssistAppState(
             // Nothing to download and no local scaffold: the detail page is all there is to offer.
             openStoreItem(item)
             return
+        }
+        // A project this device has no plugin for would download and then fail to open. Its page names the
+        // plugin and offers it, so a shelf's button leads there rather than straight to that failure.
+        if (item.requiredPlugins.isNotEmpty()) {
+            val present = runCatching { backend.settings.pluginCatalog() }.getOrDefault(emptyList()).mapTo(HashSet()) { it.id }
+            if (item.requiredPlugins.any { it !in present }) {
+                openStoreItem(item)
+                return
+            }
         }
         scope.launch {
             val result = runCatching { backend.store.install(item.id) }.getOrNull()

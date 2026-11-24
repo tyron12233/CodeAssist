@@ -123,6 +123,12 @@ class SupabaseSubmissionService(
             shots.forEachIndexed { i, path -> if (i > 0) append(','); append(q(path)) }
             append("],")
             icon?.let { field("icon_path", it); comma() }
+            // Only when there are any, so a submission that needs no plugin sends exactly what it used to.
+            if (request.requiredPlugins.isNotEmpty()) {
+                append(""""required_plugins":[""")
+                request.requiredPlugins.forEachIndexed { i, id -> if (i > 0) append(','); append(q(id)) }
+                append("],")
+            }
             append(""""file_manifest":""").append(manifestJson(packaged)).append(',')
             field("status", "pending"); comma()
             field("submitter_id", account.userId)

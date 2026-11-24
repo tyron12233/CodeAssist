@@ -2046,6 +2046,8 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="store_hero_installs">instalaciones</string>
     <string name="store_hero_download">descarga</string>
     <string name="store_install_project">Instalar proyecto</string>
+    <string name="store_get_plugin">Obtener %1$s</string>
+    <string name="store_needs_plugin_hint">Necesita el complemento %1$s para abrirse. Obtenlo, reinicia CodeAssist y luego instálalo aquí.</string>
     <string name="store_open_in_editor">Abrir en el editor</string>
     <string name="store_item_reviews">%1$d reseñas</string>
     <string name="store_item_tab_overview">Resumen</string>

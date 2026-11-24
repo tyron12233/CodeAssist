@@ -898,6 +898,8 @@
     <string name="store_hero_installs">安装量</string>
     <string name="store_hero_download">下载量</string>
     <string name="store_install_project">安装项目</string>
+    <string name="store_get_plugin">获取 %1$s</string>
+    <string name="store_needs_plugin_hint">需要 %1$s 插件才能打开。请先获取它并重启 CodeAssist，然后在此安装。</string>
     <string name="store_open_in_editor">在编辑器中打开</string>
     <string name="store_item_reviews">%1$d 条评价</string>
     <string name="store_item_tab_overview">概览</string>

@@ -517,6 +517,7 @@ private fun AppRoute(
                 // sheet reports rather than working around.
                 onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
                 onOpenPublisher = { handle -> app.openPublisher(handle) },
+                onGetPlugin = { id -> app.openGetPlugin(id) },
                 // What "Open in editor" opens. Without it the button was inert, which is the half of
                 // this the user could see; the other half was the feed's own Open re-downloading.
                 onOpenInstalled = { path -> app.openInstalledProject(path) },
@@ -641,6 +642,7 @@ private fun AppRoute(
             },
             onOpenUrl = if (fileActions.canOpenUrl) ({ url: String -> fileActions.openUrl(url) }) else null,
             startTab = app.pluginsStartTab,
+            focusPlugin = app.pluginsFocus,
             // The Logs viewer is an editor overlay, so the row offers it only with a project open (a project closed
             // behind Home is still loaded, which is why this is not `epoch > 0`).
             onOpenLogs = if (app.projectOpen) {

@@ -117,6 +117,24 @@ class StoreItemScreenSnapshot {
         backend = ShotBackend(),
     )
 
+    /** A Flutter project on a device without the Dart plugin: the button gets the plugin, and the hint says why. */
+    @Test
+    fun renderProjectThatNeedsAMissingPlugin() = snapshot(
+        "item-needs-plugin.png",
+        remote.copy(id = "flutter-weather", title = "Flutter Weather", language = "Dart", requiredPlugins = listOf("dev.codeassist.dart")),
+        dark = true,
+        backend = object : StubBackend() {
+            override suspend fun pluginDownloads() = dev.ide.ui.backend.UiPluginDownloads(
+                listOf(
+                    dev.ide.ui.backend.UiPluginDownload(
+                        "dev.codeassist.dart", "Dart & Flutter", "", "", "CodeAssist", "0.3.0", null,
+                        "https://example.com/dart.apk", null, emptyList(), "Dart",
+                    ),
+                ),
+            )
+        },
+    )
+
     @OptIn(ExperimentalComposeUiApi::class)
     private fun snapshot(
         name: String,

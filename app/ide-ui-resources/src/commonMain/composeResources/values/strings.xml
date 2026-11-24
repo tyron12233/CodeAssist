@@ -910,6 +910,8 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="store_hero_installs">installs</string>
     <string name="store_hero_download">download</string>
     <string name="store_install_project">Install project</string>
+    <string name="store_get_plugin">Get %1$s</string>
+    <string name="store_needs_plugin_hint">Needs the %1$s plugin to open. Get it, restart CodeAssist, then install it here.</string>
     <string name="store_open_in_editor">Open in editor</string>
     <string name="store_item_reviews">%1$d reviews</string>
     <string name="store_item_tab_overview">Overview</string>

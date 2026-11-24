@@ -86,6 +86,8 @@ data class RemoteStoreItem(
      * when there is one and falls back to the glyph when there is not.
      */
     val iconPath: String? = null,
+    /** Ids of the plugins the project needs to open, from its latest version. Empty for nearly every item. */
+    val requiredPlugins: List<String> = emptyList(),
 )
 
 /** A filter tile on the Explore screen. */

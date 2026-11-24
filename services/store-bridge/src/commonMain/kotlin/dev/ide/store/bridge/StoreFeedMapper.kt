@@ -240,6 +240,7 @@ object StoreFeedMapper {
             // when it published none of its own, rather than falling back to the abstract code panel.
             screenshots = screenshots.ifEmpty { local?.screenshots.orEmpty() },
             iconPath = iconPath,
+            requiredPlugins = requiredPlugins,
         )
     }
 

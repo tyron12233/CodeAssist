@@ -77,7 +77,7 @@ class StoreSubmissions(
     /** Why the last [pack] of [rootPath] failed, or null if it succeeded or was never tried. */
     fun packError(rootPath: String): String? = packLock.withLock { packErrors[rootPath] }
 
-    fun submit(draft: UiSubmissionDraft, packaged: UiPackagedProject): UiSubmitResult {
+    fun submit(draft: UiSubmissionDraft, packaged: UiPackagedProject, requiredPlugins: List<String> = emptyList()): UiSubmitResult {
         val request = StoreSubmissionRequest(
             itemSlug = draft.itemSlug,
             title = draft.title.trim(),
@@ -97,6 +97,7 @@ class StoreSubmissions(
             // rendering wins when it has one: most projects' launcher icons are XML, which only something
             // with a canvas can turn into an image.
             iconPath = iconFileFor(draft.iconBytes ?: runCatching { launcherIcon(packaged.rootPath) }.getOrNull()),
+            requiredPlugins = requiredPlugins,
         )
         // The archive the screen showed, not a reconstruction of it: same bytes, same manifest, same hash.
         // Re-packing if it is missing keeps a submit working after the engine was rebuilt underneath the

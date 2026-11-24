@@ -6287,8 +6287,8 @@ internal fun r356(i: RemoteIn): dev.ide.ui.backend.UiStoreAccount = dev.ide.ui.b
 
 internal fun w357(o: RemoteOut, v: dev.ide.ui.backend.UiStoreUpdate) {
     w358(o, v.item)
-    o.opt(v.installedVersion) { n803 -> o.string(n803) }
-    o.opt(v.availableVersion) { n804 -> o.string(n804) }
+    o.opt(v.installedVersion) { n804 -> o.string(n804) }
+    o.opt(v.availableVersion) { n805 -> o.string(n805) }
     o.string(v.rootPath)
 }
 internal fun r357(i: RemoteIn): dev.ide.ui.backend.UiStoreUpdate = dev.ide.ui.backend.UiStoreUpdate(
@@ -6329,6 +6329,7 @@ internal fun w358(o: RemoteOut, v: dev.ide.ui.backend.UiStoreItem) {
     o.opt(v.previewKey) { n800 -> o.string(n800) }
     o.list(v.screenshots) { e801 -> o.string(e801) }
     o.opt(v.iconPath) { n802 -> o.string(n802) }
+    o.list(v.requiredPlugins) { e803 -> o.string(e803) }
 }
 internal fun r358(i: RemoteIn): dev.ide.ui.backend.UiStoreItem = dev.ide.ui.backend.UiStoreItem(
     id = i.str(),
@@ -6361,12 +6362,13 @@ internal fun r358(i: RemoteIn): dev.ide.ui.backend.UiStoreItem = dev.ide.ui.back
     previewKey = i.opt { i.str() },
     screenshots = i.list { i.str() },
     iconPath = i.opt { i.str() },
+    requiredPlugins = i.list { i.str() },
 )
 
 internal fun w359(o: RemoteOut, v: dev.ide.ui.backend.UiStoreCatalog) {
-    o.list(v.featured) { e807 -> w358(o, e807) }
-    o.list(v.categories) { e808 -> o.string(e808) }
-    o.list(v.sections) { e809 -> w360(o, e809) }
+    o.list(v.featured) { e808 -> w358(o, e808) }
+    o.list(v.categories) { e809 -> o.string(e809) }
+    o.list(v.sections) { e810 -> w360(o, e810) }
 }
 internal fun r359(i: RemoteIn): dev.ide.ui.backend.UiStoreCatalog = dev.ide.ui.backend.UiStoreCatalog(
     featured = i.list { r358(i) },
@@ -6377,8 +6379,8 @@ internal fun r359(i: RemoteIn): dev.ide.ui.backend.UiStoreCatalog = dev.ide.ui.b
 internal fun w360(o: RemoteOut, v: dev.ide.ui.backend.UiStoreSection) {
     o.string(v.id)
     o.string(v.title)
-    o.opt(v.subtitle) { n805 -> o.string(n805) }
-    o.list(v.items) { e806 -> w358(o, e806) }
+    o.opt(v.subtitle) { n806 -> o.string(n806) }
+    o.list(v.items) { e807 -> w358(o, e807) }
 }
 internal fun r360(i: RemoteIn): dev.ide.ui.backend.UiStoreSection = dev.ide.ui.backend.UiStoreSection(
     id = i.str(),
@@ -6390,7 +6392,7 @@ internal fun r360(i: RemoteIn): dev.ide.ui.backend.UiStoreSection = dev.ide.ui.b
 internal fun w361(o: RemoteOut, v: dev.ide.ui.backend.UiStoreFeed) {
     o.int(v.mode.ordinal)
     w362(o, v.state)
-    o.list(v.sections) { e838 -> w364(o, e838) }
+    o.list(v.sections) { e839 -> w364(o, e839) }
     o.bool(v.fromCache)
 }
 internal fun r361(i: RemoteIn): dev.ide.ui.backend.UiStoreFeed = dev.ide.ui.backend.UiStoreFeed(
@@ -6456,7 +6458,7 @@ internal fun r364(i: RemoteIn): dev.ide.ui.backend.UiFeedSection = when (val tag
 
 internal fun w365(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Bundled) {
     o.string(v.id)
-    o.list(v.items) { e810 -> w358(o, e810) }
+    o.list(v.items) { e811 -> w358(o, e811) }
 }
 internal fun r365(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Bundled = dev.ide.ui.backend.UiFeedSection.Bundled(
     id = i.str(),
@@ -6466,7 +6468,7 @@ internal fun r365(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Bundled = dev.i
 internal fun w366(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Catalogue) {
     o.string(v.id)
     o.string(v.title)
-    o.list(v.items) { e811 -> w358(o, e811) }
+    o.list(v.items) { e812 -> w358(o, e812) }
 }
 internal fun r366(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Catalogue = dev.ide.ui.backend.UiFeedSection.Catalogue(
     id = i.str(),
@@ -6477,7 +6479,7 @@ internal fun r366(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Catalogue = dev
 internal fun w367(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Categories) {
     o.string(v.id)
     o.string(v.title)
-    o.list(v.categories) { e812 -> w368(o, e812) }
+    o.list(v.categories) { e813 -> w368(o, e813) }
 }
 internal fun r367(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Categories = dev.ide.ui.backend.UiFeedSection.Categories(
     id = i.str(),
@@ -6498,9 +6500,9 @@ internal fun r368(i: RemoteIn): dev.ide.ui.backend.UiStoreCategory = dev.ide.ui.
 
 internal fun w369(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Charts) {
     o.string(v.id)
-    o.list(v.tabs) { e816 -> w370(o, e816) }
-    o.opt(v.computedAt) { n817 -> o.string(n817) }
-    o.opt(v.title) { n818 -> o.string(n818) }
+    o.list(v.tabs) { e817 -> w370(o, e817) }
+    o.opt(v.computedAt) { n818 -> o.string(n818) }
+    o.opt(v.title) { n819 -> o.string(n819) }
 }
 internal fun r369(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Charts = dev.ide.ui.backend.UiFeedSection.Charts(
     id = i.str(),
@@ -6512,8 +6514,8 @@ internal fun r369(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Charts = dev.id
 internal fun w370(o: RemoteOut, v: dev.ide.ui.backend.UiChartTab) {
     o.string(v.key)
     o.string(v.label)
-    o.list(v.entries) { e814 -> w371(o, e814) }
-    o.opt(v.metric) { n815 -> o.string(n815) }
+    o.list(v.entries) { e815 -> w371(o, e815) }
+    o.opt(v.metric) { n816 -> o.string(n816) }
 }
 internal fun r370(i: RemoteIn): dev.ide.ui.backend.UiChartTab = dev.ide.ui.backend.UiChartTab(
     key = i.str(),
@@ -6524,7 +6526,7 @@ internal fun r370(i: RemoteIn): dev.ide.ui.backend.UiChartTab = dev.ide.ui.backe
 
 internal fun w371(o: RemoteOut, v: dev.ide.ui.backend.UiChartEntry) {
     o.int(v.rank)
-    o.opt(v.previousRank) { n813 -> o.int(n813) }
+    o.opt(v.previousRank) { n814 -> o.int(n814) }
     w358(o, v.item)
 }
 internal fun r371(i: RemoteIn): dev.ide.ui.backend.UiChartEntry = dev.ide.ui.backend.UiChartEntry(
@@ -6536,8 +6538,8 @@ internal fun r371(i: RemoteIn): dev.ide.ui.backend.UiChartEntry = dev.ide.ui.bac
 internal fun w372(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Collections) {
     o.string(v.id)
     o.string(v.title)
-    o.opt(v.subtitle) { n821 -> o.string(n821) }
-    o.list(v.items) { e822 -> w373(o, e822) }
+    o.opt(v.subtitle) { n822 -> o.string(n822) }
+    o.list(v.items) { e823 -> w373(o, e823) }
 }
 internal fun r372(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Collections = dev.ide.ui.backend.UiFeedSection.Collections(
     id = i.str(),
@@ -6550,9 +6552,9 @@ internal fun w373(o: RemoteOut, v: dev.ide.ui.backend.UiStoreCollection) {
     o.string(v.id)
     o.string(v.eyebrow)
     o.string(v.title)
-    o.opt(v.iconId) { n819 -> o.string(n819) }
+    o.opt(v.iconId) { n820 -> o.string(n820) }
     o.int(v.projectCount)
-    o.list(v.previewIconIds) { e820 -> o.string(e820) }
+    o.list(v.previewIconIds) { e821 -> o.string(e821) }
 }
 internal fun r373(i: RemoteIn): dev.ide.ui.backend.UiStoreCollection = dev.ide.ui.backend.UiStoreCollection(
     id = i.str(),
@@ -6565,7 +6567,7 @@ internal fun r373(i: RemoteIn): dev.ide.ui.backend.UiStoreCollection = dev.ide.u
 
 internal fun w374(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Featured) {
     o.string(v.id)
-    o.list(v.items) { e823 -> w358(o, e823) }
+    o.list(v.items) { e824 -> w358(o, e824) }
 }
 internal fun r374(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Featured = dev.ide.ui.backend.UiFeedSection.Featured(
     id = i.str(),
@@ -6574,7 +6576,7 @@ internal fun r374(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Featured = dev.
 
 internal fun w375(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.GhostShelves) {
     o.string(v.id)
-    o.list(v.shelves) { e826 -> w376(o, e826) }
+    o.list(v.shelves) { e827 -> w376(o, e827) }
 }
 internal fun r375(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.GhostShelves = dev.ide.ui.backend.UiFeedSection.GhostShelves(
     id = i.str(),
@@ -6585,8 +6587,8 @@ internal fun w376(o: RemoteOut, v: dev.ide.ui.backend.UiGhostShelf) {
     o.string(v.key)
     o.int(v.have)
     o.int(v.need)
-    o.opt(v.title) { n824 -> o.string(n824) }
-    o.opt(v.note) { n825 -> o.string(n825) }
+    o.opt(v.title) { n825 -> o.string(n825) }
+    o.opt(v.note) { n826 -> o.string(n826) }
 }
 internal fun r376(i: RemoteIn): dev.ide.ui.backend.UiGhostShelf = dev.ide.ui.backend.UiGhostShelf(
     key = i.str(),
@@ -6599,8 +6601,8 @@ internal fun r376(i: RemoteIn): dev.ide.ui.backend.UiGhostShelf = dev.ide.ui.bac
 internal fun w377(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Personalized) {
     o.string(v.id)
     o.string(v.title)
-    o.opt(v.subtitle) { n827 -> o.string(n827) }
-    o.list(v.items) { e828 -> w358(o, e828) }
+    o.opt(v.subtitle) { n828 -> o.string(n828) }
+    o.list(v.items) { e829 -> w358(o, e829) }
 }
 internal fun r377(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Personalized = dev.ide.ui.backend.UiFeedSection.Personalized(
     id = i.str(),
@@ -6620,12 +6622,12 @@ internal fun r378(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.PublishPitch = 
 
 internal fun w379(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Shelf) {
     o.string(v.id)
-    o.opt(v.title) { n829 -> o.string(n829) }
-    o.opt(v.subtitle) { n830 -> o.string(n830) }
-    o.opt(v.eyebrow) { n831 -> o.string(n831) }
-    o.opt(v.iconId) { n832 -> o.string(n832) }
+    o.opt(v.title) { n830 -> o.string(n830) }
+    o.opt(v.subtitle) { n831 -> o.string(n831) }
+    o.opt(v.eyebrow) { n832 -> o.string(n832) }
+    o.opt(v.iconId) { n833 -> o.string(n833) }
     o.int(v.layout.ordinal)
-    o.list(v.items) { e833 -> w358(o, e833) }
+    o.list(v.items) { e834 -> w358(o, e834) }
 }
 internal fun r379(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Shelf = dev.ide.ui.backend.UiFeedSection.Shelf(
     id = i.str(),
@@ -6648,13 +6650,13 @@ internal fun r380(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Spotlight = dev
 
 internal fun w381(o: RemoteOut, v: dev.ide.ui.backend.UiStorePublisher) {
     o.string(v.id)
-    o.opt(v.handle) { n834 -> o.string(n834) }
+    o.opt(v.handle) { n835 -> o.string(n835) }
     o.string(v.name)
-    o.opt(v.bio) { n835 -> o.string(n835) }
+    o.opt(v.bio) { n836 -> o.string(n836) }
     o.bool(v.verified)
     o.int(v.projectCount)
     o.int(v.installCount)
-    o.opt(v.rating) { n836 -> o.float(n836) }
+    o.opt(v.rating) { n837 -> o.float(n837) }
     o.int(v.followerCount)
 }
 internal fun r381(i: RemoteIn): dev.ide.ui.backend.UiStorePublisher = dev.ide.ui.backend.UiStorePublisher(
@@ -6671,7 +6673,7 @@ internal fun r381(i: RemoteIn): dev.ide.ui.backend.UiStorePublisher = dev.ide.ui
 
 internal fun w382(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Ticker) {
     o.string(v.id)
-    o.list(v.terms) { e837 -> o.string(e837) }
+    o.list(v.terms) { e838 -> o.string(e838) }
 }
 internal fun r382(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Ticker = dev.ide.ui.backend.UiFeedSection.Ticker(
     id = i.str(),
@@ -6681,7 +6683,7 @@ internal fun r382(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Ticker = dev.id
 internal fun w383(o: RemoteOut, v: dev.ide.ui.backend.UiStoreInstallResult) {
     o.bool(v.success)
     o.string(v.message)
-    o.opt(v.rootPath) { n839 -> o.string(n839) }
+    o.opt(v.rootPath) { n840 -> o.string(n840) }
 }
 internal fun r383(i: RemoteIn): dev.ide.ui.backend.UiStoreInstallResult = dev.ide.ui.backend.UiStoreInstallResult(
     success = i.bool(),
@@ -6693,8 +6695,8 @@ internal fun w384(o: RemoteOut, v: dev.ide.ui.backend.UiInstallProgress) {
     o.string(v.itemId)
     o.int(v.state.ordinal)
     o.float(v.fraction)
-    o.opt(v.message) { n840 -> o.string(n840) }
-    o.opt(v.rootPath) { n841 -> o.string(n841) }
+    o.opt(v.message) { n841 -> o.string(n841) }
+    o.opt(v.rootPath) { n842 -> o.string(n842) }
 }
 internal fun r384(i: RemoteIn): dev.ide.ui.backend.UiInstallProgress = dev.ide.ui.backend.UiInstallProgress(
     itemId = i.str(),
@@ -6705,9 +6707,9 @@ internal fun r384(i: RemoteIn): dev.ide.ui.backend.UiInstallProgress = dev.ide.u
 )
 
 internal fun w385(o: RemoteOut, v: dev.ide.ui.backend.UiLocalChanges) {
-    o.list(v.modified) { e842 -> o.string(e842) }
-    o.list(v.deleted) { e843 -> o.string(e843) }
-    o.list(v.added) { e844 -> o.string(e844) }
+    o.list(v.modified) { e843 -> o.string(e843) }
+    o.list(v.deleted) { e844 -> o.string(e844) }
+    o.list(v.added) { e845 -> o.string(e845) }
     o.bool(v.known)
     o.bool(v.canMerge)
 }
@@ -6722,8 +6724,8 @@ internal fun r385(i: RemoteIn): dev.ide.ui.backend.UiLocalChanges = dev.ide.ui.b
 internal fun w386(o: RemoteOut, v: dev.ide.ui.backend.UiStoreMergeResult) {
     o.bool(v.success)
     o.string(v.message)
-    o.list(v.conflicts) { e845 -> o.string(e845) }
-    o.opt(v.rootPath) { n846 -> o.string(n846) }
+    o.list(v.conflicts) { e846 -> o.string(e846) }
+    o.opt(v.rootPath) { n847 -> o.string(n847) }
 }
 internal fun r386(i: RemoteIn): dev.ide.ui.backend.UiStoreMergeResult = dev.ide.ui.backend.UiStoreMergeResult(
     success = i.bool(),
@@ -6735,17 +6737,17 @@ internal fun r386(i: RemoteIn): dev.ide.ui.backend.UiStoreMergeResult = dev.ide.
 internal fun w387(o: RemoteOut, v: dev.ide.ui.backend.UiMyProfile) {
     o.string(v.handle)
     o.string(v.displayName)
-    o.opt(v.bio) { n847 -> o.string(n847) }
-    o.opt(v.location) { n848 -> o.string(n848) }
-    o.opt(v.linkUrl) { n849 -> o.string(n849) }
-    o.opt(v.avatarUrl) { n850 -> o.string(n850) }
+    o.opt(v.bio) { n848 -> o.string(n848) }
+    o.opt(v.location) { n849 -> o.string(n849) }
+    o.opt(v.linkUrl) { n850 -> o.string(n850) }
+    o.opt(v.avatarUrl) { n851 -> o.string(n851) }
     o.bool(v.verified)
     o.int(v.followers)
     o.int(v.publishedCount)
     o.int(v.pendingCount)
     o.int(v.totalInstalls)
     o.int(v.totalLikes)
-    o.opt(v.averageRating) { n851 -> o.float(n851) }
+    o.opt(v.averageRating) { n852 -> o.float(n852) }
     o.bool(v.isModerator)
     o.int(v.moderationQueue)
 }
@@ -6771,14 +6773,14 @@ internal fun w388(o: RemoteOut, v: dev.ide.ui.backend.UiPublishedItem) {
     o.string(v.slug)
     o.string(v.title)
     o.string(v.status)
-    o.opt(v.publishedVersion) { n852 -> o.string(n852) }
+    o.opt(v.publishedVersion) { n853 -> o.string(n853) }
     o.string(v.suggestedVersion)
-    o.opt(v.iconPath) { n853 -> o.string(n853) }
+    o.opt(v.iconPath) { n854 -> o.string(n854) }
     o.string(v.summary)
     o.string(v.description)
     o.string(v.category)
-    o.list(v.tags) { e854 -> o.string(e854) }
-    o.list(v.screenshots) { e855 -> o.string(e855) }
+    o.list(v.tags) { e855 -> o.string(e855) }
+    o.list(v.screenshots) { e856 -> o.string(e856) }
 }
 internal fun r388(i: RemoteIn): dev.ide.ui.backend.UiPublishedItem = dev.ide.ui.backend.UiPublishedItem(
     slug = i.str(),
@@ -6799,7 +6801,7 @@ internal fun w389(o: RemoteOut, v: dev.ide.ui.backend.UiStoreSubmission) {
     o.string(v.projectName)
     o.string(v.version)
     o.int(v.status.ordinal)
-    o.opt(v.note) { n856 -> o.string(n856) }
+    o.opt(v.note) { n857 -> o.string(n857) }
 }
 internal fun r389(i: RemoteIn): dev.ide.ui.backend.UiStoreSubmission = dev.ide.ui.backend.UiStoreSubmission(
     itemId = i.str(),
@@ -6812,13 +6814,13 @@ internal fun r389(i: RemoteIn): dev.ide.ui.backend.UiStoreSubmission = dev.ide.u
 internal fun w390(o: RemoteOut, v: dev.ide.ui.backend.UiReportedContent) {
     o.string(v.reportId)
     o.string(v.reason)
-    o.opt(v.detail) { n857 -> o.string(n857) }
-    o.opt(v.itemSlug) { n858 -> o.string(n858) }
-    o.opt(v.itemTitle) { n859 -> o.string(n859) }
+    o.opt(v.detail) { n858 -> o.string(n858) }
+    o.opt(v.itemSlug) { n859 -> o.string(n859) }
+    o.opt(v.itemTitle) { n860 -> o.string(n860) }
     o.bool(v.isItemReport)
-    o.opt(v.reviewAuthorId) { n860 -> o.string(n860) }
+    o.opt(v.reviewAuthorId) { n861 -> o.string(n861) }
     o.int(v.reviewStars)
-    o.opt(v.reviewText) { n861 -> o.string(n861) }
+    o.opt(v.reviewText) { n862 -> o.string(n862) }
     o.bool(v.reviewHidden)
 }
 internal fun r390(i: RemoteIn): dev.ide.ui.backend.UiReportedContent = dev.ide.ui.backend.UiReportedContent(
@@ -6839,7 +6841,7 @@ internal fun w391(o: RemoteOut, v: dev.ide.ui.backend.UiPackagedProject) {
     o.int(v.fileCount)
     o.long(v.totalBytes)
     o.string(v.sha256)
-    o.list(v.excluded) { e862 -> o.string(e862) }
+    o.list(v.excluded) { e863 -> o.string(e863) }
     o.string(v.archivePath)
 }
 internal fun r391(i: RemoteIn): dev.ide.ui.backend.UiPackagedProject = dev.ide.ui.backend.UiPackagedProject(
@@ -6854,21 +6856,21 @@ internal fun r391(i: RemoteIn): dev.ide.ui.backend.UiPackagedProject = dev.ide.u
 internal fun w392(o: RemoteOut, v: dev.ide.ui.backend.UiPublisherProfile) {
     o.string(v.handle)
     o.string(v.displayName)
-    o.opt(v.bio) { n863 -> o.string(n863) }
-    o.opt(v.avatarUrl) { n864 -> o.string(n864) }
-    o.opt(v.location) { n865 -> o.string(n865) }
-    o.opt(v.linkUrl) { n866 -> o.string(n866) }
+    o.opt(v.bio) { n864 -> o.string(n864) }
+    o.opt(v.avatarUrl) { n865 -> o.string(n865) }
+    o.opt(v.location) { n866 -> o.string(n866) }
+    o.opt(v.linkUrl) { n867 -> o.string(n867) }
     o.bool(v.verified)
     o.int(v.followers)
     o.bool(v.following)
-    o.opt(v.joinedAt) { n867 -> o.string(n867) }
+    o.opt(v.joinedAt) { n868 -> o.string(n868) }
     o.int(v.projectCount)
     o.int(v.totalInstalls)
     o.int(v.totalLikes)
-    o.opt(v.averageRating) { n868 -> o.float(n868) }
-    o.list(v.items) { e869 -> w358(o, e869) }
+    o.opt(v.averageRating) { n869 -> o.float(n869) }
+    o.list(v.items) { e870 -> w358(o, e870) }
     o.bool(v.loading)
-    o.opt(v.error) { n870 -> o.string(n870) }
+    o.opt(v.error) { n871 -> o.string(n871) }
 }
 internal fun r392(i: RemoteIn): dev.ide.ui.backend.UiPublisherProfile = dev.ide.ui.backend.UiPublisherProfile(
     handle = i.str(),
@@ -6891,11 +6893,11 @@ internal fun r392(i: RemoteIn): dev.ide.ui.backend.UiPublisherProfile = dev.ide.
 )
 
 internal fun w393(o: RemoteOut, v: dev.ide.ui.backend.UiModerationQueue) {
-    o.list(v.pending) { e885 -> w394(o, e885) }
-    o.list(v.recent) { e886 -> w394(o, e886) }
+    o.list(v.pending) { e886 -> w394(o, e886) }
+    o.list(v.recent) { e887 -> w394(o, e887) }
     o.int(v.pendingCount)
     o.bool(v.loading)
-    o.opt(v.error) { n887 -> o.string(n887) }
+    o.opt(v.error) { n888 -> o.string(n888) }
 }
 internal fun r393(i: RemoteIn): dev.ide.ui.backend.UiModerationQueue = dev.ide.ui.backend.UiModerationQueue(
     pending = i.list { r394(i) },
@@ -6910,16 +6912,16 @@ internal fun w394(o: RemoteOut, v: dev.ide.ui.backend.UiPendingSubmission) {
     o.string(v.version)
     o.string(v.status)
     o.long(v.sizeBytes)
-    o.opt(v.sha256) { n877 -> o.string(n877) }
+    o.opt(v.sha256) { n878 -> o.string(n878) }
     o.int(v.fileCount)
-    o.list(v.files) { e878 -> w395(o, e878) }
-    o.opt(v.changelog) { n879 -> o.string(n879) }
+    o.list(v.files) { e879 -> w395(o, e879) }
+    o.opt(v.changelog) { n880 -> o.string(n880) }
     o.long(v.submittedAtMs)
-    o.opt(v.reviewNote) { n880 -> o.string(n880) }
-    o.list(v.screenshotPaths) { e881 -> o.string(e881) }
-    o.opt(v.iconPath) { n882 -> o.string(n882) }
-    o.list(v.edits) { e883 -> w396(o, e883) }
-    o.opt(v.submitter) { n884 -> w397(o, n884) }
+    o.opt(v.reviewNote) { n881 -> o.string(n881) }
+    o.list(v.screenshotPaths) { e882 -> o.string(e882) }
+    o.opt(v.iconPath) { n883 -> o.string(n883) }
+    o.list(v.edits) { e884 -> w396(o, e884) }
+    o.opt(v.submitter) { n885 -> w397(o, n885) }
     w398(o, v.listing)
 }
 internal fun r394(i: RemoteIn): dev.ide.ui.backend.UiPendingSubmission = dev.ide.ui.backend.UiPendingSubmission(
@@ -6962,8 +6964,8 @@ internal fun r396(i: RemoteIn): dev.ide.ui.backend.UiListingEdit = dev.ide.ui.ba
 
 internal fun w397(o: RemoteOut, v: dev.ide.ui.backend.UiSubmissionSubmitter) {
     o.string(v.userId)
-    o.opt(v.handle) { n871 -> o.string(n871) }
-    o.opt(v.displayName) { n872 -> o.string(n872) }
+    o.opt(v.handle) { n872 -> o.string(n872) }
+    o.opt(v.displayName) { n873 -> o.string(n873) }
     o.bool(v.verified)
     o.bool(v.banned)
 }
@@ -6981,11 +6983,11 @@ internal fun w398(o: RemoteOut, v: dev.ide.ui.backend.UiSubmissionListing) {
     o.string(v.summary)
     o.string(v.description)
     o.string(v.category)
-    o.opt(v.language) { n873 -> o.string(n873) }
-    o.list(v.tags) { e874 -> o.string(e874) }
+    o.opt(v.language) { n874 -> o.string(n874) }
+    o.list(v.tags) { e875 -> o.string(e875) }
     o.string(v.status)
-    o.opt(v.iconPath) { n875 -> o.string(n875) }
-    o.list(v.screenshots) { e876 -> o.string(e876) }
+    o.opt(v.iconPath) { n876 -> o.string(n876) }
+    o.list(v.screenshots) { e877 -> o.string(e877) }
     o.int(v.installs)
 }
 internal fun r398(i: RemoteIn): dev.ide.ui.backend.UiSubmissionListing = dev.ide.ui.backend.UiSubmissionListing(
@@ -7005,12 +7007,12 @@ internal fun r398(i: RemoteIn): dev.ide.ui.backend.UiSubmissionListing = dev.ide
 internal fun w399(o: RemoteOut, v: dev.ide.ui.backend.UiReviewPage) {
     o.float(v.average)
     o.int(v.count)
-    o.map(v.distribution, { k894 -> o.int(k894) }, { v895 -> o.int(v895) })
-    o.opt(v.mine) { n896 -> w400(o, n896) }
-    o.list(v.reviews) { e897 -> w400(o, e897) }
+    o.map(v.distribution, { k895 -> o.int(k895) }, { v896 -> o.int(v896) })
+    o.opt(v.mine) { n897 -> w400(o, n897) }
+    o.list(v.reviews) { e898 -> w400(o, e898) }
     o.bool(v.hasMore)
     o.bool(v.loading)
-    o.opt(v.error) { n898 -> o.string(n898) }
+    o.opt(v.error) { n899 -> o.string(n899) }
     o.bool(v.canReply)
     o.bool(v.canModerate)
 }
@@ -7029,17 +7031,17 @@ internal fun r399(i: RemoteIn): dev.ide.ui.backend.UiReviewPage = dev.ide.ui.bac
 
 internal fun w400(o: RemoteOut, v: dev.ide.ui.backend.UiStoreReview) {
     o.string(v.authorId)
-    o.opt(v.authorName) { n888 -> o.string(n888) }
-    o.opt(v.authorHandle) { n889 -> o.string(n889) }
+    o.opt(v.authorName) { n889 -> o.string(n889) }
+    o.opt(v.authorHandle) { n890 -> o.string(n890) }
     o.bool(v.verified)
     o.int(v.stars)
-    o.opt(v.review) { n890 -> o.string(n890) }
+    o.opt(v.review) { n891 -> o.string(n891) }
     o.int(v.helpful)
     o.bool(v.votedByMe)
-    o.opt(v.appVersion) { n891 -> o.string(n891) }
-    o.opt(v.itemVersion) { n892 -> o.string(n892) }
+    o.opt(v.appVersion) { n892 -> o.string(n892) }
+    o.opt(v.itemVersion) { n893 -> o.string(n893) }
     o.long(v.postedAtMs)
-    o.opt(v.reply) { n893 -> o.string(n893) }
+    o.opt(v.reply) { n894 -> o.string(n894) }
     o.bool(v.mine)
 }
 internal fun r400(i: RemoteIn): dev.ide.ui.backend.UiStoreReview = dev.ide.ui.backend.UiStoreReview(
@@ -7059,9 +7061,9 @@ internal fun r400(i: RemoteIn): dev.ide.ui.backend.UiStoreReview = dev.ide.ui.ba
 )
 
 internal fun w401(o: RemoteOut, v: dev.ide.ui.backend.UiStoreSearchPage) {
-    o.list(v.items) { e899 -> w358(o, e899) }
+    o.list(v.items) { e900 -> w358(o, e900) }
     o.bool(v.hasMore)
-    o.opt(v.error) { n900 -> o.string(n900) }
+    o.opt(v.error) { n901 -> o.string(n901) }
 }
 internal fun r401(i: RemoteIn): dev.ide.ui.backend.UiStoreSearchPage = dev.ide.ui.backend.UiStoreSearchPage(
     items = i.list { r358(i) },
@@ -7074,13 +7076,13 @@ internal fun w402(o: RemoteOut, v: dev.ide.ui.backend.UiSubmissionDraft) {
     o.string(v.summary)
     o.string(v.description)
     o.string(v.category)
-    o.opt(v.language) { n901 -> o.string(n901) }
-    o.list(v.tags) { e902 -> o.string(e902) }
+    o.opt(v.language) { n902 -> o.string(n902) }
+    o.list(v.tags) { e903 -> o.string(e903) }
     o.string(v.version)
-    o.list(v.screenshotPaths) { e903 -> o.string(e903) }
-    o.opt(v.itemSlug) { n904 -> o.string(n904) }
-    o.opt(v.changelog) { n905 -> o.string(n905) }
-    o.opt(v.iconBytes) { n906 -> o.bytes(n906) }
+    o.list(v.screenshotPaths) { e904 -> o.string(e904) }
+    o.opt(v.itemSlug) { n905 -> o.string(n905) }
+    o.opt(v.changelog) { n906 -> o.string(n906) }
+    o.opt(v.iconBytes) { n907 -> o.bytes(n907) }
     o.bool(v.listingEdits)
 }
 internal fun r402(i: RemoteIn): dev.ide.ui.backend.UiSubmissionDraft = dev.ide.ui.backend.UiSubmissionDraft(
@@ -7101,7 +7103,7 @@ internal fun r402(i: RemoteIn): dev.ide.ui.backend.UiSubmissionDraft = dev.ide.u
 internal fun w403(o: RemoteOut, v: dev.ide.ui.backend.UiSubmitResult) {
     o.bool(v.success)
     o.string(v.message)
-    o.opt(v.submission) { n907 -> w389(o, n907) }
+    o.opt(v.submission) { n908 -> w389(o, n908) }
 }
 internal fun r403(i: RemoteIn): dev.ide.ui.backend.UiSubmitResult = dev.ide.ui.backend.UiSubmitResult(
     success = i.bool(),
@@ -7110,8 +7112,8 @@ internal fun r403(i: RemoteIn): dev.ide.ui.backend.UiSubmitResult = dev.ide.ui.b
 )
 
 internal fun w404(o: RemoteOut, v: dev.ide.ui.backend.UiTranslation) {
-    o.map(v.fields, { k908 -> o.string(k908) }, { v909 -> o.string(v909) })
-    o.opt(v.error) { n910 -> o.string(n910) }
+    o.map(v.fields, { k909 -> o.string(k909) }, { v910 -> o.string(v910) })
+    o.opt(v.error) { n911 -> o.string(n911) }
 }
 internal fun r404(i: RemoteIn): dev.ide.ui.backend.UiTranslation = dev.ide.ui.backend.UiTranslation(
     fields = i.map({ i.str() }, { i.str() }),
@@ -7122,10 +7124,10 @@ internal fun w405(o: RemoteOut, v: dev.ide.ui.backend.UiVcsResult) {
     o.bool(v.ok)
     o.string(v.message)
     o.bool(v.authRequired)
-    o.opt(v.path) { n912 -> o.string(n912) }
-    o.list(v.conflicts) { e913 -> o.string(e913) }
-    o.opt(v.projectKind) { n914 -> o.int(n914.ordinal) }
-    o.opt(v.text) { n915 -> w406(o, n915) }
+    o.opt(v.path) { n913 -> o.string(n913) }
+    o.list(v.conflicts) { e914 -> o.string(e914) }
+    o.opt(v.projectKind) { n915 -> o.int(n915.ordinal) }
+    o.opt(v.text) { n916 -> w406(o, n916) }
 }
 internal fun r405(i: RemoteIn): dev.ide.ui.backend.UiVcsResult = dev.ide.ui.backend.UiVcsResult(
     ok = i.bool(),
@@ -7139,7 +7141,7 @@ internal fun r405(i: RemoteIn): dev.ide.ui.backend.UiVcsResult = dev.ide.ui.back
 
 internal fun w406(o: RemoteOut, v: dev.ide.ui.backend.UiVcsText) {
     o.string(v.key)
-    o.list(v.args) { e911 -> w406(o, e911) }
+    o.list(v.args) { e912 -> w406(o, e912) }
     o.string(v.text)
 }
 internal fun r406(i: RemoteIn): dev.ide.ui.backend.UiVcsText = dev.ide.ui.backend.UiVcsText(
@@ -7173,7 +7175,7 @@ internal fun w408(o: RemoteOut, v: dev.ide.ui.backend.UiVcsActivity) {
     o.bool(v.busy)
     o.string(v.task)
     o.float(v.fraction)
-    o.opt(v.taskText) { n916 -> w406(o, n916) }
+    o.opt(v.taskText) { n917 -> w406(o, n917) }
 }
 internal fun r408(i: RemoteIn): dev.ide.ui.backend.UiVcsActivity = dev.ide.ui.backend.UiVcsActivity(
     busy = i.bool(),
@@ -7212,7 +7214,7 @@ internal fun r410(i: RemoteIn): dev.ide.ui.backend.UiVcsBranch = dev.ide.ui.back
 
 internal fun w411(o: RemoteOut, v: dev.ide.ui.backend.UiVcsCommitDetail) {
     w412(o, v.commit)
-    o.list(v.files) { e919 -> w413(o, e919) }
+    o.list(v.files) { e920 -> w413(o, e920) }
     o.int(v.insertions)
     o.int(v.deletions)
 }
@@ -7232,7 +7234,7 @@ internal fun w412(o: RemoteOut, v: dev.ide.ui.backend.UiVcsCommit) {
     o.string(v.authorEmail)
     o.long(v.timeMs)
     o.string(v.timeLabel)
-    o.list(v.refs) { e917 -> o.string(e917) }
+    o.list(v.refs) { e918 -> o.string(e918) }
     o.bool(v.merge)
 }
 internal fun r412(i: RemoteIn): dev.ide.ui.backend.UiVcsCommit = dev.ide.ui.backend.UiVcsCommit(
@@ -7255,7 +7257,7 @@ internal fun w413(o: RemoteOut, v: dev.ide.ui.backend.UiVcsChange) {
     o.string(v.status)
     o.bool(v.staged)
     o.bool(v.conflicted)
-    o.opt(v.oldPath) { n918 -> o.string(n918) }
+    o.opt(v.oldPath) { n919 -> o.string(n919) }
 }
 internal fun r413(i: RemoteIn): dev.ide.ui.backend.UiVcsChange = dev.ide.ui.backend.UiVcsChange(
     path = i.str(),
@@ -7392,7 +7394,7 @@ internal fun r421(i: RemoteIn): dev.ide.ui.backend.UiVcsSignIn.Done = dev.ide.ui
 
 internal fun w422(o: RemoteOut, v: dev.ide.ui.backend.UiVcsSignIn.Failed) {
     o.string(v.message)
-    o.opt(v.text) { n920 -> w406(o, n920) }
+    o.opt(v.text) { n921 -> w406(o, n921) }
 }
 internal fun r422(i: RemoteIn): dev.ide.ui.backend.UiVcsSignIn.Failed = dev.ide.ui.backend.UiVcsSignIn.Failed(
     message = i.str(),
@@ -7428,14 +7430,14 @@ internal fun w426(o: RemoteOut, v: dev.ide.ui.backend.UiVcsStatus) {
     o.int(v.ahead)
     o.int(v.behind)
     o.string(v.operation)
-    o.list(v.staged) { e921 -> w413(o, e921) }
-    o.list(v.unstaged) { e922 -> w413(o, e922) }
-    o.list(v.conflicted) { e923 -> w413(o, e923) }
+    o.list(v.staged) { e922 -> w413(o, e922) }
+    o.list(v.unstaged) { e923 -> w413(o, e923) }
+    o.list(v.conflicted) { e924 -> w413(o, e924) }
     o.string(v.headSummary)
     o.string(v.headShortId)
     o.string(v.error)
-    o.opt(v.errorText) { n924 -> w406(o, n924) }
-    o.list(v.remotes) { e925 -> o.string(e925) }
+    o.opt(v.errorText) { n925 -> w406(o, n925) }
+    o.list(v.remotes) { e926 -> o.string(e926) }
 }
 internal fun r426(i: RemoteIn): dev.ide.ui.backend.UiVcsStatus = dev.ide.ui.backend.UiVcsStatus(
     present = i.bool(),

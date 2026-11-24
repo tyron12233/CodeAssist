@@ -282,6 +282,11 @@ data class UiStoreItem(
      * the real app icon; where it is not, the glyph tile is the honest fallback rather than a blank square.
      */
     val iconPath: String? = null,
+    /**
+     * Ids of the plugins the project needs to open. The store offers to get any this device lacks before it
+     * offers the install: without the plugin the download would be a project the IDE cannot open.
+     */
+    val requiredPlugins: List<String> = emptyList(),
 )
 
 /** A titled shelf of store items (e.g. "Starter templates", "Sample projects"). */
