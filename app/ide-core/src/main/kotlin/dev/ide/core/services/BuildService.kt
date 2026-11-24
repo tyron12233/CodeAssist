@@ -8,6 +8,7 @@ import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.android.support.tools.SigningConfig
 import dev.ide.build.BUILD_PLUGIN_EP
+import dev.ide.build.ANDROID_RUN_PARTICIPANT_EP
 import dev.ide.build.BUILD_SYSTEM_EP
 import dev.ide.build.BuildContext
 import dev.ide.build.BuildControl
@@ -1233,14 +1234,29 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                     // wonder why nothing changed.
                     val isPlugin = PluginProject.isPluginModule(module)
                     val label = if (isPlugin) "Install plugin" else "Run"
+                    // A plugin can join the run (a Flutter app's hot reload): extras on the launch intent, then a
+                    // session of its own in the Run console once the app is up. The first that answers takes part.
+                    val participant = if (isPlugin) null else ctx.platform.extensions.extensions(ANDROID_RUN_PARTICIPANT_EP)
+                        .firstNotNullOfOrNull { p -> runCatching { p.launchExtras(module, variant) }.getOrNull()?.let { p to it } }
+                    val participantIo = participant?.let { (p, _) ->
+                        val sessionId = runConsoleSeq.incrementAndGet()
+                        RunProgramIo(sessionId, module.name, p.consoleTitle).also { io ->
+                            currentRunIo = io
+                            _runConsole.value = RunConsoleUi(sessionId, module.name, p.consoleTitle)
+                        }
+                    }
                     // On a successful build, install + launch (the OS shows its own install-confirmation).
                     launch(
                         module.name,
                         graph,
                         "> $label $variant · ${module.name}",
-                        firstBuildDexBanner(module, variant)
+                        firstBuildDexBanner(module, variant),
+                        onComplete = if (participantIo != null) ::finalizeRunConsole else null,
                     ) { log ->
-                        installer.installAndLaunch(apk, launchPkg, target, log)
+                        val launched = installer.installAndLaunch(apk, launchPkg, target, participant?.second.orEmpty(), log)
+                        if (participant != null && participantIo != null && launched) {
+                            participant.first.afterLaunch(module, variant, participantIo, log)
+                        }
                         if (isPlugin) {
                             log("")
                             log("Installed as a plugin. Plugins load at startup, so this build is not live")

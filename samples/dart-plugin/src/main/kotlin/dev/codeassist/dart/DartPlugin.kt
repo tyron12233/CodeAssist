@@ -1,5 +1,6 @@
 package dev.codeassist.dart
 
+import dev.ide.build.ANDROID_RUN_PARTICIPANT_EP
 import dev.ide.build.BUILD_PLUGIN_EP
 import dev.ide.build.RUN_TASK_PROVIDER_EP
 import dev.ide.build.TEST_PROVIDER_EP
@@ -48,6 +49,8 @@ class DartPlugin : Plugin {
         // module's ordinary Android build compiles that package and packages it with the engine.
         reg.register(FACET_CODEC_EP, FlutterFacetCodec)
         reg.register(BUILD_PLUGIN_EP, FlutterBuildPlugin(sdk, flutter, pub, reg.logger("FlutterBuild")))
+        // Run Debug on that module is `flutter run`: the app's own APK, attached for hot reload.
+        reg.register(ANDROID_RUN_PARTICIPANT_EP, FlutterRunParticipant(sdk, flutter, pub))
         log.info("registered; the Dart SDK is prepared on first use")
     }
 

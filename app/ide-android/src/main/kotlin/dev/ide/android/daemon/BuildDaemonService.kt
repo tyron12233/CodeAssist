@@ -526,9 +526,9 @@ class BuildDaemonService : Service() {
         // The engine's ApkInstaller runs in THIS process; after an install it asks the bridge to launch the
         // app in the UI process (where a foreground activity makes the launch legal). Forward over the live
         // callback; returning false (no UI bound) makes the installer fall back to launching locally.
-        PackageLaunchBridge.setForwarder { pkg ->
+        PackageLaunchBridge.setForwarder { pkg, extras ->
             val cb = callback ?: return@setForwarder false
-            runCatching { cb.onLaunchPackage(pkg); true }.getOrDefault(false)
+            runCatching { cb.onLaunchPackage(pkg, extras); true }.getOrDefault(false)
         }
         // "Run plugin in sandbox" built here; the sandbox is an activity, so the UI process starts it.
         PackageLaunchBridge.setSandboxForwarder { path ->

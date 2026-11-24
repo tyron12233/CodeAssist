@@ -2,6 +2,7 @@
 package dev.ide.android.daemon;
 
 import android.content.Intent;
+import android.os.Bundle;
 
 interface IBuildCallback {
     // oneway: fire-and-forget, ordered per-binder, never blocks the daemon. These carry BuildState DELTAS
@@ -29,7 +30,8 @@ interface IBuildCallback {
     // The android "Run" just installed [packageName]; launch it HERE in the UI process. The install runs in
     // :build, but firing the installed app's activity from that background process is blocked by Android's
     // background-activity-launch rules — the UI has a foreground activity, so it can.
-    oneway void onLaunchPackage(String packageName);
+    // [extras] go on the launch intent (null for none): what a Run a plugin joins asked for.
+    oneway void onLaunchPackage(String packageName, in Bundle extras);
 
     // A plugin build for "Run plugin in sandbox" is ready at [apkPath]; start the sandbox HERE in the UI process,
     // for the same reason as onLaunchPackage: only a process with a visible activity may start one.

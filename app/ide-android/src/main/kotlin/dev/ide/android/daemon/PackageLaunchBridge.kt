@@ -17,19 +17,19 @@ import android.content.Intent
  */
 object PackageLaunchBridge {
     @Volatile
-    private var forwarder: ((String) -> Boolean)? = null
+    private var forwarder: ((String, android.os.Bundle?) -> Boolean)? = null
 
     @Volatile
     private var confirmForwarder: ((Intent) -> Boolean)? = null
 
     /** Registered by [BuildDaemonService] while it holds a live UI callback; cleared (null) when it doesn't. */
-    fun setForwarder(f: ((String) -> Boolean)?) {
+    fun setForwarder(f: ((String, android.os.Bundle?) -> Boolean)?) {
         forwarder = f
     }
 
     /** Try to forward the launch of [packageName] to the UI process. Returns true if it was handed off (the
      *  caller must NOT also launch locally); false if there's no UI to forward to. */
-    fun forwardLaunch(packageName: String): Boolean = forwarder?.invoke(packageName) ?: false
+    fun forwardLaunch(packageName: String, extras: android.os.Bundle? = null): Boolean = forwarder?.invoke(packageName, extras) ?: false
 
     @Volatile
     private var sandboxForwarder: ((String) -> Boolean)? = null

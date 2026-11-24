@@ -29,7 +29,7 @@ class BuildDaemonClient(
         { _, _, _, _, _ -> },
     private val onPermission: (reqId: Int, category: String, detail: String) -> Unit = { _, _, _ -> },
     /** The daemon installed an android-app APK; launch it here in the UI process (foreground-activity rules). */
-    private val onLaunchPackage: (packageName: String) -> Unit = {},
+    private val onLaunchPackage: (packageName: String, extras: android.os.Bundle?) -> Unit = { _, _ -> },
     /** The daemon built a plugin for "Run plugin in sandbox"; start the sandbox here in the UI process. */
     private val onLaunchPluginSandbox: (apkPath: String) -> Unit = {},
     /** The daemon's install needs the user to confirm; start the OS confirmation here in the UI process. */
@@ -81,7 +81,7 @@ class BuildDaemonClient(
             onRunFrame.invoke(runId, path ?: return, width, height, seq)
         }
         override fun onPermission(reqId: Int, category: String?, detail: String?) = onPermission.invoke(reqId, category ?: "", detail ?: "")
-        override fun onLaunchPackage(packageName: String?) = onLaunchPackage.invoke(packageName ?: "")
+        override fun onLaunchPackage(packageName: String?, extras: android.os.Bundle?) = onLaunchPackage.invoke(packageName ?: "", extras)
         override fun onLaunchPluginSandbox(apkPath: String?) = onLaunchPluginSandbox.invoke(apkPath ?: "")
         override fun onInstallConfirm(confirm: android.content.Intent?) {
             onInstallConfirm.invoke(confirm ?: return)

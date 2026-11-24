@@ -432,6 +432,11 @@ const val PLUGIN_API_VERSION: Int = 4
  * watched files changed, in the IDE's process, with dependencies re-resolved, so the build sees the new modules.
  * An IDE-owned project's sync now removes only the modules and dependencies the previous sync produced, so what
  * the user added in the IDE survives it. Defaulted to false; an older host never asks.
+ *
+ * And `dev.ide.build.AndroidRunParticipant` on `ANDROID_RUN_PARTICIPANT_EP` (`platform.androidRunParticipant`): a
+ * plugin joins the host's Run of an Android app module, with extras on its launch intent and a session in the Run
+ * console once it launched. The Dart plugin makes a Flutter app's Run Debug `flutter run` with it: the app's own
+ * APK, attached for hot reload. An older host never consults it.
  */
 const val PLUGIN_SPI_VERSION: String = "3.8.0"
 

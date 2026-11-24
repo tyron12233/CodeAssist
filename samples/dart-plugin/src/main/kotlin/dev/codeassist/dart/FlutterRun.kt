@@ -18,6 +18,7 @@ import dev.ide.build.TaskOutputsImpl
 import dev.ide.build.TaskResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -168,6 +169,35 @@ internal class FlutterRunTask(
     override val outputs: TaskOutputs get() = TaskOutputsImpl()
 
     private lateinit var out: (String) -> Unit
+
+    /**
+     * Set for a run of the app's own APK ([attach]): the VM service of the app the host just launched, and the
+     * Dart plugin registrant the APK was compiled with. Null for a run in the player.
+     */
+    private var attachUri: String? = null
+    private var registrantArgs: List<String> = emptyList()
+
+    /**
+     * Run in the app's own debug APK rather than the player, as `flutter run` does: the host has installed and
+     * launched it with the VM service on [vmUri] ([FlutterRunParticipant]). The app keeps its plugins, which the
+     * player has none of; reloads, restarts and the console work as in the player.
+     */
+    suspend fun attach(io: ProgramIo, vmUri: String, registrant: List<String>): TaskResult = withContext(Dispatchers.IO) {
+        attachUri = vmUri
+        registrantArgs = registrant
+        out = { line: String -> io.stdout(line + "\n") }
+        io.started()
+        val result = try {
+            session(io)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            out(e.message ?: e.toString())
+            TaskResult.Failed(e.message ?: "The Flutter run failed")
+        }
+        io.exited(if (result is TaskResult.Success) 0 else 1)
+        result
+    }
     private var packageName = ""
     private val galleryFile: Path get() = pkg.resolve(".dart_tool/codeassist/preview/main.dart")
 
@@ -208,6 +238,7 @@ internal class FlutterRunTask(
             pkg, sdk, flutter, entry, FlutterSession.runWork(pkg), out,
             alsoChanged = { if (preview && writeGallery()) listOf(galleryFile) else emptyList() },
             siblings = listOf(FlutterSession.paneWork(pkg).resolve("app.dill")),
+            extraArgs = registrantArgs,
         )
         var player: FlutterPlayer.Started? = null
         var watching: PackageWatcher? = null
@@ -219,15 +250,21 @@ internal class FlutterRunTask(
             if (!first.ok) return fail("The app did not compile (${first.errors} error(s)).")
             out("Compiled in ${ms(started)} ms.")
 
-            out("Starting the Flutter player ...")
             val launched = System.nanoTime()
-            player = FlutterPlayer.launch()
-            val vm = FlutterSession.connect(player.uri)
+            val target = attachUri
+            val vm = if (target != null) {
+                out("Connecting to the app ...")
+                connectWhenUp(target)
+            } else {
+                out("Starting the Flutter player ...")
+                player = FlutterPlayer.launch()
+                FlutterSession.connect(player.uri)
+            }
             vm.onEvent = { stream, event -> if (stream == "Stdout" || stream == "Stderr") printed(event) }
             for (stream in listOf("Stdout", "Stderr")) runCatching { vm.call("streamListen", mapOf("streamId" to stream)) }
-            out("The player answered in ${ms(launched)} ms.")
+            out(if (target != null) "The app answered in ${ms(launched)} ms." else "The player answered in ${ms(launched)} ms.")
             val uploaded = System.nanoTime()
-            app.runIn(vm, player.isolate, first.dill!!)
+            app.runIn(vm, player?.isolate, first.dill!!)
             out("Running in ${ms(uploaded)} ms. Saving a file hot-reloads it; type r (reload), R (restart) or q (quit).")
 
             val watcher = PackageWatcher(pkg, DartPlugin.tools?.bus).also { watching = it }
@@ -285,6 +322,25 @@ internal class FlutterRunTask(
             if (Files.exists(marker)) Files.setLastModifiedTime(marker, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()))
             else Files.write(marker, ByteArray(0))
         }
+    }
+
+    /**
+     * The VM service at [uri], retried while the app comes up: the host only asked for the launch, the system may
+     * still be showing the install confirmation, and the engine opens its service a moment after the app starts.
+     */
+    private suspend fun connectWhenUp(uri: String, timeoutMs: Long = 180_000): VmService {
+        val deadline = System.nanoTime() + timeoutMs * 1_000_000
+        var last: Exception? = null
+        while (System.nanoTime() < deadline) {
+            currentCoroutineContext().ensureActive()
+            try {
+                return FlutterSession.connect(uri)
+            } catch (e: Exception) {
+                last = e
+                kotlinx.coroutines.delay(500)
+            }
+        }
+        throw IOException("The app's Dart VM service did not answer at $uri: ${last?.message}. If the app is not open, open it and run again.")
     }
 
     private fun pubGet(): Boolean {

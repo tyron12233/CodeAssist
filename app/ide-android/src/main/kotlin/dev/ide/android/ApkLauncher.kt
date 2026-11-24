@@ -24,20 +24,26 @@ object ApkLauncher {
 
     /** Launch [packageName], retrying for ~2s while the PackageManager catches up. [log] gets a one-line outcome. */
     fun launch(context: Context, packageName: String, log: (String) -> Unit) {
-        attempt(context.applicationContext, packageName, log, 0)
+        attempt(context.applicationContext, packageName, null, log, 0)
     }
 
-    private fun attempt(context: Context, packageName: String, log: (String) -> Unit, n: Int) {
+    /** [launch] with [extras] on the launch intent: what a Run a plugin joins asked for (a Flutter VM service port). */
+    fun launch(context: Context, packageName: String, extras: android.os.Bundle?, log: (String) -> Unit) {
+        attempt(context.applicationContext, packageName, extras, log, 0)
+    }
+
+    private fun attempt(context: Context, packageName: String, extras: android.os.Bundle?, log: (String) -> Unit, n: Int) {
         val intent = resolveLaunchIntent(context, packageName)
         if (intent != null) {
             runCatching {
+                if (extras != null) intent.putExtras(extras)
                 context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 log("Launching $packageName…")
             }.onFailure { log("Installed — couldn't launch $packageName: ${it.message}") }
             return
         }
         if (n < RETRY_ATTEMPTS) {
-            mainHandler.postDelayed({ attempt(context, packageName, log, n + 1) }, RETRY_DELAY_MS)
+            mainHandler.postDelayed({ attempt(context, packageName, extras, log, n + 1) }, RETRY_DELAY_MS)
         } else {
             log("Installed — no launchable activity in $packageName.")
         }

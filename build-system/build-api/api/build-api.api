@@ -3,6 +3,15 @@
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/build/AlwaysRun
 	kind interface
+dev/ide/build/AndroidRunKt
+	kind class
+	super java/lang/Object
+	method static getANDROID_RUN_PARTICIPANT_EP()Ldev/ide/platform/ExtensionPoint;
+dev/ide/build/AndroidRunParticipant
+	kind interface
+	method abstract afterLaunch(Ldev/ide/model/Module;Ljava/lang/String;Ldev/ide/build/ProgramIo;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	method abstract getConsoleTitle()Ljava/lang/String;
+	method abstract launchExtras(Ldev/ide/model/Module;Ljava/lang/String;)Ljava/util/Map;
 dev/ide/build/AssetsOutput
 	kind class
 	super java/lang/Object

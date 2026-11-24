@@ -33,6 +33,25 @@ import java.nio.file.Path
 class ApkInstallerImpl(context: Context) : ApkInstaller {
     private val context = context.applicationContext
 
+    /** Launch-intent extras for a package being installed, until its install ends (see the extras overload). */
+    private val pendingExtras = java.util.concurrent.ConcurrentHashMap<String, android.os.Bundle>()
+
+    override suspend fun installAndLaunch(
+        apk: Path, packageName: String, target: String?, extras: Map<String, Any>, log: (String) -> Unit,
+    ): Boolean {
+        if (extras.isEmpty()) pendingExtras.remove(packageName) else pendingExtras[packageName] = bundleOf(extras)
+        return installAndLaunch(apk, packageName, log)
+    }
+
+    private fun bundleOf(extras: Map<String, Any>) = android.os.Bundle().apply {
+        for ((key, value) in extras) when (value) {
+            is Int -> putInt(key, value)
+            is Long -> putLong(key, value)
+            is Boolean -> putBoolean(key, value)
+            else -> putString(key, value.toString())
+        }
+    }
+
     override suspend fun installAndLaunch(apk: Path, packageName: String, log: (String) -> Unit): Boolean = withContext(Dispatchers.IO) {
         if (!Files.exists(apk)) { log("APK not found: $apk"); return@withContext false }
         // Only an APK this IDE's build signed, byte for byte: never one that came from a download or a clone.
@@ -190,12 +209,14 @@ class ApkInstallerImpl(context: Context) : ApkInstaller {
                         // background-activity-launch block, and it owns the "Launching…" build-console line).
                         // Fall back to launching here only when there's no UI to forward to (isolation off /
                         // unbound) — ApkLauncher then retries while this process's PackageManager catches up.
-                        if (!PackageLaunchBridge.forwardLaunch(packageName)) {
-                            FullScreenAdGate.runWhenClear { ApkLauncher.launch(context, packageName, log) }
+                        val extras = pendingExtras.remove(packageName)
+                        if (!PackageLaunchBridge.forwardLaunch(packageName, extras)) {
+                            FullScreenAdGate.runWhenClear { ApkLauncher.launch(context, packageName, extras, log) }
                         }
                     }
                     else -> {
                         val msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+                        pendingExtras.remove(packageName)
                         log("Install ${if (status == PackageInstaller.STATUS_FAILURE_ABORTED) "cancelled" else "failed"}${if (msg != null) ": $msg" else ""}.")
                         dropReceiver(sessionId)
                     }

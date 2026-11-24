@@ -32,11 +32,13 @@ internal class FlutterSession(
     private val alsoChanged: () -> List<Path> = { emptyList() },
     /** Other compiles of this package whose kernels a cold compiler can start from (see [FrontendServer.warm]). */
     siblings: List<Path> = emptyList(),
+    /** More compiler arguments: the Dart plugin registrant, for the app's own APK ([FlutterPlugins.dartRegistrantArgs]). */
+    extraArgs: List<String> = emptyList(),
 ) : AutoCloseable {
     /** What a reload or restart came to, and the compiler's errors when it did not happen. */
     class Outcome(val ok: Boolean, val problems: List<String> = emptyList())
 
-    private val frontend = FrontendServer(sdk, flutter, pkg, work.resolve("app.dill"), siblings + seed(sdk))
+    private val frontend = FrontendServer(sdk, flutter, pkg, work.resolve("app.dill"), siblings + seed(sdk), extraArgs)
     private var vm: VmService? = null
     private var fsUri = ""
     private var lastUsed = System.nanoTime()

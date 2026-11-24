@@ -74,6 +74,14 @@ interface ApkInstaller {
     suspend fun installAndLaunch(apk: Path, packageName: String, target: String?, log: (String) -> Unit): Boolean =
         installAndLaunch(apk, packageName, log)
 
+    /**
+     * [installAndLaunch] with [extras] on the launch intent (String, Int, Long or Boolean values), for a Run a
+     * plugin joins ([dev.ide.build.AndroidRunParticipant]). An installer that cannot pass extras launches without.
+     */
+    suspend fun installAndLaunch(
+        apk: Path, packageName: String, target: String?, extras: Map<String, Any>, log: (String) -> Unit,
+    ): Boolean = installAndLaunch(apk, packageName, target, log)
+
     /** Whether [runInstrumentation] works here: it needs a device the IDE drives from outside (adb). */
     val runsInstrumentation: Boolean get() = false
 
