@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -46,7 +45,6 @@ import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.TreeNode
@@ -260,10 +258,9 @@ internal fun Modifier.treeDragGestures(
 @Composable
 internal fun DragChip(drag: TreeDrag, targetName: String?) {
     val count = drag.paths.size
-    val p = drag.pointer
     Column(
         Modifier
-            .offset { IntOffset(p.x.toInt() + 24, p.y.toInt() + 12) }
+            .followPointer(gapX = 24, gapY = 12) { drag.pointer }
             .widthIn(max = 260.dp)
             .shadow(6.dp, RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(12.dp))

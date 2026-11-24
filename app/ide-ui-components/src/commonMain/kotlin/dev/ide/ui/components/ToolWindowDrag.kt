@@ -39,13 +39,10 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.ToolWindowSide
 import dev.ide.ui.platform.touchInput
 import dev.ide.ui.theme.Ca
-import androidx.compose.foundation.layout.offset
-import kotlin.math.roundToInt
 
 /** The tool window being dragged from its stripe button: what the ghost under the pointer shows. */
 class DraggedToolWindow(val id: String, val title: String, val icon: ImageVector)
@@ -200,10 +197,7 @@ fun ToolWindowDragGhost() {
     Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
         Row(
             Modifier
-                .offset {
-                    val p = drag.pointer - origin
-                    IntOffset(p.x.roundToInt() + 12, p.y.roundToInt() + 12)
-                }
+                .followPointer(gapX = 12, gapY = 12) { drag.pointer - origin }
                 .background(scheme.inverseSurface, RoundedCornerShape(Ca.radius.md))
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
