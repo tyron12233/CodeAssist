@@ -128,6 +128,58 @@ data class DailyBoard(
     val total: Int = 0,
     val rows: List<DailyRank> = emptyList(),
     val you: DailyRank? = null,
+    /**
+     * Whether the caller may open the rows' solutions: the day is over, or the caller has solved it. The
+     * server decides; [DailyChallengeService.solution] applies the same rule.
+     */
+    val solutionsOpen: Boolean = false,
+)
+
+/** One ranked player's accepted solution for a day, with what the judge measured about it. */
+data class DailySolutionEntry(
+    val rank: Int,
+    val handle: String,
+    val displayName: String,
+    val avatarUrl: String? = null,
+    val score: Int,
+    val language: DailyLanguage,
+    val timeClass: String,
+    val spaceClass: String,
+    /** How many classes above the declared optimum; 0 is optimal. */
+    val timeSteps: Int = 0,
+    val spaceSteps: Int = 0,
+    val runtimeNs: Long,
+    val allocBytes: Long,
+    val solveMs: Long,
+    val attempts: Int,
+    val acceptedAt: String? = null,
+    val source: String,
+    val growthExponent: Double? = null,
+    val probe: List<DailyProbePoint> = emptyList(),
+    val testsPassed: Int = 0,
+    val testsTotal: Int = 0,
+    val isYou: Boolean = false,
+)
+
+/**
+ * A leaderboard solution, as `daily_solution()` returns it.
+ *
+ * [open] false is a normal answer: [reason] says why (`sign_in`, `solve_first`, `not_found`). [you] is the
+ * caller's own ranked solution for the same day, when they have one and it is not [solution] itself.
+ */
+data class DailySolution(
+    val date: String,
+    val open: Boolean,
+    val reason: String? = null,
+    val title: String? = null,
+    val slug: String? = null,
+    val optimalTime: String? = null,
+    val optimalSpace: String? = null,
+    /** `ns` when the curve is timed, `ops` when the judge counted operations. */
+    val measuredBy: String = "ns",
+    val reference: List<DailyProbePoint> = emptyList(),
+    val solution: DailySolutionEntry? = null,
+    val you: DailySolutionEntry? = null,
 )
 
 data class DailyStreak(
@@ -229,6 +281,10 @@ interface DailyChallengeService {
         StoreResult.Unavailable("Challenges are not configured")
 
     fun profile(limit: Int = 30): StoreResult<DailyProfile> = StoreResult.Unavailable("Sign in to see your history")
+
+    /** [handle]'s ranked solution for [date] (blank is today), if the caller may see it. */
+    fun solution(date: String?, handle: String): StoreResult<DailySolution> =
+        StoreResult.Unavailable("Challenges are not configured")
 
     /**
      * Submits a solution for judging.

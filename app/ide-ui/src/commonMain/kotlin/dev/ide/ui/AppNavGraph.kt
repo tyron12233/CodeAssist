@@ -45,6 +45,7 @@ import dev.ide.ui.theme.Season
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.VcsService
+import dev.ide.ui.backend.AgentService
 import dev.ide.ui.components.BetaInfo
 import dev.ide.ui.components.CircularProgressIndicator
 import dev.ide.ui.generated.resources.Res
@@ -174,8 +175,13 @@ private fun rememberHubSections(app: CodeAssistAppState, state: IdeUiState): Lis
     }
     // A user-configured language server is a program the IDE starts, which Android does not allow an app to
     // do for one it did not ship; there a language comes from a plugin instead.
-    val hidden = remember(state.backend) {
-        if (state.backend.settings.languageServersSupported()) emptySet() else setOf(HubTool.LanguageServers)
+    val servers = remember(state.backend) { state.backend.settings.languageServersSupported() }
+    // "Use with Claude" is the agent plugin's screen, so it goes when that plugin is off or this build has
+    // neither the local MCP server nor the relay.
+    val claude = dev.ide.ui.components.rememberClaudeLinkState(state.backend).available
+    val hidden = buildSet {
+        if (!servers) add(HubTool.LanguageServers)
+        if (!claude) add(HubTool.UseWithClaude)
     }
     return hubSections(pages, hidden)
 }
@@ -229,13 +235,19 @@ private fun screenOf(tool: HubTool): Screen = when (tool) {
     HubTool.Plugins -> Screen.Plugins
     HubTool.LanguageServers -> Screen.LanguageServers
     HubTool.Storage -> Screen.Storage
+    HubTool.UseWithClaude -> Screen.PluginScreen
 }
 
 private fun openHubTarget(app: CodeAssistAppState, target: HubTarget) {
     when (target) {
         is HubTarget.Page -> app.openSettingsPage(target.id)
         // The keystore manager remembers that it was entered from Settings (its Back and its signing row).
-        is HubTarget.Tool -> if (target.tool == HubTool.Keystore) app.openKeystoreManagerFromHub() else app.navigateTo(screenOf(target.tool))
+        is HubTarget.Tool -> when (target.tool) {
+            HubTool.Keystore -> app.openKeystoreManagerFromHub()
+            // A plugin's screen: it opens over Settings, and Back returns here.
+            HubTool.UseWithClaude -> app.openPluginScreen(AgentService.SCREEN_USE_WITH_CLAUDE)
+            else -> app.navigateTo(screenOf(target.tool))
+        }
     }
 }
 
@@ -929,40 +941,74 @@ private fun ProjectPickerRoute(
     val updates by produceState(emptyList<dev.ide.ui.backend.UiStoreUpdate>(), projects) {
         value = runCatching { backend.store.availableUpdates() }.getOrDefault(emptyList())
     }
-    ProjectsHomeScreen(
-        updates = updates,
-        onOpenUpdate = { app.openStoreItem(it.item) },
-        seasonalCard = if (winterMode != null || countdownShown) {
-            { cardModifier ->
-                Column(cardModifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    winterMode?.let { mode ->
-                        WinterCard(
-                            mode = mode,
-                            onPrimary = if (mode == SeasonalCardMode.Offer) winter::dressUp else winter::putBack,
-                            onSecondary = if (mode == SeasonalCardMode.Applied) winter::putBack else winter::dismiss,
-                        )
-                    }
-                    if (countdownShown) {
-                        val ledger = app.holidayLedger
-                        CountdownHomeCard(
-                            status = CountdownCardStatus.of(ledger),
-                            stars = ledger.stars(),
-                            auroraOut = HolidayLedger.DOORS in ledger.opened(),
-                            onOpen = app::openCountdown,
-                        )
-                    }
+    val seasonal: (@Composable (Modifier) -> Unit)? = if (winterMode != null || countdownShown) {
+        { cardModifier ->
+            Column(cardModifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                winterMode?.let { mode ->
+                    WinterCard(
+                        mode = mode,
+                        onPrimary = if (mode == SeasonalCardMode.Offer) winter::dressUp else winter::putBack,
+                        onSecondary = if (mode == SeasonalCardMode.Applied) winter::putBack else winter::dismiss,
+                    )
+                }
+                if (countdownShown) {
+                    val ledger = app.holidayLedger
+                    CountdownHomeCard(
+                        status = CountdownCardStatus.of(ledger),
+                        stars = ledger.stars(),
+                        auroraOut = HolidayLedger.DOORS in ledger.opened(),
+                        onOpen = app::openCountdown,
+                    )
                 }
             }
-        } else halloweenMode?.let { mode ->
+        }
+    } else halloweenMode?.let { mode ->
+        { cardModifier ->
+            HalloweenCard(
+                mode = mode,
+                onPrimary = if (mode == SeasonalCardMode.Offer) halloween::dressUp else halloween::putBack,
+                onSecondary = if (mode == SeasonalCardMode.Applied) halloween::putBack else halloween::dismiss,
+                modifier = cardModifier,
+            )
+        }
+    }
+    // The one-time "Use with Claude" announcement. A seasonal dress-up offer is also a question waiting on an
+    // answer, so the two never show together: this one waits until that is answered. It does share the slot
+    // with the countdown card, which stays all season, and sits under it.
+    val claudeLink = dev.ide.ui.components.rememberClaudeLinkState(backend)
+    var claudeAnswered by remember(backend) { mutableStateOf(!backend.settings.preference(CLAUDE_ANNOUNCED_KEY).isNullOrEmpty()) }
+    val answerClaude = {
+        backend.settings.setPreference(CLAUDE_ANNOUNCED_KEY, "1")
+        claudeAnswered = true
+    }
+    // Someone who turned the link on found the feature without the card.
+    LaunchedEffect(claudeLink.enabled) { if (claudeLink.enabled && !claudeAnswered) answerClaude() }
+    val announcement: (@Composable (Modifier) -> Unit)? =
+        if (claudeLink.available && !claudeLink.enabled && !claudeAnswered && winterMode == null && halloweenMode == null) {
             { cardModifier ->
-                HalloweenCard(
-                    mode = mode,
-                    onPrimary = if (mode == SeasonalCardMode.Offer) halloween::dressUp else halloween::putBack,
-                    onSecondary = if (mode == SeasonalCardMode.Applied) halloween::putBack else halloween::dismiss,
+                dev.ide.ui.components.ClaudeAnnouncementCard(
+                    onSetUp = {
+                        answerClaude()
+                        app.openPluginScreen(AgentService.SCREEN_USE_WITH_CLAUDE)
+                    },
+                    onDismiss = answerClaude,
                     modifier = cardModifier,
                 )
             }
-        },
+        } else null
+    // The server's announcements (at most two), under the seasonal card and the Claude card.
+    val served = rememberHomeAnnouncements(app, fileActions)
+    val cardSlots = listOfNotNull(seasonal, announcement, served)
+    ProjectsHomeScreen(
+        updates = updates,
+        onOpenUpdate = { app.openStoreItem(it.item) },
+        seasonalCard = if (cardSlots.size > 1) {
+            { cardModifier ->
+                Column(cardModifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    cardSlots.forEach { it(Modifier) }
+                }
+            }
+        } else cardSlots.firstOrNull(),
         bell = { NotificationBell(backend, onClick = { notificationsVisible = true }) },
         accountRequested = accountRequested,
         onAccountRequestHandled = onAccountRequestHandled,
@@ -1239,3 +1285,6 @@ private fun LearnRoute(app: CodeAssistAppState, fileActions: FileActions) {
         } else null,
     )
 }
+
+/** Set once Home's "Use with Claude" announcement has been dismissed or followed, so it never shows again. */
+private const val CLAUDE_ANNOUNCED_KEY = "announce.useWithClaude"

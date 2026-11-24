@@ -3,6 +3,8 @@ package dev.ide.agent.ui
 import androidx.compose.runtime.collectAsState
 import dev.ide.ui.ext.HomeTabContribution
 import dev.ide.ui.ext.OverlayContribution
+import dev.ide.ui.ext.ScreenContribution
+import dev.ide.ui.backend.AgentService
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.ext.ToolWindowContribution
@@ -10,10 +12,10 @@ import dev.ide.ui.ext.UiContributionScope
 import dev.ide.ui.ext.UiPlugin
 
 /**
- * The AI agent's Compose UI, as one self-contained plugin: the chat panel (a RIGHT-anchored tool window) plus
- * the write-permission prompt (an app-wide overlay). Co-declared with its engine facet `AgentPlugin` as one
- * `BuiltInPlugin` in ide-core's `BuiltInPlugins`, so a single unified registration drives both halves under one
- * enable/disable decision; the shell just registers whatever `IdeBackend.uiPlugins()` reports. `AgentPlugin`
+ * The AI agent's Compose UI, as one self-contained plugin: the chat panel (a RIGHT-anchored tool window), the
+ * "Use with Claude" screen, and the write-permission prompt (an app-wide overlay). Co-declared with its engine
+ * facet `AgentPlugin` as one `BuiltInPlugin` in ide-core's `BuiltInPlugins`, so a single unified registration
+ * drives both halves under one enable/disable decision; the shell just registers whatever `IdeBackend.uiPlugins()` reports. `AgentPlugin`
  * owns the settings page + the `AgentService` wiring.
  */
 object AgentUiPlugin : UiPlugin {
@@ -39,6 +41,13 @@ object AgentUiPlugin : UiPlugin {
                 icon = CaIcons.sparkle,
                 content = { ctx -> AgentHomeTab(ctx) },
             ),
+        )
+        // The reverse direction: Claude working on the project through the IDE's MCP server or the relay. A
+        // screen so the shell can route to it from places this module cannot reach (the editor, Settings, Home).
+        scope.screen(
+            ScreenContribution(AgentService.SCREEN_USE_WITH_CLAUDE, "Use with Claude") { ctx ->
+                UseWithClaudeScreen(ctx.backend, onBack = ctx::back)
+            },
         )
         // The write-permission prompt (ASK_EACH): observes backend.agent.permissionRequest and shows only while
         // a mutating tool call awaits approval. App-wide overlay so it appears over any screen.

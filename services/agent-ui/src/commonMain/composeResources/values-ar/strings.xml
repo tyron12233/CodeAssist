@@ -326,4 +326,11 @@
     <string name="conn_relay_status_replaced">فُتح هذا الرابط في CodeAssist آخر. فعّله هنا مجددًا لاستعادته.</string>
     <string name="conn_relay_step">في Claude: الإعدادات، الموصلات، إضافة موصل مخصص. الصق هذا العنوان واختر بدون تسجيل دخول.</string>
     <string name="conn_relay_new_link">إنشاء رابط جديد</string>
+    <string name="claude_screen_title">الاستخدام مع Claude</string>
+    <string name="claude_screen_intro">يمكن لـ Claude قراءة المشروع المفتوح في CodeAssist وتعديله وبناؤه. اختر أين تستخدم Claude.</string>
+    <string name="claude_copy_link">نسخ الرابط</string>
+    <string name="claude_link_copied">تم نسخ الرابط</string>
+    <string name="claude_open_connectors">فتح موصلات Claude</string>
+    <string name="claude_row_body">Claude Code وClaude Desktop وclaude.ai وتطبيق Claude</string>
+    <string name="chat_empty_claude">تفضّل Claude؟ اربط claude.ai</string>
 </resources>

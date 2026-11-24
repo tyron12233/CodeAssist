@@ -99,7 +99,7 @@ val aiProxyUrl = (findProperty("AI_PROXY_URL") as String?) ?: System.getenv("AI_
     ?: "https://codeassist-ai-proxy.lucena-tyronscott.workers.dev"
 // The R2 mirror of the public store files; blank reads Supabase Storage (see supabase/functions/r2-mirror).
 val storeMediaUrl = (findProperty("STORE_MEDIA_URL") as String?) ?: System.getenv("STORE_MEDIA_URL")
-    ?: "https://pub-a5be92b9c0b14a86ae36e09cb86f0ffa.r2.dev"
+    ?: "https://codeassist-store-files.lucena-tyronscott.workers.dev"
 // The catalog hides items that need a newer IDE than this one, compared against the Android versionCode: the
 // desktop build ships from the same tree, so it is the same IDE.
 val storeAppBuild: Int = Regex("""versionCode\s*=\s*(\d+)""")

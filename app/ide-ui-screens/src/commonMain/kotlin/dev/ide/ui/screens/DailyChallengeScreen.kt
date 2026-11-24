@@ -401,7 +401,7 @@ private fun ChallengeSectionHeader(title: String, onAction: (() -> Unit)? = null
  * slower run in a better class is the result worth understanding.
  */
 @Composable
-fun BoardRow(row: UiChallengeRank, modifier: Modifier = Modifier) {
+fun BoardRow(row: UiChallengeRank, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
     val highlight = row.isYou
     val background =
         if (highlight) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
@@ -410,6 +410,7 @@ fun BoardRow(row: UiChallengeRank, modifier: Modifier = Modifier) {
 
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.md)).background(background)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -437,6 +438,9 @@ fun BoardRow(row: UiChallengeRank, modifier: Modifier = Modifier) {
             fontWeight = FontWeight.Bold,
             color = onBackground,
         )
+        if (onClick != null) {
+            Symbol(CaSymbols.chevronRight, contentDescription = null, size = 20.dp, tint = onBackground.copy(alpha = 0.6f))
+        }
     }
 }
 

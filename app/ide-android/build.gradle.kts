@@ -746,10 +746,11 @@ android {
 
         // Where the store's public files (project zips, screenshots, icons) are mirrored, in Cloudflare R2 (see
         // supabase/functions/r2-mirror). The app reads there first and falls back to Supabase Storage on any miss,
-        // so blank simply reads Supabase as before. The default is the bucket's r2.dev address until it has a
-        // custom domain (which adds Cloudflare's cache and rate limiting in front of it).
+        // so blank simply reads Supabase as before. The default is the Worker that serves the bucket
+        // (supabase/cloudflare/store-files), not the bucket's r2.dev address: Cloudflare rate-limits r2.dev, and a
+        // throttled read falls back to Supabase, whose egress is what the mirror exists to save.
         val storeMediaUrl = (findProperty("STORE_MEDIA_URL") as String?) ?: System.getenv("STORE_MEDIA_URL")
-            ?: "https://pub-a5be92b9c0b14a86ae36e09cb86f0ffa.r2.dev"
+            ?: "https://codeassist-store-files.lucena-tyronscott.workers.dev"
         buildConfigField("String", "STORE_MEDIA_URL", "\"$storeMediaUrl\"")
 
         // AdMob defaults = Google TEST ids. Debug inherits these as-is; `release` overrides to the real ids

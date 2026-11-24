@@ -7,6 +7,9 @@ import androidx.compose.ui.text.font.FontStyle
 import dev.ide.ui.editor.core.AIDL_KEYWORDS
 import dev.ide.ui.editor.core.JAVA_KEYWORDS
 import dev.ide.ui.editor.core.KOTLIN_KEYWORDS
+import dev.ide.ui.editor.core.LexState
+import dev.ide.ui.editor.core.TokenType
+import dev.ide.ui.editor.core.styleLine
 import dev.ide.ui.ext.EditorLanguageProfile
 import dev.ide.ui.ext.EditorLanguageRegistry
 import dev.ide.ui.ext.SyntaxFamily
@@ -132,6 +135,8 @@ fun highlight(text: String, language: CodeLanguage, syntax: SyntaxColors): Annot
     // Markdown has no whole-document scanner (the active editor uses the incremental styleMarkdownLine); the
     // legacy scanner just renders it uncolored rather than mis-tokenizing prose as Java.
     if (language == CodeLanguage.Markdown) return AnnotatedString(text)
+    // The indentation family has no whole-document scanner of its own: run its per-line one over each line.
+    if (language.profile.syntax == SyntaxFamily.INDENT_BLOCK) return highlightByLines(text, language, syntax)
     return buildAnnotatedString {
         append(text)
         addStyle(SpanStyle(color = syntax.default), 0, text.length)
@@ -281,3 +286,38 @@ private fun highlightXml(text: String, syntax: SyntaxColors): AnnotatedString = 
         }
     }
 }
+
+/** [highlight] through the incremental per-line scanner, carrying its state from line to line. */
+private fun highlightByLines(text: String, language: CodeLanguage, syntax: SyntaxColors): AnnotatedString =
+    buildAnnotatedString {
+        append(text)
+        addStyle(SpanStyle(color = syntax.default), 0, text.length)
+        var state = LexState.CODE
+        var start = 0
+        while (start <= text.length) {
+            var end = text.indexOf('\n', start)
+            if (end < 0) end = text.length
+            val styled = styleLine(text.substring(start, end), state, language)
+            for (span in styled.spans) {
+                val color = when (span.type) {
+                    TokenType.KEYWORD, TokenType.KEYWORD_CONTROL, TokenType.KEYWORD_MODIFIER -> syntax.keyword
+                    TokenType.STRING, TokenType.RAW_STRING, TokenType.CHAR -> syntax.string
+                    TokenType.COMMENT, TokenType.DOC_COMMENT -> syntax.comment
+                    TokenType.NUMBER -> syntax.number
+                    TokenType.ANNOTATION -> syntax.annotation
+                    TokenType.FUNC -> syntax.func
+                    TokenType.TYPE -> syntax.type
+                    TokenType.PROPERTY -> syntax.property
+                    else -> syntax.punctuation
+                }
+                val italic = span.type == TokenType.COMMENT || span.type == TokenType.DOC_COMMENT
+                addStyle(
+                    SpanStyle(color = color, fontStyle = if (italic) FontStyle.Italic else null),
+                    start + span.start, start + span.end.coerceAtMost(end - start),
+                )
+            }
+            state = styled.exitState
+            if (end >= text.length) break
+            start = end + 1
+        }
+    }

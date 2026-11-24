@@ -302,4 +302,11 @@
     <string name="conn_relay_status_replaced">This link was opened in another CodeAssist. Turn it on here again to take it back.</string>
     <string name="conn_relay_step">In Claude: Settings, Connectors, Add custom connector. Paste this address and choose no sign-in.</string>
     <string name="conn_relay_new_link">Make a new link</string>
+    <string name="claude_screen_title">Use with Claude</string>
+    <string name="claude_screen_intro">Claude can read, edit and build the project open in CodeAssist. Pick where you use Claude.</string>
+    <string name="claude_copy_link">Copy link</string>
+    <string name="claude_link_copied">Link copied</string>
+    <string name="claude_open_connectors">Open Claude connectors</string>
+    <string name="claude_row_body">Claude Code, Claude Desktop, claude.ai and the Claude app</string>
+    <string name="chat_empty_claude">Prefer Claude? Connect claude.ai</string>
 </resources>

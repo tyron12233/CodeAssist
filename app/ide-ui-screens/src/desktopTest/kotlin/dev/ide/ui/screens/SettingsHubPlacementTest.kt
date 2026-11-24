@@ -23,7 +23,7 @@ class SettingsHubPlacementTest {
                 HubGroup.Editor to listOf("appearance", "Colors", "editor", "CodeStyle", "keymap", "Symbols"),
                 HubGroup.Code to listOf("completion", "analysis", "LanguageServers"),
                 HubGroup.Build to listOf("buildRuntime", "SdkManager", "Keystore"),
-                HubGroup.Extensions to listOf("Plugins"),
+                HubGroup.Extensions to listOf("Plugins", "UseWithClaude"),
                 HubGroup.System to listOf("Storage", "privacy"),
             ),
             ids(hubPlacement(appPages)),
@@ -39,7 +39,7 @@ class SettingsHubPlacementTest {
     @Test
     fun pluginPagesLandInExtensionsAfterPluginsInBackendOrder() {
         val extensions = ids(hubPlacement(listOf("vcs", "appearance", "ai"))).toMap().getValue(HubGroup.Extensions)
-        assertEquals(listOf("Plugins", "vcs", "ai"), extensions)
+        assertEquals(listOf("Plugins", "vcs", "ai", "UseWithClaude"), extensions)
     }
 
     @Test

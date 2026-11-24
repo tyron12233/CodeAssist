@@ -308,4 +308,11 @@
     <string name="conn_relay_new_link">Crear un enlace nuevo</string>
     <string name="chat_ca_cert">Certificado de CA (opcional)</string>
     <string name="chat_ca_cert_hint">Pega un certificado de CA (PEM) solo si el endpoint usa una CA privada o regional en la que el sistema no confía (p. ej., GigaChat). Se confía en ella además de las CA del sistema; la cadena se sigue verificando.</string>
+    <string name="claude_screen_title">Usar con Claude</string>
+    <string name="claude_screen_intro">Claude puede leer, editar y compilar el proyecto abierto en CodeAssist. Elige dónde usas Claude.</string>
+    <string name="claude_copy_link">Copiar enlace</string>
+    <string name="claude_link_copied">Enlace copiado</string>
+    <string name="claude_open_connectors">Abrir conectores de Claude</string>
+    <string name="claude_row_body">Claude Code, Claude Desktop, claude.ai y la app de Claude</string>
+    <string name="chat_empty_claude">¿Prefieres Claude? Conecta claude.ai</string>
 </resources>

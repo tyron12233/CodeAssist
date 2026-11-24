@@ -296,4 +296,11 @@
     <string name="conn_relay_status_replaced">此链接已在另一个 CodeAssist 中打开。在此重新开启即可收回。</string>
     <string name="conn_relay_step">在 Claude 中：设置、连接器、添加自定义连接器。粘贴此地址并选择无需登录。</string>
     <string name="conn_relay_new_link">生成新链接</string>
+    <string name="claude_screen_title">与 Claude 一起使用</string>
+    <string name="claude_screen_intro">Claude 可以读取、编辑和构建 CodeAssist 中打开的项目。选择你使用 Claude 的地方。</string>
+    <string name="claude_copy_link">复制链接</string>
+    <string name="claude_link_copied">链接已复制</string>
+    <string name="claude_open_connectors">打开 Claude 连接器</string>
+    <string name="claude_row_body">Claude Code、Claude Desktop、claude.ai 和 Claude 应用</string>
+    <string name="chat_empty_claude">更喜欢 Claude？连接 claude.ai</string>
 </resources>

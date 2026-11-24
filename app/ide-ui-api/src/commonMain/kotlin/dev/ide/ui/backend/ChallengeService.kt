@@ -111,7 +111,58 @@ data class UiChallengeBoard(
     val total: Int = 0,
     val rows: List<UiChallengeRank> = emptyList(),
     val you: UiChallengeRank? = null,
+    /** Whether the rows' solutions can be opened: the day is over, or the viewer has solved it. */
+    val solutionsOpen: Boolean = false,
 )
+
+/** One ranked player's accepted code for a day, with what the judge measured about it. */
+data class UiChallengeSolutionEntry(
+    val rank: Int,
+    val handle: String,
+    val displayName: String,
+    val avatarUrl: String? = null,
+    val score: Int,
+    val language: UiChallengeLanguage,
+    val timeClass: String,
+    val spaceClass: String,
+    /** How many classes above the declared optimum; 0 is optimal. */
+    val timeSteps: Int = 0,
+    val spaceSteps: Int = 0,
+    val runtimeNs: Long,
+    val allocBytes: Long,
+    val solveMs: Long,
+    val attempts: Int,
+    val source: String,
+    val growthExponent: Double? = null,
+    val growth: List<UiGrowthPoint> = emptyList(),
+    val testsPassed: Int = 0,
+    val testsTotal: Int = 0,
+    val isYou: Boolean = false,
+)
+
+/** Why a solution could not be opened. */
+enum class UiSolutionLock { None, SignIn, SolveFirst, NotFound, Offline }
+
+/**
+ * A leaderboard solution and, when the viewer has one of their own for the same day, theirs beside it.
+ *
+ * [referenceGrowth] is the reference solution's curve at [solution]'s sizes, so the chart reads the same way
+ * the result sheet does.
+ */
+data class UiChallengeSolution(
+    val date: String = "",
+    val lock: UiSolutionLock = UiSolutionLock.Offline,
+    val title: String? = null,
+    val optimalTime: String? = null,
+    val optimalSpace: String? = null,
+    /** True when the judge counted operations instead of timing, so runtimes are estimates. */
+    val counted: Boolean = false,
+    val referenceGrowth: List<UiGrowthPoint> = emptyList(),
+    val solution: UiChallengeSolutionEntry? = null,
+    val you: UiChallengeSolutionEntry? = null,
+) {
+    val open: Boolean get() = lock == UiSolutionLock.None && solution != null
+}
 
 data class UiChallengeStreak(
     val current: Int = 0,
@@ -256,6 +307,12 @@ interface ChallengeService {
     suspend fun board(date: String? = null, limit: Int = 50): UiChallengeBoard = UiChallengeBoard()
 
     suspend fun profile(): UiChallengeProfile = UiChallengeProfile()
+
+    /**
+     * [handle]'s ranked solution for [date] (blank is today). The server decides whether the viewer may see
+     * it: the day is over, or they have solved it themselves.
+     */
+    suspend fun solution(date: String?, handle: String): UiChallengeSolution = UiChallengeSolution(date = date.orEmpty())
 
     /**
      * Compiles and runs [source] against the published samples on this device.

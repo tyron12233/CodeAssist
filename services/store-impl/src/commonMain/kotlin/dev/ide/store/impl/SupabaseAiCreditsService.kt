@@ -116,7 +116,7 @@ class SupabaseAiCreditsService(
     }
 
     internal companion object {
-        private fun SupabaseAccountService.aiCreditsSession(): AiCreditsSession {
+        internal fun SupabaseAccountService.aiCreditsSession(): AiCreditsSession {
             val owner = this
             return object : AiCreditsSession {
                 override fun authAvailable(): Boolean = owner.authAvailable()

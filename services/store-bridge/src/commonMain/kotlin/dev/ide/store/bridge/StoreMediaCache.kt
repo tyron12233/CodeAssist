@@ -6,6 +6,7 @@ import dev.ide.store.impl.fetchHttps
 import dev.ide.store.impl.platform.StoreFs
 import dev.ide.store.impl.platform.joinPath
 import dev.ide.store.impl.platform.nowMillis
+import dev.ide.store.impl.platform.parentPath
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -96,6 +97,43 @@ class StoreMediaCache(
         }
     }
 
+    /**
+     * An image on one of Home's announcements: a path in the public media bucket (fetched like a screenshot,
+     * the mirror first) or an `https` URL (fetched like an avatar, with the same limits).
+     *
+     * Unlike a published screenshot, an announcement's image path is chosen by an admin and can be uploaded
+     * over, so a kept copy is re-fetched once it is a week old rather than trusted forever.
+     */
+    suspend fun announcementImage(src: String): String? = withContext(storeIo) {
+        val external = src.startsWith("https://")
+        if (!external && (src.contains(':') || src.startsWith("/") || src.split('/').any { it == ".." })) {
+            return@withContext null
+        }
+        val dir = root() ?: return@withContext null
+        val name = if (external) "${src.hashCode().toUInt().toString(16)}.img" else src.replace('/', '_')
+        val cached = joinPath(dir, "store/announce/$name")
+        val fresh = { isCached(cached) && nowMillis() - StoreFs.modifiedMillis(cached) < ANNOUNCE_CACHE_MS }
+        if (fresh()) return@withContext cached
+        laneFor(src).withLock {
+            if (fresh()) return@withLock cached
+            // Fetched beside the kept copy and moved over it, so a refresh that fails leaves the old image.
+            val incoming = "$cached.part"
+            parentPath(cached)?.let { StoreFs.mkdirs(it) }
+            val ok = if (external) {
+                fetchHttps(src, incoming, MAX_AVATAR_BYTES * 2, AVATAR_TIMEOUT_MS)
+            } else {
+                source.downloadMedia(src, incoming) is StoreResult.Ok
+            }
+            if (ok) {
+                StoreFs.delete(cached)
+                if (!StoreFs.rename(incoming, cached)) StoreFs.delete(incoming)
+            } else {
+                StoreFs.delete(incoming)
+            }
+            cached.takeIf { isCached(it) }
+        }
+    }
+
     private fun cachePath(kind: String, storagePath: String): String? =
         root()?.let { joinPath(it, "store/$kind/${storagePath.replace('/', '_')}") }
 
@@ -114,5 +152,7 @@ class StoreMediaCache(
         const val AVATAR_CACHE_MS = 7L * 24 * 60 * 60 * 1000
 
         const val AVATAR_TIMEOUT_MS = 8_000
+
+        const val ANNOUNCE_CACHE_MS = 7L * 24 * 60 * 60 * 1000
     }
 }

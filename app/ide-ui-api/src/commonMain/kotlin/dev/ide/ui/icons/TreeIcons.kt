@@ -99,6 +99,9 @@ object TreeIcons {
         register("sourceset.android-res", TreeIcon.Glyph(CaIcons.image, IconTint.Fixed(androidGreen)))
         register("sourceset.assets", TreeIcon.Glyph(CaIcons.box, IconTint.Warning))
         register("sourceset.aidl", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Fixed(androidGreen)))
+        // Prebuilt native libraries (`src/<set>/jniLibs`): a folder in the theme's secondary tone, set apart from
+        // source roots like Android Studio's own jniLibs folder.
+        register("sourceset.jni-libs", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Secondary))
         register("sourceset.generated", TreeIcon.Folder(CaIcons.folder, CaIcons.folderOpen, IconTint.Tertiary))
         // Derived build output (the curated "build outputs" node + the raw `build/` dir) — IntelliJ marks
         // excluded/output dirs with a warm tint; the row text is additionally muted via `styleHint`.

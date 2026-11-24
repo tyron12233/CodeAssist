@@ -314,4 +314,11 @@
     <string name="conn_relay_new_link">Создать новую ссылку</string>
     <string name="chat_ca_cert">Сертификат ЦС (необязательно)</string>
     <string name="chat_ca_cert_hint">Вставьте сертификат ЦС (PEM), только если сервер использует частный или региональный ЦС, которому система не доверяет (например, GigaChat). Он добавляется к системным ЦС; цепочка по-прежнему проверяется.</string>
+    <string name="claude_screen_title">Работа с Claude</string>
+    <string name="claude_screen_intro">Claude может читать, изменять и собирать проект, открытый в CodeAssist. Выберите, где вы используете Claude.</string>
+    <string name="claude_copy_link">Копировать ссылку</string>
+    <string name="claude_link_copied">Ссылка скопирована</string>
+    <string name="claude_open_connectors">Открыть коннекторы Claude</string>
+    <string name="claude_row_body">Claude Code, Claude Desktop, claude.ai и приложение Claude</string>
+    <string name="chat_empty_claude">Предпочитаете Claude? Подключите claude.ai</string>
 </resources>

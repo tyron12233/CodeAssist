@@ -178,10 +178,10 @@ class IosBackend(
     override val store: StoreService = IosStoreService.supabase(
         url = StoreConfig.SUPABASE_URL,
         apiKey = StoreConfig.SUPABASE_KEY,
-        // `CFBundleVersion`, which is iOS's build number and the exact counterpart of Android's
-        // versionCode — the store filters items by it, so a number derived from the marketing version
-        // would claim a build that does not exist and change which items the feed offers.
-        appBuild = IosBundle.buildNumber(),
+        // The Android app's versionCode, not `CFBundleVersion`: the store filters listings and Explore
+        // shelves by it, and what decides whether this app can show one is the shared UI, which is the
+        // same commit's on both. iOS's own build number (1) hid every shelf added since the first build.
+        appBuild = StoreConfig.APP_BUILD,
         projectsRoot = { projectsRoot },
         mediaBaseUrl = StoreConfig.STORE_MEDIA_URL,
         aiProxyUrl = StoreConfig.AI_PROXY_URL,

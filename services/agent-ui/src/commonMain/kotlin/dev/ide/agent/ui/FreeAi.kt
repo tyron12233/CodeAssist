@@ -146,11 +146,12 @@ internal fun FreeAiStrip(backend: IdeBackend, onManage: () -> Unit) {
 }
 
 @Composable
-internal fun SignInButtons(backend: IdeBackend, centered: Boolean = false) {
+internal fun SignInButtons(backend: IdeBackend, centered: Boolean = false, pitch: Boolean = true) {
     val uriHandler = LocalUriHandler.current
     val scheme = MaterialTheme.colorScheme
     var waiting by remember { mutableStateOf(false) }
-    Text(
+    // The Free AI pitch; a caller asking for the account for some other reason says why itself.
+    if (pitch) Text(
         stringResource(Res.string.free_ai_pitch), color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
         textAlign = if (centered) TextAlign.Center else null,
     )

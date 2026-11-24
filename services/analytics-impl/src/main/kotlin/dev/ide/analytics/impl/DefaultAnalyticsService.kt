@@ -21,6 +21,11 @@ import java.nio.file.StandardCopyOption
  *    never allowed to grow without limit). A drop is silent — losing telemetry must never affect the IDE.
  *  - **Batched.** Events flush when the buffer reaches [batchSize] or every [flushIntervalMs]; a failed send
  *    is retried on the next tick (the batch is returned to the front of the buffer).
+ *  - **Spaced.** With [minSendGapMs] set, a partial batch is sent at most that often, counted from the last send
+ *    (or from construction, so a short session's events ride along with a later one). A full batch goes at
+ *    once. Every request is a metered line on the backend's plan, and the queue is on disk, so waiting loses
+ *    nothing. After a failed send the gap doubles per failure, up to [maxBackoffMs], so an outage is not met
+ *    with a retry every tick from every device.
  *
  * Network I/O happens off the monitor lock, so [track] from the UI/engine threads never blocks on the wire.
  */
@@ -34,10 +39,29 @@ class DefaultAnalyticsService(
     private val batchSize: Int = 20,
     private val maxBuffer: Int = 500,
     private val flushIntervalMs: Long = 30_000,
+    private val minSendGapMs: Long = 0,
+    private val maxBackoffMs: Long = 60 * 60_000,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : AnalyticsService {
 
     private val lock = Any()
     private val buffer = ArrayDeque<AnalyticsEvent>()
+
+    /** When the last send was attempted, successful or not. Starts at construction: see the class doc. */
+    @Volatile
+    private var lastAttemptAt: Long = clock()
+
+    @Volatile
+    private var consecutiveFailures = 0
+
+    /** How long after [lastAttemptAt] the next send may go: the configured gap, widened after failures. */
+    private fun currentGapMs(): Long {
+        // Without spacing configured, sending stays immediate and a failure is simply retried on the next tick.
+        if (consecutiveFailures == 0 || minSendGapMs <= 0L) return minSendGapMs
+        val base = maxOf(minSendGapMs, flushIntervalMs, 1L)
+        val shift = (consecutiveFailures - 1).coerceAtMost(20)
+        return minOf(maxBackoffMs, base shl shift)
+    }
 
     @Volatile
     private var enabledFlag: Boolean = initialConsent
@@ -86,6 +110,10 @@ class DefaultAnalyticsService(
         while (!closed) {
             val batch = synchronized(lock) {
                 if (buffer.isEmpty()) return
+                val due = clock() - lastAttemptAt >= currentGapMs()
+                // A full batch skips the gap, but never the backoff after a failure.
+                val full = buffer.size >= batchSize && consecutiveFailures == 0
+                if (!due && !full) return
                 val n = minOf(buffer.size, batchSize)
                 val take = ArrayList<AnalyticsEvent>(n)
                 repeat(n) { take.add(buffer.removeFirst()) }
@@ -93,6 +121,8 @@ class DefaultAnalyticsService(
                 take
             }
             val ok = runCatching { sink.send(EventBatch(installId, sessionId, device, batch)) }.getOrDefault(false)
+            lastAttemptAt = clock()
+            consecutiveFailures = if (ok) 0 else consecutiveFailures + 1
             if (!ok) {
                 // Couldn't ship: return the batch to the front (preserving order) and stop until the next tick.
                 synchronized(lock) {

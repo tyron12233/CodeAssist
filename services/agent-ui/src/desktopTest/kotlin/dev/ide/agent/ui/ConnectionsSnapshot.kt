@@ -103,19 +103,27 @@ class ConnectionsSnapshot {
     }
 
     @Test
-    fun renderConnectionsDark() = snapshot("connections-dark.png", dark = true) { AgentConnectionsSheet(backend(sample), onOpenFile = {}) {} }
-
-    @Test
-    fun renderConnectionsLight() = snapshot("connections-light.png", dark = false) { AgentConnectionsSheet(backend(sample), onOpenFile = {}) {} }
-
-    @Test
-    fun renderConnectionsEmptyLight() = snapshot("connections-empty-light.png", dark = false) {
-        AgentConnectionsSheet(backend(UiAgentConnections(mcpSupported = true, projectOpen = true, appSkillsDir = "/a/skills")), onOpenFile = {}) {}
+    fun renderConnectionsDark() = snapshot("connections-dark.png", dark = true) {
+        AgentConnectionsSheet(backend(sample), onOpenFile = {}, onUseWithClaude = {}) {}
     }
 
     @Test
-    fun renderClaudeLinkDark() = snapshot("connections-claude-dark.png", dark = true, height = 3400) {
-        AgentConnectionsSheet(backend(UiAgentConnections(mcpSupported = true, projectOpen = true, appSkillsDir = "/a/skills"), hosting), onOpenFile = {}) {}
+    fun renderConnectionsLight() = snapshot("connections-light.png", dark = false) {
+        AgentConnectionsSheet(backend(sample), onOpenFile = {}, onUseWithClaude = {}) {}
+    }
+
+    @Test
+    fun renderConnectionsEmptyLight() = snapshot("connections-empty-light.png", dark = false) {
+        AgentConnectionsSheet(
+            backend(UiAgentConnections(mcpSupported = true, projectOpen = true, appSkillsDir = "/a/skills")),
+            onOpenFile = {}, onUseWithClaude = {},
+        ) {}
+    }
+
+    /** The Claude sections live on their own screen now; the sheet keeps only a row leading there. */
+    @Test
+    fun renderTrimmedConnectionsDark() = snapshot("connections-trimmed-dark.png", dark = true, height = 3400) {
+        AgentConnectionsSheet(backend(sample, hosting), onOpenFile = {}, onUseWithClaude = {}) {}
     }
 
     @Test

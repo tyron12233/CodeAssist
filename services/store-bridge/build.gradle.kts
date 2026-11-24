@@ -35,6 +35,8 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             // The process-wide IO dispatcher `storeIo` delegates to on iOS.
             implementation(project(":model-api"))
+            // The JSON reader and writer the kept announcements file is read and written with.
+            implementation(project(":platform-json"))
         }
 
         commonTest.dependencies {

@@ -296,4 +296,11 @@
     <string name="conn_relay_new_link">Buat tautan baru</string>
     <string name="chat_ca_cert">Sertifikat CA (opsional)</string>
     <string name="chat_ca_cert_hint">Tempel sertifikat CA (PEM) hanya jika endpoint memakai CA privat atau regional yang tidak dipercaya sistem (mis. GigaChat). Sertifikat ini dipercaya sebagai tambahan CA sistem; rantainya tetap diverifikasi.</string>
+    <string name="claude_screen_title">Gunakan dengan Claude</string>
+    <string name="claude_screen_intro">Claude dapat membaca, mengedit, dan mem-build proyek yang terbuka di CodeAssist. Pilih tempat Anda menggunakan Claude.</string>
+    <string name="claude_copy_link">Salin tautan</string>
+    <string name="claude_link_copied">Tautan disalin</string>
+    <string name="claude_open_connectors">Buka konektor Claude</string>
+    <string name="claude_row_body">Claude Code, Claude Desktop, claude.ai, dan aplikasi Claude</string>
+    <string name="chat_empty_claude">Lebih suka Claude? Hubungkan claude.ai</string>
 </resources>

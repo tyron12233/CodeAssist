@@ -736,7 +736,9 @@ object AndroidIde {
                     PendingPushes.storeToken(appContext, token)
                     // Also into the project manager's preferences, where the engine can read it: managing a
                     // topic subscription needs the token, and the engine has no access to this service's
-                    // own SharedPreferences.
+                    // own SharedPreferences. A token the engine already had is bound by the engine itself when
+                    // it restores the session (StoreBackend.adoptAccount), so only a new one is bound below.
+                    val newToken = runCatching { manager.preference("store.push.token") != token }.getOrDefault(true)
                     runCatching { manager.setPreference("store.push.token", token) }
                     Thread({
                         if (PendingPushes.tokenNeedsRegistering(appContext, token)) {
@@ -751,11 +753,11 @@ object AndroidIde {
                                 PendingPushes.markTokenRegistered(appContext, token)
                             }
                         }
-                        // Outside that gate on purpose. Registration is anonymous, so the device row carries
-                        // no account and a review decision addressed to one reaches nothing until this binds
-                        // them. A token that was already registered still needs binding, and a session that
-                        // was restored before FCM answered had no token to bind. A signed-out launch no-ops.
-                        runCatching { accounts.bindPushDevice(token) }
+                        // Registration is anonymous, so the device row carries no account and a review decision
+                        // addressed to one reaches nothing until it is bound. A session restored before FCM
+                        // answered found no token to bind, so a NEW token is bound here; a known one was bound
+                        // (once per token and account) by the engine. A signed-out launch no-ops.
+                        if (newToken) runCatching { accounts.bindPushDevice(token) }
                     }, "push-register").apply { isDaemon = true }.start()
                 }
         }
@@ -877,6 +879,7 @@ object AndroidIde {
             // Hides catalog items that need a newer IDE than this install.
             appBuild = BuildConfig.VERSION_CODE,
             mediaBaseUrl = BuildConfig.STORE_MEDIA_URL,
+            platform = "android",
         )
     }
 
@@ -1035,10 +1038,13 @@ object AndroidIde {
             initialConsent = manager.preference("analytics.consent") == "granted",
             queueFile = File(home, "analytics-queue.txt").toPath(),
             // Fewer, larger requests: every request is a metered log line on the Supabase plan, and the queue is
-            // written to disk on each event, so waiting longer to send loses nothing to a killed process. Leaving
-            // the screen flushes regardless (AndroidMemory).
-            batchSize = 50,
+            // written to disk on each event, so waiting longer to send loses nothing to a killed process. A partial
+            // batch goes at most every 10 minutes, including the flush on leaving the screen (AndroidMemory), so a
+            // short session's events ride along with a later send. At 50 events and a send on every screen exit
+            // this was ~21 requests per session.
+            batchSize = 100,
             flushIntervalMs = 120_000,
+            minSendGapMs = 10 * 60_000,
         )
         // Bridge the logging facade to analytics: caught ERROR logs become scrubbed `error_logged` events
         // (no messages/paths). No-ops while the service is disabled, and starts working on consent.

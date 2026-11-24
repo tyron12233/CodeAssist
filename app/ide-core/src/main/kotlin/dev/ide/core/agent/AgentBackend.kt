@@ -1635,6 +1635,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             UiAgentCommand("model", "Choose the model"),
             UiAgentCommand("mcp", "Manage MCP servers and skills"),
             UiAgentCommand("skills", "Manage the skills the agent can load"),
+            UiAgentCommand("claude", "Let Claude work on this project"),
         )
 
         private const val INIT_PROMPT = "Explore this project and write an AGENTS.md file at the project root " +

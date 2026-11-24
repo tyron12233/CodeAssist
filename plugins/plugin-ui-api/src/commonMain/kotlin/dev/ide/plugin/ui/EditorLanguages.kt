@@ -23,6 +23,22 @@ enum class SyntaxStyle {
     /** Whole-line `#` comments, no strings, no nesting. */
     HASH_COMMENT,
 
+    /**
+     * Blocks by indentation rather than braces: Python, GDScript, Starlark, Nim, CoffeeScript.
+     *
+     * Comments start at [EditorLanguage.lineComment] (`#` when unset); `'…'` and `"…"` are both strings;
+     * [EditorLanguage.multilineStrings] (`"""` and `'''` when unset) span lines, and one standing as a
+     * statement of its own colors as a doc comment. [EditorLanguage.stringPrefixes] glue to their quote, and
+     * the expressions inside `{…}` of an [EditorLanguage.interpolatingPrefixes] string color as code. A `@`
+     * that starts a line is a decorator. With no [EditorLanguage.keywords], Python's are used.
+     *
+     * Enter opens a deeper line after a [EditorLanguage.blockOpeners] (`:`), a shallower one after a
+     * [EditorLanguage.blockExitWords] statement, and a hanging one inside an open bracket. Typing the opener
+     * of a [EditorLanguage.dedentWords] line (`else:`) moves it back to its partner's level. Blocks fold by
+     * indentation when no `LanguageBackend` supplies folds.
+     */
+    INDENT_BLOCK,
+
     /** Headings, fences, lists, inline code. */
     MARKDOWN,
 
@@ -70,13 +86,16 @@ class EditorLanguage(
     val syntax: SyntaxStyle = SyntaxStyle.C_FAMILY,
 
     /**
-     * Words colored as keywords. Only consulted by [SyntaxStyle.C_FAMILY]. Capitalized words already color as
-     * types and a word followed by `(` already colors as a call, so neither type names nor function names
-     * belong here.
+     * Words colored as keywords. Consulted by [SyntaxStyle.C_FAMILY] and [SyntaxStyle.INDENT_BLOCK].
+     * Capitalized words already color as types and a word followed by `(` already colors as a call, so
+     * neither type names nor function names belong here.
      */
     val keywords: Set<String> = emptySet(),
 
-    /** Line-comment marker, or null when the language has none. Drives Toggle Comment. */
+    /**
+     * Line-comment marker, or null when the language has none. Drives Toggle Comment, and is where the
+     * [SyntaxStyle.C_FAMILY] and [SyntaxStyle.INDENT_BLOCK] scanners start a comment (`//` and `#` when unset).
+     */
     val lineComment: String? = null,
 
     /** Block-comment delimiters, or null when the language has none. Both must be set to be used. */
@@ -116,7 +135,67 @@ class EditorLanguage(
      * merely adds a language need not think about it.
      */
     val order: Int = 1000,
-)
+
+    /**
+     * String delimiters that open and close the same way and may span lines, e.g. `"""` and `'''`.
+     * Consulted by [SyntaxStyle.C_FAMILY] (a Dart or Swift multi-line string) and [SyntaxStyle.INDENT_BLOCK]
+     * (where empty means `"""` and `'''`). They are tried longest first.
+     */
+    val multilineStrings: List<String> = emptyList(),
+
+    /**
+     * Letters that may sit directly in front of a quote and belong to the string: `f`, `r`, `b`, `rb` in
+     * Python, `r` in Dart. Matched case-insensitively. Without this a prefix colors as a stray word.
+     */
+    val stringPrefixes: Set<String> = emptySet(),
+
+    /**
+     * The [stringPrefixes] whose strings interpolate `{expression}`: `f`, `rf`, `fr` in Python. The braces'
+     * contents color as code and `{{`/`}}` stay literal. Only consulted by [SyntaxStyle.INDENT_BLOCK].
+     */
+    val interpolatingPrefixes: Set<String> = emptySet(),
+
+    /**
+     * What ends a line that opens a block: `:` in Python. Enter after one indents, and those lines are where
+     * indentation folds start. Only consulted by [SyntaxStyle.INDENT_BLOCK], where empty means `:`.
+     */
+    val blockOpeners: List<String> = emptyList(),
+
+    /**
+     * Words that end a block when they start a statement: `return`, `pass`, `raise`, `break`, `continue`.
+     * Enter after such a line drops one level. Only consulted by [SyntaxStyle.INDENT_BLOCK], where empty
+     * means Python's.
+     */
+    val blockExitWords: Set<String> = emptySet(),
+
+    /**
+     * Words that continue an earlier block at its level: `else`, `elif`, `except`, `finally`. Typing the
+     * opener that ends such a line moves the line back to its partner's indentation. Only consulted by
+     * [SyntaxStyle.INDENT_BLOCK], where empty means Python's.
+     */
+    val dedentWords: Set<String> = emptySet(),
+) {
+    /**
+     * The constructor before the indentation and string fields were added, kept so a plugin compiled against
+     * it still links. Hidden from source: new code resolves to the primary constructor.
+     */
+    @Deprecated("Binary compatibility only", level = DeprecationLevel.HIDDEN)
+    constructor(
+        id: String,
+        suffixes: List<String>,
+        syntax: SyntaxStyle = SyntaxStyle.C_FAMILY,
+        keywords: Set<String> = emptySet(),
+        lineComment: String? = null,
+        blockCommentOpen: String? = null,
+        blockCommentClose: String? = null,
+        directivePrefix: String? = null,
+        tokenColorKeys: Map<String, String> = emptyMap(),
+        order: Int = 1000,
+    ) : this(
+        id, suffixes, syntax, keywords, lineComment, blockCommentOpen, blockCommentClose, directivePrefix,
+        tokenColorKeys, order, emptyList(), emptySet(), emptySet(), emptyList(), emptySet(), emptySet(),
+    )
+}
 
 /**
  * An icon for the file types a plugin adds, shown in the project tree, on editor tabs and in breadcrumbs.

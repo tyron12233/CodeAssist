@@ -260,7 +260,7 @@ private fun ComplexityPanel(result: UiChallengeVerdict) {
 }
 
 @Composable
-private fun MetricTile(label: String, value: String, reference: String?, index: Int, modifier: Modifier = Modifier) {
+internal fun MetricTile(label: String, value: String, reference: String?, index: Int, modifier: Modifier = Modifier) {
     val pair = tonalPair(index)
     Column(
         modifier.clip(RoundedCornerShape(Ca.radius.md)).background(pair.container).padding(14.dp),
@@ -286,7 +286,7 @@ private fun MetricTile(label: String, value: String, reference: String?, index: 
 }
 
 @Composable
-private fun PlainTile(label: String, value: String, modifier: Modifier = Modifier) {
+internal fun PlainTile(label: String, value: String, modifier: Modifier = Modifier) {
     Column(
         modifier.clip(RoundedCornerShape(Ca.radius.md))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(14.dp),
@@ -412,7 +412,7 @@ private fun GrowthCard(result: UiChallengeVerdict) {
 }
 
 @Composable
-private fun Legend(label: String, color: Color) {
+internal fun Legend(label: String, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(Modifier.size(width = 14.dp, height = 3.dp).background(color))
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
@@ -446,14 +446,18 @@ fun GrowthChart(
     modifier: Modifier = Modifier,
     reference: List<UiGrowthPoint> = emptyList(),
     referenceColor: Color = grid,
+    /** A second measured curve on the same axes (the viewer's own, when comparing two solutions). */
+    comparison: List<UiGrowthPoint> = emptyList(),
+    comparisonColor: Color = referenceColor,
 ) {
     if (points.size < 2) return
     Canvas(modifier) {
         val mine = points.filter { it.n > 0 && it.ns > 0 }
         val theirs = reference.filter { it.n > 0 && it.ns > 0 }
+        val other = comparison.filter { it.n > 0 && it.ns > 0 }
         if (mine.size < 2) return@Canvas
 
-        val all = mine + theirs
+        val all = mine + theirs + (if (other.size >= 2) other else emptyList())
         val minX = ln(all.minOf { it.n }.toDouble())
         val maxX = ln(all.maxOf { it.n }.toDouble())
         val minY = ln(all.minOf { it.ns }.toDouble())
@@ -487,6 +491,15 @@ fun GrowthChart(
             )
         }
 
+        if (other.size >= 2) {
+            val path = Path().apply {
+                moveTo(at(other[0]).x, at(other[0]).y)
+                for (i in 1..other.lastIndex) lineTo(at(other[i]).x, at(other[i]).y)
+            }
+            drawPath(path, color = comparisonColor, style = Stroke(width = 3f))
+            for (p in other) drawCircle(comparisonColor, radius = 3.5f, center = at(p))
+        }
+
         val path = Path().apply {
             moveTo(at(mine[0]).x, at(mine[0]).y)
             for (i in 1..mine.lastIndex) lineTo(at(mine[i]).x, at(mine[i]).y)
@@ -496,7 +509,7 @@ fun GrowthChart(
     }
 }
 
-private fun oneDecimalOf(v: Double): String {
+internal fun oneDecimalOf(v: Double): String {
     val scaled = kotlin.math.round(v * 100).toLong()
     val whole = scaled / 100
     val frac = kotlin.math.abs(scaled % 100)

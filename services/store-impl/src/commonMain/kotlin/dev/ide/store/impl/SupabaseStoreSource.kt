@@ -38,6 +38,8 @@ class SupabaseStoreSource(
      * mirror that lags or goes down costs egress, never an install.
      */
     mediaBaseUrl: String = "",
+    /** `android`, `ios` or `desktop`: which app this is, for announcements targeted at one of them. */
+    override val platform: String? = null,
 ) : StoreCatalogSource {
 
     private val http = StoreHttp(connectTimeoutMs, readTimeoutMs)
@@ -103,6 +105,22 @@ class SupabaseStoreSource(
             append('}')
         }
         return rpc("store_explore", body)
+    }
+
+    /**
+     * Home's announcements, straight from `home_announcements(...)`, unparsed so the caller can cache the
+     * exact bytes. Anonymous like the feed: the server filters by the parameters, not by who asks.
+     */
+    override fun homeAnnouncementsDocument(locale: String, signedIn: Boolean): StoreResult<String> {
+        val body = buildString {
+            append('{')
+            append(""""p_app_build":""").append(appBuild?.toString() ?: "null").append(',')
+            append(""""p_platform":""").append(platform?.let { jsonStr(it) } ?: "null").append(',')
+            append(""""p_locale":""").append(jsonStr(locale)).append(',')
+            append(""""p_signed_in":""").append(signedIn)
+            append('}')
+        }
+        return rpc("home_announcements", body)
     }
 
     /**

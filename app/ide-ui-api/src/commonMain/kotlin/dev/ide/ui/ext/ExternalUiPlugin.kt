@@ -182,6 +182,12 @@ private class BridgedRegistration(
                 // custom color instead of leaving a mapping the host will never consult and never mention.
                 tokenColorKeys = language.tokenColorKeys.filterKeys { it in TOKEN_TYPE_NAMES },
                 order = language.order,
+                multilineStrings = language.multilineStrings,
+                stringPrefixes = language.stringPrefixes,
+                interpolatingPrefixes = language.interpolatingPrefixes,
+                blockOpeners = language.blockOpeners,
+                blockExitWords = language.blockExitWords,
+                dedentWords = language.dedentWords,
             ),
         )
         return UiHandle { registration.dispose() }
@@ -309,6 +315,7 @@ private fun ExternalSyntax.internal(): SyntaxFamily = when (this) {
     ExternalSyntax.C_FAMILY -> SyntaxFamily.C_FAMILY
     ExternalSyntax.XML -> SyntaxFamily.XML
     ExternalSyntax.HASH_COMMENT -> SyntaxFamily.HASH_COMMENT
+    ExternalSyntax.INDENT_BLOCK -> SyntaxFamily.INDENT_BLOCK
     ExternalSyntax.MARKDOWN -> SyntaxFamily.MARKDOWN
     ExternalSyntax.PLAIN -> SyntaxFamily.PLAIN
 }
