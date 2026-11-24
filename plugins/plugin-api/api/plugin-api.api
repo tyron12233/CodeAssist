@@ -55,12 +55,13 @@ dev/ide/plugin/PluginKt
 dev/ide/plugin/PluginManifest
 	kind class
 	super java/lang/Object
-	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Z)V
-	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ZLjava/util/List;)V
+	ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ZLjava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method component1()Ljava/lang/String;
 	method component10()Ljava/util/List;
 	method component11()Ljava/lang/String;
 	method component12()Z
+	method component13()Ljava/util/List;
 	method component2()Ljava/lang/String;
 	method component3()Ljava/lang/String;
 	method component4()I
@@ -69,7 +70,7 @@ dev/ide/plugin/PluginManifest
 	method component7()Z
 	method component8()Ljava/util/List;
 	method component9()Ljava/util/List;
-	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Z)Ldev/ide/plugin/PluginManifest;
+	method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ZLjava/util/List;)Ldev/ide/plugin/PluginManifest;
 	method equals(Ljava/lang/Object;)Z
 	method getApiVersion()I
 	method getCapabilities()Ljava/util/List;
@@ -80,12 +81,13 @@ dev/ide/plugin/PluginManifest
 	method getId()Ljava/lang/String;
 	method getMinHostVersion()Ljava/lang/String;
 	method getName()Ljava/lang/String;
+	method getOptionalDependsOn()Ljava/util/List;
 	method getPluginId-0MWS1W8()Ljava/lang/String;
 	method getTrusted()Z
 	method getUiEntryPoints()Ljava/util/List;
 	method getVersion()Ljava/lang/String;
 	method hashCode()I
-	method static copy$default(Ldev/ide/plugin/PluginManifest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/plugin/PluginManifest;
+	method static copy$default(Ldev/ide/plugin/PluginManifest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ZLjava/util/List;ILjava/lang/Object;)Ldev/ide/plugin/PluginManifest;
 	method toString()Ljava/lang/String;
 dev/ide/plugin/PluginManifestKt
 	kind class

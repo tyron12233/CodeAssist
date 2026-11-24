@@ -74,13 +74,21 @@ dev/ide/plugin/ui/EditorLanguage
 	super java/lang/Object
 	ctor (Ljava/lang/String;Ljava/util/List;Ldev/ide/plugin/ui/SyntaxStyle;Ljava/util/Set;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;I)V
 	ctor (Ljava/lang/String;Ljava/util/List;Ldev/ide/plugin/ui/SyntaxStyle;Ljava/util/Set;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	ctor (Ljava/lang/String;Ljava/util/List;Ldev/ide/plugin/ui/SyntaxStyle;Ljava/util/Set;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;ILjava/util/List;Ljava/util/Set;Ljava/util/Set;Ljava/util/List;Ljava/util/Set;Ljava/util/Set;)V
+	ctor (Ljava/lang/String;Ljava/util/List;Ldev/ide/plugin/ui/SyntaxStyle;Ljava/util/Set;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;ILjava/util/List;Ljava/util/Set;Ljava/util/Set;Ljava/util/List;Ljava/util/Set;Ljava/util/Set;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	method getBlockCommentClose()Ljava/lang/String;
 	method getBlockCommentOpen()Ljava/lang/String;
+	method getBlockExitWords()Ljava/util/Set;
+	method getBlockOpeners()Ljava/util/List;
+	method getDedentWords()Ljava/util/Set;
 	method getDirectivePrefix()Ljava/lang/String;
 	method getId()Ljava/lang/String;
+	method getInterpolatingPrefixes()Ljava/util/Set;
 	method getKeywords()Ljava/util/Set;
 	method getLineComment()Ljava/lang/String;
+	method getMultilineStrings()Ljava/util/List;
 	method getOrder()I
+	method getStringPrefixes()Ljava/util/Set;
 	method getSuffixes()Ljava/util/List;
 	method getSyntax()Ldev/ide/plugin/ui/SyntaxStyle;
 	method getTokenColorKeys()Ljava/util/Map;
@@ -270,6 +278,7 @@ dev/ide/plugin/ui/SyntaxStyle
 	super java/lang/Enum
 	field static C_FAMILY Ldev/ide/plugin/ui/SyntaxStyle;
 	field static HASH_COMMENT Ldev/ide/plugin/ui/SyntaxStyle;
+	field static INDENT_BLOCK Ldev/ide/plugin/ui/SyntaxStyle;
 	field static MARKDOWN Ldev/ide/plugin/ui/SyntaxStyle;
 	field static PLAIN Ldev/ide/plugin/ui/SyntaxStyle;
 	field static XML Ldev/ide/plugin/ui/SyntaxStyle;
