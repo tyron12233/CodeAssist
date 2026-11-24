@@ -578,6 +578,16 @@ data class UiStoreReview(
  * [installedVersion] is what this device installed; [item] is the listing as the store has it now, carrying
  * [availableVersion]. [rootPath] is the folder the install lives in.
  */
+/** One published version of a store project and its release notes, newest first in a list. */
+data class UiVersionNote(
+    val version: String,
+    val versionCode: Int,
+    /** Null when the publisher wrote none for this version. */
+    val changelog: String? = null,
+    /** ISO 8601, when the version went live; the UI renders it relative ("3 days ago"). */
+    val publishedAt: String? = null,
+)
+
 data class UiStoreUpdate(
     val item: UiStoreItem,
     val installedVersion: String?,

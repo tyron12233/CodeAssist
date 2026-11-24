@@ -2054,6 +2054,11 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="store_item_tab_readme">README</string>
     <string name="store_item_tab_reviews">Valoraciones y reseñas</string>
     <string name="store_item_tab_changelog">Registro de cambios</string>
+    <string name="store_whats_new_in">Novedades de la %1$s</string>
+    <string name="store_whats_new_since">Novedades desde la %1$s</string>
+    <string name="store_whats_new_more">Ver más</string>
+    <string name="store_whats_new_less">Ver menos</string>
+    <string name="store_whats_new_no_notes">Esta versión no tiene notas.</string>
     <string name="store_downloading_pct">%1$d%%</string>
     <string name="store_unpacking">Desempaquetando…</string>
     <string name="store_retry">Reintentar</string>

@@ -1946,6 +1946,11 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="store_item_tab_readme">README</string>
     <string name="store_item_tab_reviews">Notas e avaliações</string>
     <string name="store_item_tab_changelog">Novidades</string>
+    <string name="store_whats_new_in">Novidades da %1$s</string>
+    <string name="store_whats_new_since">Novidades desde a %1$s</string>
+    <string name="store_whats_new_more">Mostrar mais</string>
+    <string name="store_whats_new_less">Mostrar menos</string>
+    <string name="store_whats_new_no_notes">Esta versão não tem notas.</string>
     <string name="store_downloading_pct">%1$d%%</string>
     <string name="store_unpacking">Descompactando…</string>
     <string name="store_retry">Tentar novamente</string>

@@ -261,7 +261,16 @@ fun StoreItemScreen(
         value = runCatching { backend.settings.pluginDownloads().plugins.firstOrNull { it.id == id }?.name }.getOrNull() ?: id
     }
 
-    val tabs = remember(item) { availableTabs(item) }
+    // Every published version's notes, for "What's new since" and the Changelog tab. A bundled item has no
+    // versions; a failed fetch leaves the live version's own notes to stand in.
+    val history by produceState(emptyList<dev.ide.ui.backend.UiVersionNote>(), item.id) {
+        if (item.version != null && item.templateId == null) {
+            value = runCatching { backend.store.versionHistory(item.id) }.getOrDefault(emptyList())
+        }
+    }
+    val whatsNew = remember(item, history, update) { whatsNew(item, history, update?.installedVersion) }
+    val now = remember { dev.ide.ui.platform.nowMillis() }
+    val tabs = remember(item, history) { availableTabs(item, history) }
 
     // Neutral, like every other surface: the hero used to hash the item id to pick one of three tints.
     val pair = tonalPair(item.id.hashCode())
@@ -350,9 +359,11 @@ fun StoreItemScreen(
                     }
 
                     when (tab) {
-                        StoreTab.Overview -> overview(backend, item, shots) { lightbox = it }
+                        StoreTab.Overview -> overview(backend, item, shots, whatsNew, now) { lightbox = it }
                         StoreTab.Readme -> item("readme") { ProseCard(item.readme.orEmpty()) }
-                        StoreTab.Changelog -> item("changelog") { ChangelogCard(item) }
+                        StoreTab.Changelog -> item("changelog") {
+                            if (history.any { !it.changelog.isNullOrBlank() }) VersionHistoryList(history, now) else ChangelogCard(item)
+                        }
                         StoreTab.Reviews -> item("reviews") {
                             ReviewsPanel(
                                 backend = backend,
@@ -437,13 +448,13 @@ fun StoreItemScreen(
 /** Which tabs the detail screen offers, given what this item actually carries. */
 private enum class StoreTab { Overview, Readme, Reviews, Changelog }
 
-private fun availableTabs(item: UiStoreItem): List<StoreTab> = buildList {
+private fun availableTabs(item: UiStoreItem, history: List<dev.ide.ui.backend.UiVersionNote> = emptyList()): List<StoreTab> = buildList {
     add(StoreTab.Overview)
     if (!item.readme.isNullOrBlank()) add(StoreTab.Readme)
     // Always offered, not only when reviews exist: an item with none needs somewhere for the first one to
     // be written, and the panel draws its own empty state.
     add(StoreTab.Reviews)
-    if (!item.changelog.isNullOrBlank()) add(StoreTab.Changelog)
+    if (!item.changelog.isNullOrBlank() || history.any { !it.changelog.isNullOrBlank() }) add(StoreTab.Changelog)
 }
 
 @Composable
@@ -982,8 +993,13 @@ private fun LazyListScope.overview(
     backend: IdeBackend,
     item: UiStoreItem,
     shots: List<String>,
+    whatsNew: WhatsNew?,
+    now: Long,
     onOpenShot: (Int) -> Unit,
 ) {
+    // Above the screenshots: for a project someone already has, what changed is the news; for one they do
+    // not, it says the project is looked after.
+    whatsNew?.let { item("whats-new") { WhatsNewCard(it, now) } }
     // Only offered when the item actually has artwork; see ScreenshotCarousel.
     if (item.screenshots.isNotEmpty() || item.previewKey != null) {
         item("shots") { ScreenshotCarousel(backend, item, onOpenShot, shots) }
@@ -1639,6 +1655,10 @@ private fun ReviewsPanel(
         )
     }
 }
+
+/** [relativeAge], for the release notes in WhatsNew.kt. */
+@Composable
+internal fun releaseAge(publishedAtMs: Long, now: Long): String? = relativeAge(publishedAtMs, now)
 
 /** "3 d ago" style age, or null when the backend sent no usable timestamp. */
 @Composable

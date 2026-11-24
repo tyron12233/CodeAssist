@@ -1351,6 +1351,13 @@ interface StoreService {
      */
     suspend fun updateFor(itemId: String): UiStoreUpdate? = null
 
+    /**
+     * [itemId]'s published versions with their release notes, newest first. Empty when the store cannot be
+     * reached or the item is a bundled one with no versions, which the page answers with the live version's
+     * notes alone.
+     */
+    suspend fun versionHistory(itemId: String): List<UiVersionNote> = emptyList()
+
     /** Every installed store project the store has a newer version of: Home's Updates segment. */
     suspend fun availableUpdates(): List<UiStoreUpdate> = emptyList()
 

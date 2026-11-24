@@ -918,6 +918,11 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="store_item_tab_readme">README</string>
     <string name="store_item_tab_reviews">Ratings and reviews</string>
     <string name="store_item_tab_changelog">Changelog</string>
+    <string name="store_whats_new_in">What's new in %1$s</string>
+    <string name="store_whats_new_since">What's new since %1$s</string>
+    <string name="store_whats_new_more">Show more</string>
+    <string name="store_whats_new_less">Show less</string>
+    <string name="store_whats_new_no_notes">No release notes for this version.</string>
     <string name="store_item_type">Type</string>
     <string name="store_item_language">Language</string>
     <string name="store_item_publisher">Publisher</string>

@@ -91,6 +91,17 @@ class SupabaseStoreSource(
         }
     }
 
+    override fun versionHistory(slug: String): StoreResult<List<dev.ide.store.RemoteVersionNote>> =
+        when (val r = rpc("store_version_history", """{"p_slug":${jsonStr(slug)}}""")) {
+            is StoreResult.Ok -> {
+                val parsed = JsonReader.parseOrNull(r.value)
+                    ?: return StoreResult.Failed("Version history was not valid JSON")
+                StoreResult.Ok(JsonReader.arr(parsed).mapNotNull(::parseVersionNote))
+            }
+            is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
+        }
+
     /**
      * The Explore feed document, straight from `store_explore()`.
      *
@@ -387,6 +398,17 @@ class SupabaseStoreSource(
         private const val MAX_MEDIA_BYTES = 8L * 1024 * 1024
 
         /** Minimal JSON string escaping — enough for the scalars these RPC bodies carry. */
+        /** One version's notes; a row without a version is dropped. */
+        internal fun parseVersionNote(v: Any?): dev.ide.store.RemoteVersionNote? {
+            val version = JsonReader.str(v, "version") ?: return null
+            return dev.ide.store.RemoteVersionNote(
+                version = version,
+                versionCode = JsonReader.int(v, "versionCode"),
+                changelog = JsonReader.str(v, "changelog")?.takeIf { it.isNotBlank() },
+                publishedAt = JsonReader.str(v, "publishedAt"),
+            )
+        }
+
         internal fun jsonStr(s: String): String {
             val sb = StringBuilder(s.length + 2)
             sb.append('"')

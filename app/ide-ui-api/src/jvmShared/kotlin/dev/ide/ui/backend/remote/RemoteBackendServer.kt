@@ -614,63 +614,64 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
             60 -> { val r = t.translationAvailable(); o.bool(r) }
             61 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.update(a0, a1); w383(o, r) }
             62 -> { val a0 = i.str(); val r = t.updateFor(a0); o.opt(r) { n283 -> w357(o, n283) } }
-            63 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.bool(); val r = t.voteReview(a0, a1, a2); o.opt(r) { n284 -> o.string(n284) } }
-            64 -> { val a0 = i.str(); val a1 = i.str(); val r = t.withdrawSubmission(a0, a1); o.bool(r) }
+            63 -> { val a0 = i.str(); val r = t.versionHistory(a0); o.list(r) { e284 -> w405(o, e284) } }
+            64 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.bool(); val r = t.voteReview(a0, a1, a2); o.opt(r) { n285 -> o.string(n285) } }
+            65 -> { val a0 = i.str(); val a1 = i.str(); val r = t.withdrawSubmission(a0, a1); o.bool(r) }
             else -> error("StoreService has no member $member that is called")
         }
     }
 
     private suspend fun s22(t: dev.ide.ui.backend.VcsService, member: Int, i: RemoteIn, o: RemoteOut) {
         when (member) {
-            0 -> { val r = t.abortMerge(); w405(o, r) }
-            3 -> { val r = t.addDefaultIgnores(); w405(o, r) }
-            4 -> { val a0 = i.str(); val a1 = i.str(); val r = t.addRemote(a0, a1); w405(o, r) }
-            5 -> { val a0 = i.str(); val r = t.baseText(a0); o.opt(r) { n285 -> o.string(n285) } }
-            6 -> { val a0 = i.str(); val r = t.blame(a0); o.list(r) { e286 -> o.opt(e286) { n287 -> w409(o, n287) } } }
-            7 -> { val a0 = i.bool(); val r = t.branches(a0); o.list(r) { e288 -> w410(o, e288) } }
+            0 -> { val r = t.abortMerge(); w406(o, r) }
+            3 -> { val r = t.addDefaultIgnores(); w406(o, r) }
+            4 -> { val a0 = i.str(); val a1 = i.str(); val r = t.addRemote(a0, a1); w406(o, r) }
+            5 -> { val a0 = i.str(); val r = t.baseText(a0); o.opt(r) { n286 -> o.string(n286) } }
+            6 -> { val a0 = i.str(); val r = t.blame(a0); o.list(r) { e287 -> o.opt(e287) { n288 -> w410(o, n288) } } }
+            7 -> { val a0 = i.bool(); val r = t.branches(a0); o.list(r) { e289 -> w411(o, e289) } }
             8 -> { t.cancelSignIn() }
-            9 -> { val a0 = i.str(); val r = t.checkoutBranch(a0); w405(o, r) }
-            10 -> { val a0 = i.str(); val r = t.clearHostCredentials(a0); w405(o, r) }
-            11 -> { val a0 = i.str(); val a1 = i.str(); val r = t.cloneRepository(a0, a1); w405(o, r) }
-            12 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.commit(a0, a1); w405(o, r) }
-            13 -> { val a0 = i.str(); val r = t.commitDetail(a0); o.opt(r) { n289 -> w411(o, n289) } }
-            14 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val a2 = i.bool(); val r = t.createBranch(a0, a1, a2); w405(o, r) }
-            15 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.createPullRequest(a0, a1, a2); w405(o, r) }
-            16 -> { val r = t.credentialHosts(); o.list(r) { e290 -> o.string(e290) } }
-            17 -> { val r = t.defaultBranch(); o.opt(r) { n291 -> o.string(n291) } }
-            18 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.deleteBranch(a0, a1); w405(o, r) }
+            9 -> { val a0 = i.str(); val r = t.checkoutBranch(a0); w406(o, r) }
+            10 -> { val a0 = i.str(); val r = t.clearHostCredentials(a0); w406(o, r) }
+            11 -> { val a0 = i.str(); val a1 = i.str(); val r = t.cloneRepository(a0, a1); w406(o, r) }
+            12 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.commit(a0, a1); w406(o, r) }
+            13 -> { val a0 = i.str(); val r = t.commitDetail(a0); o.opt(r) { n290 -> w412(o, n290) } }
+            14 -> { val a0 = i.str(); val a1 = i.opt { i.str() }; val a2 = i.bool(); val r = t.createBranch(a0, a1, a2); w406(o, r) }
+            15 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.createPullRequest(a0, a1, a2); w406(o, r) }
+            16 -> { val r = t.credentialHosts(); o.list(r) { e291 -> o.string(e291) } }
+            17 -> { val r = t.defaultBranch(); o.opt(r) { n292 -> o.string(n292) } }
+            18 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.deleteBranch(a0, a1); w406(o, r) }
             19 -> { val r = t.deviceAuthSupported(); o.bool(r) }
-            20 -> { val a0 = i.str(); val a1 = i.bool(); val a2 = i.opt { i.str() }; val r = t.diff(a0, a1, a2); o.opt(r) { n292 -> w414(o, n292) } }
-            21 -> { val a0 = i.list { i.str() }; val r = t.discard(a0); w405(o, r) }
-            22 -> { val r = t.fetch(); w405(o, r) }
-            23 -> { val a0 = i.str(); val a1 = i.int(); val r = t.forgeRepositories(a0, a1); o.list(r) { e293 -> w415(o, e293) } }
-            24 -> { val r = t.identity(); w416(o, r) }
-            25 -> { val r = t.initRepository(); w405(o, r) }
-            26 -> { val a0 = i.int(); val a1 = i.int(); val a2 = i.opt { i.str() }; val r = t.log(a0, a1, a2); o.list(r) { e294 -> w412(o, e294) } }
-            27 -> { val a0 = i.list { i.str() }; val r = t.markResolved(a0); w405(o, r) }
-            28 -> { val a0 = i.str(); val r = t.mergeBranch(a0); w405(o, r) }
-            29 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.bool(); val r = t.publishToForge(a0, a1, a2); w405(o, r) }
-            30 -> { val r = t.pull(); w405(o, r) }
-            31 -> { val r = t.pullRequests(); o.list(r) { e295 -> w417(o, e295) } }
-            32 -> { val a0 = i.bool(); val r = t.push(a0); w405(o, r) }
+            20 -> { val a0 = i.str(); val a1 = i.bool(); val a2 = i.opt { i.str() }; val r = t.diff(a0, a1, a2); o.opt(r) { n293 -> w415(o, n293) } }
+            21 -> { val a0 = i.list { i.str() }; val r = t.discard(a0); w406(o, r) }
+            22 -> { val r = t.fetch(); w406(o, r) }
+            23 -> { val a0 = i.str(); val a1 = i.int(); val r = t.forgeRepositories(a0, a1); o.list(r) { e294 -> w416(o, e294) } }
+            24 -> { val r = t.identity(); w417(o, r) }
+            25 -> { val r = t.initRepository(); w406(o, r) }
+            26 -> { val a0 = i.int(); val a1 = i.int(); val a2 = i.opt { i.str() }; val r = t.log(a0, a1, a2); o.list(r) { e295 -> w413(o, e295) } }
+            27 -> { val a0 = i.list { i.str() }; val r = t.markResolved(a0); w406(o, r) }
+            28 -> { val a0 = i.str(); val r = t.mergeBranch(a0); w406(o, r) }
+            29 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.bool(); val r = t.publishToForge(a0, a1, a2); w406(o, r) }
+            30 -> { val r = t.pull(); w406(o, r) }
+            31 -> { val r = t.pullRequests(); o.list(r) { e296 -> w418(o, e296) } }
+            32 -> { val a0 = i.bool(); val r = t.push(a0); w406(o, r) }
             33 -> { t.refresh() }
-            34 -> { val r = t.remotes(); o.list(r) { e296 -> w418(o, e296) } }
-            35 -> { val a0 = i.str(); val r = t.removeRemote(a0); w405(o, r) }
-            36 -> { val a0 = i.str(); val a1 = i.str(); val r = t.renameBranch(a0, a1); w405(o, r) }
-            37 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.saveHostCredentials(a0, a1, a2); w405(o, r) }
-            38 -> { val a0 = i.str(); val r = t.setActiveAccount(a0); w405(o, r) }
-            39 -> { val a0 = i.str(); val a1 = i.str(); val r = t.setIdentity(a0, a1); w405(o, r) }
-            41 -> { val a0 = i.str(); val r = t.signInWithToken(a0); w405(o, r) }
-            42 -> { val a0 = i.str(); val r = t.signOut(a0); w405(o, r) }
-            43 -> { val a0 = i.list { i.str() }; val r = t.stage(a0); w405(o, r) }
+            34 -> { val r = t.remotes(); o.list(r) { e297 -> w419(o, e297) } }
+            35 -> { val a0 = i.str(); val r = t.removeRemote(a0); w406(o, r) }
+            36 -> { val a0 = i.str(); val a1 = i.str(); val r = t.renameBranch(a0, a1); w406(o, r) }
+            37 -> { val a0 = i.str(); val a1 = i.str(); val a2 = i.str(); val r = t.saveHostCredentials(a0, a1, a2); w406(o, r) }
+            38 -> { val a0 = i.str(); val r = t.setActiveAccount(a0); w406(o, r) }
+            39 -> { val a0 = i.str(); val a1 = i.str(); val r = t.setIdentity(a0, a1); w406(o, r) }
+            41 -> { val a0 = i.str(); val r = t.signInWithToken(a0); w406(o, r) }
+            42 -> { val a0 = i.str(); val r = t.signOut(a0); w406(o, r) }
+            43 -> { val a0 = i.list { i.str() }; val r = t.stage(a0); w406(o, r) }
             44 -> { t.startSignIn() }
-            45 -> { val a0 = i.int(); val a1 = i.bool(); val r = t.stashApply(a0, a1); w405(o, r) }
-            46 -> { val a0 = i.int(); val r = t.stashDrop(a0); w405(o, r) }
-            47 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.stashPush(a0, a1); w405(o, r) }
-            48 -> { val r = t.stashes(); o.list(r) { e297 -> w425(o, e297) } }
+            45 -> { val a0 = i.int(); val a1 = i.bool(); val r = t.stashApply(a0, a1); w406(o, r) }
+            46 -> { val a0 = i.int(); val r = t.stashDrop(a0); w406(o, r) }
+            47 -> { val a0 = i.str(); val a1 = i.bool(); val r = t.stashPush(a0, a1); w406(o, r) }
+            48 -> { val r = t.stashes(); o.list(r) { e298 -> w426(o, e298) } }
             50 -> { val r = t.supported(); o.bool(r) }
             51 -> { val r = t.underVersionControl(); o.bool(r) }
-            52 -> { val a0 = i.list { i.str() }; val r = t.unstage(a0); w405(o, r) }
+            52 -> { val a0 = i.list { i.str() }; val r = t.unstage(a0); w406(o, r) }
             else -> error("VcsService has no member $member that is called")
         }
     }
@@ -769,43 +770,43 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
                 16 -> { val v = value as dev.ide.ui.backend.UiFreeAiState; w43(o, v) }
                 19 -> { val v = value as dev.ide.ui.backend.UiMcpHost; w47(o, v) }
                 20 -> { val v = value as dev.ide.ui.backend.UiMcpRelay; w48(o, v) }
-                22 -> { val v = value as kotlin.collections.List<dev.ide.ui.backend.UiAgentModel>; o.list(v) { e298 -> w38(o, e298) } }
+                22 -> { val v = value as kotlin.collections.List<dev.ide.ui.backend.UiAgentModel>; o.list(v) { e299 -> w38(o, e299) } }
                 24 -> { val v = value as dev.ide.ui.backend.UiOpenRouterSignIn; w50(o, v) }
-                26 -> { val v = value as dev.ide.ui.backend.UiAgentPermissionRequest?; o.opt(v) { n299 -> w55(o, n299) } }
-                27 -> { val v = value as dev.ide.ui.backend.UiAgentQuestionRequest?; o.opt(v) { n300 -> w56(o, n300) } }
-                62 -> { val v = value as dev.ide.ui.backend.UiAgentUsageLimits?; o.opt(v) { n301 -> w61(o, n301) } }
+                26 -> { val v = value as dev.ide.ui.backend.UiAgentPermissionRequest?; o.opt(v) { n300 -> w55(o, n300) } }
+                27 -> { val v = value as dev.ide.ui.backend.UiAgentQuestionRequest?; o.opt(v) { n301 -> w56(o, n301) } }
+                62 -> { val v = value as dev.ide.ui.backend.UiAgentUsageLimits?; o.opt(v) { n302 -> w61(o, n302) } }
             }
             4 -> when (member) {
                 2 -> { val v = value as dev.ide.ui.backend.AppLogUi; w79(o, v) }
                 3 -> { val v = value as dev.ide.ui.backend.BuildState; w81(o, v) }
-                7 -> { val v = value as dev.ide.ui.backend.UiPermissionRequest?; o.opt(v) { n302 -> w85(o, n302) } }
-                9 -> { val v = value as dev.ide.ui.backend.RunConsoleUi?; o.opt(v) { n303 -> w86(o, n303) } }
+                7 -> { val v = value as dev.ide.ui.backend.UiPermissionRequest?; o.opt(v) { n303 -> w85(o, n303) } }
+                9 -> { val v = value as dev.ide.ui.backend.RunConsoleUi?; o.opt(v) { n304 -> w86(o, n304) } }
             }
             5 -> when (member) {
-                8 -> { val v = value as dev.ide.ui.backend.UiJudgeProgress?; o.opt(v) { n304 -> w107(o, n304) } }
+                8 -> { val v = value as dev.ide.ui.backend.UiJudgeProgress?; o.opt(v) { n305 -> w107(o, n305) } }
             }
             7 -> when (member) {
                 14 -> { val v = value as dev.ide.ui.backend.DepsResolveState; w123(o, v) }
                 18 -> { val v = value as kotlin.Int; o.int(v) }
-                19 -> { val v = value as dev.ide.ui.backend.UiAddResult?; o.opt(v) { n305 -> w118(o, n305) } }
+                19 -> { val v = value as dev.ide.ui.backend.UiAddResult?; o.opt(v) { n306 -> w118(o, n306) } }
             }
             8 -> when (member) {
-                5 -> { val v = value as dev.ide.ui.backend.UiError?; o.opt(v) { n306 -> w131(o, n306) } }
+                5 -> { val v = value as dev.ide.ui.backend.UiError?; o.opt(v) { n307 -> w131(o, n307) } }
             }
             9 -> when (member) {
-                10 -> { val v = value as kotlin.collections.Set<kotlin.String>; o.list(v.toList()) { e307 -> o.string(e307) } }
-                13 -> { val v = value as kotlin.collections.Map<kotlin.String, kotlin.collections.List<dev.ide.ui.backend.UiTextEdit>>; o.map(v, { k308 -> o.string(k308) }, { v309 -> o.list(v309) { e310 -> w7(o, e310) } }) }
+                10 -> { val v = value as kotlin.collections.Set<kotlin.String>; o.list(v.toList()) { e308 -> o.string(e308) } }
+                13 -> { val v = value as kotlin.collections.Map<kotlin.String, kotlin.collections.List<dev.ide.ui.backend.UiTextEdit>>; o.map(v, { k309 -> o.string(k309) }, { v310 -> o.list(v310) { e311 -> w7(o, e311) } }) }
                 32 -> { val v = value as kotlin.Int; o.int(v) }
             }
             10 -> when (member) {
                 10 -> { val v = value as kotlin.Int; o.int(v) }
             }
             14 -> when (member) {
-                4 -> { val v = value as kotlin.collections.List<dev.ide.ui.backend.UiNotification>; o.list(v) { e311 -> w276(o, e311) } }
+                4 -> { val v = value as kotlin.collections.List<dev.ide.ui.backend.UiNotification>; o.list(v) { e312 -> w276(o, e312) } }
                 5 -> { val v = value as kotlin.Int; o.int(v) }
             }
             15 -> when (member) {
-                5 -> { val v = value as dev.ide.ui.backend.PreviewProgress?; o.opt(v) { n312 -> w285(o, n312) } }
+                5 -> { val v = value as dev.ide.ui.backend.PreviewProgress?; o.opt(v) { n313 -> w285(o, n313) } }
             }
             16 -> when (member) {
                 21 -> { val v = value as kotlin.Int; o.int(v) }
@@ -817,17 +818,17 @@ class RemoteBackendServer(private val backend: IdeBackend, scope: CoroutineScope
                 1 -> { val v = value as dev.ide.ui.backend.IndexUiStatus; w321(o, v) }
             }
             19 -> when (member) {
-                0 -> { val v = value as kotlin.collections.List<dev.ide.ui.backend.UiAutoDisabledInspection>; o.list(v) { e313 -> w326(o, e313) } }
+                0 -> { val v = value as kotlin.collections.List<dev.ide.ui.backend.UiAutoDisabledInspection>; o.list(v) { e314 -> w326(o, e314) } }
             }
             21 -> when (member) {
                 3 -> { val v = value as dev.ide.ui.backend.UiStoreAuthState; w355(o, v) }
-                16 -> { val v = value as kotlin.collections.Map<kotlin.String, dev.ide.ui.backend.UiInstallProgress>; o.map(v, { k314 -> o.string(k314) }, { v315 -> w384(o, v315) }) }
+                16 -> { val v = value as kotlin.collections.Map<kotlin.String, dev.ide.ui.backend.UiInstallProgress>; o.map(v, { k315 -> o.string(k315) }, { v316 -> w384(o, v316) }) }
             }
             22 -> when (member) {
-                1 -> { val v = value as kotlin.collections.List<dev.ide.ui.backend.UiVcsAccount>; o.list(v) { e316 -> w407(o, e316) } }
-                2 -> { val v = value as dev.ide.ui.backend.UiVcsActivity; w408(o, v) }
-                40 -> { val v = value as dev.ide.ui.backend.UiVcsSignIn; w419(o, v) }
-                49 -> { val v = value as dev.ide.ui.backend.UiVcsStatus; w426(o, v) }
+                1 -> { val v = value as kotlin.collections.List<dev.ide.ui.backend.UiVcsAccount>; o.list(v) { e317 -> w408(o, e317) } }
+                2 -> { val v = value as dev.ide.ui.backend.UiVcsActivity; w409(o, v) }
+                40 -> { val v = value as dev.ide.ui.backend.UiVcsSignIn; w420(o, v) }
+                49 -> { val v = value as dev.ide.ui.backend.UiVcsStatus; w427(o, v) }
             }
         }
     }

@@ -135,6 +135,27 @@ class StoreItemScreenSnapshot {
         },
     )
 
+    /** An installed 1.6.0 offered 1.8.2: the card lists what every version since changed. */
+    @Test
+    fun renderWhatsNewSinceTheInstalledVersion() = snapshot(
+        "item-whats-new-since.png",
+        remote,
+        dark = true,
+        backend = object : StubBackend() { override val store: dev.ide.ui.backend.StoreService = object : dev.ide.ui.backend.StoreService {
+            private val installed = kotlinx.coroutines.flow.MutableStateFlow(
+                mapOf(remote.id to dev.ide.ui.backend.UiInstallProgress(remote.id, dev.ide.ui.backend.UiInstallState.INSTALLED, 1f, rootPath = "/tmp/ktor-exposed")),
+            )
+            override fun installProgress() = installed
+            override suspend fun updateFor(itemId: String) =
+                dev.ide.ui.backend.UiStoreUpdate(remote, "1.6.0", "1.8.2", "/tmp/ktor-exposed")
+            override suspend fun versionHistory(itemId: String) = listOf(
+                dev.ide.ui.backend.UiVersionNote("1.8.2", 10802, "Koin replaces the hand-rolled service locator.\nShared view model test suite.", "2026-11-20T10:00:00+00:00"),
+                dev.ide.ui.backend.UiVersionNote("1.7.0", 10700, "Postgres 17 in the compose file.", "2026-11-02T10:00:00+00:00"),
+                dev.ide.ui.backend.UiVersionNote("1.6.0", 10600, "First release.", "2026-10-01T10:00:00+00:00"),
+            )
+        } },
+    )
+
     @OptIn(ExperimentalComposeUiApi::class)
     private fun snapshot(
         name: String,

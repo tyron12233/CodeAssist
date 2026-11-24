@@ -906,6 +906,11 @@
     <string name="store_item_tab_readme">README</string>
     <string name="store_item_tab_reviews">评分与评价</string>
     <string name="store_item_tab_changelog">更新日志</string>
+    <string name="store_whats_new_in">%1$s 新功能</string>
+    <string name="store_whats_new_since">自 %1$s 以来的新功能</string>
+    <string name="store_whats_new_more">显示更多</string>
+    <string name="store_whats_new_less">收起</string>
+    <string name="store_whats_new_no_notes">此版本没有更新说明。</string>
     <string name="store_item_type">类型</string>
     <string name="store_item_language">语言</string>
     <string name="store_item_publisher">发布者</string>

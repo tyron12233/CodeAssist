@@ -975,6 +975,17 @@ private fun UpdateRow(update: UiStoreUpdate, onOpen: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = c.onSurfaceVariant,
                 )
+                // What the new version says it changes, so a fix can be told from a rewrite before opening it.
+                changelogPreview(update.item.changelog)?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = c.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
             }
             Text(stringResource(Res.string.home_update_review), style = MaterialTheme.typography.labelLarge, color = c.primary)
         }

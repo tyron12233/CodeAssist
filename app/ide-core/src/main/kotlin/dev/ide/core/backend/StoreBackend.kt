@@ -832,6 +832,15 @@ internal class StoreBackend(
     private fun installedRoot(itemId: String): String? =
         progressState.value[itemId]?.takeIf { it.state == UiInstallState.INSTALLED }?.rootPath?.takeIf(::isProject)
 
+    override suspend fun versionHistory(itemId: String): List<dev.ide.ui.backend.UiVersionNote> = withContext(storeIo) {
+        when (val r = source.versionHistory(itemId)) {
+            is dev.ide.store.StoreResult.Ok -> r.value.map {
+                dev.ide.ui.backend.UiVersionNote(it.version, it.versionCode, it.changelog, it.publishedAt)
+            }
+            else -> emptyList()
+        }
+    }
+
     override suspend fun updateFor(itemId: String): dev.ide.ui.backend.UiStoreUpdate? {
         val root = installedRoot(itemId) ?: return null
         return withContext(storeIo) { runCatching { storeUpdates.check(itemId, root) }.getOrNull() }

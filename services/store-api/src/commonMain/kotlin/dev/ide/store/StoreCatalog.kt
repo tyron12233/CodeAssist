@@ -91,6 +91,16 @@ data class RemoteStoreItem(
 )
 
 /** A filter tile on the Explore screen. */
+/** One approved version of a listing and what its publisher said about it. */
+data class RemoteVersionNote(
+    val version: String,
+    val versionCode: Int,
+    /** Null when the version shipped without notes. */
+    val changelog: String? = null,
+    /** ISO 8601, when the version went live. */
+    val publishedAt: String? = null,
+)
+
 data class RemoteCategory(
     val id: String,
     val title: String,
@@ -218,6 +228,10 @@ interface StoreCatalogSource {
      * the form has to have it and cannot infer it from a display title.
      */
     fun categories(): StoreResult<List<Pair<String, String>>> =
+        StoreResult.Unavailable("No store endpoint")
+
+    /** The approved versions of [slug], newest first, with their release notes (`store_version_history`). */
+    fun versionHistory(slug: String): StoreResult<List<RemoteVersionNote>> =
         StoreResult.Unavailable("No store endpoint")
 
     /**

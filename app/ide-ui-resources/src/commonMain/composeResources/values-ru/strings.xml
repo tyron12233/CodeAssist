@@ -1958,6 +1958,11 @@
     <string name="store_item_tab_readme">README</string>
     <string name="store_item_tab_reviews">Оценки и отзывы</string>
     <string name="store_item_tab_changelog">Список изменений</string>
+    <string name="store_whats_new_in">Что нового в %1$s</string>
+    <string name="store_whats_new_since">Что нового с версии %1$s</string>
+    <string name="store_whats_new_more">Показать больше</string>
+    <string name="store_whats_new_less">Показать меньше</string>
+    <string name="store_whats_new_no_notes">Для этой версии нет примечаний.</string>
     <string name="store_downloading_pct">%1$d%%</string>
     <string name="store_unpacking">Распаковка…</string>
     <string name="store_retry">Повторить</string>

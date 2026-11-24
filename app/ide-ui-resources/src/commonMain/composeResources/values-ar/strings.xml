@@ -989,6 +989,11 @@
     <string name="store_item_tab_readme">README</string>
     <string name="store_item_tab_reviews">التقييمات والمراجعات</string>
     <string name="store_item_tab_changelog">سجل التغييرات</string>
+    <string name="store_whats_new_in">الجديد في %1$s</string>
+    <string name="store_whats_new_since">الجديد منذ %1$s</string>
+    <string name="store_whats_new_more">عرض المزيد</string>
+    <string name="store_whats_new_less">عرض أقل</string>
+    <string name="store_whats_new_no_notes">لا توجد ملاحظات إصدار لهذا الإصدار.</string>
     <string name="store_item_type">النوع</string>
     <string name="store_item_language">اللغة</string>
     <string name="store_item_publisher">الناشر</string>

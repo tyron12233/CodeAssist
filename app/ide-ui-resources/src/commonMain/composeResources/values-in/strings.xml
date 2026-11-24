@@ -1836,6 +1836,11 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="store_item_tab_readme">README</string>
     <string name="store_item_tab_reviews">Rating dan ulasan</string>
     <string name="store_item_tab_changelog">Log perubahan</string>
+    <string name="store_whats_new_in">Yang baru di %1$s</string>
+    <string name="store_whats_new_since">Yang baru sejak %1$s</string>
+    <string name="store_whats_new_more">Tampilkan lebih banyak</string>
+    <string name="store_whats_new_less">Tampilkan lebih sedikit</string>
+    <string name="store_whats_new_no_notes">Tidak ada catatan rilis untuk versi ini.</string>
     <string name="store_downloading_pct">%1$d%%</string>
     <string name="store_unpacking">Mengekstrak…</string>
     <string name="store_retry">Coba lagi</string>
