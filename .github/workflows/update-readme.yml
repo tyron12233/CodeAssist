@@ -22,6 +22,8 @@ env:
 
 jobs:
   update:
+    # An app release only: tool mirrors (dart-sdk-*, dart-gen-snapshot-*, ndk-toolchain-*) are prereleases too.
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

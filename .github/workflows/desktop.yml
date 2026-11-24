@@ -26,6 +26,8 @@ defaults:
 
 jobs:
   windows:
+    # An app release only: tool mirrors (dart-sdk-*, dart-gen-snapshot-*, ndk-toolchain-*) are prereleases too.
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')
     name: Windows installer
     runs-on: windows-latest
     permissions:
@@ -145,6 +147,8 @@ jobs:
         run: gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber
 
   linux:
+    # An app release only: tool mirrors (dart-sdk-*, dart-gen-snapshot-*, ndk-toolchain-*) are prereleases too.
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')
     name: Linux package
     runs-on: ubuntu-latest
     permissions:

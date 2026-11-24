@@ -24,6 +24,8 @@ concurrency:
 
 jobs:
   dist:
+    # An app release only: tool mirrors (dart-sdk-*, dart-gen-snapshot-*, ndk-toolchain-*) are prereleases too.
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')
     name: Distribution + smoke build
     runs-on: ubuntu-latest
     permissions:
