@@ -37,10 +37,13 @@ internal class ManifestMergeTask(
     // versionName from the merged output so aapt2 injects the facet value instead (AGP's DSL-wins rule).
     private val stripVersionCode: Boolean = false,
     private val stripVersionName: Boolean = false,
+    /** The variant's own manifests (`src/debug/AndroidManifest.xml`), highest priority first; missing ones skipped. */
+    private val overlayManifests: List<Path> = emptyList(),
 ) : Task {
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
             filePaths("primary", listOf(primaryManifest).filter { Files.exists(it) })
+            filePaths("overlays", overlayManifests.filter { Files.exists(it) })
             filePaths("libs", libraryManifests.filter { Files.exists(it) })
             // Placeholder values are part of the merged output, so a change must re-run the merge.
             property("placeholders", placeholders.toSortedMap().toString())
@@ -70,6 +73,7 @@ internal class ManifestMergeTask(
             ManifestMerger.merge(
                 primaryManifest, libs, placeholders, appMinSdk = minSdk,
                 stripVersionCode = stripVersionCode, stripVersionName = stripVersionName,
+                overlays = overlayManifests.filter { Files.isRegularFile(it) },
             )
         } catch (t: Throwable) {
             val cause = t.cause ?: t

@@ -58,6 +58,42 @@ class ManifestMergerTest {
     private fun android(e: Element, local: String) =
         e.getAttributeNS(ManifestMerger.ANDROID_NS, local)
 
+    // A Flutter app's src/debug/AndroidManifest.xml, as `flutter create` writes it.
+    private val DEBUG_OVERLAY = """
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <uses-permission android:name="android.permission.INTERNET"/>
+        </manifest>
+    """.trimIndent()
+
+    @Test
+    fun aVariantManifestAddsToTheMainOne() {
+        val result = ManifestMerger.mergeXml(APP, emptyList(), overlays = listOf(DEBUG_OVERLAY))
+        assertFalse(result.hasErrors, result.messages.toString())
+        val root = parse(result.xml)
+        assertEquals("com.example.app", root.getAttribute("package"), "the main manifest's package survives")
+        assertEquals(
+            listOf("android.permission.INTERNET"),
+            descendants(root, "uses-permission").map { android(it, "name") },
+        )
+        assertEquals(listOf(".MainActivity"), descendants(root, "activity").map { android(it, "name") })
+        assertEquals("App", android(descendants(root, "application").single(), "label"))
+    }
+
+    @Test
+    fun aVariantManifestOutranksTheMainOneAndTheLibrariesComeAfter() {
+        val debugLabel = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+                <application android:label="App (debug)"/>
+            </manifest>
+        """.trimIndent()
+        val result = ManifestMerger.mergeXml(APP, listOf(FIREBASE_LIB), mapOf("applicationId" to "com.example.app"), overlays = listOf(debugLabel))
+        val root = parse(result.xml)
+        val application = descendants(root, "application").single()
+        assertEquals("App (debug)", android(application, "label"), "the build type's value wins, as in AGP")
+        assertEquals("@mipmap/ic_launcher", android(application, "icon"), "what only the main manifest says is kept")
+        assertTrue(descendants(root, "provider").isNotEmpty(), "libraries still merge in")
+    }
+
     @Test
     fun mergesLibraryComponentsAndPermissions() {
         val r = ManifestMerger.mergeXml(APP, listOf(FIREBASE_LIB), mapOf("applicationId" to "com.example.app"))

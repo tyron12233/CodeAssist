@@ -626,11 +626,18 @@ class AndroidBuildSystem(
         }
         // Merge dependency-library + AAR manifests into the app manifest (so their components/permissions
         // land in the APK), substituting ${applicationId} etc. The linked manifest is the merged one.
+        // The variant's own manifests overlay the main one, as AGP merges them: `src/debug/AndroidManifest.xml`
+        // (a Flutter app's INTERNET permission is there), a flavor's, the variant's, highest priority first.
+        val mainManifest = layout.manifest(facet).toAbsolutePath().normalize()
+        val overlayManifests = sourceSetNames(app, variant).filter { it != "main" }.reversed()
+            .map { moduleDir(app).resolve("src").resolve(it).resolve("AndroidManifest.xml") }
+            .filter { it.toAbsolutePath().normalize() != mainManifest }
         tasks.task(processManifest, listOf(checkAarMeta)) {
             ManifestMergeTask(
                 processManifest, layout.manifest(facet), libraryManifests, manifestPlaceholders,
                 facet.minSdk, facet.targetSdk, layout.mergedManifest, facet.namespace,
                 stripVersionCode = versionCodeAuthoritative, stripVersionName = versionNameAuthoritative,
+                overlayManifests = overlayManifests,
             )
         }
         // On a debug build, splice the log-bridge <provider> into the merged manifest before linking; aapt2

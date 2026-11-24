@@ -74,14 +74,18 @@ object ManifestMerger {
         appMinSdk: Int? = null,
         stripVersionCode: Boolean = false,
         stripVersionName: Boolean = false,
+        /** The variant's own manifests (`src/debug/AndroidManifest.xml`, a flavor's), highest priority first. */
+        overlays: List<Path> = emptyList(),
     ): Result {
         val primaryXml = Files.readAllBytes(primary).toString(Charsets.UTF_8)
         val libXmls = libraries.mapNotNull { lib ->
             runCatching { lib to Files.readAllBytes(lib).toString(Charsets.UTF_8) }.getOrNull()
         }
+        val overlayXmls = overlays.mapNotNull { o -> runCatching { o to Files.readAllBytes(o).toString(Charsets.UTF_8) }.getOrNull() }
         return mergeXml(
             primaryXml, libXmls.map { it.second }, placeholders, libXmls.map { it.first.toString() },
             appMinSdk, stripVersionCode, stripVersionName,
+            overlays = overlayXmls.map { it.second }, overlayNames = overlayXmls.map { it.first.toString() },
         )
     }
 
@@ -102,12 +106,43 @@ object ManifestMerger {
         appMinSdk: Int? = null,
         stripVersionCode: Boolean = false,
         stripVersionName: Boolean = false,
+        /**
+         * The app's variant manifests, highest priority first: a build type's, then its flavors' (AGP's
+         * overlays). Each outranks [primary], as `src/debug/AndroidManifest.xml` outranks `src/main`'s: the
+         * highest is the base, the others and then [primary] merge into it, and the libraries after that.
+         */
+        overlays: List<String> = emptyList(),
+        overlayNames: List<String> = emptyList(),
     ): Result {
         val messages = ArrayList<Message>()
-        val mergedDoc = runCatching { parse(primary) }.getOrElse {
-            return Result(primary, listOf(Message(Severity.ERROR, "primary manifest is not valid XML: ${it.message}")))
+        val mergedDoc = runCatching { parse(overlays.firstOrNull() ?: primary) }.getOrElse {
+            val what = if (overlays.isEmpty()) "primary manifest" else overlayNames.firstOrNull() ?: "variant manifest"
+            return Result(primary, listOf(Message(Severity.ERROR, "$what is not valid XML: ${it.message}")))
         }
         substitutePlaceholders(mergedDoc.documentElement, placeholders, "primary manifest", messages)
+        // The rest of the app's own manifests, in decreasing priority, ending with the main one. They are the
+        // app's, not a library's: no package to resolve class names against, no minSdk floor to check.
+        if (overlays.isNotEmpty()) {
+            val lower = overlays.drop(1).mapIndexed { i, xml -> xml to (overlayNames.getOrNull(i + 1) ?: "variant manifest") } +
+                (primary to "main manifest")
+            for ((xml, name) in lower) {
+                val doc = runCatching { parse(xml) }.getOrElse {
+                    return Result(primary, listOf(Message(Severity.ERROR, "$name is not valid XML: ${it.message}")))
+                }
+                substitutePlaceholders(doc.documentElement, placeholders, name, messages)
+                // The root's own attributes (`package`, a version) are the app's, never taken from a library, so
+                // the element merge leaves them alone: an overlay without them takes the lower manifest's.
+                val root = mergedDoc.documentElement
+                val from = doc.documentElement.attributes
+                for (k in 0 until from.length) {
+                    val attr = from.item(k) as org.w3c.dom.Attr
+                    if (attr.name.startsWith("xmlns")) continue
+                    val present = if (attr.namespaceURI != null) root.hasAttributeNS(attr.namespaceURI, attr.localName) else root.hasAttribute(attr.name)
+                    if (!present) root.setAttributeNode(mergedDoc.importNode(attr, true) as org.w3c.dom.Attr)
+                }
+                mergeElement(mergedDoc.documentElement, doc.documentElement, mergedDoc, name, null, messages)
+            }
+        }
 
         // The app's authoritative minSdk (build config wins; else the app manifest's own value; else API 1) and
         // the library packages exempted from the floor check via <uses-sdk tools:overrideLibrary>. Both are read
