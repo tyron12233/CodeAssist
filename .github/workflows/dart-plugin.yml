@@ -1,34 +1,55 @@
-name: Dart plugin APK
+name: Dart plugin release
 
-# Builds the Dart plugin (samples/dart-plugin) as installable APKs, one per ABI. apk.yml only builds the IDE.
+# Builds the Dart plugin (samples/dart-plugin) as one release-signed APK per ABI and attaches them to a CodeAssist
+# release as CodeAssist-Dart-Plugin-<version>-<abi>.apk. apk.yml only builds the IDE.
 #
 # The plugin carries a Dart SDK and Flutter that run ON the device, and neither is in the repository, so:
 #   1. sdk:     tools/dart-sdk/fetch-dart-android.sh once per ABI (downloads Termux's Dart package for it)
-#   2. flutter: tools/dart-sdk/fetch-flutter.sh once (the engine for every ABI Flutter ships one for, plus the
-#               ABI-independent framework files), from a Flutter SDK pinned to the Dart version
-#   3. plugin:  gather the results and run assembleDebug, which makes dart-plugin-<abi>-debug.apk for every ABI
+#   2. flutter: tools/dart-sdk/fetch-flutter.sh once (the debug engine for every ABI Flutter ships one for, plus the
+#               ABI-independent framework files), from a Flutter SDK pinned to the Dart version, then
+#               fetch-flutter-release.sh (the release engine, our gen_snapshot from the dart-gen-snapshot-<dart>
+#               prerelease, and the product platform), so the plugin can build release (AOT) Flutter APKs
+#   3. plugin:  gather the results and run assembleRelease, which makes dart-plugin-<abi>-release.apk for every ABI
 #               that has something staged
 #
-# Three ABIs: Termux publishes no Dart package for x86 (32-bit), so there is no x86 plugin. Every package is
-# checked against the checksum pinned in fetch-dart-android.sh. A failed SDK job leaves its ABI without an APK and
-# the plugin job builds with the others; arm64-v8a is required.
+# Three ABIs: Termux publishes no Dart package for x86 (32-bit), so there is no x86 plugin. Every download is
+# checked against a pinned checksum. A failed SDK job leaves its ABI without an APK and the plugin job builds with
+# the others; arm64-v8a is required.
 #
-# Manual only. Trim the `abi` matrix, and the matching download and upload steps, for fewer APKs.
+# Runs when a release is published (tags v*), and by hand: with a tag it attaches to that release, without one it
+# only builds, and the APKs are this run's artifacts.
+#
+# Signing uses the IDE's upload key, from the repository secrets RELEASE_KEYSTORE_BASE64, RELEASE_STORE_PASSWORD,
+# RELEASE_KEY_ALIAS and RELEASE_KEY_PASSWORD. This workflow never runs for a pull request.
 
 on:
+  release:
+    types: [ published ]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach the APKs to (e.g. v3.49.0); empty to only build
+        type: string
+        default: ""
+
+permissions:
+  contents: write
 
 env:
   JAVA_VERSION: "25"
   FLUTTER_VERSION: "3.47.9"
+  # The release's own commit, so the plugin matches the app it ships with.
+  REF: ${{ github.event.release.tag_name || inputs.tag || github.ref }}
 
 concurrency:
-  group: dart-plugin-${{ github.ref }}
-  cancel-in-progress: true
+  group: dart-plugin-${{ github.event.release.tag_name || inputs.tag || github.ref }}
+  cancel-in-progress: false
 
 jobs:
   sdk:
     name: Dart SDK ${{ matrix.abi }}
+    # An app release only: prereleases created by other workflows (dart-gen-snapshot-*) are not app versions.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -36,6 +57,8 @@ jobs:
         abi: [ arm64-v8a, armeabi-v7a, x86_64 ]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF }}
 
       - name: Fetch the ${{ matrix.abi }} Dart SDK
         working-directory: tools/dart-sdk
@@ -65,9 +88,12 @@ jobs:
 
   flutter:
     name: Flutter engines and framework
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF }}
 
       - name: Set up Flutter ${{ env.FLUTTER_VERSION }}
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
@@ -82,6 +108,20 @@ jobs:
           FLUTTER_HOME: ${{ env.FLUTTER_ROOT }}
         run: ./fetch-flutter.sh
 
+      # The release engine, gen_snapshot and product platform go beside the debug engine staged above.
+      - name: Stage Flutter release mode
+        working-directory: tools/dart-sdk
+        run: ./fetch-flutter-release.sh
+
+      - name: Check release mode was staged
+        run: |
+          out=tools/dart-sdk/build/out/flutter
+          test -d "$out/product/flutter_patched_sdk_product"
+          for abi in $(ls "$out/jniLibs"); do
+            test -f "$out/jniLibs/$abi/libflutter_release.so"
+            test -x "$out/jniLibs/$abi/libgen_snapshot.so"
+          done
+
       - name: Upload Flutter
         uses: actions/upload-artifact@v4
         with:
@@ -91,13 +131,17 @@ jobs:
           retention-days: 7
 
   plugin:
-    name: assembleDebug
+    name: Release APKs
     needs: [ sdk, flutter ]
     # Carry on with whichever ABIs got an SDK; the check below insists on arm64-v8a.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')) }}
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF }}
 
       - name: Fetch the SDK libraries and Flutter
         uses: actions/download-artifact@v4
@@ -108,7 +152,6 @@ jobs:
         with:
           name: dart-flutter
           path: tools/dart-sdk/build/out/flutter
-        continue-on-error: true
 
       - name: Fetch the per-ABI executables
         uses: actions/download-artifact@v4
@@ -153,31 +196,86 @@ jobs:
       - name: Run the plugin's unit tests
         run: ./gradlew :samples:dart-plugin:testDebugUnitTest --console=plain --stacktrace
 
-      - name: Build the plugin APKs
-        run: ./gradlew :samples:dart-plugin:assembleDebug --console=plain --stacktrace
+      # download-artifact drops the executable bit; the plugin marks its jniLibs executable on the device anyway.
+      - name: Restore gen_snapshot's executable bit
+        run: chmod +x tools/dart-sdk/build/out/flutter/jniLibs/*/libgen_snapshot.so
 
-      - name: List the APKs
-        run: ls -la samples/dart-plugin/build/outputs/apk/debug/*.apk
+      # The keystore is written outside the checkout and only for the build step's lifetime.
+      - name: Build the release APKs
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          [[ -n "$RELEASE_KEYSTORE_BASE64" ]] || { echo "RELEASE_KEYSTORE_BASE64 is not set: the APKs would be unsigned" >&2; exit 1; }
+          export RELEASE_STORE_FILE="$RUNNER_TEMP/upload.jks"
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RELEASE_STORE_FILE"
+          trap 'rm -f "$RELEASE_STORE_FILE"' EXIT
+          ./gradlew :samples:dart-plugin:assembleRelease --console=plain --stacktrace
 
-      # One artifact per ABI, so a phone only has to download its own. An ABI with no SDK has no APK.
-      - name: Upload arm64-v8a APK
-        uses: actions/upload-artifact@v4
+      - name: Check and name the APKs
+        id: apks
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' samples/dart-plugin/src/main/res/raw/codeassist_plugin.toml | head -1)"
+          [[ -n "$version" ]] || { echo "no version in codeassist_plugin.toml" >&2; exit 1; }
+          mkdir -p dist
+          abis=""
+          for apk in samples/dart-plugin/build/outputs/apk/release/dart-plugin-*-release.apk; do
+            abi="$(basename "$apk")"; abi="${abi#dart-plugin-}"; abi="${abi%-release.apk}"
+            "$apksigner" verify "$apk"
+            # Release mode has to be inside: the engine, gen_snapshot and the product platform.
+            unzip -l "$apk" "lib/$abi/libflutter_release.so" "lib/$abi/libgen_snapshot.so" >/dev/null \
+              || { echo "$apk has no release-mode Flutter for $abi" >&2; exit 1; }
+            unzip -l "$apk" | grep -q 'flutter-product.zip' || { echo "$apk has no flutter-product.zip" >&2; exit 1; }
+            cp "$apk" "dist/CodeAssist-Dart-Plugin-$version-$abi.apk"
+            abis="$abis $abi"
+          done
+          test -f "dist/CodeAssist-Dart-Plugin-$version-arm64-v8a.apk" || { echo "no arm64-v8a APK" >&2; exit 1; }
+          "$apksigner" verify --print-certs "dist/CodeAssist-Dart-Plugin-$version-arm64-v8a.apk" | grep -m1 SHA-256
+          ls -la dist
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "abis=${abis# }" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: dart-plugin-arm64-v8a
-          path: samples/dart-plugin/build/outputs/apk/debug/*arm64-v8a*.apk
+          name: dart-plugin-release
+          path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
-      - name: Upload armeabi-v7a APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: dart-plugin-armeabi-v7a
-          path: samples/dart-plugin/build/outputs/apk/debug/*armeabi-v7a*.apk
-          if-no-files-found: ignore
-          retention-days: 30
-      - name: Upload x86_64 APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: dart-plugin-x86_64
-          path: samples/dart-plugin/build/outputs/apk/debug/*x86_64*.apk
-          if-no-files-found: ignore
-          retention-days: 30
+
+      - name: Attach to ${{ env.TAG }}
+        if: env.TAG != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.apks.outputs.version }}
+          ABIS: ${{ steps.apks.outputs.abis }}
+        run: |
+          gh release upload "$TAG" dist/*.apk --clobber
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG"
+          # The catalog row the Get plugins page reads (Supabase public.plugin_catalog): every ABI's build, and
+          # the plain link (what older apps read) on arm64.
+          json="{"
+          for abi in $ABIS; do
+            f="dist/CodeAssist-Dart-Plugin-$VERSION-$abi.apk"
+            json="$json\"$abi\": {\"url\": \"$base/$(basename "$f")\", \"size\": $(stat -c %s "$f")},"
+          done
+          json="${json%,}}"
+          arm64="dist/CodeAssist-Dart-Plugin-$VERSION-arm64-v8a.apk"
+          {
+            echo "Attached to [$TAG](https://github.com/${GITHUB_REPOSITORY}/releases/tag/$TAG)."
+            echo
+            echo "Catalog update (Supabase SQL editor):"
+            echo
+            echo '```sql'
+            echo "update public.plugin_catalog set"
+            echo "  version = '$VERSION',"
+            echo "  download_url = '$base/$(basename "$arm64")',"
+            echo "  size_bytes = $(stat -c %s "$arm64"),"
+            echo "  page_url = 'https://github.com/${GITHUB_REPOSITORY}/releases/tag/$TAG',"
+            echo "  abi_downloads = '$json'::jsonb,"
+            echo "  updated_at = now()"
+            echo "where id = 'dev.codeassist.dart';"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

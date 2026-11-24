@@ -87,8 +87,8 @@ android {
         // The IDE's own floor: this code runs inside the IDE's process.
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     // Signed with the IDE's upload key when one is configured (a gitignored keystore.properties at the repo
