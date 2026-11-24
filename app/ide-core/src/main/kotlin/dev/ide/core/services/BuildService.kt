@@ -818,8 +818,10 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                 )
             }
         }
-        // Android libraries package an .aar (per variant) — visible from Run like any other module's task.
-        for (m in ctx.modules().filter { it.type.id == "android-lib" }) {
+        // Android libraries package an .aar (per variant) — visible from Run like any other module's task. Not one a
+        // tool generated under a hidden directory of the project (a Flutter plugin's Android library, copied into
+        // `.dart_tool/`): it is built as part of the app that needs it, and nobody packages it on its own.
+        for (m in ctx.modules().filter { it.type.id == "android-lib" && !isToolGenerated(it) }) {
             for (v in AndroidVariants.compute(m)) {
                 val cap = v.name.replaceFirstChar { it.uppercase() }
                 add(
@@ -852,6 +854,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable, BuildC
                 )
             )
         }
+    }
+
+    /** A module a tool keeps under a hidden directory of the project (`.dart_tool/...`), not one the user made. */
+    private fun isToolGenerated(module: dev.ide.model.Module): Boolean {
+        val root = ctx.projectOf(module)?.rootDir?.path ?: return false
+        val relative = runCatching { java.nio.file.Paths.get(root).relativize(java.nio.file.Paths.get(module.dir.path)) }.getOrNull()
+            ?: return false
+        return relative.any { it.toString().startsWith(".") }
     }
 
     /** Run/assemble the task with [id] (from [runTasks]); streams progress into [buildState]. */

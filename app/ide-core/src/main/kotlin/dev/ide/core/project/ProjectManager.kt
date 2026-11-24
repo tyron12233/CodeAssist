@@ -118,6 +118,13 @@ enum class ImportableKind {
      *  statically into a native workspace, so it opens in compatibility mode. */
     EXTERNAL,
 
+    /**
+     * A folder an importer reads into a model the IDE then owns ([dev.ide.model.sync.ModelOwnership.IDE]): a pub
+     * package or Flutter app. Imported as it is, with no compatibility-or-convert question: there are no build
+     * files to keep in charge, and converting would move a Flutter app's `android/` Gradle files aside.
+     */
+    ADOPTABLE,
+
     /** Neither -- the caller should say so rather than silently doing nothing. */
     NONE,
 }
@@ -495,8 +502,11 @@ class ProjectManager private constructor(
     fun inspectFolder(dir: Path): ImportableKind = when {
         !Files.isDirectory(dir) -> ImportableKind.NONE
         ModelPersistence.exists(dir.toString()) -> ImportableKind.CODE_ASSIST
-        ProjectSyncService.importerFor(env.platform.extensions, dir) != null -> ImportableKind.EXTERNAL
-        else -> ImportableKind.NONE
+        else -> when (ProjectSyncService.importerFor(env.platform.extensions, dir)?.ownership) {
+            null -> ImportableKind.NONE
+            dev.ide.model.sync.ModelOwnership.IDE -> ImportableKind.ADOPTABLE
+            else -> ImportableKind.EXTERNAL
+        }
     }
 
     fun importExternalProject(sourceDir: Path): IdeServices? {
@@ -614,7 +624,8 @@ class ProjectManager private constructor(
         // An importer claiming the folder can still fail on its contents (an unreadable build script). The
         // fallback is the same as for a folder nothing claimed: an editable project beats no project.
         val adopted = kind == ImportableKind.CODE_ASSIST ||
-            (kind == ImportableKind.EXTERNAL && runCatching { adoptProjectInPlace(here) }.getOrDefault(false))
+            ((kind == ImportableKind.EXTERNAL || kind == ImportableKind.ADOPTABLE) &&
+                runCatching { adoptProjectInPlace(here) }.getOrDefault(false))
         if (adopted) return kind
         IdeServices.adoptPlainFolderAt(here, sdk(), sharedCachesRoot = homeDir, env = env, origin = origin)
         return ImportableKind.NONE

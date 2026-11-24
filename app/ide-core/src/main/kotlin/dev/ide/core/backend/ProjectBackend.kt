@@ -57,6 +57,8 @@ private const val MAX_PREVIEW_IMAGE_BYTES = 8L * 1024 * 1024
 internal fun ImportableKind.toUi(): UiProjectFolderKind = when (this) {
     ImportableKind.CODE_ASSIST -> UiProjectFolderKind.CODE_ASSIST
     ImportableKind.EXTERNAL -> UiProjectFolderKind.GRADLE
+    // Nothing to choose: imported as it is, like a CodeAssist workspace (the importer reads it in).
+    ImportableKind.ADOPTABLE -> UiProjectFolderKind.CODE_ASSIST
     ImportableKind.NONE -> UiProjectFolderKind.UNKNOWN
 }
 
