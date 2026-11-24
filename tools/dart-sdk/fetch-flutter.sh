@@ -102,6 +102,13 @@ R="$OUT/root"
 mkdir -p "$R/packages/flutter" "$R/packages/flutter_test" "$R/bin/cache/pkg" "$R/bin/cache/artifacts/engine/common"
 cp -R "$FLUTTER_HOME/packages/flutter/lib" "$FLUTTER_HOME/packages/flutter/pubspec.yaml" "$FLUTTER_HOME/packages/flutter/LICENSE" "$R/packages/flutter/"
 cp -R "$FLUTTER_HOME/packages/flutter_test/lib" "$FLUTTER_HOME/packages/flutter_test/pubspec.yaml" "$R/packages/flutter_test/"
+# The SDK packages pub.dev packages depend on with `sdk: flutter`: every federated plugin's web implementation needs
+# flutter_web_plugins, so without it `pub get` fails for shared_preferences, url_launcher and the like on any
+# platform; flutter_localizations is what an app localizes with. Sources only, like the two above.
+for extra in flutter_web_plugins flutter_localizations; do
+    mkdir -p "$R/packages/$extra"
+    cp -R "$FLUTTER_HOME/packages/$extra/lib" "$FLUTTER_HOME/packages/$extra/pubspec.yaml" "$R/packages/$extra/"
+done
 cp -R "$FLUTTER_HOME/bin/cache/pkg/sky_engine" "$R/bin/cache/pkg/"
 cp -R "$FLUTTER_HOME/bin/cache/artifacts/engine/common/flutter_patched_sdk" "$R/bin/cache/artifacts/engine/common/"
 cp "$VERSION_JSON" "$R/bin/cache/flutter.version.json"

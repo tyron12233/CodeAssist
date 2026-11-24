@@ -117,5 +117,31 @@ light or dark scheme. How it gets into the pane (Android 11 and later):
 "Preview widgets" in the Run menu shows every preview in `lib/` in the player instead, which is also what Android
 10 and earlier get.
 
-Not possible here: release (AOT) builds, which need a `gen_snapshot` that runs on Android; Flutter plugins with
-Android code of their own (the player has none); widget tests (`flutter test` needs Flutter's host test engine).
+### APKs
+
+A Flutter app's `android/app` module builds into an APK through the IDE's ordinary Android build: the plugin's
+build step compiles the package and hands the build `flutter_assets` and the engine to package. Run Debug makes
+what `flutter build apk --debug` does (the program as kernel, the debug engine's JIT). Run Release makes what
+`flutter build apk --release` does: the program compiled ahead of time to machine code, `lib/<abi>/libapp.so`,
+loaded by the release engine, with no kernel in the APK.
+
+A release build needs three more things, which `fetch-flutter-release.sh` stages (run it after
+`fetch-flutter.sh`; it needs no Flutter SDK, everything comes by URL and pinned checksum):
+
+| Staged as | What it is |
+| --- | --- |
+| `jniLibs/<abi>/libflutter_release.so` | the release engine, from Flutter's Maven repository, stripped (165 MB to 12 MB for arm64); renamed `libflutter.so` in the app |
+| `jniLibs/<abi>/libgen_snapshot.so` | Dart's `gen_snapshot` built for Android, from this repository's `dart-gen-snapshot-<dart version>` prerelease |
+| `product/flutter_patched_sdk_product/` | the core libraries for product mode, which the release kernel compiles against |
+
+`gen_snapshot` has to be built like the release engine's own Dart VM, or the engine refuses the snapshot with
+"Snapshot not compatible with the current VM configuration": the same Dart revision (same snapshot hash), product
+mode, and on 64-bit targets compressed pointers. Flutter publishes `gen_snapshot` only for x64 desktops, and
+Termux's is built without compressed pointers (the only difference the engine reports), so
+`build-gen-snapshot.sh` builds Dart's own with `--os android --arch arm64c` (`x64c`, `arm`), product mode.
+`.github/workflows/dart-gen-snapshot.yml` runs it (a Dart checkout with the NDK is several GB, ten minutes on a
+hosted runner) and publishes the prerelease; its build is reproducible, so the checksums pinned in
+`fetch-flutter-release.sh` hold across runs.
+
+Not possible here: Flutter plugins with Android code of their own (neither the player nor the APK build compiles
+them yet); widget tests (`flutter test` needs Flutter's host test engine).

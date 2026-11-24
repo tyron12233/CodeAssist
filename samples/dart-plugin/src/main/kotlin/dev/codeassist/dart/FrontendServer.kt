@@ -29,6 +29,8 @@ class FrontendServer(
      * (the Run's, the preview pane's), then a plugin-wide one. See [warm].
      */
     private val seeds: List<Path> = emptyList(),
+    /** More arguments for the compiler: an APK build's Dart plugin registrant ([FlutterPlugins.dartRegistrantArgs]). */
+    private val extraArgs: List<String> = emptyList(),
 ) : AutoCloseable {
     /** A compile's outcome: the kernel file (null when it failed outright), its error count, what it said. */
     class Result(val dill: Path?, val errors: Int, val messages: List<String>) {
@@ -70,7 +72,7 @@ class FrontendServer(
             "-Ddart.vm.product=false",
             "--no-print-incremental-dependencies",
                 seed?.let { "--initialize-from-dill=$it" },
-            ),
+            ) + extraArgs,
         ).directory(pkg.toFile()).redirectErrorStream(true)
             .apply { environment().putAll(sdk.environment()) }
             .start()

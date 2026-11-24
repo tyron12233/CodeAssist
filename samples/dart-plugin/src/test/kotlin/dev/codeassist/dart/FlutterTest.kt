@@ -32,6 +32,28 @@ class FlutterTest {
     }
 
     @Test
+    fun aMultiLineDescriptionDoesNotHideTheKeysAfterIt() {
+        // shared_preferences 2.5.6's pubspec, the top of it.
+        val yaml = """
+            name: shared_preferences
+            description: Flutter plugin for reading and writing simple key-value pairs.
+              Wraps NSUserDefaults on iOS and SharedPreferences on Android.
+            version: 2.5.6
+            dependencies:
+              flutter:
+                sdk: flutter
+              shared_preferences_android: ^2.3.4
+        """.trimIndent()
+        val spec = MiniYaml.parse(yaml) as Map<*, *>
+        assertEquals(
+            "Flutter plugin for reading and writing simple key-value pairs. Wraps NSUserDefaults on iOS and SharedPreferences on Android.",
+            spec["description"],
+        )
+        assertEquals("2.5.6", spec["version"])
+        assertTrue("shared_preferences_android" in (spec["dependencies"] as Map<*, *>))
+    }
+
+    @Test
     fun aPubspecFlutterSectionReads() {
         val yaml = """
             name: app # the app

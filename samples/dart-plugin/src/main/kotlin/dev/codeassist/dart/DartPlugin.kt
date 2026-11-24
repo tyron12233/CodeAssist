@@ -1,11 +1,13 @@
 package dev.codeassist.dart
 
+import dev.ide.build.BUILD_PLUGIN_EP
 import dev.ide.build.RUN_TASK_PROVIDER_EP
 import dev.ide.build.TEST_PROVIDER_EP
 import dev.ide.lang.FILE_TYPE_EP
 import dev.ide.lang.FileTypeMapping
 import dev.ide.lang.LanguageId
 import dev.ide.lsp.LANGUAGE_SERVER_EP
+import dev.ide.model.FACET_CODEC_EP
 import dev.ide.model.FileIconExtensionPoint
 import dev.ide.model.ModuleTypeExtensionPoint
 import dev.ide.model.sync.PROJECT_IMPORTER_EP
@@ -41,6 +43,11 @@ class DartPlugin : Plugin {
 
         reg.register(RUN_TASK_PROVIDER_EP, DartRunTaskProvider(sdk, pub, flutter))
         reg.register(TEST_PROVIDER_EP, DartTestProvider(sdk, pub))
+
+        // A Flutter app's APK: its `android/app` module carries a [flutter] table naming the package, and the
+        // module's ordinary Android build compiles that package and packages it with the engine.
+        reg.register(FACET_CODEC_EP, FlutterFacetCodec)
+        reg.register(BUILD_PLUGIN_EP, FlutterBuildPlugin(sdk, flutter, pub, reg.logger("FlutterBuild")))
         log.info("registered; the Dart SDK is prepared on first use")
     }
 

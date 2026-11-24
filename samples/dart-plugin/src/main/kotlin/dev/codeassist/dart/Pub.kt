@@ -1,7 +1,9 @@
 package dev.codeassist.dart
 
 import java.io.IOException
+import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
 import java.util.concurrent.TimeUnit
 
 /**
@@ -54,9 +56,13 @@ class Pub(private val sdk: DartSdk, private val flutter: FlutterSdk? = null) {
         cancellation?.attach(process)
         runCatching { process.outputStream.close() }
         // pub can wait on the network for a long time; the reader runs beside the timeout rather than in its way.
+        var solveFailed = false
         val reader = Thread({
             try {
-                process.inputStream.bufferedReader().forEachLine(out)
+                process.inputStream.bufferedReader().forEachLine { line ->
+                    if (FAILURES.any { it in line }) solveFailed = true
+                    out(line)
+                }
             } catch (_: IOException) {
                 // Killed: the stream ended with the process.
             }
@@ -68,6 +74,24 @@ class Pub(private val sdk: DartSdk, private val flutter: FlutterSdk? = null) {
             return -1
         }
         reader.join(5_000)
-        return process.exitValue()
+        // `dart pub get` has been seen to exit 0 after "version solving failed": the output decides.
+        val code = process.exitValue().let { if (it == 0 && solveFailed) 1 else it }
+        if (code == 0 && command in RESOLVING) markResolved(pkg)
+        return code
+    }
+
+    /**
+     * Record that [pkg]'s package config answers its pubspec as it is now. pub leaves an unchanged config
+     * untouched, so after a save that changed nothing pub cares about, the pubspec stays newer than the config
+     * and [DartPackages.needsPubGet] would ask for another `pub get` on every run and build.
+     */
+    private fun markResolved(pkg: Path) {
+        val config = pkg.resolve(DartPackages.PACKAGE_CONFIG)
+        if (Files.isRegularFile(config)) runCatching { Files.setLastModifiedTime(config, FileTime.fromMillis(System.currentTimeMillis())) }
+    }
+
+    private companion object {
+        val RESOLVING = setOf("get", "upgrade", "downgrade")
+        val FAILURES = listOf("version solving failed", "Failed to update packages")
     }
 }

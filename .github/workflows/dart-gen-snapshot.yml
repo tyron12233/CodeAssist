@@ -1,0 +1,90 @@
+name: Dart gen_snapshot
+
+# Builds the Dart SDK's gen_snapshot as an Android executable (tools/dart-sdk/build-gen-snapshot.sh), one per device
+# ABI, for the Dart plugin's Flutter release (AOT) builds. A Dart checkout with the NDK is several GB, more than a
+# laptop may spare, and the build is the same every time for a given Dart version, so it runs here and publishes
+# the executables as the prerelease `dart-gen-snapshot-<dart version>`:
+#   gen_snapshot-<abi>   the executable for a device of that ABI (arm64-v8a, x86_64, armeabi-v7a)
+#   SHA256SUMS           their checksums, which tools/dart-sdk/fetch-flutter-release.sh pins
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - tools/dart-sdk/build-gen-snapshot.sh
+      - .github/workflows/dart-gen-snapshot.yml
+  workflow_dispatch:
+    inputs:
+      dart_version:
+        description: Dart tag (the Dart of the Flutter the plugin pins)
+        default: "3.13.7"
+
+permissions:
+  contents: read
+
+# One publish at a time: two runs replacing the same release's assets would leave it half one, half the other.
+concurrency:
+  group: dart-gen-snapshot
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: gen_snapshot ${{ matrix.arch }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [ arm64c, x64c, arm ]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/dart-sdk
+
+      # The checkout, toolchains and NDK need more than the runner leaves free by default.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h /
+
+      - name: Build
+        env:
+          ARCH: ${{ matrix.arch }}
+          DART_VERSION: ${{ inputs.dart_version || '3.13.7' }}
+          WORK: ${{ runner.temp }}/gen-snapshot
+        run: tools/dart-sdk/build-gen-snapshot.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gen_snapshot-${{ matrix.arch }}
+          path: tools/dart-sdk/build/out/gen-snapshot
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DART_VERSION: ${{ inputs.dart_version || '3.13.7' }}
+        run: |
+          mkdir assets
+          for dir in artifacts/gen_snapshot-*/*/; do
+            abi="$(basename "$dir")"
+            cp "$dir/gen_snapshot" "assets/gen_snapshot-$abi"
+          done
+          (cd assets && sha256sum gen_snapshot-* > SHA256SUMS && cat SHA256SUMS)
+          tag="dart-gen-snapshot-$DART_VERSION"
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+              --title "Dart $DART_VERSION gen_snapshot for Android" \
+              --notes "gen_snapshot from Dart $DART_VERSION, built for Android (product mode; compressed pointers on 64-bit) by .github/workflows/dart-gen-snapshot.yml. The Dart plugin uses it to compile Flutter apps ahead of time on the device."
+          fi
+          gh release upload "$tag" assets/* --repo "$GITHUB_REPOSITORY" --clobber

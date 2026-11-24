@@ -180,7 +180,14 @@ object MiniYaml {
                 val key = unquote(line.text.substring(0, colon).trim())
                 val rest = line.text.substring(colon + 1).trim()
                 i++
-                out[key] = if (rest.isNotEmpty()) scalar(rest) else when {
+                out[key] = if (rest.isNotEmpty()) {
+                    // A plain scalar may go on over more-indented lines (`description: one\n  two`), as
+                    // pub.dev pubspecs' descriptions often do; folded into one, as YAML reads it. Stopping at
+                    // the first of them lost every key after it, the package's dependencies included.
+                    val parts = arrayListOf(rest)
+                    while (i < lines.size && lines[i].indent > indent) { parts += lines[i].text; i++ }
+                    scalar(parts.joinToString(" "))
+                } else when {
                     i < lines.size && lines[i].indent > indent -> block(lines[i].indent)
                     // `key:` followed by a sequence at the same indent is legal YAML, and common in pubspecs.
                     i < lines.size && lines[i].indent == indent && isItem(lines[i].text) -> sequence(indent)
