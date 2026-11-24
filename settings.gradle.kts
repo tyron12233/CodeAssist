@@ -17,8 +17,9 @@ plugins {
 }
 
 // R8 runs in its own JVM with its own heap, so the Gradle daemon keeps its 3 GB (gradle.properties) and the
-// extra memory exists only while a minified build shrinks. 5 GB holds R8 with the toolchain outside its
-// input (dev.ide.toolchain-split): measured 154s, 11% of it GC, peak 4.7 GB. The root build script turns
+// extra memory exists only while a minified build shrinks. 5 GB held R8 with the toolchain outside its
+// input (dev.ide.toolchain-split: measured 154s, 11% of it GC, peak 4.7 GB); that split is off since
+// 3.48.2 (see app/ide-android/build.gradle.kts), so R8 reads the whole app again and gets 9 GB. The root build script turns
 // horizontal class merging off with a system property of the daemon, which a separate JVM never sees, so
 // it is passed again here.
 android {
@@ -27,7 +28,7 @@ android {
             create("isolatedR8") {
                 r8 {
                     runInSeparateProcess = true
-                    jvmOptions += listOf("-Xmx5g", "-Dcom.android.tools.r8.disableHorizontalClassMerging=true")
+                    jvmOptions += listOf("-Xmx9g", "-Dcom.android.tools.r8.disableHorizontalClassMerging=true")
                 }
             }
         }

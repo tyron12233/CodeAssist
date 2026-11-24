@@ -641,8 +641,14 @@ gradle.taskGraph.whenReady {
 // dexed on its own. These packages are kept by name anyway (proguard-rules.pro), so R8 had little to do to
 // them, but reading and tracing them was about half of R8's time and more heap than a 3 GB daemon has.
 // Generated keep rules protect what the toolchain uses in the rest of the app.
+// OFF since 3.48.2: D8 desugared the toolchain against the core-library config, but the app's `j$` library
+// is shrunk (L8) to what R8 saw, so `j$.util.stream.Stream`, `DesugarCollectors`, `DesugarDuration` and
+// `Collection$-EL` were referenced and never shipped. StreamEx failed to load, IntelliJ's class-file stubs
+// with it, and no JDK class resolved in a Java file (3.48.0/3.48.1). Before turning this back on, the
+// toolchain's desugared-library keep rules (D8 --desugared-lib-pg-conf-output) must reach L8, and every
+// `Lj$/` type the APK references must be defined in it.
 toolchainSplit {
-    buildTypes.addAll("release", "profile")
+    // buildTypes.addAll("release", "profile")
     d8Version.set("9.5.29") // = the root build script's R8 pin, which AGP shrinks the rest of the app with
     desugarConfigVersion.set(libs.versions.desugarJdkLibs)
     packages.addAll(
