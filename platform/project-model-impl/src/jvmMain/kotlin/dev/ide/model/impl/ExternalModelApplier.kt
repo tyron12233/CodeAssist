@@ -9,6 +9,7 @@ import dev.ide.model.ModifiableModule
 import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
+import dev.ide.model.OrderEntry
 import dev.ide.model.PlatformDependency
 import dev.ide.model.SourceSetTemplate
 import dev.ide.model.sanitizeCoordinate
@@ -35,6 +36,11 @@ private val log = Log.logger("ide.model")
  * and this one no longer reports is removed, while a module the IDE has that no sync ever produced is left
  * alone (it was added in the IDE, and dropping it would be data loss). With no previous snapshot nothing is
  * removed.
+ *
+ * Dependencies follow the same rule. When the build files own the model ([apply]'s `removeAbsent`), a module's
+ * dependencies are replaced wholesale on every sync. When the IDE owns it and there is a [previous] snapshot,
+ * only the dependencies that snapshot declared are replaced: one the user added in the IDE survives a sync
+ * that knows nothing about it.
  */
 class ExternalModelApplier(private val store: ProjectModelStore) {
 
@@ -92,7 +98,11 @@ class ExternalModelApplier(private val store: ProjectModelStore) {
                     configure(module, external, defaultLanguageLevel, replaceDependencies = false)
                     added += external.name
                 } else {
-                    configure(tx.module(current.id), external, current.languageLevel, replaceDependencies = true, current = current)
+                    // Which of the module's dependencies a sync may take away: all of them when the build files
+                    // own the model or no earlier sync is known, otherwise the ones the earlier sync declared.
+                    val owned = if (removeAbsent || previous == null) null
+                    else previous.modules.firstOrNull { it.name == external.name }?.dependencies.orEmpty()
+                    configure(tx.module(current.id), external, current.languageLevel, replaceDependencies = true, current = current, ownedDependencies = owned)
                     updated += external.name
                 }
             }
@@ -154,6 +164,8 @@ class ExternalModelApplier(private val store: ProjectModelStore) {
         defaultLanguageLevel: LanguageLevel,
         replaceDependencies: Boolean,
         current: Module? = null,
+        /** The dependencies a previous sync declared, when only those may be replaced; null for all of them. */
+        ownedDependencies: List<ExternalDependency>? = null,
     ) {
         module.dirRelPath = external.dirRelPath.ifBlank { external.name }
         module.languageLevel = external.languageLevel ?: defaultLanguageLevel
@@ -164,16 +176,22 @@ class ExternalModelApplier(private val store: ProjectModelStore) {
             module.addSourceSet(SourceSetTemplate(set.name, set.scope, LinkedHashMap(set.roots)))
         }
 
+        val kept = HashSet<String>()
         if (replaceDependencies && current != null) {
             // Drop what a previous sync declared and re-declare from the snapshot. SDK entries are the
-            // host's, not the build files', so they stay.
+            // host's, not the build files', so they stay, and so does what the IDE owns (see the class doc).
+            val owned = ownedDependencies?.mapTo(HashSet()) { dependencyKey(orderEntry(it)) }
             for (entry in current.dependencies) {
-                if (entry is LibraryDependency || entry is PlatformDependency || entry is ModuleDependency) {
-                    module.removeDependency(entry)
-                }
+                val syncable = entry is LibraryDependency || entry is PlatformDependency || entry is ModuleDependency
+                if (syncable && (owned == null || dependencyKey(entry) in owned)) module.removeDependency(entry)
+                else dependencyKey(entry)?.let { kept += it }
             }
         }
-        for (dependency in external.dependencies) module.addDependency(orderEntry(dependency))
+        // A dependency the module still has (one the user added that the snapshot also declares) is not added twice.
+        for (dependency in external.dependencies) {
+            val entry = orderEntry(dependency)
+            if (kept.add(dependencyKey(entry) ?: continue)) module.addDependency(entry)
+        }
 
         // Facets travel as table + values so an importer needs no facet class; the codec registered for the
         // table turns them back into a real Facet. An unknown table is skipped rather than failing the sync,
@@ -187,6 +205,14 @@ class ExternalModelApplier(private val store: ProjectModelStore) {
                 log.warn("skipped facet '${facet.table}' on module '${external.name}': ${e.message}")
             }
         }
+    }
+
+    /** What identifies a dependency across syncs: its kind, target, scope and variant. Null for SDK entries. */
+    private fun dependencyKey(entry: OrderEntry): String? = when (entry) {
+        is LibraryDependency -> "lib|${entry.library.name}|${entry.scope.name}|${entry.variant.orEmpty()}"
+        is ModuleDependency -> "module|${entry.target.value}|${entry.scope.name}|${entry.variant.orEmpty()}"
+        is PlatformDependency -> "bom|${entry.bom}|${entry.scope.name}|${entry.variant.orEmpty()}"
+        else -> null
     }
 
     private fun orderEntry(dependency: ExternalDependency) = when (dependency) {

@@ -1,21 +1,34 @@
-# The compiled surface of io.github.tyron12233:build-api, pinned at SPI 3.6.0.
+# The compiled surface of io.github.tyron12233:build-api, pinned at SPI 3.8.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/build/AlwaysRun
 	kind interface
+dev/ide/build/AssetsOutput
+	kind class
+	super java/lang/Object
+	ctor (Ljava/nio/file/Path;Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	method equals(Ljava/lang/Object;)Z
+	method getDir()Ljava/nio/file/Path;
+	method getProducedBy-xgv66CM()Ljava/lang/String;
+	method hashCode()I
+	method toString()Ljava/lang/String;
 dev/ide/build/BuildConfiguration
 	kind interface
 	method abstract getProject()Ldev/ide/model/Project;
 	method abstract getRequest()Ldev/ide/build/BuildRequest;
 	method abstract getTasks()Ldev/ide/build/TaskContainer;
+	method addAssets-aA_KukA(Ldev/ide/model/Module;Ljava/nio/file/Path;Ljava/lang/String;)V
 	method addNativeLibraries-aA_KukA(Ldev/ide/model/Module;Ljava/nio/file/Path;Ljava/lang/String;)V
+	method assets(Ldev/ide/model/Module;)Ljava/util/List;
 	method getBuildSystemId--V1bbYQ()Ljava/lang/String;
 	method getEnv()Ldev/ide/build/BuildEnv;
 	method nativeLibraries(Ldev/ide/model/Module;)Ljava/util/List;
 dev/ide/build/BuildConfiguration$DefaultImpls
 	kind class
 	super java/lang/Object
+	method static addAssets-aA_KukA(Ldev/ide/build/BuildConfiguration;Ldev/ide/model/Module;Ljava/nio/file/Path;Ljava/lang/String;)V
 	method static addNativeLibraries-aA_KukA(Ldev/ide/build/BuildConfiguration;Ldev/ide/model/Module;Ljava/nio/file/Path;Ljava/lang/String;)V
+	method static assets(Ldev/ide/build/BuildConfiguration;Ldev/ide/model/Module;)Ljava/util/List;
 	method static getBuildSystemId--V1bbYQ(Ldev/ide/build/BuildConfiguration;)Ljava/lang/String;
 	method static getEnv(Ldev/ide/build/BuildConfiguration;)Ldev/ide/build/BuildEnv;
 	method static nativeLibraries(Ldev/ide/build/BuildConfiguration;Ldev/ide/model/Module;)Ljava/util/List;
@@ -422,6 +435,12 @@ dev/ide/build/LoggingProgramIo
 	method exited(I)V
 	method getStdin()Ljava/io/InputStream;
 	method stdout(Ljava/lang/String;)V
+dev/ide/build/NativeFileHash
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/build/NativeFileHash;
+	method getSha256()Lkotlin/jvm/functions/Function1;
+	method setSha256(Lkotlin/jvm/functions/Function1;)V
 dev/ide/build/NativeLibraryOutput
 	kind class
 	super java/lang/Object
@@ -565,6 +584,13 @@ dev/ide/build/RunPointer
 	field static INSTANCE Ldev/ide/build/RunPointer;
 	field static MOVE I
 	field static UP I
+dev/ide/build/RunSettings
+	kind interface
+	method abstract entryPoint(Ldev/ide/model/Module;)Ljava/lang/String;
+dev/ide/build/RunSettingsKt
+	kind class
+	super java/lang/Object
+	method static getRUN_SETTINGS()Ldev/ide/platform/ServiceKey;
 dev/ide/build/RunTaskProvider
 	kind interface
 	method abstract tasksFor(Ldev/ide/model/Module;)Ljava/util/List;

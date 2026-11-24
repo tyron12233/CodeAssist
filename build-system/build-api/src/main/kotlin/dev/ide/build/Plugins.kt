@@ -85,6 +85,33 @@ interface BuildConfiguration {
 
     /** Everything declared through [addNativeLibraries] for [module], in declaration order. */
     fun nativeLibraries(module: Module): List<NativeLibraryOutput> = emptyList()
+
+    /**
+     * Declare [dir] as assets [module] contributes to whatever packages it, written by [producedBy].
+     *
+     * [dir] is laid out the way an `assets` folder is: a file at `<dir>/flutter_assets/kernel_blob.bin` is
+     * packaged as `assets/flutter_assets/kernel_blob.bin`. Like [addNativeLibraries] it is for output a
+     * plugin produces on every build (a compiled program, a bundle of its resources), so it sits under the
+     * module's build directory instead of among the user's `src/<set>/assets`.
+     *
+     * A build system that packages assets adds [dir] after the declared `assets` roots of [module] and of
+     * every module it packages, and orders packaging after [producedBy]. One that packages none ignores the
+     * declaration.
+     */
+    fun addAssets(module: Module, dir: Path, producedBy: TaskName) {}
+
+    /** Everything declared through [addAssets] for [module], in declaration order. */
+    fun assets(module: Module): List<AssetsOutput> = emptyList()
+}
+
+/** A directory of assets a task writes, laid out as an `assets` folder is. See [BuildConfiguration.addAssets]. */
+class AssetsOutput(val dir: Path, val producedBy: TaskName) {
+    override fun equals(other: Any?): Boolean =
+        other is AssetsOutput && other.dir == dir && other.producedBy == producedBy
+
+    override fun hashCode(): Int = dir.hashCode() * 31 + producedBy.hashCode()
+
+    override fun toString(): String = "$dir (from $producedBy)"
 }
 
 /** A directory of native libraries a task writes, laid out `<abi>/lib<name>.so`. See [BuildConfiguration.addNativeLibraries]. */

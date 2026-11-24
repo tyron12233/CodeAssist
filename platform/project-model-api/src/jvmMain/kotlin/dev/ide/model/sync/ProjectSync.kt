@@ -125,6 +125,17 @@ interface ProjectImporter {
     /** Read the build files at [SyncRequest.root] into a snapshot. Pure with respect to the model: it may
      *  read the file system and the network, but must not mutate the project model. */
     suspend fun resolve(request: SyncRequest): SyncOutcome
+
+    /**
+     * Sync without asking before a build starts, when a [syncFiles] match changed since the last sync.
+     *
+     * For an importer whose model follows files a tool rewrites rather than files the user edits: a pub
+     * package's Flutter plugins become modules of their own, and `pub get` changes which ones there are. Its
+     * user did not edit a build file and should not have to tap Sync for the next build to see the change.
+     * The host syncs, re-resolves dependencies and then builds. Off by default: a build that silently
+     * re-reads hand-edited build files would discard edits made in the IDE since.
+     */
+    val syncBeforeBuild: Boolean get() = false
 }
 
 /** Plugins contribute project importers here; the host selects one per project root by [ProjectImporter.detect]. */

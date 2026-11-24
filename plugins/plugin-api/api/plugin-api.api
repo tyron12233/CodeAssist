@@ -1,6 +1,9 @@
-# The compiled surface of io.github.tyron12233:plugin-api, pinned at SPI 3.6.0.
+# The compiled surface of io.github.tyron12233:plugin-api, pinned at SPI 3.8.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
+dev/ide/plugin/HostPath_jvmKt
+	kind class
+	super java/lang/Object
 dev/ide/plugin/Plugin
 	kind interface
 	method abstract register(Ldev/ide/plugin/PluginRegistration;)V
@@ -601,6 +604,12 @@ dev/ide/plugin/editor/EditorTopics
 	super java/lang/Object
 	field static INSTANCE Ldev/ide/plugin/editor/EditorTopics;
 	method getEDITOR()Ldev/ide/platform/Topic;
+dev/ide/plugin/editor/GutterActions
+	kind class
+	super java/lang/Object
+	field static INSTANCE Ldev/ide/plugin/editor/GutterActions;
+	field static RUN_TASK_PREFIX Ljava/lang/String;
+	method runTask(Ljava/lang/String;)Ljava/lang/String;
 dev/ide/plugin/editor/GutterMark
 	kind class
 	super java/lang/Object

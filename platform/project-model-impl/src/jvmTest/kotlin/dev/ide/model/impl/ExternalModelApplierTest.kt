@@ -5,6 +5,7 @@ import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
 import dev.ide.model.LanguageLevel
 import dev.ide.model.LibraryDependency
+import dev.ide.model.LibraryRef
 import dev.ide.model.ModuleDependency
 import dev.ide.model.sync.ExternalFacet
 import dev.ide.model.sync.ExternalLibrary
@@ -136,6 +137,43 @@ class ExternalModelApplierTest {
         val declared = store.workspace.projects.single().modules.single()
             .dependencies.filterIsInstance<LibraryDependency>().map { it.library.name }
         assertEquals(listOf("b:two:2.0"), declared, "the build files are the source of truth for declarations")
+    }
+
+    @Test
+    fun anIdeOwnedSyncReplacesOnlyWhatThePreviousSyncDeclared() = withWorkspace { platform, store ->
+        platform.registerTestTypes()
+        val applier = ExternalModelApplier(store)
+        val first = snapshot(
+            appModule(dependencies = listOf(ExternalLibrary("a:one:1.0"), ExternalModuleRef("plugin_a"))),
+            ExternalModule(name = "plugin_a", dirRelPath = "plugins/a", typeId = "java-lib"),
+        )
+        applier.apply(first, LanguageLevel.JAVA_17)
+
+        // The user adds a library in the IDE; the sync knows nothing of it.
+        val project = store.workspace.projects.single()
+        project.beginModification().apply {
+            module(project.modules.single { it.name == "app" }.id)
+                .addDependency(LibraryDependency(LibraryRef("u:mine:1.0"), DependencyScope.IMPLEMENTATION))
+            commit()
+        }
+
+        // The next sync no longer has plugin_a (pub get dropped it) and adds plugin_b.
+        val second = snapshot(
+            appModule(dependencies = listOf(ExternalLibrary("a:one:1.0"), ExternalModuleRef("plugin_b"))),
+            ExternalModule(name = "plugin_b", dirRelPath = "plugins/b", typeId = "java-lib"),
+        )
+        val report = applier.apply(second, LanguageLevel.JAVA_17, previous = first)
+
+        assertEquals(listOf("plugin_a"), report.removed, "what the previous sync produced and this one did not is gone")
+        val modules = store.workspace.projects.single().modules
+        assertEquals(setOf("app", "plugin_b"), modules.map { it.name }.toSet())
+        val app = modules.single { it.name == "app" }
+        assertEquals(
+            setOf("u:mine:1.0", "a:one:1.0"),
+            app.dependencies.filterIsInstance<LibraryDependency>().map { it.library.name }.toSet(),
+            "the user's own library survives; the synced one is not doubled",
+        )
+        assertEquals(listOf("plugin_b"), app.dependencies.filterIsInstance<ModuleDependency>().map { it.target.value })
     }
 
     @Test

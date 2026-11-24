@@ -826,6 +826,10 @@ class AndroidBuildSystem(
         // realized rather than now: the plugins that declare them are applied after every task is registered.
         val nativeModules = (listOf(app) + closure).distinctBy { it.id }
         fun contributedNative() = nativeModules.flatMap { config.nativeLibraries(it) }
+        // Assets a plugin produces for the app or a module it packages (a compiled Flutter program and its
+        // bundle), after the declared roots. Read at realize time for the same reason as the native ones.
+        fun packagedAssets() = (assetsDirs + nativeModules.flatMap { config.assets(it) }.map { it.dir }).distinct()
+        fun assetProducers() = nativeModules.flatMap { config.assets(it) }.map { it.producedBy }.distinct()
         tasks.task(mergeNativeLibs) {
             MergeNativeLibsTask(
                 mergeNativeLibs, jniDirs + contributedNative().map { it.dir }.distinct(), externalJars,
@@ -1092,8 +1096,9 @@ class AndroidBuildSystem(
             val bundleResAp = if (shrinkResources) layout.shrunkProtoAp else layout.protoAp
             val packageBundle = step("packageBundle")
             tasks.task(packageBundle, pkgDeps) {
-                BundleTask(packageBundle, bundleResAp, dexDirs, assetsDirs, listOf(layout.mergedNativeLibs), layout.unsignedAab, layout.baseModuleZip, bundler, javaResJars = listOf(layout.mergedJavaRes), artProfile = artProfile, packaging = facet.packaging)
+                BundleTask(packageBundle, bundleResAp, dexDirs, packagedAssets(), listOf(layout.mergedNativeLibs), layout.unsignedAab, layout.baseModuleZip, bundler, javaResJars = listOf(layout.mergedJavaRes), artProfile = artProfile, packaging = facet.packaging)
             }
+            tasks.named(packageBundle).configure { assetProducers().forEach { dependsOn(it) } }
             val signBundle = step("signBundle")
             tasks.task(signBundle, listOf(packageBundle)) {
                 SignBundleTask(signBundle, layout.unsignedAab, layout.signedAab, variantSigning, facet.minSdk, bundleSigner)
@@ -1103,7 +1108,8 @@ class AndroidBuildSystem(
             return
         }
 
-        tasks.task(pkg, pkgDeps) { PackageApkTask(pkg, layout.resourcesAp, dexDirs, assetsDirs, listOf(layout.mergedNativeLibs), layout.unsignedApk, javaResJars = listOf(layout.mergedJavaRes), artProfile = artProfile, packaging = facet.packaging, compressionLevel = if (release) java.util.zip.Deflater.BEST_COMPRESSION else java.util.zip.Deflater.BEST_SPEED) }
+        tasks.task(pkg, pkgDeps) { PackageApkTask(pkg, layout.resourcesAp, dexDirs, packagedAssets(), listOf(layout.mergedNativeLibs), layout.unsignedApk, javaResJars = listOf(layout.mergedJavaRes), artProfile = artProfile, packaging = facet.packaging, compressionLevel = if (release) java.util.zip.Deflater.BEST_COMPRESSION else java.util.zip.Deflater.BEST_SPEED) }
+        tasks.named(pkg).configure { assetProducers().forEach { dependsOn(it) } }
         // `dexApi`: the minSdk, or this device's level for a Run, whose APK goes nowhere else (see dexApiFor).
         tasks.task(sign, listOf(pkg)) { SignApkTask(sign, layout.unsignedApk, layout.signedApk, variantSigning, signer, minSdk = dexApi) }
         // Top-level lifecycle aggregate (AGP's `assemble<Variant>`): fronts the signed APK.

@@ -95,7 +95,8 @@ internal class ProjectSyncService(private val ctx: EngineContext) {
     ): ProjectSyncOutcome {
         val importer = importer()
             ?: return ProjectSyncOutcome(false, "No build files to sync from were found.")
-        val request = SyncRequest(ctx.workspaceRoot, progress, reason)
+        val previous = SyncSnapshot.read(ctx.workspaceRoot, importer.id.value)
+        val request = SyncRequest(ctx.workspaceRoot, progress, reason, previous)
         val outcome = runCatching {
             importer.resolve(request)
         }.getOrElse { e ->
@@ -109,7 +110,9 @@ internal class ProjectSyncService(private val ctx: EngineContext) {
             notes(outcome.messages),
         )
 
-        val report = applyToModel(contributeTo(ctx.platform.extensions, importer, request, model), importer, recreate)
+        val contributed = contributeTo(ctx.platform.extensions, importer, request, model)
+        val report = applyToModel(contributed, importer, recreate, previous)
+        SyncSnapshot.write(ctx.workspaceRoot, importer.id.value, contributed)
         ExternalRepositories.merge(ctx.workspaceRoot, model.repositories)
         record(importer, outcome.messages)
 
@@ -130,16 +133,25 @@ internal class ProjectSyncService(private val ctx: EngineContext) {
         model: ExternalProjectModel,
         importer: ProjectImporter,
         recreate: Set<String>,
+        previous: ExternalProjectModel?,
     ): ExternalModelApplier.Report {
         val report = ExternalModelApplier(ctx.store).apply(
             model,
             defaultLanguageLevel(),
+            previous = previous,
             removeAbsent = importer.ownership == ModelOwnership.EXTERNAL,
             recreate = recreate,
         )
         ctx.store.save()
         return report
     }
+
+    /**
+     * The importer to sync before a build: one that asked for it ([ProjectImporter.syncBeforeBuild]) and whose
+     * watched files changed since its last sync. Null when the build can start as the model is. Reads the disk.
+     */
+    fun importerToSyncBeforeBuild(): ProjectImporter? =
+        importer()?.takeIf { it.syncBeforeBuild && isStale() }
 
     /** The language level a module with none of its own inherits: the project's existing one. */
     private fun defaultLanguageLevel(): LanguageLevel =

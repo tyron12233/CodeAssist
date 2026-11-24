@@ -117,6 +117,7 @@ import dev.ide.core.sync.ExternalRepositories
 import dev.ide.core.sync.NoSyncProgress
 import dev.ide.core.sync.ProjectSyncOutcome
 import dev.ide.core.sync.ProjectSyncService
+import dev.ide.core.sync.SyncSnapshot
 import dev.ide.core.sync.SyncStamp
 import dev.ide.core.sync.UnrecognizedProjectMarker
 import dev.ide.core.templates.CalculatorSampleTemplate
@@ -2319,6 +2320,31 @@ class IdeServices private constructor(
      * declare. Model + persistence only; the caller re-resolves dependencies and re-indexes afterwards.
      */
     internal suspend fun syncFromBuildFiles(): ProjectSyncOutcome = projectSync.sync(SyncReason.MANUAL)
+
+    /**
+     * True when this project's importer syncs before builds ([dev.ide.model.sync.ProjectImporter.syncBeforeBuild]),
+     * so a build should go through [syncBeforeBuildIfNeeded] first. Asks the importers to detect the folder,
+     * which stats a few files; whether a sync is actually due is [syncBeforeBuildIfNeeded]'s, off the main thread.
+     */
+    fun syncsBeforeBuild(): Boolean = runCatching { projectSync.importer()?.syncBeforeBuild == true }.getOrDefault(false)
+
+    /**
+     * Sync the project before a build when its importer asks for that and is out of date
+     * ([dev.ide.model.sync.ProjectImporter.syncBeforeBuild]), then re-resolve dependencies and re-index when the
+     * model changed, as a manual Sync does, so the build sees new modules with their libraries in place.
+     * Returns the sync's outcome, or null when no sync was due. Must run in the IDE's process: the `:build`
+     * daemon reads the model from disk and would not see a sync of its own copy.
+     */
+    internal suspend fun syncBeforeBuildIfNeeded(): ProjectSyncOutcome? {
+        val importer = projectSync.importerToSyncBeforeBuild() ?: return null
+        val outcome = projectSync.sync(SyncReason.BUILD_FILE_CHANGED)
+        if (outcome.ok && outcome.modelChanged) {
+            dependencies.retryDependencyResolution()
+            reindex()
+        }
+        if (!outcome.ok) Log.logger("ide.sync").warn("sync before build (${importer.displayName}) failed: ${outcome.message}")
+        return outcome
+    }
 
     /**
      * The target this compatibility-mode project's Kotlin Multiplatform modules are imported for, or null
@@ -6730,6 +6756,8 @@ class IdeServices private constructor(
                 )
             }
             SyncStamp.write(root, importer.id.value, SyncStamp.match(root, importer.syncFiles()))
+            // What this import declared, so the first sync replaces only that (see SyncSnapshot).
+            SyncSnapshot.write(root, importer.id.value, model)
             return true
         }
 

@@ -1,5 +1,6 @@
 package dev.ide.build.engine
 
+import dev.ide.build.AssetsOutput
 import dev.ide.build.BuildConfiguration
 import dev.ide.build.BuildEnv
 import dev.ide.build.BuildPlugin
@@ -45,6 +46,18 @@ class SimpleBuildConfiguration(
 
     @Synchronized
     override fun nativeLibraries(module: Module): List<NativeLibraryOutput> = nativeLibs[module.id]?.toList().orEmpty()
+
+    private val assetDirs = LinkedHashMap<ModuleId, MutableList<AssetsOutput>>()
+
+    @Synchronized
+    override fun addAssets(module: Module, dir: Path, producedBy: TaskName) {
+        val list = assetDirs.getOrPut(module.id) { ArrayList() }
+        val output = AssetsOutput(dir, producedBy)
+        if (output !in list) list.add(output)
+    }
+
+    @Synchronized
+    override fun assets(module: Module): List<AssetsOutput> = assetDirs[module.id]?.toList().orEmpty()
 }
 
 /**

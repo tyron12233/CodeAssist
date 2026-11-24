@@ -10,7 +10,12 @@ import dev.ide.ui.backend.RunConsoleUi
 import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.UiPermissionDecision
 import dev.ide.ui.backend.UiPermissionRequest
+import dev.ide.platform.log.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 /** [BuildService] over the engine: build/run state, the run-task list, interactive console I/O, and the
  *  run-sandbox permission prompts. The observable flows re-point to the live engine on each project swap. */
@@ -21,8 +26,27 @@ internal class BuildBackend(private val ctx: BackendContext) : BuildService {
 
     override val buildState: StateFlow<BuildState> = ctx.engineFlow(BuildState()) { runner(it).buildState }
     override fun runTasks(): List<RunTaskOption> = runner(ctx.services).runTasks()
-    override fun runTask(id: String) = runner(ctx.services).runTask(id)
-    override fun runBuild() = runner(ctx.services).runBuild()
+    override fun runTask(id: String) = beforeBuild { it.runTask(id) }
+    override fun runBuild() = beforeBuild { it.runBuild() }
+
+    /** Where a build waits for its project to sync first; see [beforeBuild]. */
+    private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Start a build with [start], syncing the project first when its importer asks for that and is out of date
+     * ([IdeServices.syncBeforeBuildIfNeeded]): a Flutter app whose `pub get` brought in a plugin builds with the
+     * plugin's module in place. Here, in the IDE's process, because the `:build` daemon reads the model from
+     * disk. A project whose importer does not ask starts at once, on the caller's thread, as it always has.
+     */
+    private fun beforeBuild(start: (BuildRunner) -> Unit) {
+        val services = ctx.services
+        if (!services.syncsBeforeBuild()) return start(runner(services))
+        syncScope.launch {
+            runCatching { services.syncBeforeBuildIfNeeded() }
+                .onFailure { log.warn("sync before build failed; building with the model as it is", it) }
+            start(runner(services))
+        }
+    }
     override fun stopBuild() = runner(ctx.services).stopBuild()
 
     override val runConsole: StateFlow<RunConsoleUi?> = ctx.engineFlow<RunConsoleUi?>(null) { runner(it).runConsole }
@@ -43,4 +67,8 @@ internal class BuildBackend(private val ctx: BackendContext) : BuildService {
     override fun listVariants(moduleName: String): List<String> = ctx.services.listVariants(moduleName)
     override fun activeVariant(moduleName: String): String? = ctx.services.activeVariant(moduleName)
     override fun setActiveVariant(moduleName: String, variant: String) = ctx.services.setActiveVariant(moduleName, variant)
+
+    private companion object {
+        val log = Log.logger("ide.build")
+    }
 }

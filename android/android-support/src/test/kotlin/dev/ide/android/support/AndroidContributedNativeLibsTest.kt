@@ -106,6 +106,50 @@ class AndroidContributedNativeLibsTest {
         assertMergeReads(bundle, plugin.dir)
     }
 
+    /** Declares `<module>/build/assets-out` as assets of [moduleName], written by `:<module>:bundleAssets`. */
+    private class AssetsPlugin(private val moduleName: String) : BuildPlugin {
+        override val id = "assets-test"
+        lateinit var dir: Path
+
+        override fun apply(config: BuildConfiguration) {
+            val module = config.project.modules.single { it.name == moduleName }
+            val task = TaskName(":$moduleName:bundleAssets")
+            dir = config.env.buildDir(module).resolve("assets-out")
+            config.tasks.register(task) { NoopTask(task) }
+            config.addAssets(module, dir, task)
+        }
+    }
+
+    @Test
+    fun appPackagesDeclaredAssetsAfterTheirProducer() = withProject { project, buildSystem, root ->
+        val plugin = AssetsPlugin("app")
+        val graph = graph(buildSystem, project, root, plugin, "app")
+
+        val pkg = graph.task(":app:packageApkDebug")
+        assertTrue(
+            graph.dependencies(pkg).any { it.name == TaskName(":app:bundleAssets") },
+            "packageApk must run after the task that writes the declared assets",
+        )
+        assertReadsAsset(pkg, plugin.dir)
+    }
+
+    @Test
+    fun appPackagesAssetsDeclaredForAModuleItDependsOn() = withProject { project, buildSystem, root ->
+        val plugin = AssetsPlugin("feature")
+        val graph = graph(buildSystem, project, root, plugin, "app")
+
+        val pkg = graph.task(":app:packageApkDebug")
+        assertTrue(graph.dependencies(pkg).any { it.name == TaskName(":feature:bundleAssets") })
+        assertReadsAsset(pkg, plugin.dir)
+    }
+
+    private fun assertReadsAsset(task: Task, dir: Path) {
+        val before = task.inputs.fingerprint()
+        Files.createDirectories(dir.resolve("flutter_assets"))
+        Files.write(dir.resolve("flutter_assets/kernel_blob.bin"), byteArrayOf(1, 2, 3))
+        assertNotEquals(before, task.inputs.fingerprint(), "${task.name} does not read ${dir.fileName}")
+    }
+
     /** A library appearing in [dir] has to change [task]'s inputs, which is what proves the task reads it. */
     private fun assertMergeReads(task: Task, dir: Path) {
         val before = task.inputs.fingerprint()

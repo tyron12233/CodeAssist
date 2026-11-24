@@ -1,4 +1,4 @@
-# The compiled surface of io.github.tyron12233:project-model-api, pinned at SPI 3.6.0.
+# The compiled surface of io.github.tyron12233:project-model-api, pinned at SPI 3.8.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/model/AndroidBuildFeatures
@@ -172,6 +172,11 @@ dev/ide/model/ContentRoot
 	kind interface
 	method abstract getDir()Ldev/ide/vfs/VirtualFile;
 	method abstract getRoles()Ljava/util/Set;
+dev/ide/model/ContentWalkKt
+	kind class
+	super java/lang/Object
+	method static contentFilesUnder(Ljava/nio/file/Path;Ljava/util/Set;)Ljava/util/List;
+	method static derivedOutputDirs(Ldev/ide/model/Module;)Ljava/util/Set;
 dev/ide/model/DependencyChange
 	kind interface
 	method abstract getAdded()Z
@@ -1466,10 +1471,12 @@ dev/ide/model/sync/ProjectImporter
 	method abstract resolve(Ldev/ide/model/sync/SyncRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	method abstract syncFiles()Ljava/util/List;
 	method getOwnership()Ldev/ide/model/sync/ModelOwnership;
+	method getSyncBeforeBuild()Z
 dev/ide/model/sync/ProjectImporter$DefaultImpls
 	kind class
 	super java/lang/Object
 	method static getOwnership(Ldev/ide/model/sync/ProjectImporter;)Ldev/ide/model/sync/ModelOwnership;
+	method static getSyncBeforeBuild(Ldev/ide/model/sync/ProjectImporter;)Z
 dev/ide/model/sync/ProjectSyncKt
 	kind class
 	super java/lang/Object
