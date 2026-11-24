@@ -1,0 +1,18 @@
+[plugin]
+id = "dev.codeassist.swift"
+name = "Swift"
+version = "0.1.0"
+apiVersion = 4
+description = "Swift on the device, with a bundled Swift 6.4.3 toolchain for Android (one plugin APK per ABI). Run compiles and runs a Swift package's executable in the Run console, through the compiler's JIT, with the standard library and Foundation. A Swift Console App template starts one. Completion and errors, and SwiftUI previews, come next."
+entryPoints = ["dev.codeassist.swift.SwiftPlugin"]
+uiEntryPoints = ["dev.codeassist.swift.SwiftUiPlugin"]
+capabilities = [
+    "model.moduleType",
+    "build.runTask",
+    "build.task",
+    "ui.editorLanguage",
+    "fs.read",
+    "fs.write",
+]
+# The plugin data directory (privateDataDir) arrived with SPI 3.4.0, first released in CodeAssist 3.41.0.
+minHostVersion = "3.41.0"

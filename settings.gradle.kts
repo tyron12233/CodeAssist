@@ -244,6 +244,7 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":samples:lsp-plugin",
         ":samples:dart-plugin",
         ":samples:dotnet-plugin",
+        ":samples:swift-plugin",
     )
 }
 
