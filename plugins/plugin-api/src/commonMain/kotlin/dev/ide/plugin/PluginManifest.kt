@@ -437,6 +437,10 @@ const val PLUGIN_API_VERSION: Int = 4
  * plugin joins the host's Run of an Android app module, with extras on its launch intent and a session in the Run
  * console once it launched. The Dart plugin makes a Flutter app's Run Debug `flutter run` with it: the app's own
  * APK, attached for hot reload. An older host never consults it.
+ *
+ * And `PluginManifest.optionalDependsOn` (TOML `optionalDependsOn = [...]`): plugins this one works with but
+ * does not need. A present one loads first; a missing one blocks nothing, and the Plugins screen offers to get
+ * it, as it now also does for a missing [PluginManifest.dependsOn]. An older host ignores the key.
  */
 const val PLUGIN_SPI_VERSION: String = "3.8.0"
 
@@ -485,6 +489,16 @@ data class PluginManifest(
     val capabilities: List<String> = emptyList(),
     val minHostVersion: String? = null,
     val trusted: Boolean = true,
+    /**
+     * Ids of plugins this one works with but does not need (SPI 3.8.0). One that is installed and enabled
+     * loads first, as if it were in [dependsOn], so this plugin can look up what it contributes; one that is
+     * missing or turned off blocks nothing. The Plugins screen names the missing ones on this plugin's page and
+     * offers to get them, so a feature that needs another plugin is one tap from working.
+     *
+     * The Dart plugin names the NDK plugin here: Flutter apps build without it, and only the plugins that ship
+     * C code through `dart:ffi` need it.
+     */
+    val optionalDependsOn: List<String> = emptyList(),
 ) {
     /** The attribution id every contribution this plugin makes is tagged with. */
     val pluginId: PluginId get() = PluginId(id)

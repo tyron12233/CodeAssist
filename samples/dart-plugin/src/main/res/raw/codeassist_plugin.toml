@@ -23,3 +23,7 @@ capabilities = [
 minHostVersion = "3.40.0"
 # Building a Flutter APK packages a build directory's assets, which SPI 3.8.0 added; on an older IDE that build
 # fails and says to update, and everything else works.
+
+# Flutter plugins that ship C code through dart:ffi build with the NDK plugin. Everything else works without it,
+# so it is optional: when it is installed it loads first, and when it is not the Plugins screen offers it.
+optionalDependsOn = ["dev.codeassist.ndk"]

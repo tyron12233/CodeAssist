@@ -18,6 +18,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.runtime.key
 import dev.ide.ui.theme.Motion
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -104,6 +105,13 @@ import dev.ide.ui.generated.resources.plugins_detail_app_version
 import dev.ide.ui.generated.resources.plugins_detail_builtin
 import dev.ide.ui.generated.resources.plugins_detail_copied
 import dev.ide.ui.generated.resources.plugins_detail_depends
+import dev.ide.ui.generated.resources.plugins_chip_needs
+import dev.ide.ui.generated.resources.plugins_chip_works_with
+import dev.ide.ui.generated.resources.plugins_detail_works_with
+import dev.ide.ui.generated.resources.plugins_uses_get
+import dev.ide.ui.generated.resources.plugins_uses_optional
+import dev.ide.ui.generated.resources.plugins_uses_required
+import dev.ide.ui.generated.resources.plugins_uses_title
 import dev.ide.ui.generated.resources.plugins_detail_details
 import dev.ide.ui.generated.resources.plugins_detail_enabled
 import dev.ide.ui.generated.resources.plugins_detail_enabled_hint
@@ -218,6 +226,16 @@ fun PluginsScreen(
     val detail = detailId?.let { id -> plugins.firstOrNull { it.id == id } }
     // The plugin whose consent dialog is open. Nothing loads while this is unanswered.
     var asking by remember { mutableStateOf<UiPluginInfo?>(null) }
+    // The plugin the Get tab leads with: one another plugin's page asked for.
+    var getFocus by remember { mutableStateOf<String?>(null) }
+    // What the published plugins are called, for naming a plugin another one uses by more than its id. Fetched
+    // only when some plugin here uses one this device does not have.
+    val wantsNames = plugins.any { it.missingRequired.isNotEmpty() || it.missingOptional.isNotEmpty() }
+    var published by remember { mutableStateOf<List<UiPluginDownload>>(emptyList()) }
+    LaunchedEffect(wantsNames) {
+        if (wantsNames) published = runCatching { backend.settings.pluginDownloads().plugins }.getOrDefault(emptyList())
+    }
+    val getPlugin: (String) -> Unit = { id -> getFocus = id; detailId = null; tab = PluginsTab.Get; query = "" }
 
     val refresh = {
         plugins = backend.settings.pluginCatalog()
@@ -257,18 +275,20 @@ fun PluginsScreen(
                             onOpenLogs = onOpenLogs?.takeIf { !detail.builtIn && detail.togglable }?.let { open -> { open(detail.id) } },
                             onOpenApp = detail.app?.takeIf { it.canOpen }?.let { { backend.settings.openPluginApp(detail.id) } },
                             onOpenAppInfo = detail.app?.let { { backend.settings.openPluginAppInfo(detail.id) } },
+                            published = published,
+                            onGet = getPlugin,
                         )
                     }
                 }
                 return@Column
             }
             Box(Modifier.entranceReveal(order = 1)) {
-                PluginTabs(tab, installed.size, builtIn.size) { tab = it; query = "" }
+                PluginTabs(tab, installed.size, builtIn.size) { tab = it; query = ""; getFocus = null }
             }
             // Keyed by tab: switching tabs composes the new tab's list afresh, so it staggers in again.
             key(tab) {
                 when (tab) {
-                    PluginsTab.Get -> GetPlugins(backend, onOpenUrl)
+                    PluginsTab.Get -> GetPlugins(backend, onOpenUrl, getFocus)
                     else -> {
                         val all = if (tab == PluginsTab.BuiltIn) builtIn else installed
                         val shown = if (query.isBlank()) all else all.filter { it.matches(query) }
@@ -300,6 +320,7 @@ fun PluginsScreen(
                                         Box(Modifier.entranceReveal(order = 2 + i)) {
                                             PluginCard(
                                                 p,
+                                                published = published,
                                                 onOpen = { detailId = p.id },
                                                 onReview = { asking = p },
                                                 onToggle = { enabled -> backend.settings.setPluginEnabled(p.id, enabled); refresh() },
@@ -564,6 +585,7 @@ private fun statusOf(p: UiPluginInfo): Pair<String, androidx.compose.ui.graphics
 @Composable
 private fun PluginCard(
     p: UiPluginInfo,
+    published: List<UiPluginDownload>,
     onOpen: () -> Unit,
     onReview: () -> Unit,
     onToggle: (Boolean) -> Unit,
@@ -608,6 +630,12 @@ private fun PluginCard(
                     PluginStatusPill(status, color)
                     if (p.version.isNotBlank()) Chip("v${p.version}")
                     if (p.app?.signedLikeIde == true) VerifiedChip()
+                    val c = MaterialTheme.colorScheme
+                    p.missingRequired.firstOrNull()?.let {
+                        Chip(stringResource(Res.string.plugins_chip_needs, pluginName(it, published)), fill = c.errorContainer, textColor = c.onErrorContainer)
+                    } ?: p.missingOptional.firstOrNull()?.let {
+                        Chip(stringResource(Res.string.plugins_chip_works_with, pluginName(it, published)), fill = c.secondaryContainer, textColor = c.onSecondaryContainer)
+                    }
                 }
             }
             // A plugin awaiting an answer gets Review rather than a switch: a switch would say "off", when the
@@ -650,6 +678,8 @@ private fun PluginDetail(
     onOpenLogs: (() -> Unit)?,
     onOpenApp: (() -> Unit)?,
     onOpenAppInfo: (() -> Unit)?,
+    published: List<UiPluginDownload> = emptyList(),
+    onGet: (String) -> Unit = {},
 ) {
     val c = MaterialTheme.colorScheme
     Column(
@@ -676,6 +706,14 @@ private fun PluginDetail(
 
         p.error?.let { error ->
             Notice(CaSymbols.error, stringResource(Res.string.plugins_detail_problem), stringResource(Res.string.plugins_failed, error), c.errorContainer, c.onErrorContainer)
+        }
+        // The plugins it uses that this device does not have, each one tap from the Get tab: the required ones
+        // first, since this plugin does not load without them.
+        if (p.missingRequired.isNotEmpty() || p.missingOptional.isNotEmpty()) {
+            Section(title = stringResource(Res.string.plugins_uses_title)) {
+                p.missingRequired.forEach { MissingPluginRow(it, required = true, published, onGet) }
+                p.missingOptional.forEach { MissingPluginRow(it, required = false, published, onGet) }
+            }
         }
         if (p.needsConsent) {
             Column(
@@ -743,6 +781,7 @@ private fun DetailsTable(p: UiPluginInfo) {
         p.apiVersion?.let { add(stringResource(Res.string.plugins_detail_api) to it.toString()) }
         p.minHostVersion?.let { add(stringResource(Res.string.plugins_detail_min_host) to stringResource(Res.string.plugins_detail_min_host_value, it)) }
         if (p.dependsOn.isNotEmpty()) add(stringResource(Res.string.plugins_detail_depends) to p.dependsOn.joinToString(", "))
+        if (p.optionalDependsOn.isNotEmpty()) add(stringResource(Res.string.plugins_detail_works_with) to p.optionalDependsOn.joinToString(", "))
         p.app?.let { app ->
             relativeAge(app.firstInstalledAt, now)?.let { add(stringResource(Res.string.plugins_detail_installed) to it) }
             if (app.lastUpdatedAt > app.firstInstalledAt + 60_000) relativeAge(app.lastUpdatedAt, now)?.let { add(stringResource(Res.string.plugins_detail_updated) to it) }
@@ -772,6 +811,35 @@ private fun DetailsTable(p: UiPluginInfo) {
                     modifier = Modifier.weight(1f),
                 )
             }
+        }
+    }
+}
+
+/** What [id] is called where the published plugins say, else the id itself. */
+private fun pluginName(id: String, published: List<UiPluginDownload>): String =
+    published.firstOrNull { it.id == id }?.name ?: id
+
+/** A plugin another one uses and this device lacks: what it is, whether it is needed, and a way to get it. */
+@Composable
+private fun MissingPluginRow(id: String, required: Boolean, published: List<UiPluginDownload>, onGet: (String) -> Unit) {
+    val c = MaterialTheme.colorScheme
+    val listing = published.firstOrNull { it.id == id }
+    val name = listing?.name ?: id
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        PluginGlyph(name, id, size = 40.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(name, style = MaterialTheme.typography.titleSmall, color = c.onSurface)
+            Text(
+                stringResource(if (required) Res.string.plugins_uses_required else Res.string.plugins_uses_optional),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (required) c.error else c.onSurfaceVariant,
+            )
+            listing?.tagline?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        FilledTonalButton({ onGet(id) }, contentPadding = PaddingValues(horizontal = 14.dp)) {
+            Text(stringResource(Res.string.plugins_uses_get))
         }
     }
 }
@@ -815,7 +883,7 @@ private fun ActionButton(glyph: Char, label: String, onClick: () -> Unit, modifi
 
 /** The "Get plugins" tab: the published plugins, each against what this device has of it. */
 @Composable
-private fun GetPlugins(backend: IdeBackend, onOpenUrl: ((String) -> Unit)?) {
+private fun GetPlugins(backend: IdeBackend, onOpenUrl: ((String) -> Unit)?, focus: String? = null) {
     var result by remember { mutableStateOf<UiPluginDownloads?>(null) }
     var attempt by remember { mutableIntStateOf(0) }
     LaunchedEffect(attempt) { result = backend.settings.pluginDownloads() }
@@ -853,7 +921,11 @@ private fun GetPlugins(backend: IdeBackend, onOpenUrl: ((String) -> Unit)?) {
                     }
                 }
                 // The list arrives after a fetch, so it staggers in when it lands rather than with the screen.
-                r.plugins.forEachIndexed { i, d -> key(d.id) { Box(Modifier.entranceReveal(order = 1 + i)) { DownloadCard(d, onOpenUrl) } } }
+                // The plugin another one's page asked for leads, outlined, so it is the first thing seen.
+                val shown = r.plugins.sortedByDescending { it.id == focus }
+                shown.forEachIndexed { i, d ->
+                    key(d.id) { Box(Modifier.entranceReveal(order = 1 + i)) { DownloadCard(d, onOpenUrl, focused = d.id == focus) } }
+                }
             }
         }
     }
@@ -862,12 +934,13 @@ private fun GetPlugins(backend: IdeBackend, onOpenUrl: ((String) -> Unit)?) {
 /** One downloadable plugin: what it is for, what it adds, and the one thing to do about it. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DownloadCard(d: UiPluginDownload, onOpenUrl: ((String) -> Unit)?) {
+private fun DownloadCard(d: UiPluginDownload, onOpenUrl: ((String) -> Unit)?, focused: Boolean = false) {
     val c = MaterialTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
     Surface(
         shape = RoundedCornerShape(26.dp),
         color = c.surfaceContainerLow,
+        border = if (focused) BorderStroke(2.dp, c.primary) else null,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

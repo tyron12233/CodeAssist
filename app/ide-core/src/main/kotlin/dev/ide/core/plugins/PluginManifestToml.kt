@@ -19,6 +19,7 @@ import dev.ide.plugin.PluginManifest
  * entryPoints = ["com.example.hello.HelloPlugin"]
  * uiEntryPoints = ["com.example.hello.HelloUiPlugin"]
  * dependsOn = ["kotlin-language"]
+ * optionalDependsOn = ["dev.codeassist.ndk"]
  * capabilities = ["ui.toolWindow"]
  * minHostVersion = "3.11.0"
  * ```
@@ -61,6 +62,7 @@ object PluginManifestToml {
             capabilities = strings(table, "capabilities"),
             minHostVersion = string(table, "minHostVersion"),
             trusted = false,
+            optionalDependsOn = strings(table, "optionalDependsOn"),
         )
     }
 

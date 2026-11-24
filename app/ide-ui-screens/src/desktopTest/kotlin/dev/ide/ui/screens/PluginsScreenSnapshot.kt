@@ -123,6 +123,24 @@ class PluginsScreenSnapshot {
         )
     }
 
+    /** Dart installed without the NDK plugin it works with, and a plugin whose required one is missing. */
+    private class UsesBackend : StubBackend() {
+        override fun pluginCatalog(): List<UiPluginInfo> = listOf(
+            UiPluginInfo(
+                "dev.codeassist.dart", "Dart & Flutter", "0.3.0", "Dart and Flutter apps, with hot reload and live previews.",
+                essential = false, enabled = true, builtIn = false, origin = "dev.codeassist.dart",
+                optionalDependsOn = listOf("dev.codeassist.ndk"), missingOptional = listOf("dev.codeassist.ndk"),
+            ),
+            UiPluginInfo(
+                "com.example.addon", "Addon", "1.0.0", "Extends another plugin.",
+                essential = false, enabled = true, builtIn = false, origin = "com.example.addon",
+                dependsOn = listOf("com.example.base"), missingRequired = listOf("com.example.base"),
+                error = "requires plugin 'com.example.base', which is not available",
+            ),
+        )
+        override suspend fun pluginDownloads(): UiPluginDownloads = DownloadsBackend().pluginDownloads()
+    }
+
     /** With nothing installed, the Installed tab still exists and shows its empty state. */
     private class NoInstalledBackend : StubBackend() {
         override fun pluginCatalog(): List<UiPluginInfo> = listOf(
@@ -164,6 +182,22 @@ class PluginsScreenSnapshot {
     }
 
     @Test
+    fun renderPluginsThatUseMissingOnes() {
+        snapshot("plugins-uses.png", UsesBackend(), startTab = PluginsTab.Installed)
+    }
+
+    @Test
+    fun renderPageOfAPluginThatWorksWithAMissingOne() {
+        snapshot("plugins-uses-detail.png", UsesBackend(), startTab = PluginsTab.Installed, click = FIRST_CARD, height = 2400)
+    }
+
+    @Test
+    fun getOnAPluginsPageLeadsTheGetTabWithIt() {
+        // Get, on Dart's page, beside the NDK plugin it works with.
+        snapshot("plugins-uses-get.png", UsesBackend(), startTab = PluginsTab.Installed, click = FIRST_CARD, then = Offset(718f, 553f))
+    }
+
+    @Test
     fun renderWaitingChangesWithRestart() {
         snapshot("plugins-restart-pending.png", WaitingBackend(), onRestart = {})
     }
@@ -174,6 +208,8 @@ class PluginsScreenSnapshot {
         backend: IdeBackend,
         startTab: PluginsTab? = null,
         click: Offset? = null,
+        /** A second tap, once the first one's screen has settled. */
+        then: Offset? = null,
         onRestart: (() -> Unit)? = null,
         height: Int = HEIGHT,
     ) {
@@ -195,7 +231,12 @@ class PluginsScreenSnapshot {
                 // The tab indicator animates across and the new list staggers in; step until both settle.
                 for (frame in 21..60) scene.render(frame * 50_000_000L)
             }
-            val img = scene.render(3_200_000_000L)
+            if (then != null) {
+                scene.sendPointerEvent(PointerEventType.Press, then)
+                scene.sendPointerEvent(PointerEventType.Release, then)
+                for (frame in 61..100) scene.render(frame * 50_000_000L)
+            }
+            val img = scene.render(if (then != null) 5_200_000_000L else 3_200_000_000L)
             val png = img.encodeToData(EncodedImageFormat.PNG)!!.bytes
             File("$OUT_DIR/$name").apply { parentFile?.mkdirs() }.writeBytes(png)
             println("wrote snapshot: $OUT_DIR/$name (${png.size} bytes)")

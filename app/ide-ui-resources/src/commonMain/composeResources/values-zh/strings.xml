@@ -2603,6 +2603,13 @@
     <string name="plugins_detail_min_host">需要 CodeAssist</string>
     <string name="plugins_detail_min_host_value">%1$s 或更高版本</string>
     <string name="plugins_detail_depends">依赖于</string>
+    <string name="plugins_detail_works_with">配合使用</string>
+    <string name="plugins_uses_title">它使用的插件</string>
+    <string name="plugins_uses_required">必需：缺少它无法加载。</string>
+    <string name="plugins_uses_optional">可选：扩展它的功能。</string>
+    <string name="plugins_uses_get">获取</string>
+    <string name="plugins_chip_needs">需要 %1$s</string>
+    <string name="plugins_chip_works_with">可配合 %1$s</string>
     <string name="plugins_detail_installed">安装时间</string>
     <string name="plugins_detail_updated">更新时间</string>
     <string name="plugins_detail_size">大小</string>

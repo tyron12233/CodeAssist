@@ -147,6 +147,9 @@ class PluginManager(
      * plugins visited as roots in declaration order, so the result is deterministic and independent plugins
      * keep their declared relative order. Throws [IllegalArgumentException] on a duplicate id, a `dependsOn`
      * referencing a plugin not in [plugins], or a dependency cycle.
+     *
+     * An `optionalDependsOn` that is in [plugins] orders the same way; one that is not is skipped. An optional
+     * edge that would close a cycle is dropped rather than failing the launch: it promised nothing.
      */
     private fun topoSort(plugins: List<Plugin>): List<Plugin> {
         val byId = LinkedHashMap<String, Plugin>()
@@ -167,6 +170,10 @@ class PluginManager(
             if (p.manifest.id in placed) return
             require(onStack.add(p.manifest.id)) { "plugin dependency cycle at '${p.manifest.id}'" }
             for (dep in p.manifest.dependsOn) visit(byId.getValue(dep))
+            for (dep in p.manifest.optionalDependsOn) {
+                val target = byId[dep] ?: continue
+                if (dep !in onStack) visit(target)
+            }
             onStack.remove(p.manifest.id)
             placed.add(p.manifest.id)
             ordered.add(p)

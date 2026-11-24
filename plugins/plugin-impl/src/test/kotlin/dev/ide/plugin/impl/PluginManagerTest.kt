@@ -28,8 +28,9 @@ private class FakePlugin(
     dependsOn: List<String> = emptyList(),
     private val loadOrder: MutableList<String>? = null,
     private val viaFacade: Boolean = false,
+    optionalDependsOn: List<String> = emptyList(),
 ) : Plugin {
-    override val manifest = PluginManifest(id = id, name = id, dependsOn = dependsOn)
+    override val manifest = PluginManifest(id = id, name = id, dependsOn = dependsOn, optionalDependsOn = optionalDependsOn)
     val contribution = "$id-impl"
 
     override fun register(reg: PluginRegistration) {
@@ -54,6 +55,39 @@ class PluginManagerTest {
         )
         assertEquals(listOf("a", "b"), order)
         assertEquals(listOf("a-impl", "b-impl"), reg.extensions(EP))
+    }
+
+    @Test
+    fun `an optional dependency that is present loads first`() {
+        val order = mutableListOf<String>()
+        PluginManager(ExtensionRegistryImpl()).loadAll(
+            listOf(
+                FakePlugin("dart", loadOrder = order, optionalDependsOn = listOf("ndk")),
+                FakePlugin("ndk", loadOrder = order),
+            )
+        )
+        assertEquals(listOf("ndk", "dart"), order)
+    }
+
+    @Test
+    fun `an optional dependency that is missing blocks nothing`() {
+        val order = mutableListOf<String>()
+        PluginManager(ExtensionRegistryImpl()).loadAll(
+            listOf(FakePlugin("dart", loadOrder = order, optionalDependsOn = listOf("ndk")))
+        )
+        assertEquals(listOf("dart"), order)
+    }
+
+    @Test
+    fun `an optional edge that closes a cycle is dropped instead of failing the launch`() {
+        val order = mutableListOf<String>()
+        PluginManager(ExtensionRegistryImpl()).loadAll(
+            listOf(
+                FakePlugin("a", dependsOn = listOf("b"), loadOrder = order),
+                FakePlugin("b", loadOrder = order, optionalDependsOn = listOf("a")),
+            )
+        )
+        assertEquals(listOf("b", "a"), order)
     }
 
     /** Captures the [PluginRegistration.dataDir] a plugin is handed. */

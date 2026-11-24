@@ -3080,6 +3080,13 @@
     <string name="plugins_detail_min_host">تتطلب CodeAssist</string>
     <string name="plugins_detail_min_host_value">‏%1$s أو أحدث</string>
     <string name="plugins_detail_depends">تعتمد على</string>
+    <string name="plugins_detail_works_with">تعمل مع</string>
+    <string name="plugins_uses_title">الإضافات التي تستخدمها</string>
+    <string name="plugins_uses_required">مطلوبة: لا يمكن تحميلها بدون هذه الإضافة.</string>
+    <string name="plugins_uses_optional">اختيارية: تضيف إلى ما يمكنها فعله.</string>
+    <string name="plugins_uses_get">احصل عليها</string>
+    <string name="plugins_chip_needs">تحتاج %1$s</string>
+    <string name="plugins_chip_works_with">تعمل مع %1$s</string>
     <string name="plugins_detail_installed">تاريخ التثبيت</string>
     <string name="plugins_detail_updated">تاريخ التحديث</string>
     <string name="plugins_detail_size">الحجم</string>

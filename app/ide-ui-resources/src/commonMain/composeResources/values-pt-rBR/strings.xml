@@ -2308,6 +2308,13 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="plugins_detail_min_host">Requer o CodeAssist</string>
     <string name="plugins_detail_min_host_value">%1$s ou mais recente</string>
     <string name="plugins_detail_depends">Depende de</string>
+    <string name="plugins_detail_works_with">Funciona com</string>
+    <string name="plugins_uses_title">Plugins que ele usa</string>
+    <string name="plugins_uses_required">Obrigatório: ele não carrega sem este.</string>
+    <string name="plugins_uses_optional">Opcional: amplia o que ele pode fazer.</string>
+    <string name="plugins_uses_get">Obter</string>
+    <string name="plugins_chip_needs">Precisa de %1$s</string>
+    <string name="plugins_chip_works_with">Funciona com %1$s</string>
     <string name="plugins_detail_installed">Instalado</string>
     <string name="plugins_detail_updated">Atualizado</string>
     <string name="plugins_detail_size">Tamanho</string>

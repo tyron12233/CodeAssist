@@ -112,6 +112,9 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         // "not running yet" straight after the user allowed it. `enabled` already works this way.
         val consented = manager.consentedPlugins()
         val installed = manager.env.installedPlugins.associateBy { it.manifest.id }
+        // Every plugin this device has, built in or installed, whether or not it is turned on: a dependency on one
+        // the user turned off is answered by turning it on, not by downloading it again.
+        val present = catalog.all.mapTo(HashSet()) { it.id }
         val catalogued = catalog.all.map { m ->
             val fromSource = installed[m.id]
             val essential = catalog.isEssential(m.id)
@@ -132,6 +135,9 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
                 minHostVersion = m.minHostVersion,
                 apiVersion = m.apiVersion,
                 app = fromSource?.let { appFacts(it.origin.label) },
+                optionalDependsOn = m.optionalDependsOn,
+                missingRequired = m.dependsOn.filterNot { it in present },
+                missingOptional = m.optionalDependsOn.filterNot { it in present },
             )
         }
         // Plugins with no usable manifest are not in the catalog and have no id to persist a choice against,

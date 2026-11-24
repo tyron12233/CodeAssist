@@ -1813,6 +1813,12 @@ data class UiPluginInfo(
     val apiVersion: Int? = null,
     /** What the package manager says about the installed plugin app, or null for a built-in (or no host support). */
     val app: UiPluginApp? = null,
+    /** Plugins this one works with but does not need (its manifest's `optionalDependsOn`). */
+    val optionalDependsOn: List<String> = emptyList(),
+    /** The [dependsOn] ids not installed on this device: this plugin cannot load until they are. */
+    val missingRequired: List<String> = emptyList(),
+    /** The [optionalDependsOn] ids not installed on this device: what it does with them is unavailable. */
+    val missingOptional: List<String> = emptyList(),
 )
 
 /** An installed plugin app's facts, read from the package manager rather than from anything it declares. */

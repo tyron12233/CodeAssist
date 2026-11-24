@@ -23,6 +23,7 @@ class PluginManifestTomlTest {
             entryPoints = ["com.example.hello.HelloPlugin"]
             uiEntryPoints = ["com.example.hello.HelloUiPlugin"]
             dependsOn = ["kotlin-language"]
+            optionalDependsOn = ["dev.codeassist.ndk"]
             capabilities = ["ui.toolWindow", "fs.read"]
             minHostVersion = "3.11.0"
             """.trimIndent()
@@ -35,6 +36,7 @@ class PluginManifestTomlTest {
         assertEquals(listOf("com.example.hello.HelloPlugin"), m.entryPoints)
         assertEquals(listOf("com.example.hello.HelloUiPlugin"), m.uiEntryPoints)
         assertEquals(listOf("kotlin-language"), m.dependsOn)
+        assertEquals(listOf("dev.codeassist.ndk"), m.optionalDependsOn)
         assertEquals(listOf("ui.toolWindow", "fs.read"), m.capabilities)
         assertEquals("3.11.0", m.minHostVersion)
     }

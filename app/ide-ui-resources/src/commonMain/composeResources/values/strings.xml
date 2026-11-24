@@ -1728,6 +1728,13 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="plugins_detail_min_host">Needs CodeAssist</string>
     <string name="plugins_detail_min_host_value">%1$s or newer</string>
     <string name="plugins_detail_depends">Depends on</string>
+    <string name="plugins_detail_works_with">Works with</string>
+    <string name="plugins_uses_title">Plugins it uses</string>
+    <string name="plugins_uses_required">Required: it can't load without this one.</string>
+    <string name="plugins_uses_optional">Optional: adds to what it can do.</string>
+    <string name="plugins_uses_get">Get</string>
+    <string name="plugins_chip_needs">Needs %1$s</string>
+    <string name="plugins_chip_works_with">Works with %1$s</string>
     <string name="plugins_detail_installed">Installed</string>
     <string name="plugins_detail_updated">Updated</string>
     <string name="plugins_detail_size">Size</string>

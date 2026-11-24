@@ -2325,6 +2325,13 @@
     <string name="plugins_detail_min_host">Требуется CodeAssist</string>
     <string name="plugins_detail_min_host_value">%1$s или новее</string>
     <string name="plugins_detail_depends">Зависит от</string>
+    <string name="plugins_detail_works_with">Работает с</string>
+    <string name="plugins_uses_title">Плагины, которые он использует</string>
+    <string name="plugins_uses_required">Обязательный: без него плагин не загрузится.</string>
+    <string name="plugins_uses_optional">Необязательный: расширяет его возможности.</string>
+    <string name="plugins_uses_get">Получить</string>
+    <string name="plugins_chip_needs">Нужен %1$s</string>
+    <string name="plugins_chip_works_with">Работает с %1$s</string>
     <string name="plugins_detail_installed">Установлен</string>
     <string name="plugins_detail_updated">Обновлён</string>
     <string name="plugins_detail_size">Размер</string>

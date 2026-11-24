@@ -25,3 +25,12 @@
 # Adding the `tokenColorKeys` parameter changed the primary's descriptor and its $default synthetic, and
 # there is no way to keep both while adding a defaulted parameter — a secondary constructor carrying the
 # old defaults is an overload ambiguity, and one without them does not reproduce the $default bridge.
+
+# SPI 3.8.0 (not yet released): PluginManifest grew `optionalDependsOn`, which changes its constructors and
+# copy. A plugin shipped as its own app does not construct a manifest (Plugin.manifest defaults to the packaged
+# TOML, which the host parses with its own copy of this class), so none of the published plugins makes these
+# calls. Decide at the release: keep these lines' members gone, or bump PLUGIN_API_VERSION.
+dev/ide/plugin/PluginManifest ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Z)V
+dev/ide/plugin/PluginManifest ctor (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+dev/ide/plugin/PluginManifest method copy(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Z)Ldev/ide/plugin/PluginManifest;
+dev/ide/plugin/PluginManifest method static copy$default(Ldev/ide/plugin/PluginManifest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/util/List;Ljava/lang/String;ZLjava/util/List;Ljava/util/List;Ljava/util/List;Ljava/lang/String;ZILjava/lang/Object;)Ldev/ide/plugin/PluginManifest;

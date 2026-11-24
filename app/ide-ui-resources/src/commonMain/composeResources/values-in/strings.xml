@@ -2188,6 +2188,13 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="plugins_detail_min_host">Memerlukan CodeAssist</string>
     <string name="plugins_detail_min_host_value">%1$s atau lebih baru</string>
     <string name="plugins_detail_depends">Bergantung pada</string>
+    <string name="plugins_detail_works_with">Bekerja dengan</string>
+    <string name="plugins_uses_title">Plugin yang digunakan</string>
+    <string name="plugins_uses_required">Wajib: tidak dapat dimuat tanpa plugin ini.</string>
+    <string name="plugins_uses_optional">Opsional: menambah apa yang bisa dilakukannya.</string>
+    <string name="plugins_uses_get">Dapatkan</string>
+    <string name="plugins_chip_needs">Memerlukan %1$s</string>
+    <string name="plugins_chip_works_with">Bekerja dengan %1$s</string>
     <string name="plugins_detail_installed">Dipasang</string>
     <string name="plugins_detail_updated">Diperbarui</string>
     <string name="plugins_detail_size">Ukuran</string>

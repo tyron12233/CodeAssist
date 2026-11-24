@@ -44,7 +44,7 @@ class PluginManifestCompletion(
 
         when (val key = keyBeingValued(head)) {
             null -> keys(params, result)
-            "dependsOn" -> knownPluginIds().forEach { id ->
+            "dependsOn", "optionalDependsOn" -> knownPluginIds().forEach { id ->
                 add(params, result, id, CompletionItemKind.VARIABLE, "an installed or built-in plugin id")
             }
             "capabilities" -> CAPABILITIES.forEach { (value, detail) ->
@@ -129,6 +129,7 @@ class PluginManifestCompletion(
             "entryPoints" to "fully-qualified classes implementing Plugin",
             "uiEntryPoints" to "fully-qualified classes implementing UiPlugin (Compose UI)",
             "dependsOn" to "plugin ids that must load first",
+            "optionalDependsOn" to "plugin ids this one works with; load first when installed",
             "capabilities" to "what the plugin declares it does",
             "minHostVersion" to "oldest CodeAssist this plugin runs on",
         )
