@@ -44,4 +44,9 @@ interface IBuildCallback {
     oneway void onAppLog(int level, String tag, int pid, int tid, String message, long timestampMs);
     // Session/connection change. reset = true means clear the buffer (a new run started); packageName may be empty.
     oneway void onAppLogState(boolean connected, String packageName, boolean reset);
+
+    // One new build-log line, whole: onLog carries only the text, so the UI side could not tell an error from
+    // chatter, nor which task said it (a failed task's reason never reached the Errors filter). [level] is a
+    // UiLogLevel ordinal; task and timeLabel may be empty.
+    oneway void onLogLine(String message, int level, String task, String timeLabel, long timestampMs);
 }

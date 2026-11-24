@@ -21,6 +21,7 @@ class BuildDaemonClient(
     private val onStatus: (status: String, moduleName: String, elapsedMs: Long) -> Unit = { _, _, _ -> },
     private val onStep: (name: String, status: String) -> Unit = { _, _ -> },
     private val onLog: (message: String) -> Unit = {},
+    private val onLogLine: (message: String, level: Int, task: String, timeLabel: String, timestampMs: Long) -> Unit = { _, _, _, _, _ -> },
     private val onDiagnostic: (severity: String, message: String, kind: String, source: String, file: String?, line: Int, column: Int, detail: String?, task: String?) -> Unit = { _, _, _, _, _, _, _, _, _ -> },
     private val onRunConsole: (runId: Int, moduleName: String, mainClass: String, phase: Int, acceptsInput: Boolean, hasExit: Boolean, exitCode: Int) -> Unit = { _, _, _, _, _, _, _ -> },
     private val onConsoleChunk: (runId: Int, text: String, kind: Int) -> Unit = { _, _, _ -> },
@@ -68,6 +69,8 @@ class BuildDaemonClient(
             onStatus.invoke(status ?: "", moduleName ?: "", elapsedMs)
         override fun onStep(name: String?, status: String?) = onStep.invoke(name ?: "", status ?: "")
         override fun onLog(message: String?) = onLog.invoke(message ?: "")
+        override fun onLogLine(message: String?, level: Int, task: String?, timeLabel: String?, timestampMs: Long) =
+            onLogLine.invoke(message ?: "", level, task ?: "", timeLabel ?: "", timestampMs)
         override fun onDiagnostic(severity: String?, message: String?, kind: String?, source: String?, file: String?, line: Int, column: Int, detail: String?, task: String?) =
             onDiagnostic.invoke(severity ?: "", message ?: "", kind ?: "", source ?: "", file, line, column, detail, task)
         override fun onRunConsole(runId: Int, moduleName: String?, mainClass: String?, phase: Int, acceptsInput: Boolean, hasExit: Boolean, exitCode: Int) =

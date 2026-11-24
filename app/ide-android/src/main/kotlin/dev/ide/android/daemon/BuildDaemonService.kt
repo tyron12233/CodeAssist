@@ -307,7 +307,10 @@ class BuildDaemonService : Service() {
                 }
             }
             if (bs.log.size > lastLogCount) {
-                for (i in lastLogCount until bs.log.size) runCatching { cb?.onLog(bs.log[i].message) }
+                for (i in lastLogCount until bs.log.size) {
+                    val l = bs.log[i]
+                    runCatching { cb?.onLogLine(l.message, l.level.ordinal, l.task.orEmpty(), l.timeLabel, l.timestampMs) }
+                }
                 lastLogCount = bs.log.size
             }
             if (bs.diagnostics.size > lastDiagCount) {

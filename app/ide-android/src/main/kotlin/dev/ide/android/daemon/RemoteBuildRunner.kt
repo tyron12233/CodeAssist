@@ -164,6 +164,13 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
             noteActivity()
             _buildState.update { it.copy(log = it.log + line(msg)) }
         },
+        onLogLine = { msg, level, task, timeLabel, timestampMs ->
+            noteActivity()
+            val row = BuildLogLine(
+                msg, UiLogLevel.entries.getOrElse(level) { UiLogLevel.Info }, task.ifEmpty { null }, timeLabel, timestampMs,
+            )
+            _buildState.update { it.copy(log = it.log + row) }
+        },
         onDiagnostic = { severity, message, kind, source, file, lineNo, column, detail, task ->
             noteActivity()
             _buildState.update {
