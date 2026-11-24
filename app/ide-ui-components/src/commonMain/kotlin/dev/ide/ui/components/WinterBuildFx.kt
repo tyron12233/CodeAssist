@@ -190,7 +190,7 @@ internal fun FrostEdge(seed: Int, progress: () -> Float, modifier: Modifier = Mo
         )
         for (corner in listOf(Offset(0f, size.height), Offset(size.width, size.height))) {
             val r = reach * 1.8f
-            drawCircle(Brush.radialGradient(listOf(ice.copy(alpha = 0.26f * shown), ice.copy(alpha = 0f)), corner, r), r, corner)
+            drawRadialGlow(listOf(ice.copy(alpha = 0.26f * shown), ice.copy(alpha = 0f)), corner, r)
         }
         for (c in crystals) {
             val grow = ((shown - c.delay) / (1f - c.delay)).coerceIn(0f, 1f)
@@ -258,7 +258,7 @@ internal fun GoldShimmer(seed: Int, progress: () -> Float, modifier: Modifier = 
             if (t <= 0f || t >= 1f) continue
             val a = sin(t * PI.toFloat())
             val c = Offset(g.x * size.width, g.y * size.height * 0.3f + unit * 0.04f)
-            drawCircle(Brush.radialGradient(listOf(StarGold.copy(alpha = 0.35f * a), StarGold.copy(alpha = 0f)), c, unit * 0.05f), unit * 0.05f, c)
+            drawRadialGlow(listOf(StarGold.copy(alpha = 0.35f * a), StarGold.copy(alpha = 0f)), c, unit * 0.05f)
             drawSparkle(c, unit * g.scale * (0.6f + 0.4f * a), StarGold.copy(alpha = a))
         }
     }

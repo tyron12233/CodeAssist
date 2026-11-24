@@ -41,6 +41,16 @@ val WinterSnow = Color(0xFFF7F5F0)
 val WinterLightColors = listOf(StarGold, AuroraTeal, AuroraViolet, Color(0xFF8FC8FF), Color(0xFFF2A6C4))
 
 /**
+ * A disc of [radius] at [center] filled with a radial gradient of [colors]. Draws nothing for a radius that is
+ * not positive: Android's RadialGradient throws on one, and an animation that grows a glow from nothing hands
+ * it exactly 0 on its first frame (the 3.48.0 countdown crash).
+ */
+fun DrawScope.drawRadialGlow(colors: List<Color>, center: Offset, radius: Float) {
+    if (!(radius > 0f)) return
+    drawCircle(Brush.radialGradient(colors, center, radius), radius, center)
+}
+
+/**
  * A six-armed snowflake of [radius] at [center], each arm with one pair of short branches, turned by
  * [rotation] degrees. Drawn as strokes so it stays crisp from a 3 dp flake to a 40 dp one.
  */
@@ -65,11 +75,7 @@ fun DrawScope.drawSnowflake(center: Offset, radius: Float, color: Color, rotatio
 
 /** A soft round flake: the falling snow, where the arms of [drawSnowflake] would be too small to read. */
 fun DrawScope.drawSnowDot(center: Offset, radius: Float, color: Color) {
-    drawCircle(
-        Brush.radialGradient(listOf(color, color.copy(alpha = color.alpha * 0.5f), color.copy(alpha = 0f)), center, radius * 1.7f),
-        radius * 1.7f,
-        center,
-    )
+    drawRadialGlow(listOf(color, color.copy(alpha = color.alpha * 0.5f), color.copy(alpha = 0f)), center, radius * 1.7f)
 }
 
 /**
@@ -77,11 +83,7 @@ fun DrawScope.drawSnowDot(center: Offset, radius: Float, color: Color) {
  */
 fun DrawScope.drawStar(center: Offset, radius: Float, color: Color, glow: Float = 0f, rotation: Float = 0f) {
     if (glow > 0f) {
-        drawCircle(
-            Brush.radialGradient(listOf(color.copy(alpha = 0.45f * glow), color.copy(alpha = 0f)), center, radius * 2.2f),
-            radius * 2.2f,
-            center,
-        )
+        drawRadialGlow(listOf(color.copy(alpha = 0.45f * glow), color.copy(alpha = 0f)), center, radius * 2.2f)
     }
     val path = Path()
     val inner = radius * 0.45f
@@ -100,11 +102,8 @@ fun DrawScope.drawStar(center: Offset, radius: Float, color: Color, glow: Float 
  * [twinkle] (0..1) scales the rays, so a caller can make it breathe.
  */
 fun DrawScope.drawSkyStar(center: Offset, radius: Float, color: Color, twinkle: Float = 1f) {
-    drawCircle(
-        Brush.radialGradient(listOf(color.copy(alpha = color.alpha * 0.35f), color.copy(alpha = 0f)), center, radius * 1.4f),
-        radius * 1.4f,
-        center,
-    )
+    if (!(radius > 0f)) return
+    drawRadialGlow(listOf(color.copy(alpha = color.alpha * 0.35f), color.copy(alpha = 0f)), center, radius * 1.4f)
     drawSparkle(center, radius * (0.55f + 0.45f * twinkle), color)
     drawCircle(Color.White.copy(alpha = color.alpha * 0.9f), radius * 0.16f, center)
 }
@@ -244,11 +243,7 @@ fun DrawScope.drawSnowHills(rise: Float, color: Color, back: Color = color.copy(
 /** One fairy light: a small glowing dot of [radius] at [at], its halo [glow] (0..1) strong. */
 fun DrawScope.drawFairyLight(at: Offset, radius: Float, color: Color, glow: Float = 1f) {
     if (glow > 0f) {
-        drawCircle(
-            Brush.radialGradient(listOf(color.copy(alpha = 0.4f * glow * color.alpha), color.copy(alpha = 0f)), at, radius * 3f),
-            radius * 3f,
-            at,
-        )
+        drawRadialGlow(listOf(color.copy(alpha = 0.4f * glow * color.alpha), color.copy(alpha = 0f)), at, radius * 3f)
     }
     drawCircle(color, radius, at)
     drawCircle(Color.White.copy(alpha = 0.5f * color.alpha), radius * 0.4f, at - Offset(radius * 0.25f, radius * 0.25f))

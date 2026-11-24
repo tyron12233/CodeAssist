@@ -29,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Paint
@@ -328,7 +327,7 @@ private fun DrawScope.drawLitPumpkin(center: Offset, height: Float, lit: Float, 
     if (lit > 0.5f) {
         // A halo that fades to nothing, so a row of lit pumpkins glows rather than sitting on discs.
         val r = height * 0.95f
-        drawCircle(Brush.radialGradient(listOf(Glow.copy(alpha = 0.3f * lit), Color.Transparent), center, r), r, center)
+        drawRadialGlow(listOf(Glow.copy(alpha = 0.3f * lit), Color.Transparent), center, r)
     }
     withAlpha(lit) { drawPumpkin(center, w) }
 }

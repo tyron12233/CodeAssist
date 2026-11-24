@@ -163,7 +163,7 @@ fun WinterCard(
         art = {
             Canvas(Modifier.size(56.dp)) {
                 val c = Offset(size.width / 2f, size.height / 2f)
-                drawCircle(Brush.radialGradient(listOf(AuroraTeal.copy(alpha = 0.28f), AuroraTeal.copy(alpha = 0f)), c, size.minDimension * 0.55f), size.minDimension * 0.55f, c)
+                drawRadialGlow(listOf(AuroraTeal.copy(alpha = 0.28f), AuroraTeal.copy(alpha = 0f)), c, size.minDimension * 0.55f)
                 drawSnowflake(c, size.minDimension * 0.42f, WinterSnow, 8f)
             }
         },
