@@ -31,6 +31,34 @@ class DependencyPartitionTest {
         buckets.mapValues { (_, v) -> v.map { it.coordinate.name }.sorted() }
 
     @Test
+    fun eachVariantDeclarationGetsTheTransitivesItsVariantNeeds() {
+        // debugImplementation(dbg) and releaseImplementation(rel), both on lifecycle: a release build never sees
+        // the debug declaration, so its library must carry lifecycle too (the Flutter embeddings, debug and release).
+        val resolved = listOf(art("dbg", listOf("lifecycle")), art("rel", listOf("lifecycle")), art("lifecycle"))
+        val out = DependencyPartition.partition(
+            listOf("g:dbg:1.0" to coord("dbg"), "g:rel:1.0" to coord("rel")),
+            resolved,
+            mapOf("g:dbg:1.0" to "debug", "g:rel:1.0" to "release"),
+        )
+        assertEquals(mapOf("g:dbg:1.0" to listOf("dbg", "lifecycle"), "g:rel:1.0" to listOf("lifecycle", "rel")), names(out))
+    }
+
+    @Test
+    fun aSharedDeclarationClaimsFirstForEveryVariant() {
+        // releaseImplementation(rel) declared BEFORE implementation(shared): shared is on every classpath, so it
+        // owns lifecycle and the variant declaration does not take it again.
+        val resolved = listOf(art("rel", listOf("lifecycle")), art("shared", listOf("lifecycle")), art("lifecycle"))
+        val out = DependencyPartition.partition(
+            listOf("g:rel:1.0" to coord("rel"), "g:shared:1.0" to coord("shared")),
+            resolved,
+            mapOf("g:rel:1.0" to "release"),
+        )
+        assertEquals(mapOf("g:rel:1.0" to listOf("rel"), "g:shared:1.0" to listOf("lifecycle", "shared")), names(out))
+        // Buckets keep declaration order.
+        assertEquals(listOf("g:rel:1.0", "g:shared:1.0"), out.keys.toList())
+    }
+
+    @Test
     fun eachArtifactGoesToExactlyOneBucketAndUnionIsWholeClosure() {
         // a → b → c ; standalone d. Direct deps: a, d.
         val resolved = listOf(art("a", listOf("b")), art("b", listOf("c")), art("c"), art("d"))

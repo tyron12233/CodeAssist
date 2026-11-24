@@ -501,7 +501,9 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         // reads its own kind rather than a sibling classifier's.
         val byCoordinate = result.resolved.associateBy { it.coordinate }
         val byGa = result.resolved.associateBy { it.coordinate.group to it.coordinate.name }
-        val partition = DependencyPartition.partition(directs, result.resolved)
+        // A build variant's declaration (`releaseImplementation`) is claimed against its own variant's share only.
+        val variants = module.dependencies.filterIsInstance<LibraryDependency>().associate { it.library.name to it.variant }
+        val partition = DependencyPartition.partition(directs, result.resolved, variants)
         // Stamp a why-it-failed on each declared coordinate that didn't resolve (cleared if it did), so the
         // project error state can explain itself; keyed by the declared library name.
         recordResolveReasons(directs, result)

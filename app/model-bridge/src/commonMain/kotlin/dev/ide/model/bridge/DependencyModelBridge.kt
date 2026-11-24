@@ -164,7 +164,11 @@ class DependencyModelBridge(private val store: ProjectModelStore) {
     fun attach(module: Module, result: ResolutionResult): Boolean {
         val directs = declared(module).map { it.coordinate.toString() to it.coordinate }
         if (directs.isEmpty()) return false
-        val partition = DependencyPartition.partition(directs, result.resolved)
+        // A build variant's declaration (`releaseImplementation`) is claimed against its own variant's share only.
+        val variants = module.dependencies.filterIsInstance<LibraryDependency>()
+            .mapNotNull { e -> Coordinate.parseOrNull(e.library.name)?.let { it.toString() to e.variant } }
+            .toMap()
+        val partition = DependencyPartition.partition(directs, result.resolved, variants)
         val byCoordinate = result.resolved.associateBy { it.coordinate }
         var changed = false
         for ((libraryName, coordinate) in directs) {

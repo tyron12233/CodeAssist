@@ -23,6 +23,12 @@ private typealias ArtifactId = Triple<String, String, String>
  * artifacts are CLAIMED per `group:name:classifier`: one module can contribute several files under one
  * `group:name` when more than one of its Maven classifiers was declared (`gdx-platform`, once per ABI), and
  * each declaration must end up owning the artifact it actually named.
+ *
+ * A declaration scoped to a build variant (`debugImplementation`) only ever shares a classpath with the shared
+ * declarations and its own variant's, so a transitive is claimed once per variant rather than once overall:
+ * `debugImplementation(x)` and `releaseImplementation(y)` reaching the same library each get it, since a release
+ * build never sees the debug declaration's share. Shared declarations claim first, and what they claim is on
+ * every variant's classpath, so no variant declaration takes it again.
  */
 object DependencyPartition {
 
@@ -30,18 +36,29 @@ object DependencyPartition {
     private val ResolvedArtifact.artifactId: ArtifactId
         get() = Triple(coordinate.group, coordinate.name, coordinate.classifier.orEmpty())
 
-    /** [directs] is `(libraryName, coordinate)` in declaration order; [resolved] is the whole-graph closure. */
+    /**
+     * [directs] is `(libraryName, coordinate)` in declaration order; [resolved] is the whole-graph closure;
+     * [variants] names the build variant a declaration is scoped to (absent or null: shared by every variant).
+     */
     fun partition(
         directs: List<Pair<String, Coordinate>>,
         resolved: List<ResolvedArtifact>,
+        variants: Map<String, String?> = emptyMap(),
     ): LinkedHashMap<String, MutableList<ResolvedArtifact>> {
         val byGa = HashMap<Ga, MutableList<ResolvedArtifact>>()
         resolved.forEach { byGa.getOrPut(it.ga) { ArrayList() }.add(it) }
 
-        val claimed = HashSet<ArtifactId>()
+        val shared = HashSet<ArtifactId>()
+        val byVariant = HashMap<String, HashSet<ArtifactId>>()
         val out = LinkedHashMap<String, MutableList<ResolvedArtifact>>()
-        for ((libName, coord) in directs) {
-            val bucket = out.getOrPut(libName) { ArrayList() }
+        // Buckets in declaration order; claiming shared declarations first.
+        directs.forEach { (libName, _) -> out.getOrPut(libName) { ArrayList() } }
+        val ordered = directs.filter { variants[it.first] == null } + directs.filter { variants[it.first] != null }
+        for ((libName, coord) in ordered) {
+            val bucket = out.getValue(libName)
+            val variant = variants[libName]
+            val own = if (variant == null) shared else byVariant.getOrPut(variant) { HashSet() }
+            fun claim(id: ArtifactId): Boolean = id !in shared && own.add(id)
             val root: Ga = coord.group to coord.name
             val queue = ArrayDeque<Ga>()
             if (byGa.containsKey(root)) queue.add(root)
@@ -56,13 +73,14 @@ object DependencyPartition {
                 // classifier) every unclaimed artifact of the module is taken, as before.
                 val exact = if (ga == root) candidates.filter { it.coordinate.classifier == coord.classifier } else emptyList()
                 for (art in exact.ifEmpty { candidates }) {
-                    if (claimed.add(art.artifactId)) bucket.add(art)
+                    if (claim(art.artifactId)) bucket.add(art)
                 }
                 candidates.flatMap { it.dependsOn }.forEach { queue.add(it.group to it.name) }
             }
         }
         // Defensive: an artifact reached from no declarer is attached to the first declarer so the whole
         // closure is always preserved on the classpath.
+        val claimed = shared + byVariant.values.flatten()
         resolved.filter { it.artifactId !in claimed }
             .takeIf { it.isNotEmpty() }
             ?.let { leftover -> out.values.firstOrNull()?.addAll(leftover) }

@@ -1323,8 +1323,12 @@ const val AAR_EXPLODE_VERSION = "7"
  * takes the managed one, so a managed `provided`/`test` entry (com.google.zxing:android-core's
  * `com.google.android:android`, a 2012 API-16 android.jar plus the seven legacy jars behind it)
  * stops resolving as `compile` onto the classpath.
+ *
+ * 3: a build variant's declaration (`releaseImplementation`) is partitioned against its own variant only
+ * ([DependencyPartition]). Two variant declarations sharing a transitive used to give it to the first, so the
+ * other variant's build had it on no classpath at all (a Flutter app's release embedding without AndroidX).
  */
-const val RESOLVER_GRAPH_VERSION = "2"
+const val RESOLVER_GRAPH_VERSION = "3"
 
 /** A search hit with what ranking needs beyond the coordinate: when it was last published (0 when unknown). */
 internal data class RankedHit(val candidate: ArtifactCandidate, val publishedAt: Long)
