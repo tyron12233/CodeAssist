@@ -28,10 +28,25 @@ class SwiftPlugin : Plugin {
         reg.register(ProjectTemplateExtensionPoint, SwiftConsoleTemplate())
         reg.register(FileIconExtensionPoint, SwiftFileIconProvider)
         reg.register(RUN_TASK_PROVIDER_EP, SwiftRunTaskProvider(toolchain))
+        val text = SwiftTextEngine(toolchain.home.resolve("fonts"))
+        tools = Tools(toolchain, text, SwiftPreviewPainter(text), reg.logger("SwiftUIPreview"))
         log.info("registered; the Swift toolchain is prepared on first use")
     }
 
+    /** What the UI facet's SwiftUI preview pane shares with this facet. */
+    class Tools(
+        val toolchain: SwiftToolchain,
+        val text: SwiftTextEngine,
+        val painter: SwiftPreviewPainter,
+        val log: dev.ide.platform.log.Logger,
+    )
+
     companion object {
+        /** Set by [register], read by the UI facet ([SwiftPreviewPane]): one classloader loads both facets. */
+        @Volatile
+        var tools: Tools? = null
+            private set
+
         /** The language id, shared by the file-type mapping and the editor profile. */
         const val LANGUAGE = "swift"
     }

@@ -11,6 +11,8 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
+    // The UI facet's SwiftUI preview pane is a @Composable.
+    alias(libs.plugins.kotlin.compose)
 }
 
 val swiftAbi: String = providers.gradleProperty("swift.abi").orNull ?: "arm64-v8a"
@@ -48,8 +50,8 @@ android {
         // The IDE's own floor: this code runs inside the IDE's process.
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
         ndk { abiFilters += swiftAbi }
     }
 
@@ -119,6 +121,12 @@ dependencies {
     compileOnly(project(":project-model-api"))
     compileOnly(libs.kotlinx.coroutines.core)
 
+    // The IDE's Compose, which the preview pane is composed by. Never bundled.
+    compileOnly(libs.androidx.compose.runtime)
+    compileOnly(libs.androidx.compose.foundation)
+    compileOnly(libs.androidx.compose.ui)
+    compileOnly(libs.androidx.compose.material3)
+
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
@@ -126,4 +134,6 @@ dependencies {
     testImplementation(project(":build-api"))
     testImplementation(project(":project-model-api"))
     testImplementation(libs.kotlinx.coroutines.core)
+    // The Compose compiler insists on a runtime wherever it compiles, test sources included.
+    testImplementation(libs.androidx.compose.runtime)
 }

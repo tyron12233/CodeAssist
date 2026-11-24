@@ -53,8 +53,11 @@ final class CoreTextMeasurer: _TextMeasurer {
         let string = attributed(spans)
         let typesetter = CTTypesetterCreateWithAttributedString(string)
         let fonts = spans.map(font)
-        let ascent = fonts.map { CTFontGetAscent($0) }.max() ?? 0
-        let lineHeight = fonts.map { CTFontGetAscent($0) + CTFontGetDescent($0) + CTFontGetLeading($0) }.max() ?? 0
+        // iOS's SF line metrics (the Mac's SF reports a shorter line): the same constants the device's text engine
+        // uses (SwiftTextEngine.LINE_HEIGHT / ASCENT), measured against the Simulator.
+        let size = spans.map(\.size).max() ?? 17
+        let ascent = 0.9521 * size
+        let lineHeight = 1.1934 * size
         var lines: [CTLine] = []
         var start = 0
         let length = string.length
