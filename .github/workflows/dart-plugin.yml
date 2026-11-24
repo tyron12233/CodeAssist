@@ -17,7 +17,7 @@ name: Dart plugin release
 # the others; arm64-v8a is required.
 #
 # Runs when a release is published (tags v*), and by hand: with a tag it attaches to that release, without one it
-# only builds, and the APKs are this run's artifacts.
+# only builds, and the APKs are this run's artifacts. By hand it builds the branch it was started on (see REF).
 #
 # Signing uses the IDE's upload key, from the repository secrets RELEASE_KEYSTORE_BASE64, RELEASE_STORE_PASSWORD,
 # RELEASE_KEY_ALIAS and RELEASE_KEY_PASSWORD. This workflow never runs for a pull request.
@@ -38,8 +38,10 @@ permissions:
 env:
   JAVA_VERSION: "25"
   FLUTTER_VERSION: "3.47.9"
-  # The release's own commit, so the plugin matches the app it ships with.
-  REF: ${{ github.event.release.tag_name || inputs.tag || github.ref }}
+  # A published release builds from its own commit, so the plugin matches the app it ships with. A run by hand
+  # builds from the branch it was started on and attaches to `tag`: a fix to this workflow or the fetch scripts
+  # can then ship for a release that is already out, without moving its tag.
+  REF: ${{ github.event.release.tag_name || github.ref }}
 
 concurrency:
   group: dart-plugin-${{ github.event.release.tag_name || inputs.tag || github.ref }}
@@ -54,7 +56,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        abi: [ arm64-v8a, armeabi-v7a, x86_64 ]
+        # Dart 3.13.7 survives only as our aarch64 mirror (see fetch-dart-android.sh): Termux dropped it for every
+        # ABI before arm and x86_64 were mirrored. Add them back with the next Dart (and Flutter) the plugin pins.
+        abi: [ arm64-v8a ]
     steps:
       - uses: actions/checkout@v4
         with:

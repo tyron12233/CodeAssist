@@ -52,7 +52,12 @@ esac
 # The pins above are for Dart 3.13.7 only: another DART_VERSION needs its own checksums.
 [[ "$DART_VERSION" == "3.13.7" ]] || PINNED_SHA256=""
 DEB_SHA256="${DEB_SHA256:-$PINNED_SHA256}"
-DEB_URL="${DEB_URL:-https://packages.termux.dev/apt/termux-main/pool/main/d/dart/dart_${DART_VERSION}_${DEB_ARCH}.deb}"
+# Termux serves only its latest Dart, so a pinned version disappears from its pool when Termux moves on (3.13.7 did
+# when 3.14.1 landed). Our mirror, the dart-sdk-<version> prerelease, is tried first, then Termux. The checksum is
+# what makes either one acceptable. Only aarch64 was mirrored for 3.13.7: arm and x86_64 were gone by then.
+MIRROR_URL="https://github.com/tyron12233/CodeAssist/releases/download/dart-sdk-${DART_VERSION}/dart_${DART_VERSION}_${DEB_ARCH}.deb"
+TERMUX_URL="https://packages.termux.dev/apt/termux-main/pool/main/d/dart/dart_${DART_VERSION}_${DEB_ARCH}.deb"
+DEB_URLS="${DEB_URL:-$MIRROR_URL $TERMUX_URL}"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="${WORK:-$HERE/build}"
@@ -70,12 +75,14 @@ sha256() {
 mkdir -p "$DL"
 if [[ ! -f "$DEB" ]]; then
     log "downloading Dart $DART_VERSION for android $ABI (Termux package arch $DEB_ARCH, ~96 MB)"
-    curl -fL --retry 3 -o "$DEB.part" "$DEB_URL" || {
-        echo "could not download $DEB_URL" >&2
-        echo "If this is a 404, Termux publishes no Dart $DART_VERSION package for $DEB_ARCH, and there is no SDK to stage for $ABI." >&2
+    for url in $DEB_URLS; do
+        if curl -fL --retry 3 -o "$DEB.part" "$url"; then mv "$DEB.part" "$DEB"; break; fi
+        echo "could not download $url" >&2
+    done
+    [[ -f "$DEB" ]] || {
+        echo "No source has Dart $DART_VERSION for $DEB_ARCH (tried: $DEB_URLS), so there is no SDK to stage for $ABI." >&2
         exit 1
     }
-    mv "$DEB.part" "$DEB"
 fi
 actual="$(sha256 "$DEB")"
 if [[ -z "$DEB_SHA256" ]]; then
