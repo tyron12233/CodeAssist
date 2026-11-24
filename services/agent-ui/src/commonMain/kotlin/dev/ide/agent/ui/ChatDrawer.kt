@@ -142,6 +142,9 @@ import dev.ide.ui.backend.UiAgentToolStatus
 import dev.ide.ui.backend.UiAgentUsage
 import dev.ide.agent.ui.generated.resources.Res
 import dev.ide.agent.ui.generated.resources.conn_menu
+import dev.ide.agent.ui.generated.resources.claude_screen_title
+import dev.ide.agent.ui.generated.resources.chat_empty_claude
+import dev.ide.ui.LocalPluginNavigator
 import dev.ide.agent.ui.generated.resources.chat_close
 import dev.ide.agent.ui.generated.resources.chat_status_answer
 import dev.ide.agent.ui.generated.resources.chat_status_minutes
@@ -247,6 +250,12 @@ fun ChatDrawer(
     var notice by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val imageFailed = stringResource(Res.string.chat_image_failed)
+    // "Use with Claude" is a screen of the app's, reached through the shell's navigator from wherever the chat is.
+    val navigate = LocalPluginNavigator.current
+    val claudeLink = rememberClaudeLinkState(backend)
+    val openClaude: (() -> Unit)? = if (claudeLink.available) {
+        { navigate(AgentService.SCREEN_USE_WITH_CLAUDE) }
+    } else null
 
     // Fetch the provider's live model list when the drawer opens or the provider changes.
     LaunchedEffect(cfg.selectedProvider) { backend.agent.refreshModels() }
@@ -269,6 +278,7 @@ fun ChatDrawer(
                 "resume", "history" -> { showHistory = true; return }
                 "model" -> { modelMenuOpen = true; return }
                 "mcp", "skills", "connections" -> { showConnections = true; return }
+                "claude" -> if (openClaude != null) { openClaude(); return }
             }
             if (backend.agent.runCommand(name, args)) {
                 cfg = backend.agent.config()
@@ -318,6 +328,7 @@ fun ChatDrawer(
                         onManage = { showProviders = true },
                         onUsage = { showUsage = true },
                         onConnections = { showConnections = true },
+                        onUseWithClaude = openClaude,
                     )
                 },
             )
@@ -332,6 +343,7 @@ fun ChatDrawer(
                         onHistory = { showHistory = true },
                         onUsage = { showUsage = true },
                         onConnections = { showConnections = true },
+                        onUseWithClaude = openClaude,
                         onCycleMode = onCycleMode,
                         onNew = { backend.agent.newSession() },
                         onClose = onClose,
@@ -348,7 +360,12 @@ fun ChatDrawer(
                             FreeAiSignInPrompt(backend, onUseOwnKey = { showProviders = true })
                         }
                     } else {
-                        EmptyState(configured = cfg.configured, onManage = { showProviders = true })
+                        EmptyState(
+                            configured = cfg.configured,
+                            onManage = { showProviders = true },
+                            // Once either link is on, the user has found it.
+                            onUseWithClaude = openClaude.takeIf { !claudeLink.enabled },
+                        )
                     }
                 } else {
                     Transcript(
@@ -421,7 +438,11 @@ fun ChatDrawer(
             AgentUsageSheet(backend) { showUsage = false }
         }
         if (showConnections) {
-            AgentConnectionsSheet(backend, onOpenFile?.let { open -> { path: String -> showConnections = false; open(path) } }) {
+            AgentConnectionsSheet(
+                backend,
+                onOpenFile?.let { open -> { path: String -> showConnections = false; open(path) } },
+                onUseWithClaude = openClaude?.let { open -> { showConnections = false; open() } },
+            ) {
                 showConnections = false
             }
         }
@@ -551,6 +572,7 @@ private fun ChatHeader(
     onHistory: () -> Unit,
     onUsage: () -> Unit,
     onConnections: () -> Unit,
+    onUseWithClaude: (() -> Unit)?,
     onCycleMode: () -> Unit,
     onNew: () -> Unit,
     onClose: (() -> Unit)?,
@@ -583,7 +605,10 @@ private fun ChatHeader(
         }
         headerActions?.invoke(this)
         ModeChip(cfg.mode, onCycleMode)
-        ChatMenu(onNew = onNew, onHistory = onHistory, onManage = onManage, onUsage = onUsage, onConnections = onConnections)
+        ChatMenu(
+            onNew = onNew, onHistory = onHistory, onManage = onManage, onUsage = onUsage, onConnections = onConnections,
+            onUseWithClaude = onUseWithClaude,
+        )
         if (onClose != null) HideToolWindowButton(onClose)
     }
 }
@@ -617,7 +642,14 @@ private fun ModeChip(mode: UiAgentPermissionMode, onCycleMode: () -> Unit) {
 
 /** The header's occasional actions, in one menu so the title and the model name keep room to read. */
 @Composable
-private fun ChatMenu(onNew: () -> Unit, onHistory: () -> Unit, onManage: () -> Unit, onUsage: () -> Unit, onConnections: () -> Unit) {
+private fun ChatMenu(
+    onNew: () -> Unit,
+    onHistory: () -> Unit,
+    onManage: () -> Unit,
+    onUsage: () -> Unit,
+    onConnections: () -> Unit,
+    onUseWithClaude: (() -> Unit)?,
+) {
     var menuOpen by remember { mutableStateOf(false) }
     Box {
         IconButtonCa(CaIcons.ellipsis, stringResource(Res.string.chat_more), { menuOpen = true }, iconSize = 16, boxSize = 28)
@@ -626,6 +658,9 @@ private fun ChatMenu(onNew: () -> Unit, onHistory: () -> Unit, onManage: () -> U
             HeaderMenuItem(CaIcons.clock, stringResource(Res.string.chat_history)) { menuOpen = false; onHistory() }
             HeaderMenuItem(CaIcons.key, stringResource(Res.string.chat_manage_keys)) { menuOpen = false; onManage() }
             HeaderMenuItem(CaIcons.layers, stringResource(Res.string.conn_menu)) { menuOpen = false; onConnections() }
+            if (onUseWithClaude != null) {
+                HeaderMenuItem(CaIcons.share, stringResource(Res.string.claude_screen_title)) { menuOpen = false; onUseWithClaude() }
+            }
             HeaderMenuItem(CaIcons.info, stringResource(Res.string.chat_usage)) { menuOpen = false; onUsage() }
         }
     }
@@ -1433,7 +1468,7 @@ private fun AssistantMarkdown(text: String) {
 }
 
 @Composable
-private fun EmptyState(configured: Boolean, onManage: () -> Unit) {
+private fun EmptyState(configured: Boolean, onManage: () -> Unit, onUseWithClaude: (() -> Unit)? = null) {
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -1461,6 +1496,16 @@ private fun EmptyState(configured: Boolean, onManage: () -> Unit) {
                 onManage,
                 Modifier.entranceSlideUp(210),
                 icon = CaIcons.key,
+            )
+        }
+        if (onUseWithClaude != null) {
+            Spacer(Modifier.height(20.dp))
+            Text(
+                stringResource(Res.string.chat_empty_claude),
+                modifier = Modifier.entranceSlideUp(270).clip(RoundedCornerShape(Ca.radius.pill))
+                    .clickable(onClick = onUseWithClaude).padding(horizontal = 10.dp, vertical = 6.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge,
             )
         }
     }

@@ -24,11 +24,21 @@ val supabaseKey = (findProperty("SUPABASE_KEY") as String?) ?: System.getenv("SU
 
 // The R2 mirror of the public store files; blank reads Supabase Storage (see supabase/functions/r2-mirror).
 val storeMediaUrl = (findProperty("STORE_MEDIA_URL") as String?) ?: System.getenv("STORE_MEDIA_URL")
-    ?: "https://pub-a5be92b9c0b14a86ae36e09cb86f0ffa.r2.dev"
+    ?: "https://codeassist-store-files.lucena-tyronscott.workers.dev"
 
 // CodeAssist Free AI's primary proxy (a Cloudflare Worker); blank uses the Supabase `ai-proxy` function alone.
 val aiProxyUrl = (findProperty("AI_PROXY_URL") as String?) ?: System.getenv("AI_PROXY_URL")
     ?: "https://codeassist-ai-proxy.lucena-tyronscott.workers.dev"
+
+// The app version the store sees: the Android app's, read from its build file, because the two apps run the
+// same UI from the same commit. The store hides listings (and whole Explore shelves) whose `min_app_build` is
+// above the caller's, so iOS's own `CFBundleVersion` (still 1) saw a store missing every shelf added since.
+val androidBuildFile = rootProject.file("app/ide-android/build.gradle.kts")
+val androidBuildText = androidBuildFile.readText()
+val appBuild = Regex("""versionCode\s*=\s*(\d+)""").find(androidBuildText)?.groupValues?.get(1)
+    ?: error("no versionCode in $androidBuildFile")
+val appVersion = Regex("""versionName\s*=\s*"([^"]+)"""").find(androidBuildText)?.groupValues?.get(1)
+    ?: error("no versionName in $androidBuildFile")
 
 val generateStoreConfig by tasks.registering {
     val outputDir = layout.buildDirectory.dir("generated/storeConfig/kotlin")
@@ -37,7 +47,8 @@ val generateStoreConfig by tasks.registering {
     inputs.property("key", supabaseKey)
     inputs.property("media", storeMediaUrl)
     inputs.property("aiProxy", aiProxyUrl)
-    inputs.property("build", project.version.toString())
+    inputs.property("build", appBuild)
+    inputs.property("version", appVersion)
     outputs.dir(outputDir)
     doLast {
         val file = outputDir.get().file("dev/ide/ios/store/StoreConfig.kt").asFile
@@ -52,7 +63,8 @@ val generateStoreConfig by tasks.registering {
                 const val SUPABASE_KEY: String = "$supabaseKey"
                 const val STORE_MEDIA_URL: String = "$storeMediaUrl"
                 const val AI_PROXY_URL: String = "$aiProxyUrl"
-                const val APP_VERSION: String = "${project.version}"
+                const val APP_VERSION: String = "$appVersion"
+                const val APP_BUILD: Int = $appBuild
             }
 
             """.trimIndent(),

@@ -113,7 +113,9 @@ class IosStoreService(
                 ),
             )
             return IosStoreService(
-                source = SupabaseStoreSource(url = url, apiKey = apiKey, appBuild = appBuild, mediaBaseUrl = mediaBaseUrl),
+                source = SupabaseStoreSource(
+                    url = url, apiKey = apiKey, appBuild = appBuild, mediaBaseUrl = mediaBaseUrl, platform = "ios",
+                ),
                 accountService = accounts,
                 submissionService = SupabaseSubmissionService(url, apiKey, accounts),
                 reviewService = SupabaseReviewService(url, apiKey, accounts),
@@ -234,6 +236,18 @@ class IosStoreService(
     override suspend fun screenshotFile(storagePath: String): String? = media.screenshot(storagePath)
 
     override suspend fun avatarFile(url: String): String? = media.avatar(url)
+
+    /** Home's announcements, kept beside the feed; see `AnnouncementCache` for when the server is asked. */
+    private val announcements = dev.ide.store.bridge.AnnouncementCache(
+        source = source,
+        cachePath = { joinPath(cacheRoot, "store/home-announcements.json") },
+        signedIn = { runCatching { accountService.hasStoredSession() }.getOrDefault(false) },
+    )
+
+    override suspend fun homeAnnouncements(localeTag: String, allowNetwork: Boolean): List<dev.ide.ui.backend.UiAnnouncement> =
+        announcements.announcements(localeTag, allowNetwork)
+
+    override suspend fun announcementImage(src: String): String? = media.announcementImage(src)
 
     // ---- installing ----------------------------------------------------------------------------------
 

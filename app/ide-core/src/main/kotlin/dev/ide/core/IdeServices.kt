@@ -2439,9 +2439,32 @@ class IdeServices private constructor(
      * so the tree can pick a distinct icon (Java sources vs `res/` vs `assets/`) and know which roots are
      * package contexts (compactable + new-class targets).
      */
-    fun treeRootsDetailed(module: Module): List<TreeRootInfo> = module.sourceSets.flatMap { ss ->
-        ss.contentRoots.filter { cr -> cr.roles.any(::surfacedInTree) }
-            .map { TreeRootInfo(Paths.get(it.dir.path), ss.name, it.roles) }
+    fun treeRootsDetailed(module: Module): List<TreeRootInfo> {
+        val declared = module.sourceSets.flatMap { ss ->
+            ss.contentRoots.filter { cr -> cr.roles.any(::shownInTree) }
+                .map { TreeRootInfo(Paths.get(it.dir.path), ss.name, it.roles) }
+        }
+        return declared + conventionJniLibRoots(module, declared)
+    }
+
+    /**
+     * `src/<set>/jniLibs` folders an Android module never declared. A project made before 3.3 has no `jniLibs`
+     * root in its model (the default source sets are only written when a module is added), yet the build
+     * packages the folder by convention (`AndroidBuildSystem.jniLibRoots`), as AGP does. Showing it here keeps
+     * the tree in step with the build: without it the folder was reachable only from the All Files view.
+     * Android-ness is read from the model (a module with an Android `res` root), since ide-core does not
+     * depend on the Android support module.
+     */
+    private fun conventionJniLibRoots(module: Module, declared: List<TreeRootInfo>): List<TreeRootInfo> {
+        val android = module.sourceSets.any { ss -> ss.contentRoots.any { ContentRole.ANDROID_RES in it.roles } }
+        if (!android) return emptyList()
+        val moduleDir = moduleRoot(module) ?: return emptyList()
+        val known = declared.mapTo(HashSet()) { it.path.toAbsolutePath().normalize() }
+        return module.sourceSets.map { it.name }.distinct().mapNotNull { set ->
+            val dir = moduleDir.resolve("src").resolve(set).resolve("jniLibs").toAbsolutePath().normalize()
+            if (dir in known || !Files.isDirectory(dir)) null
+            else TreeRootInfo(dir, set, setOf(ContentRole.JNI_LIBS))
+        }
     }
 
     /**
@@ -6880,6 +6903,13 @@ internal class ActiveEngineXmlResourceHost(private val env: ApplicationEnvironme
  * Project view. The built-ins left out (`jni-libs`, `excluded`) stay out.
  */
 private fun surfacedInTree(role: ContentRole): Boolean = role in TREE_ROOT_ROLES || role !in ContentRole.entries
+
+/**
+ * The roles the project tree draws as roots: [surfacedInTree] plus `jniLibs`. Prebuilt native libraries are
+ * part of a module the way `assets/` is, and Android Studio's Android view lists them, but they are binaries:
+ * they stay out of [IdeServices.treeRoots], which search and rename walk for text.
+ */
+private fun shownInTree(role: ContentRole): Boolean = surfacedInTree(role) || role == ContentRole.JNI_LIBS
 
 /** The built-in content roles surfaced in the project tree (code + resources + assets + AIDL); see [IdeServices.treeRoots]. */
 private val TREE_ROOT_ROLES = setOf(

@@ -155,6 +155,7 @@ import dev.ide.ui.generated.resources.tab_close_to_the_left
 import dev.ide.ui.generated.resources.tab_close_to_the_right
 import dev.ide.ui.generated.resources.tab_open_files
 import dev.ide.ui.generated.resources.undo
+import dev.ide.ui.generated.resources.edchrome_use_with_claude
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
@@ -237,6 +238,10 @@ fun EditorTopBar(
     compact: Boolean = false,
     /** Enters zen mode from the ⋯ menu; null leaves the item out. */
     onZenMode: (() -> Unit)? = null,
+    /** Whether Claude is connected to the project over the MCP link; anything but Off shows a chip. */
+    claudeLink: ClaudeLinkStatus = ClaudeLinkStatus.Off,
+    /** Opens the "Use with Claude" screen, from the ⋯ menu and the chip; null where this build has no such screen. */
+    onUseWithClaude: (() -> Unit)? = null,
 ) {
     val dim = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
     // On a desktop window with a custom title bar, the wide bar IS the title bar (IntelliJ's main toolbar):
@@ -284,6 +289,7 @@ fun EditorTopBar(
                 modifier = Modifier.weight(1f),
             )
             if (compatibilityMode) CompatModeChip(compact = compact, onClick = onCompatClick)
+            if (onUseWithClaude != null) ClaudeLinkChip(claudeLink, compact = compact, onClick = onUseWithClaude)
             IndexStatusChip(indexStatus, compact = compact, onClick = onIndexClick)
             // Save/undo/redo stay inline wherever a keyboard can't be assumed. A desktop window has one, so the
             // shortcuts and the tab's unsaved dot cover them there. A phone or tablet keeps them even while a
@@ -325,6 +331,7 @@ fun EditorTopBar(
                     variants = variants,
                     onPickVariant = onPickVariant,
                     onZenMode = onZenMode,
+                    onUseWithClaude = onUseWithClaude,
                 )
             } else {
                 // IntelliJ-lean: the bar keeps what has no other home. Undo/redo stay inline only where there may
@@ -363,6 +370,7 @@ fun EditorTopBar(
                         onPickVariant = onPickVariant,
                         editOnly = true,
                         onZenMode = onZenMode,
+                        onUseWithClaude = onUseWithClaude,
                     )
                 }
             }
@@ -489,6 +497,8 @@ private fun EditorOverflowMenu(
      *  or has its own place (the stripe's console toggle, the breadcrumb row's view switch). */
     editOnly: Boolean = false,
     onZenMode: (() -> Unit)? = null,
+    /** Opens the "Use with Claude" screen. Kept in the wide menu too: the editor has no other way there. */
+    onUseWithClaude: (() -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
     // The variant list scans the module, so it's fetched only when its submenu opens. Both the menu and the
@@ -526,6 +536,9 @@ private fun EditorOverflowMenu(
             }
             if (hasActiveFile && onZenMode != null) OverflowItem(CaIcons.expand, stringResource(Res.string.zen_mode)) {
                 open = false; onZenMode()
+            }
+            if (onUseWithClaude != null) OverflowItem(CaIcons.share, stringResource(Res.string.edchrome_use_with_claude)) {
+                open = false; onUseWithClaude()
             }
             // The build-variant (flavor) switcher — a flyout submenu of the module's variants, shown only for an
             // Android module (a non-null active variant). Picking one closes the whole menu.

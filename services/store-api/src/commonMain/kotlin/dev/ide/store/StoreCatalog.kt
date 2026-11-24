@@ -173,6 +173,12 @@ interface StoreCatalogSource {
     val appBuild: Int? get() = null
 
     /**
+     * Which app this source belongs to (`android`, `ios`, `desktop`), for content targeted at one platform.
+     * Null means unknown, which targeted content does not match.
+     */
+    val platform: String? get() = null
+
+    /**
      * The catalog for an IDE at [appBuild]. The build number filters out items that need a newer IDE, so
      * an old install never shows a card whose payload it cannot open.
      */
@@ -191,6 +197,16 @@ interface StoreCatalogSource {
      * anonymous personalization model the server holds install ids, not "this user's" installs.
      */
     fun feedDocument(seedSlug: String? = null): StoreResult<String> =
+        StoreResult.Unavailable("No store endpoint")
+
+    /**
+     * Home's announcements from `home_announcements(...)`, as the **raw JSON document**, for the same reason
+     * [feedDocument] is raw: the caller caches these exact bytes.
+     *
+     * The server picks what is live for this [appBuild], [platform], the language of [locale] and whether the
+     * user is [signedIn]; the client only draws it.
+     */
+    fun homeAnnouncementsDocument(locale: String, signedIn: Boolean): StoreResult<String> =
         StoreResult.Unavailable("No store endpoint")
 
     /**

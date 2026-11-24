@@ -61,6 +61,24 @@ class EditorLanguageProfile(
 
     /** Lowest wins when two profiles claim the same suffix, matching `FileTypeMapping.order`. */
     val order: Int = 1000,
+
+    /** String delimiters that may span lines (`"""`, `'''`). [SyntaxFamily.INDENT_BLOCK] defaults them. */
+    val multilineStrings: List<String> = emptyList(),
+
+    /** Letters that glue to a following quote and belong to the string (`f`, `r`, `b`). Case-insensitive. */
+    val stringPrefixes: Set<String> = emptySet(),
+
+    /** The [stringPrefixes] whose strings interpolate `{expression}`. [SyntaxFamily.INDENT_BLOCK] only. */
+    val interpolatingPrefixes: Set<String> = emptySet(),
+
+    /** What ends a block-opening line (`:`). [SyntaxFamily.INDENT_BLOCK] only; empty means `:`. */
+    val blockOpeners: List<String> = emptyList(),
+
+    /** Statement words that end a block (`return`, `pass`). [SyntaxFamily.INDENT_BLOCK] only. */
+    val blockExitWords: Set<String> = emptySet(),
+
+    /** Words that continue an earlier block at its level (`else`, `except`). [SyntaxFamily.INDENT_BLOCK] only. */
+    val dedentWords: Set<String> = emptySet(),
 ) {
     fun matches(fileName: String): Boolean = suffixes.any { fileName.endsWith(it) }
 }
@@ -79,6 +97,13 @@ enum class SyntaxFamily {
 
     /** Whole-line `#` comments, no strings, no nesting. ProGuard keep rules. */
     HASH_COMMENT,
+
+    /**
+     * Blocks by indentation: `#` comments, `'…'`/`"…"` strings, `"""`/`'''` strings across lines, prefixed
+     * and interpolated strings, decorators; Enter indents after `:` and dedents after `return`. Python-shaped
+     * languages; see `dev.ide.ui.editor.core.IndentBlockSyntax`.
+     */
+    INDENT_BLOCK,
 
     /** Headings, fences, lists, inline code. */
     MARKDOWN,

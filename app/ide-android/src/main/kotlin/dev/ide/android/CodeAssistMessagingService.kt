@@ -100,8 +100,12 @@ internal object PendingPushes {
     }
 
     fun storeToken(context: Context, token: String) {
-        // Clearing the "registered" marker is the point: a rotated token has to be sent again.
-        prefs(context).edit().putString(KEY_TOKEN, token).remove(KEY_TOKEN_SENT).apply()
+        // A rotated token has to be sent again, so a NEW token clears the "registered" marker. The same token
+        // must not: every launch stores the token FCM hands back before checking [tokenNeedsRegistering], and
+        // clearing the marker there made every launch re-register (18k requests a day for ~2k devices).
+        val prefs = prefs(context)
+        if (prefs.getString(KEY_TOKEN, null) == token) return
+        prefs.edit().putString(KEY_TOKEN, token).remove(KEY_TOKEN_SENT).apply()
     }
 
     fun token(context: Context): String? = prefs(context).getString(KEY_TOKEN, null)

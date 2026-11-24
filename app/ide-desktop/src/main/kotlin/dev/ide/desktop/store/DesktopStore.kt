@@ -35,6 +35,7 @@ internal fun registerDesktopStore(manager: ProjectManager, sessionFile: Path): L
         // Hides catalog items that need a newer IDE than this one.
         SupabaseStoreSource(
             url = url, apiKey = key, appBuild = StoreConfig.APP_BUILD, mediaBaseUrl = StoreConfig.STORE_MEDIA_URL,
+            platform = "desktop",
         )
     }
     val accounts = SupabaseAccountService(

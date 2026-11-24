@@ -46,6 +46,10 @@ kotlin {
                 // vocabulary: a capability with no sentence here is shown to the user as its raw id.
                 // Not a main dependency — the components render DTOs and never name an SPI type.
                 implementation(project(":plugin-api"))
+                // Test-only: the announcement snapshots render layouts from their JSON through the real parser and
+                // mapper, so what they show is what a server document turns into.
+                implementation(project(":store-impl"))
+                implementation(project(":store-bridge"))
             }
         }
     }

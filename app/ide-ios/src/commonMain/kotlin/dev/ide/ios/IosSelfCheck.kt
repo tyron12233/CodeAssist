@@ -146,7 +146,90 @@ internal object IosSelfCheck {
                 "${finished.status}, ${finished.log.size} lines, last: ${finished.log.takeLast(2).map { it.message }}" +
                     errors.take(12).joinToString("") { "\n    $it" }
             }
+            "dep" -> {
+                // `dep:<group:artifact:version>` adds an implementation dependency to the `app` module.
+                val added = backend.deps.addDependency("app", argument, "implementation")
+                delay(1500)
+                withTimeoutOrNull(600_000) { backend.deps.depsState.first { !it.resolving } }
+                "$added"
+            }
+            "program" -> {
+                // `program:<name>` replaces the open project's Main.kt with one of [PROGRAMS] and runs it through the
+                // project's first run task, reporting what the console printed.
+                val program = PROGRAMS[argument] ?: return "FAILED no program named '$argument' (${PROGRAMS.keys})"
+                fun TreeNode.all(): List<TreeNode> = listOf(this) + children.flatMap { it.all() }
+                val main = backend.files.fileTree(TreeViewMode.Project).all().mapNotNull { it.filePath }
+                    .firstOrNull { it.endsWith("/Main.kt") } ?: return "FAILED no Main.kt in the tree"
+                val packageLine = IosFiles.readText(main).lineSequence().firstOrNull { it.startsWith("package ") }
+                IosFiles.writeText(main, listOfNotNull(packageLine, program).joinToString("\n\n"))
+                backend.editor.updateDocument(main, IosFiles.readText(main))
+                val task = backend.build.runTasks().firstOrNull { it.group.contains("run", ignoreCase = true) || it.id.startsWith("run") }
+                    ?: return "FAILED no run task in ${backend.build.runTasks().map { it.id }}"
+                backend.build.runTask(task.id)
+                val done = withTimeoutOrNull(600_000) {
+                    backend.build.runConsole.first { it != null && it.phase == dev.ide.ui.backend.RunPhase.Finished }
+                } ?: return "FAILED the run never finished: ${backend.build.runConsole.value?.transcript?.joinToString("") { it.text }?.takeLast(800)}"
+                "exit ${done.exitCode} via ${task.id}\n" + done.transcript.joinToString("") { it.text }.trimEnd().prependIndent("    ")
+            }
+            "challenge" -> {
+                // What opening today's challenge waits on, one call at a time: `challenge:kotlin` for the other language.
+                val language = if (argument == "kotlin") dev.ide.ui.backend.UiChallengeLanguage.Kotlin else dev.ide.ui.backend.UiChallengeLanguage.Java
+                val parts = mutableListOf<String>()
+                suspend fun <T> timed(label: String, block: suspend () -> T): T {
+                    val at = TimeSource.Monotonic.markNow()
+                    return block().also { parts += "$label ${at.elapsedNow().inWholeMilliseconds} ms" }
+                }
+                if (!timed("available") { backend.challenges.challengesAvailable() }) return "FAILED challenges not available"
+                val day = timed("day") { backend.challenges.day(null) }
+                val problem = day.problem ?: return "FAILED no problem (${day.reason}) ${parts.joinToString()}"
+                val ready = timed("prepare") { backend.challenges.prepare(language) }
+                val stub = problem.materials[language]?.stub.orEmpty()
+                val diagnostics = timed("analyze") { backend.challenges.analyze(language, stub) }
+                "${problem.title}: ready=$ready, ${diagnostics.size} diagnostic(s); " + parts.joinToString()
+            }
             else -> "unknown step"
         }
     }
 }
+
+/** What `program:<name>` runs: each one leans on a different way user code meets the runtime. */
+private val PROGRAMS = mapOf(
+    "plain" to """
+        fun main() {
+            val words = listOf("winter", "is", "here")
+            println("plain: " + words.joinToString(" ") { it.uppercase() } + " " + words.sumOf { it.length })
+        }
+    """.trimIndent(),
+    "exception" to """
+        class Grumpy(message: String) : Exception(message)
+        class Cranky : IllegalStateException("cranky")
+
+        fun main() {
+            try { throw Grumpy("grumpy") } catch (e: Grumpy) { println("caught " + e.message) }
+            try { throw Cranky() } catch (e: IllegalStateException) { println("caught " + e.message) }
+            val r = runCatching { error("boom") }
+            println("runCatching " + r.exceptionOrNull()?.message)
+        }
+    """.trimIndent(),
+    "thread" to """
+        fun main() {
+            val t = object : Thread() { override fun run() { println("thread ran") } }
+            t.start(); t.join()
+            val r = Thread { println("runnable ran") }
+            r.start(); r.join()
+        }
+    """.trimIndent(),
+    "coroutines" to """
+        import kotlinx.coroutines.*
+
+        suspend fun twice(x: Int): Int { delay(10); return x * 2 }
+
+        fun main() = runBlocking {
+            println("Start")
+            delay(100)
+            val a = async { twice(21) }
+            launch { println("launched") }
+            println("Done " + a.await())
+        }
+    """.trimIndent(),
+)

@@ -15,10 +15,13 @@ import dev.ide.store.DailyProfile
 import dev.ide.store.DailyRank
 import dev.ide.store.DailySample
 import dev.ide.store.DailySession
+import dev.ide.store.DailySolution
+import dev.ide.store.DailySolutionEntry
 import dev.ide.store.DailyStreak
 import dev.ide.store.DailyVerdict
 import dev.ide.store.DailyYou
 import dev.ide.store.StoreResult
+import dev.ide.store.impl.SupabaseAiCreditsService.Companion.aiCreditsSession
 import dev.ide.store.impl.platform.StoreHttp
 
 /**
@@ -38,12 +41,27 @@ class SupabaseDailyService(
     private val apiKey: String,
     /** Where the judge is deployed. Blank disables submitting while browsing still works. */
     judgeUrl: String,
-    private val accounts: SupabaseAccountService,
+    /**
+     * The session's owner, for the signed-in user's access token. The same shape the free AI tier takes, so a
+     * process that holds no session of its own (the iOS app's engine) can lend the app's.
+     */
+    private val accounts: AiCreditsSession,
     connectTimeoutMs: Int = 10_000,
     readTimeoutMs: Int = 20_000,
     /** Judging compiles and runs code on a server, so its ceiling is minutes rather than seconds. */
     judgeTimeoutMs: Int = 240_000,
 ) : DailyChallengeService {
+
+    /** Over the account service in this process, which owns the session. */
+    constructor(
+        url: String,
+        apiKey: String,
+        judgeUrl: String,
+        accounts: SupabaseAccountService,
+        connectTimeoutMs: Int = 10_000,
+        readTimeoutMs: Int = 20_000,
+        judgeTimeoutMs: Int = 240_000,
+    ) : this(url, apiKey, judgeUrl, accounts.aiCreditsSession(), connectTimeoutMs, readTimeoutMs, judgeTimeoutMs)
 
     private val http = StoreHttp(connectTimeoutMs, readTimeoutMs)
 
@@ -56,11 +74,11 @@ class SupabaseDailyService(
     override fun challengesAvailable(): Boolean = configured
 
     override fun day(date: String?): StoreResult<DailyDay> =
-        rpc("daily_challenge", JsonWriter.obj("p_date" to date)).map { parseDay(it) }
+        rpc("daily_challenge", JsonWriter.obj("p_date" to dateParam(date))).map { parseDay(it) }
 
     override fun start(date: String?): StoreResult<DailySession> {
         if (accounts.bearer() == null) return StoreResult.Failed("Sign in to start the challenge")
-        return rpc("daily_start", JsonWriter.obj("p_date" to date)).flatMap { root ->
+        return rpc("daily_start", JsonWriter.obj("p_date" to dateParam(date))).flatMap { root ->
             if (JsonReader.bool(root, "ok")) {
                 StoreResult.Ok(DailySession(JsonReader.str(root, "startedAt"), JsonReader.str(root, "serverNow")))
             } else {
@@ -72,8 +90,12 @@ class SupabaseDailyService(
     override fun board(date: String?, limit: Int, offset: Int): StoreResult<DailyBoard> =
         rpc(
             "daily_leaderboard",
-            JsonWriter.obj("p_date" to date, "p_limit" to limit, "p_offset" to offset),
+            JsonWriter.obj("p_date" to dateParam(date), "p_limit" to limit, "p_offset" to offset),
         ).map { parseBoard(it) }
+
+    override fun solution(date: String?, handle: String): StoreResult<DailySolution> =
+        rpc("daily_solution", JsonWriter.obj("p_date" to dateParam(date), "p_handle" to handle))
+            .map { parseSolution(it) }
 
     override fun profile(limit: Int): StoreResult<DailyProfile> {
         if (accounts.bearer() == null) return StoreResult.Ok(DailyProfile())
@@ -170,6 +192,13 @@ class SupabaseDailyService(
     }
 
     // -------------------------------------------------------------------------------------------------
+
+    /**
+     * The `p_date` to send for [date]: null (the server's today) when it is blank. The app names today with an
+     * empty string, and Postgres refuses `''` as a date, so sending it made "Solve today's challenge" a
+     * spinner that never ended. The judge needs no such care: it reads anything that is not a date as today.
+     */
+    private fun dateParam(date: String?): String? = date?.takeIf { it.isNotBlank() }
 
     private fun rpc(name: String, body: String): StoreResult<Any?> {
         if (!configured) return StoreResult.Unavailable("Challenges are not configured in this build")
@@ -299,7 +328,56 @@ class SupabaseDailyService(
         total = JsonReader.int(root, "total"),
         rows = JsonReader.arr(JsonReader.obj(root)?.get("rows")).mapNotNull { parseRank(it) },
         you = JsonReader.obj(root)?.get("you")?.let { parseRank(it) },
+        solutionsOpen = JsonReader.bool(root, "solutionsOpen"),
     )
+
+    private fun parseSolution(root: Any?): DailySolution {
+        val problem = JsonReader.obj(root)?.get("problem")
+        return DailySolution(
+            date = JsonReader.str(root, "date").orEmpty(),
+            open = JsonReader.bool(root, "open"),
+            reason = JsonReader.str(root, "reason"),
+            title = JsonReader.str(problem, "title"),
+            slug = JsonReader.str(problem, "slug"),
+            optimalTime = JsonReader.str(problem, "optimalTime"),
+            optimalSpace = JsonReader.str(problem, "optimalSpace"),
+            measuredBy = JsonReader.str(problem, "measuredBy") ?: "ns",
+            reference = parsePoints(JsonReader.obj(root)?.get("reference")),
+            solution = parseSolutionEntry(JsonReader.obj(root)?.get("solution")),
+            you = parseSolutionEntry(JsonReader.obj(root)?.get("you")),
+        )
+    }
+
+    private fun parseSolutionEntry(v: Any?): DailySolutionEntry? {
+        val handle = JsonReader.str(v, "handle") ?: return null
+        return DailySolutionEntry(
+            rank = JsonReader.int(v, "rank"),
+            handle = handle,
+            displayName = JsonReader.str(v, "displayName") ?: handle,
+            avatarUrl = JsonReader.str(v, "avatarUrl"),
+            score = JsonReader.int(v, "score"),
+            language = DailyLanguage.of(JsonReader.str(v, "language")),
+            timeClass = JsonReader.str(v, "timeClass").orEmpty(),
+            spaceClass = JsonReader.str(v, "spaceClass").orEmpty(),
+            timeSteps = JsonReader.int(v, "timeSteps"),
+            spaceSteps = JsonReader.int(v, "spaceSteps"),
+            runtimeNs = JsonReader.long(v, "runtimeNs"),
+            allocBytes = JsonReader.long(v, "allocBytes"),
+            solveMs = JsonReader.long(v, "solveMs"),
+            attempts = JsonReader.int(v, "attempts"),
+            acceptedAt = JsonReader.str(v, "acceptedAt"),
+            source = JsonReader.str(v, "source").orEmpty(),
+            growthExponent = JsonReader.float(v, "growthExponent")?.toDouble(),
+            probe = parsePoints(JsonReader.obj(v)?.get("probe")),
+            testsPassed = JsonReader.int(v, "testsPassed"),
+            testsTotal = JsonReader.int(v, "testsTotal"),
+            isYou = JsonReader.bool(v, "isYou"),
+        )
+    }
+
+    private fun parsePoints(v: Any?): List<DailyProbePoint> = JsonReader.arr(v).map {
+        DailyProbePoint(JsonReader.int(it, "n"), JsonReader.long(it, "ns"), JsonReader.long(it, "bytes"))
+    }
 
     private fun parseRank(v: Any?): DailyRank? {
         val handle = JsonReader.str(v, "handle") ?: return null

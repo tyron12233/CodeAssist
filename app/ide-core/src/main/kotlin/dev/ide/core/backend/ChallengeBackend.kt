@@ -20,6 +20,8 @@ import dev.ide.ui.backend.UiChallengeProfile
 import dev.ide.ui.backend.UiChallengeProgress
 import dev.ide.ui.backend.UiChallengeRank
 import dev.ide.ui.backend.UiChallengeSample
+import dev.ide.ui.backend.UiChallengeSolution
+import dev.ide.ui.backend.UiChallengeSolutionEntry
 import dev.ide.ui.backend.UiChallengeStreak
 import dev.ide.ui.backend.UiChallengeVerdict
 import dev.ide.ui.backend.UiCompletionResult
@@ -34,6 +36,7 @@ import dev.ide.ui.backend.UiJudgeStep
 import dev.ide.ui.backend.UiJudgeStepState
 import dev.ide.ui.backend.UiLocalRun
 import dev.ide.ui.backend.UiSampleOutcome
+import dev.ide.ui.backend.UiSolutionLock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -80,6 +83,11 @@ internal class ChallengeBackend(
 
     override suspend fun start(date: String?): Boolean = withContext(Dispatchers.IO) {
         remote.start(date) is StoreResult.Ok
+    }
+
+    override suspend fun solution(date: String?, handle: String): UiChallengeSolution = withContext(Dispatchers.IO) {
+        (remote.solution(date, handle) as? StoreResult.Ok)?.value?.toUi()
+            ?: UiChallengeSolution(date = date.orEmpty(), lock = UiSolutionLock.Offline)
     }
 
     override suspend fun board(date: String?, limit: Int): UiChallengeBoard = withContext(Dispatchers.IO) {
@@ -514,6 +522,56 @@ private fun dev.ide.store.DailyBoard.toUi(): UiChallengeBoard = UiChallengeBoard
     total = total,
     rows = rows.map { it.toUi() },
     you = you?.toUi(),
+    solutionsOpen = solutionsOpen,
+)
+
+private fun dev.ide.store.DailySolution.toUi(): UiChallengeSolution {
+    val entry = solution?.toUi()
+    // The reference is stored at every size the problem probes; the chart wants it at the sizes this
+    // solution was measured at, which is what the judge's verdict carries too.
+    val sizes = entry?.growth?.map { it.n }?.toSet().orEmpty()
+    return UiChallengeSolution(
+        date = date,
+        lock = when {
+            !open -> when (reason) {
+                "sign_in" -> UiSolutionLock.SignIn
+                "not_found" -> UiSolutionLock.NotFound
+                else -> UiSolutionLock.SolveFirst
+            }
+            entry == null -> UiSolutionLock.NotFound
+            else -> UiSolutionLock.None
+        },
+        title = title,
+        optimalTime = optimalTime,
+        optimalSpace = optimalSpace,
+        counted = measuredBy == "ops",
+        referenceGrowth = reference.filter { it.n in sizes }.map { UiGrowthPoint(it.n, it.ns, it.bytes) },
+        solution = entry,
+        you = you?.toUi(),
+    )
+}
+
+private fun dev.ide.store.DailySolutionEntry.toUi(): UiChallengeSolutionEntry = UiChallengeSolutionEntry(
+    rank = rank,
+    handle = handle,
+    displayName = displayName,
+    avatarUrl = avatarUrl,
+    score = score,
+    language = language.toUi(),
+    timeClass = timeClass,
+    spaceClass = spaceClass,
+    timeSteps = timeSteps,
+    spaceSteps = spaceSteps,
+    runtimeNs = runtimeNs,
+    allocBytes = allocBytes,
+    solveMs = solveMs,
+    attempts = attempts,
+    source = source,
+    growthExponent = growthExponent,
+    growth = probe.map { UiGrowthPoint(it.n, it.ns, it.bytes) },
+    testsPassed = testsPassed,
+    testsTotal = testsTotal,
+    isYou = isYou,
 )
 
 private fun dev.ide.store.DailyRank.toUi(): UiChallengeRank = UiChallengeRank(

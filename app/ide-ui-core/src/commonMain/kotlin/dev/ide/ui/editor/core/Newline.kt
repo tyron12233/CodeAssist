@@ -25,6 +25,8 @@ fun newlineHandlerFor(language: CodeLanguage): NewlineHandler = when {
     // exactly the shape SyntaxFamily.C_FAMILY describes (AIDL was the first language to prove this out).
     language.profile.syntax == SyntaxFamily.C_FAMILY -> JavaNewlineHandler
     language.profile.syntax == SyntaxFamily.XML -> XmlNewlineHandler
+    // Indentation languages: deeper after `:`, shallower after `return`, hanging inside an open bracket.
+    language.profile.syntax == SyntaxFamily.INDENT_BLOCK -> IndentBlockNewlineHandler(language.profile)
     else -> DefaultNewlineHandler
 }
 
@@ -35,6 +37,10 @@ fun newlineHandlerFor(language: CodeLanguage): NewlineHandler = when {
  * smartly-indented line at the line's end. Pure over the buffer, like the [NewlineHandler]s.
  */
 fun smartEnter(text: CharSequence, caret: Int, language: CodeLanguage): RangeEdit {
+    // No braces in an indentation language: a header missing its `:` gets one instead.
+    if (language.profile.syntax == SyntaxFamily.INDENT_BLOCK) {
+        return indentBlockSmartEnter(text, caret.coerceIn(0, text.length), language.profile)
+    }
     val c = caret.coerceIn(0, text.length)
     val lineStart = lineStartOf(text, c)
     val lineEnd = lineEndFrom(text, c)

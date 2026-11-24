@@ -35,12 +35,14 @@ import dev.ide.ui.generated.resources.settings_language_servers
 import dev.ide.ui.generated.resources.settings_language_servers_subtitle
 import dev.ide.ui.generated.resources.settings_symbols
 import dev.ide.ui.generated.resources.settings_symbols_subtitle
+import dev.ide.ui.generated.resources.settings_use_with_claude
+import dev.ide.ui.generated.resources.settings_use_with_claude_subtitle
 import dev.ide.ui.icons.CaIcons
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** A destination of the Settings hub that is its own screen rather than a page of generated controls. */
-enum class HubTool { Colors, CodeStyle, Symbols, LanguageServers, SdkManager, Keystore, Plugins, Storage }
+enum class HubTool { Colors, CodeStyle, Symbols, LanguageServers, SdkManager, Keystore, Plugins, UseWithClaude, Storage }
 
 /** What one hub entry opens: a settings page (built-in or plugin-contributed) by id, or a [HubTool]. */
 sealed interface HubTarget {
@@ -86,6 +88,7 @@ private val HubSlots: List<Pair<HubGroup, List<HubTarget>>> = listOf(
     ),
     HubGroup.Extensions to listOf(
         HubTarget.Tool(HubTool.Plugins),
+        HubTarget.Tool(HubTool.UseWithClaude),
     ),
     HubGroup.System to listOf(
         HubTarget.Tool(HubTool.Storage),
@@ -95,7 +98,7 @@ private val HubSlots: List<Pair<HubGroup, List<HubTarget>>> = listOf(
 
 /**
  * Places [pageIds] (in the backend's order) into [HubSlots]. A page with no slot, which is any page a plugin
- * contributes, goes to [HubGroup.Extensions] after Plugins, so a newly installed plugin's settings land next
+ * contributes, goes to [HubGroup.Extensions] right after Plugins, so a newly installed plugin's settings land next
  * to the screen that manages the plugin. Slotted pages the backend did not offer are dropped, and so are the
  * [hiddenTools] this host cannot use (Language Servers where no installed server can be executed).
  */
@@ -113,8 +116,15 @@ internal fun hubPlacement(
                 is HubTarget.Tool -> t.tool !in hiddenTools
             }
         }
-        group to if (group == HubGroup.Extensions) present + unslotted else present
+        group to if (group == HubGroup.Extensions) afterPlugins(present, unslotted) else present
     }.filter { it.second.isNotEmpty() }
+}
+
+/** [unslotted] placed straight after the Plugins row in [present], or at the end when Plugins is hidden. */
+private fun afterPlugins(present: List<HubTarget>, unslotted: List<HubTarget>): List<HubTarget> {
+    val at = present.indexOf(HubTarget.Tool(HubTool.Plugins)) + 1
+    if (at == 0) return present + unslotted
+    return present.subList(0, at) + unslotted + present.subList(at, present.size)
 }
 
 /** What a built-in page holds, shown under its title. Plugin pages have none. */
@@ -187,6 +197,7 @@ private fun toolEntry(target: HubTarget.Tool): HubEntry {
         HubTool.Plugins -> Triple(CaIcons.box, Res.string.settings_plugins, Res.string.settings_plugins_subtitle)
         HubTool.LanguageServers -> Triple(CaIcons.code, Res.string.settings_language_servers, Res.string.settings_language_servers_subtitle)
         HubTool.Storage -> Triple(CaIcons.layers, Res.string.settings_storage, Res.string.settings_storage_subtitle)
+        HubTool.UseWithClaude -> Triple(CaIcons.share, Res.string.settings_use_with_claude, Res.string.settings_use_with_claude_subtitle)
     }
     return HubEntry(target, icon, stringResource(title), stringResource(subtitle), scopeLabel = null, keywords = emptyList())
 }

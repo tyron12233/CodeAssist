@@ -238,6 +238,7 @@ internal fun EditorCenter(
     // drawer (the desktop uses the right activity rail instead); the compact branch of EditorTopBar renders it.
     UiPluginHost.ensureLoaded()
     val rightPrimary = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).firstOrNull()
+    val claudeLink = dev.ide.ui.components.rememberClaudeLinkState(state.backend)
     Box(modifier) {
         Column(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
             // Zen mode drops the bar; the tabs strip carries its way out.
@@ -302,6 +303,10 @@ internal fun EditorCenter(
                 },
                 compact = compact,
                 onZenMode = { state.setZen(true) },
+                claudeLink = claudeLink.status,
+                onUseWithClaude = if (claudeLink.available) {
+                    { pluginNavigator(dev.ide.ui.backend.AgentService.SCREEN_USE_WITH_CLAUDE) }
+                } else null,
             )
             // Everything under the top bar: the editor proper. A wide layout lays it out between its tool-window
             // stripes and panes (via [frame]) so the bar spans the whole window above them, IntelliJ-style.
@@ -715,15 +720,27 @@ private fun EditorDaemonEffect(
         }
     }
     daemon.onCodeFolds = { folds ->
-        active.session.applyCodeFolds(folds.map {
-            FoldRegion(
-                it.startOffset,
-                it.endOffset,
-                it.placeholder,
-                it.kind,
-                it.collapsedByDefault
-            )
-        })
+        val session = active.session
+        val profile = session.language.profile
+        // An indentation language with no backend folding still folds: by indentation, computed here from the
+        // buffer. A backend that does answer (a language server's folding ranges) wins.
+        val regions = if (
+            folds.isEmpty() && profile.syntax == dev.ide.ui.ext.SyntaxFamily.INDENT_BLOCK &&
+            state.codeFoldingEnabled && !session.doc.isLarge()
+        ) {
+            dev.ide.ui.editor.core.indentBlockFolds(session.doc.chars, profile)
+        } else {
+            folds.map {
+                FoldRegion(
+                    it.startOffset,
+                    it.endOffset,
+                    it.placeholder,
+                    it.kind,
+                    it.collapsedByDefault
+                )
+            }
+        }
+        session.applyCodeFolds(regions)
     }
     daemon.onComposePreviews =
         { active.session.applyComposePreviews(it); onHasPreview(it.isNotEmpty()) }

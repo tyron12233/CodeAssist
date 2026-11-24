@@ -88,6 +88,55 @@ class FileTreeIconsTest {
         }
     }
 
+    /**
+     * `src/main/jniLibs` shows in the Project (Android) view as its own root, holding the ABI folders and `.so`
+     * files, and not only under All Files. Also when the model never declared it (a project made before 3.3,
+     * simulated by removing the declared root): the tree follows the build's `src/<set>/jniLibs` convention.
+     * Either way it stays out of the text roots that search and rename walk.
+     */
+    @Test
+    fun jniLibsShowInTheProjectViewDeclaredOrNot() {
+        withTempDir("ide-tree-jnilibs") { dir ->
+            IdeServices.bootstrapDemo(dir).use { ide ->
+                val backend = IdeServicesBackend(ide)
+                val module = ide.modules().first { it.name == "app" }
+                val moduleDir = ide.moduleRoot(module)!!
+                val abi = moduleDir.resolve("src/main/jniLibs/arm64-v8a")
+                Files.createDirectories(abi)
+                Files.write(abi.resolve("libfoo.so"), byteArrayOf(0x7f, 'E'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte()))
+
+                fun jniRoot(): TreeNode? = flatten(backend.files.fileTree())
+                    .firstOrNull { it.kind == NodeKind.SourceRoot && it.dirPath?.endsWith("src/main/jniLibs") == true }
+
+                fun assertShown(label: String) {
+                    val root = jniRoot()
+                    assertNotNull(root, "$label: src/main/jniLibs must be a root in the Project view")
+                    assertEquals("jniLibs", root.name)
+                    assertEquals("sourceset.jni-libs", root.iconId)
+                    assertTrue(flatten(root).any { it.name == "libfoo.so" && it.kind == NodeKind.File }, "$label: the .so is listed")
+                    val fresh = ide.modules().first { it.name == "app" }
+                    val textRoots = ide.treeRoots(fresh).map { it.toAbsolutePath().normalize() }
+                    assertTrue(abi.parent.toAbsolutePath().normalize() !in textRoots, "$label: jniLibs stays out of search roots")
+                }
+                assertShown("declared")
+
+                // An older project: the model has no jniLibs root at all.
+                val declared = module.sourceSets.flatMap { ss ->
+                    ss.contentRoots.filter { dev.ide.model.ContentRole.JNI_LIBS in it.roles }.map { ss.name to it }
+                }
+                for ((set, root) in declared) backend.modules.removeSourceRoot("app", set, root.dir.path)
+                assertTrue(
+                    ide.modules().first { it.name == "app" }.sourceSets.none { ss ->
+                        ss.contentRoots.any { dev.ide.model.ContentRole.JNI_LIBS in it.roles }
+                    },
+                    "the model has no jniLibs root any more",
+                )
+                assertShown("undeclared")
+            }
+            dir.toFile().deleteRecursively()
+        }
+    }
+
     /** IntelliJ's Project Files view: a module's directory carries the module mark, a source root its role. */
     @Test
     fun allFilesViewMarksModuleDirectoriesAndSourceRoots() {

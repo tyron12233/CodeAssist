@@ -1306,7 +1306,9 @@ class EditorSession(
     /** Straight off the language's profile, so a contributed language comments like any built-in. */
     private fun commentSyntax(): CommentSyntax =
         CommentSyntax(
-            language.profile.lineComment,
+            // The indentation family comments with `#` unless its profile says otherwise, as its scanner does.
+            language.profile.lineComment
+                ?: "#".takeIf { language.profile.syntax == dev.ide.ui.ext.SyntaxFamily.INDENT_BLOCK },
             language.profile.blockCommentOpen,
             language.profile.blockCommentClose,
         )

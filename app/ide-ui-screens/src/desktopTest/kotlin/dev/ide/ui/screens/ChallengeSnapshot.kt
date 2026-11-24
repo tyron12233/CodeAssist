@@ -31,6 +31,9 @@ import dev.ide.ui.backend.UiChallengeProgress
 import dev.ide.ui.backend.UiChallengeRank
 import dev.ide.ui.backend.UiChallengeSample
 import dev.ide.ui.backend.UiChallengeStreak
+import dev.ide.ui.backend.UiChallengeSolution
+import dev.ide.ui.backend.UiChallengeSolutionEntry
+import dev.ide.ui.backend.UiSolutionLock
 import dev.ide.ui.backend.UiGrowthPoint
 import dev.ide.ui.theme.CodeAssistTheme
 import java.io.File
@@ -276,6 +279,117 @@ class ChallengeSnapshot {
             File("$OUT_DIR/challenge-growth.png").apply { parentFile?.mkdirs() }.writeBytes(png)
             println("wrote snapshot: $OUT_DIR/challenge-growth.png (${png.size} bytes)")
             assertTrue(png.size > 3_000, "the chart should draw more than an empty frame")
+        } finally {
+            scene.close()
+        }
+    }
+
+    private fun curve(perN: Double) = listOf(1000, 2000, 4000, 8000, 16000, 32000).map { n ->
+        UiGrowthPoint(n, (n * perN).toLong(), 128)
+    }
+
+    private fun entry(rank: Int, handle: String, name: String, score: Int, perN: Double, isYou: Boolean, source: String) =
+        UiChallengeSolutionEntry(
+            rank = rank,
+            handle = handle,
+            displayName = name,
+            score = score,
+            language = UiChallengeLanguage.Kotlin,
+            timeClass = "O(n)",
+            spaceClass = "O(n)",
+            runtimeNs = (1000 * perN).toLong(),
+            allocBytes = 128,
+            solveMs = if (isYou) 32_360_211 else 211_599,
+            attempts = 2,
+            source = source,
+            growthExponent = 1.0,
+            growth = curve(perN),
+            testsPassed = 14,
+            testsTotal = 14,
+            isYou = isYou,
+        )
+
+    private val solution = UiChallengeSolution(
+        date = "2026-11-24",
+        lock = UiSolutionLock.None,
+        title = "Sink the Zeroes",
+        optimalTime = "O(n)",
+        optimalSpace = "O(n)",
+        counted = true,
+        referenceGrowth = curve(18.5),
+        solution = entry(
+            1, "valirahmanov26-art", "valirahmanov26-art", 133, 17.0, isYou = false,
+            """
+            fun moveZeroes(nums: IntArray): IntArray {
+                var nonZeroIndex = 0
+                for (i in nums.indices) {
+                    if (nums[i] != 0) {
+                        nums[nonZeroIndex] = nums[i]
+                        nonZeroIndex++
+                    }
+                }
+                for (i in nonZeroIndex until nums.size) {
+                    nums[i] = 0
+                }
+                return nums
+            }
+            """.trimIndent(),
+        ),
+        you = entry(
+            4, "me", "tyron", 111, 21.0, isYou = true,
+            """
+            fun moveZeroes(nums: IntArray): IntArray {
+                val out = nums.filter { it != 0 }.toMutableList()
+                repeat(nums.size - out.size) { out += 0 }
+                return out.toIntArray()
+            }
+            """.trimIndent(),
+        ),
+    )
+
+    @Test
+    fun solutionCode() = renderSolution("challenge-solution.png", dark = true, value = solution, comparing = false)
+
+    @Test
+    fun solutionCompare() = renderSolution("challenge-solution-compare.png", dark = false, value = solution, comparing = true)
+
+    @Test
+    fun solutionLocked() = renderSolution(
+        "challenge-solution-locked.png",
+        dark = true,
+        value = UiChallengeSolution(date = "2026-11-24", lock = UiSolutionLock.SolveFirst),
+        comparing = false,
+    )
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    private fun renderSolution(name: String, dark: Boolean, value: UiChallengeSolution, comparing: Boolean) {
+        val backend = object : StubBackend() {
+            override val challenges: ChallengeService = object : ChallengeService {
+                override fun challengesAvailable() = true
+                override suspend fun solution(date: String?, handle: String) = value
+            }
+        }
+        val scene = ImageComposeScene(width = 824, height = 3000, density = Density(2f)) {
+            CodeAssistTheme(dark = dark) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    ChallengeSolutionScreen(
+                        backend = backend,
+                        date = "2026-11-24",
+                        handle = "valirahmanov26-art",
+                        onBack = {},
+                        startComparing = comparing,
+                    )
+                }
+            }
+        }
+        try {
+            scene.render()
+            var image = scene.render(0)
+            repeat(20) { frame -> image = scene.render(frame * 16_000_000L) }
+            val png = image.encodeToData(EncodedImageFormat.PNG)!!.bytes
+            File("$OUT_DIR/$name").apply { parentFile?.mkdirs() }.writeBytes(png)
+            println("wrote snapshot: $OUT_DIR/$name (${png.size} bytes)")
+            assertTrue(png.size > 5_000, "the solution screen should render more than a blank frame")
         } finally {
             scene.close()
         }

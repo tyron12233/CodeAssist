@@ -64,6 +64,7 @@ object EmbeddedEngineHost {
             val manager = ProjectManager.desktop(Paths.get(projectsRoot))
             // Before the backend: its agent looks for the credits service once, as it is made.
             val freeAi = registerFreeAi(manager)
+            registerChallenges(manager)
             val host = IdeServicesBackend(initial = null, manager = manager)
             reportFreeAi(freeAi, host)
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -154,6 +155,22 @@ object EmbeddedEngineHost {
         return true
     }
 
+    /**
+     * The daily challenges, as the Android app registers them, over the app's session ([AppSession]) like
+     * [registerFreeAi]. Without it the Challenges tab answers "not available": the tab is the engine's, and
+     * the engine otherwise has no Supabase project to read the day's problem from.
+     */
+    private fun registerChallenges(manager: ProjectManager) {
+        val url = System.getProperty(SUPABASE_URL).orEmpty()
+        val key = System.getProperty(SUPABASE_KEY).orEmpty()
+        if (url.isBlank() || key.isBlank() || AppSession.ask == null) return
+        // The app passes no judge, so the one every host defaults to (app/ide-android/build.gradle.kts).
+        val judge = System.getProperty(JUDGE_URL) ?: DEFAULT_JUDGE_URL
+        manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.DAILY_CHALLENGE_SERVICE) {
+            dev.ide.store.impl.SupabaseDailyService(url = url, apiKey = key, judgeUrl = judge, accounts = AppSession)
+        }
+    }
+
     /** One line in the app's log: whether Free AI is wired, whether there is a session, which providers the agent offers. */
     private fun reportFreeAi(registered: Boolean, host: IdeServicesBackend) {
         val line = runCatching {
@@ -168,6 +185,8 @@ object EmbeddedEngineHost {
     private const val SUPABASE_URL = "codeassist.supabase.url"
     private const val SUPABASE_KEY = "codeassist.supabase.key"
     private const val AI_PROXY_URL = "codeassist.ai.proxy.url"
+    private const val JUDGE_URL = "codeassist.judge.url"
+    private const val DEFAULT_JUDGE_URL = "https://codeassist-judge.vercel.app"
 }
 
 /**

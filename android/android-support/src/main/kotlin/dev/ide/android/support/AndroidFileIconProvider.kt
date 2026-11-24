@@ -28,6 +28,7 @@ object AndroidFileIconProvider : FileIconProvider {
             ContentRole.ANDROID_RES in target.roles -> "sourceset.android-res"
             ContentRole.ASSETS in target.roles -> "sourceset.assets"
             ContentRole.AIDL in target.roles -> "sourceset.aidl"
+            ContentRole.JNI_LIBS in target.roles -> "sourceset.jni-libs"
             else -> null
         }
         // Android Studio's distinction: an application module and a library module look different.

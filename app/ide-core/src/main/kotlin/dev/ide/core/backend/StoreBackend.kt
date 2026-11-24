@@ -258,6 +258,22 @@ internal class StoreBackend(
 
     override suspend fun screenshotFile(storagePath: String): String? = media.screenshot(storagePath)
 
+    /**
+     * Home's announcements, kept on disk beside the feed and refreshed at most every few hours (see
+     * [dev.ide.store.bridge.AnnouncementCache]). Signed in means a stored session, which is known without the
+     * network and so does not change between a cold start's first frame and its restored session.
+     */
+    private val announcements = dev.ide.store.bridge.AnnouncementCache(
+        source = source,
+        cachePath = { ctx.manager?.storageRoot?.let { java.io.File(it.toFile(), "store/home-announcements.json").absolutePath } },
+        signedIn = { runCatching { accounts.hasStoredSession() }.getOrDefault(false) },
+    )
+
+    override suspend fun homeAnnouncements(localeTag: String, allowNetwork: Boolean): List<dev.ide.ui.backend.UiAnnouncement> =
+        announcements.announcements(localeTag, allowNetwork)
+
+    override suspend fun announcementImage(src: String): String? = media.announcementImage(src)
+
     override suspend fun avatarFile(url: String): String? = media.avatar(url)
 
     // ---- publisher profiles ----
@@ -425,7 +441,7 @@ internal class StoreBackend(
      * account has never published.
      */
     private fun adoptAccount(account: dev.ide.store.StoreAccount): dev.ide.store.StoreAccount {
-        bindPushDevice()
+        bindPushDevice(account.userId)
         // Likewise the host's: which build this account is being used from (see BuildAttestor).
         runCatching {
             ctx.manager?.applicationContainer?.getServiceOrNull(dev.ide.core.BUILD_ATTESTOR)?.attest(account.userId)
@@ -442,9 +458,16 @@ internal class StoreBackend(
      * Silent and idempotent. The token is written by the host when FCM hands it over, which can be after
      * a session is restored, so this is also called from the host once the token exists.
      */
-    internal fun bindPushDevice() {
-        val token = ctx.manager?.preference(PUSH_TOKEN_PREF) ?: return
-        runCatching { accounts.bindPushDevice(token) }
+    internal fun bindPushDevice(userId: String) {
+        val manager = ctx.manager ?: return
+        val token = manager.preference(PUSH_TOKEN_PREF) ?: return
+        // Once per (token, account), not per launch: a session is restored on every cold start, and on a
+        // phone that kills the IDE while the user runs their app that was hundreds of identical binds a day.
+        // Only a confirmed bind is remembered; `false` means the device row is not registered yet.
+        val pair = "$token|$userId"
+        if (manager.preference(PUSH_BOUND_PREF) == pair) return
+        val bound = runCatching { accounts.bindPushDevice(token) }.getOrNull()
+        if ((bound as? dev.ide.store.StoreResult.Ok)?.value == true) manager.setPreference(PUSH_BOUND_PREF, pair)
     }
 
     override fun authProviders(): List<String> = accountState.authProviders()
@@ -466,7 +489,10 @@ internal class StoreBackend(
 
     override fun completeSignIn(redirect: String) = accountState.completeSignIn(redirect)
 
-    override fun signOut() = accountState.signOut()
+    override fun signOut() {
+        ctx.manager?.setPreference(PUSH_BOUND_PREF, "")
+        accountState.signOut()
+    }
 
     override fun accountDeletionAvailable(): Boolean = accounts.authAvailable()
 
@@ -851,6 +877,21 @@ internal class StoreBackend(
         val installed = progressState.value.values
             .filter { it.state == UiInstallState.INSTALLED && it.rootPath != null }
             .map { it.itemId to it.rootPath!! }
+        if (installed.isEmpty()) return emptyList()
+        // The in-memory memo dies with the process, and on a phone that kills the IDE in the background each
+        // cold start re-asked the store about every installed project (one search each, hundreds a day from a
+        // single device). A check that found nothing is remembered on disk for [UPDATES_NONE_PERSIST_MS], for
+        // the same set of installed projects: an install or a delete changes the set and asks again.
+        val installedKey = installed.map { it.first }.sorted().joinToString(",")
+        val now = System.currentTimeMillis()
+        val lastNone = ctx.manager?.preference(UPDATES_NONE_PREF)
+        if (lastNone != null) {
+            val at = lastNone.substringBefore('|').toLongOrNull()
+            if (at != null && now - at in 0 until UPDATES_NONE_PERSIST_MS && lastNone.substringAfter('|') == installedKey) {
+                cachedUpdates = now to emptyList()
+                return emptyList()
+            }
+        }
         val found = withContext(storeIo) {
             kotlinx.coroutines.coroutineScope {
                 installed.map { (id, root) ->
@@ -859,6 +900,10 @@ internal class StoreBackend(
             }
         }
         cachedUpdates = System.currentTimeMillis() to found
+        // Only a clean "nothing newer" is remembered, so an update that exists keeps showing on every launch.
+        // A check that could not reach the store also comes back empty; it is remembered too, which at worst
+        // delays a real update by the persist window.
+        ctx.manager?.setPreference(UPDATES_NONE_PREF, if (found.isEmpty()) "$now|$installedKey" else "")
         return found
     }
 
@@ -1051,6 +1096,12 @@ internal class StoreBackend(
         /** How long Home's list of updates is reused. Each check is one search per installed project. */
         const val UPDATES_MEMO_MS = 10L * 60 * 1000
 
+        /** How long a check that found no updates is trusted across process restarts. */
+        const val UPDATES_NONE_PERSIST_MS = 6L * 60 * 60 * 1000
+
+        /** `<epoch ms>|<sorted installed ids>` of the last check that found no updates. */
+        const val UPDATES_NONE_PREF = "store.updates.none"
+
         const val CATEGORY_COMMUNITY = "Community"
 
         /** The anonymous install id the analytics service already generates; reused for install dedupe. */
@@ -1061,6 +1112,9 @@ internal class StoreBackend(
 
         /** Where the host parks the FCM token; the engine reads it to manage subscriptions. */
         const val PUSH_TOKEN_PREF = "store.push.token"
+
+        /** The `token|userId` pair last bound on the server, so a restored session does not bind it again. */
+        const val PUSH_BOUND_PREF = "store.push.bound"
 
         /** The broadcast topic name, matched by `store_push_claim`'s topic join. */
         const val LAUNCH_TOPIC = "store-launch"

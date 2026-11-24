@@ -195,6 +195,7 @@ fun styleLine(line: String, entryState: Int, language: CodeLanguage): StyledLine
         SyntaxFamily.XML -> styleXmlLine(line, entryState)
         SyntaxFamily.HASH_COMMENT -> styleProguardLine(line)
         SyntaxFamily.MARKDOWN -> styleMarkdownLine(line, entryState)
+        SyntaxFamily.INDENT_BLOCK -> styleIndentLine(line, entryState, language.profile)
         SyntaxFamily.C_FAMILY ->
             if (language == CodeLanguage.Kotlin) styleKotlinLine(line, entryState)
             else styleCodeLine(
@@ -202,6 +203,9 @@ fun styleLine(line: String, entryState: Int, language: CodeLanguage): StyledLine
                 language.profile.keywords.ifEmpty { JAVA_KEYWORDS },
                 language.profile.directivePrefix,
                 textBlocks = language == CodeLanguage.Java,
+                lineComment = language.profile.lineComment ?: "//",
+                multiline = language.profile.multilineStrings,
+                prefixes = language.profile.stringPrefixes,
             )
     }
 
@@ -425,11 +429,27 @@ private fun styleCodeLine(
     /** Whether `"""` opens a text block. Off for the other C-family languages, where it is an empty string
      *  followed by the start of another. */
     textBlocks: Boolean = false,
+    /** Where a line comment starts: the profile's marker, `//` when it names none. */
+    lineComment: String = "//",
+    /** A contributed language's multi-line string delimiters (Dart's `'''`); carried like a text block. */
+    multiline: List<String> = emptyList(),
+    /** Letters that glue to a following quote and belong to the string (C++'s `L`, Dart's `r`). */
+    prefixes: Set<String> = emptySet(),
 ): StyledLine {
     val n = line.length
     val spans = ArrayList<LineSpan>(8)
     var i = 0
-    if (entryState == LexState.TEXT_BLOCK) {
+    val delimiters = if (multiline.isEmpty()) multiline else multiline.sortedByDescending { it.length }
+    if (isMultiState(entryState)) {
+        val delimiter = delimiters.getOrNull((entryState - MULTI_BASE) / 4)
+        val end = if (delimiter == null) 0 else multilineEnd(line, 0, delimiter)
+        if (end < 0) {
+            if (n > 0) spans.add(LineSpan(0, n, TokenType.RAW_STRING))
+            return StyledLine(spans, entryState)
+        }
+        if (end > 0) spans.add(LineSpan(0, end, TokenType.RAW_STRING))
+        i = end
+    } else if (entryState == LexState.TEXT_BLOCK) {
         val end = textBlockEnd(line, 0)
         if (end < 0) {
             if (n > 0) spans.add(LineSpan(0, n, TokenType.RAW_STRING))
@@ -455,9 +475,20 @@ private fun styleCodeLine(
     while (i < n) {
         val c = line[i]
         when {
-            c == '/' && i + 1 < n && line[i + 1] == '/' -> {
+            line.startsWith(lineComment, i) -> {
                 spans.add(LineSpan(i, n, TokenType.COMMENT))
                 return StyledLine(spans, LexState.CODE)
+            }
+            delimiters.isNotEmpty() && (c == '"' || c == '\'' || c == '`') &&
+                delimiters.any { line.startsWith(it, i) } -> {
+                val index = delimiters.indexOfFirst { line.startsWith(it, i) }
+                val end = multilineEnd(line, i + delimiters[index].length, delimiters[index])
+                if (end < 0) {
+                    spans.add(LineSpan(i, n, TokenType.RAW_STRING))
+                    return StyledLine(spans, multiState(index, interpolating = false, doc = false))
+                }
+                spans.add(LineSpan(i, end, TokenType.RAW_STRING))
+                i = end
             }
             c == '/' && i + 1 < n && line[i + 1] == '*' -> {
                 // `/**` opens a doc comment, but `/**/` is an empty ordinary one, not an unterminated doc.
@@ -501,6 +532,11 @@ private fun styleCodeLine(
                 val start = i; i++
                 while (i < n && (line[i].isLetterOrDigit() || line[i] == '_' || line[i] == '$')) i++
                 val word = line.substring(start, i)
+                if (prefixes.isNotEmpty() && i < n && (line[i] == '"' || line[i] == '\'') && word.lowercase() in prefixes) {
+                    // The prefix reads as part of the string the next iteration scans.
+                    spans.add(LineSpan(start, i, TokenType.STRING))
+                    continue
+                }
                 val type = when {
                     word in keywords -> keywordType(word)
                     else -> {
@@ -520,6 +556,18 @@ private fun styleCodeLine(
         }
     }
     return StyledLine(spans, LexState.CODE)
+}
+
+/** End (exclusive) of a multi-line string whose body starts at [from], or -1 when it does not close on this
+ *  line. A backslash escapes the next character, as it does in every language that has such strings. */
+private fun multilineEnd(line: String, from: Int, delimiter: String): Int {
+    var i = from
+    while (i < line.length) {
+        if (line[i] == '\\') { i += 2; continue }
+        if (line.startsWith(delimiter, i)) return i + delimiter.length
+        i++
+    }
+    return -1
 }
 
 /**

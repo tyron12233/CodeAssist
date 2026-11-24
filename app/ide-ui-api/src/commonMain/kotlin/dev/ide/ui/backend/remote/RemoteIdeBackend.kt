@@ -28,7 +28,7 @@ private class RemoteIdeBackend(private val c: RemoteCalls, private val local: de
     override val notifications: dev.ide.ui.backend.NotificationService = RemoteNotificationService(c, local.notifications)
     override val preview: dev.ide.ui.backend.PreviewService = RemotePreviewService(c, local.preview)
     override val project: dev.ide.ui.backend.ProjectInfo
-        get() = c.call(0, 15) {}.let { i -> r287(i) }
+        get() = c.call(0, 15) {}.let { i -> r289(i) }
     override val projects: dev.ide.ui.backend.ProjectService = RemoteProjectService(c, local.projects)
     override val sdk: dev.ide.ui.backend.SdkService = RemoteSdkService(c, local.sdk)
     override val search: dev.ide.ui.backend.SearchService = RemoteSearchService(c, local.search)
@@ -196,18 +196,20 @@ private class RemoteChallengeService(private val c: RemoteCalls, private val loc
         c.callSuspend(5, 10) { o ->  }.let { i -> r109(i) }
     override suspend fun run(language: dev.ide.ui.backend.UiChallengeLanguage, source: kotlin.String, problem: dev.ide.ui.backend.UiChallengeProblem): dev.ide.ui.backend.UiLocalRun =
         c.callSuspend(5, 11) { o -> o.int(language.ordinal); o.string(source); w100(o, problem) }.let { i -> r112(i) }
+    override suspend fun solution(date: kotlin.String?, handle: kotlin.String): dev.ide.ui.backend.UiChallengeSolution =
+        c.callSuspend(5, 12) { o -> o.opt(date) { n9 -> o.string(n9) }; o.string(handle) }.let { i -> r114(i) }
     override suspend fun start(date: kotlin.String?): kotlin.Boolean =
-        c.callSuspend(5, 12) { o -> o.opt(date) { n9 -> o.string(n9) } }.let { i -> i.bool() }
+        c.callSuspend(5, 13) { o -> o.opt(date) { n10 -> o.string(n10) } }.let { i -> i.bool() }
     override suspend fun submit(date: kotlin.String, language: dev.ide.ui.backend.UiChallengeLanguage, source: kotlin.String): dev.ide.ui.backend.UiChallengeVerdict =
-        c.callSuspend(5, 13) { o -> o.string(date); o.int(language.ordinal); o.string(source) }.let { i -> r114(i) }
+        c.callSuspend(5, 14) { o -> o.string(date); o.int(language.ordinal); o.string(source) }.let { i -> r117(i) }
 }
 
 private class RemoteCustomizationService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.CustomizationService) : dev.ide.ui.backend.CustomizationService {
     override fun clearScopedSymbols(scope: kotlin.String): kotlin.Unit { c.call(6, 0) { o -> o.string(scope) } }
     override fun defaultMacros(): kotlin.collections.List<dev.ide.ui.backend.UiMacro> =
-        c.call(6, 1) { o ->  }.let { i -> i.list { r116(i) } }
+        c.call(6, 1) { o ->  }.let { i -> i.list { r118(i) } }
     override fun defaultSymbols(): kotlin.collections.List<dev.ide.ui.backend.UiSymbolKey> =
-        c.call(6, 2) { o ->  }.let { i -> i.list { r117(i) } }
+        c.call(6, 2) { o ->  }.let { i -> i.list { r119(i) } }
     override fun exportScope(scope: kotlin.String): kotlin.String =
         c.call(6, 3) { o -> o.string(scope) }.let { i -> i.str() }
     override fun importScope(scope: kotlin.String, json: kotlin.String): kotlin.Boolean =
@@ -219,56 +221,56 @@ private class RemoteCustomizationService(private val c: RemoteCalls, private val
     override fun scopeAvailable(scope: kotlin.String): kotlin.Boolean =
         c.call(6, 7) { o -> o.string(scope) }.let { i -> i.bool() }
     override fun scopedMacros(scope: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiMacro> =
-        c.call(6, 8) { o -> o.string(scope) }.let { i -> i.list { r116(i) } }
+        c.call(6, 8) { o -> o.string(scope) }.let { i -> i.list { r118(i) } }
     override fun scopedSymbols(scope: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiSymbolKey>? =
-        c.call(6, 9) { o -> o.string(scope) }.let { i -> i.opt { i.list { r117(i) } } }
-    override fun setScopedMacros(scope: kotlin.String, macros: kotlin.collections.List<dev.ide.ui.backend.UiMacro>): kotlin.Unit { c.call(6, 10) { o -> o.string(scope); o.list(macros) { e10 -> w116(o, e10) } } }
-    override fun setScopedSymbols(scope: kotlin.String, symbols: kotlin.collections.List<dev.ide.ui.backend.UiSymbolKey>): kotlin.Unit { c.call(6, 11) { o -> o.string(scope); o.list(symbols) { e11 -> w117(o, e11) } } }
+        c.call(6, 9) { o -> o.string(scope) }.let { i -> i.opt { i.list { r119(i) } } }
+    override fun setScopedMacros(scope: kotlin.String, macros: kotlin.collections.List<dev.ide.ui.backend.UiMacro>): kotlin.Unit { c.call(6, 10) { o -> o.string(scope); o.list(macros) { e11 -> w118(o, e11) } } }
+    override fun setScopedSymbols(scope: kotlin.String, symbols: kotlin.collections.List<dev.ide.ui.backend.UiSymbolKey>): kotlin.Unit { c.call(6, 11) { o -> o.string(scope); o.list(symbols) { e12 -> w119(o, e12) } } }
     override fun suggestSymbols(filePath: kotlin.String, existing: kotlin.collections.List<dev.ide.ui.backend.UiSymbolKey>): kotlin.collections.List<dev.ide.ui.backend.UiSymbolKey> =
-        c.call(6, 12) { o -> o.string(filePath); o.list(existing) { e12 -> w117(o, e12) } }.let { i -> i.list { r117(i) } }
+        c.call(6, 12) { o -> o.string(filePath); o.list(existing) { e13 -> w119(o, e13) } }.let { i -> i.list { r119(i) } }
     override fun symbolKeys(): kotlin.collections.List<dev.ide.ui.backend.UiSymbolKey> =
-        c.call(6, 13) { o ->  }.let { i -> i.list { r117(i) } }
+        c.call(6, 13) { o ->  }.let { i -> i.list { r119(i) } }
 }
 
 private class RemoteDependencyService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.DependencyService) : dev.ide.ui.backend.DependencyService {
     override suspend fun addDependency(moduleName: kotlin.String, coordinate: kotlin.String, scope: kotlin.String, exclusions: kotlin.collections.List<kotlin.String>, variant: kotlin.String?): dev.ide.ui.backend.UiAddResult =
-        c.callSuspend(7, 0) { o -> o.string(moduleName); o.string(coordinate); o.string(scope); o.list(exclusions) { e13 -> o.string(e13) }; o.opt(variant) { n14 -> o.string(n14) } }.let { i -> r118(i) }
+        c.callSuspend(7, 0) { o -> o.string(moduleName); o.string(coordinate); o.string(scope); o.list(exclusions) { e14 -> o.string(e14) }; o.opt(variant) { n15 -> o.string(n15) } }.let { i -> r120(i) }
     override suspend fun addFirebase(moduleName: kotlin.String, artifacts: kotlin.collections.List<kotlin.String>): dev.ide.ui.backend.UiAddResult =
-        c.callSuspend(7, 1) { o -> o.string(moduleName); o.list(artifacts) { e15 -> o.string(e15) } }.let { i -> r118(i) }
+        c.callSuspend(7, 1) { o -> o.string(moduleName); o.list(artifacts) { e16 -> o.string(e16) } }.let { i -> r120(i) }
     override suspend fun addGooglePlayServices(moduleName: kotlin.String, coordinates: kotlin.collections.List<kotlin.String>): dev.ide.ui.backend.UiAddResult =
-        c.callSuspend(7, 2) { o -> o.string(moduleName); o.list(coordinates) { e16 -> o.string(e16) } }.let { i -> r118(i) }
+        c.callSuspend(7, 2) { o -> o.string(moduleName); o.list(coordinates) { e17 -> o.string(e17) } }.let { i -> r120(i) }
     override suspend fun addLocalLibrary(moduleName: kotlin.String, path: kotlin.String, scope: kotlin.String): dev.ide.ui.backend.UiAddResult =
-        c.callSuspend(7, 3) { o -> o.string(moduleName); o.string(path); o.string(scope) }.let { i -> r118(i) }
+        c.callSuspend(7, 3) { o -> o.string(moduleName); o.string(path); o.string(scope) }.let { i -> r120(i) }
     override suspend fun addMissingLibraries(path: kotlin.String, text: kotlin.String): dev.ide.ui.backend.UiAddResult =
-        c.callSuspend(7, 4) { o -> o.string(path); o.string(text) }.let { i -> r118(i) }
+        c.callSuspend(7, 4) { o -> o.string(path); o.string(text) }.let { i -> r120(i) }
     override suspend fun addModuleDependency(moduleName: kotlin.String, targetModule: kotlin.String, scope: kotlin.String, variant: kotlin.String?): dev.ide.ui.backend.UiAddResult =
-        c.callSuspend(7, 5) { o -> o.string(moduleName); o.string(targetModule); o.string(scope); o.opt(variant) { n17 -> o.string(n17) } }.let { i -> r118(i) }
+        c.callSuspend(7, 5) { o -> o.string(moduleName); o.string(targetModule); o.string(scope); o.opt(variant) { n18 -> o.string(n18) } }.let { i -> r120(i) }
     override suspend fun addPlatform(moduleName: kotlin.String, coordinate: kotlin.String, variant: kotlin.String?): dev.ide.ui.backend.UiAddResult =
-        c.callSuspend(7, 6) { o -> o.string(moduleName); o.string(coordinate); o.opt(variant) { n18 -> o.string(n18) } }.let { i -> r118(i) }
+        c.callSuspend(7, 6) { o -> o.string(moduleName); o.string(coordinate); o.opt(variant) { n19 -> o.string(n19) } }.let { i -> r120(i) }
     override fun addRepository(name: kotlin.String, url: kotlin.String): kotlin.Boolean =
         c.call(7, 7) { o -> o.string(name); o.string(url) }.let { i -> i.bool() }
     override suspend fun artifactSearch(query: kotlin.String, moduleName: kotlin.String): dev.ide.ui.backend.UiArtifactSearch =
-        c.callSuspend(7, 8) { o -> o.string(query); o.string(moduleName) }.let { i -> r119(i) }
+        c.callSuspend(7, 8) { o -> o.string(query); o.string(moduleName) }.let { i -> r121(i) }
     override suspend fun availableVersions(moduleName: kotlin.String, coordinate: kotlin.String): kotlin.collections.List<kotlin.String> =
         c.callSuspend(7, 9) { o -> o.string(moduleName); o.string(coordinate) }.let { i -> i.list { i.str() } }
     override suspend fun cachedVersions(group: kotlin.String, name: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiCachedVersion> =
-        c.callSuspend(7, 10) { o -> o.string(group); o.string(name) }.let { i -> i.list { r121(i) } }
+        c.callSuspend(7, 10) { o -> o.string(group); o.string(name) }.let { i -> i.list { r123(i) } }
     override fun clearMissingLibraryOutcome(): kotlin.Unit { c.call(7, 11) { o ->  } }
     override suspend fun deleteCachedVersion(group: kotlin.String, name: kotlin.String, version: kotlin.String): kotlin.Boolean =
         c.callSuspend(7, 12) { o -> o.string(group); o.string(name); o.string(version) }.let { i -> i.bool() }
     override fun dependencyModules(): kotlin.collections.List<dev.ide.ui.backend.UiDepModule> =
-        c.call(7, 13) { o ->  }.let { i -> i.list { r122(i) } }
-    override val depsState: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.DepsResolveState> by lazy { c.stateFlow(7, 14) { i -> r123(i) } }
+        c.call(7, 13) { o ->  }.let { i -> i.list { r124(i) } }
+    override val depsState: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.DepsResolveState> by lazy { c.stateFlow(7, 14) { i -> r125(i) } }
     override fun localLibraryCandidates(moduleName: kotlin.String): kotlin.collections.List<kotlin.String> =
         c.call(7, 15) { o -> o.string(moduleName) }.let { i -> i.list { i.str() } }
     override fun localLibraryDropDir(moduleName: kotlin.String): kotlin.String? =
         c.call(7, 16) { o -> o.string(moduleName) }.let { i -> i.opt { i.str() } }
     override suspend fun missingLibraries(path: kotlin.String, text: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiMissingLibrary> =
-        c.callSuspend(7, 17) { o -> o.string(path); o.string(text) }.let { i -> i.list { r126(i) } }
+        c.callSuspend(7, 17) { o -> o.string(path); o.string(text) }.let { i -> i.list { r128(i) } }
     override val missingLibraryLookups: kotlinx.coroutines.flow.StateFlow<kotlin.Int> by lazy { c.stateFlow(7, 18) { i -> i.int() } }
-    override val missingLibraryOutcome: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.UiAddResult?> by lazy { c.stateFlow(7, 19) { i -> i.opt { r118(i) } } }
+    override val missingLibraryOutcome: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.UiAddResult?> by lazy { c.stateFlow(7, 19) { i -> i.opt { r120(i) } } }
     override suspend fun moduleDependencies(moduleName: kotlin.String): dev.ide.ui.backend.UiModuleDeps? =
-        c.callSuspend(7, 20) { o -> o.string(moduleName) }.let { i -> i.opt { r127(i) } }
+        c.callSuspend(7, 20) { o -> o.string(moduleName) }.let { i -> i.opt { r129(i) } }
     override fun moduleDependencyTargets(moduleName: kotlin.String): kotlin.collections.List<kotlin.String> =
         c.call(7, 21) { o -> o.string(moduleName) }.let { i -> i.list { i.str() } }
     override fun removeDependency(moduleName: kotlin.String, coordinate: kotlin.String): kotlin.Boolean =
@@ -276,15 +278,15 @@ private class RemoteDependencyService(private val c: RemoteCalls, private val lo
     override fun removeRepository(url: kotlin.String): kotlin.Boolean =
         c.call(7, 23) { o -> o.string(url) }.let { i -> i.bool() }
     override fun repositories(): kotlin.collections.List<dev.ide.ui.backend.UiRepository> =
-        c.call(7, 24) { o ->  }.let { i -> i.list { r130(i) } }
+        c.call(7, 24) { o ->  }.let { i -> i.list { r132(i) } }
     override suspend fun retryDependencyResolution(): kotlin.Unit { c.callSuspend(7, 25) { o ->  } }
     override suspend fun searchArtifacts(query: kotlin.String, moduleName: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiArtifactHit> =
-        c.callSuspend(7, 26) { o -> o.string(query); o.string(moduleName) }.let { i -> i.list { r120(i) } }
+        c.callSuspend(7, 26) { o -> o.string(query); o.string(moduleName) }.let { i -> i.list { r122(i) } }
     override suspend fun setDependencyExclusions(moduleName: kotlin.String, coordinate: kotlin.String, exclusions: kotlin.collections.List<kotlin.String>): dev.ide.ui.backend.UiAddResult =
-        c.callSuspend(7, 27) { o -> o.string(moduleName); o.string(coordinate); o.list(exclusions) { e19 -> o.string(e19) } }.let { i -> r118(i) }
+        c.callSuspend(7, 27) { o -> o.string(moduleName); o.string(coordinate); o.list(exclusions) { e20 -> o.string(e20) } }.let { i -> r120(i) }
     override fun startPendingDependencyResolution(): kotlin.Unit { c.call(7, 28) { o ->  } }
     override suspend fun updateDependency(moduleName: kotlin.String, coordinate: kotlin.String, version: kotlin.String, scope: kotlin.String, exclusions: kotlin.collections.List<kotlin.String>): dev.ide.ui.backend.UiAddResult =
-        c.callSuspend(7, 29) { o -> o.string(moduleName); o.string(coordinate); o.string(version); o.string(scope); o.list(exclusions) { e20 -> o.string(e20) } }.let { i -> r118(i) }
+        c.callSuspend(7, 29) { o -> o.string(moduleName); o.string(coordinate); o.string(version); o.string(scope); o.list(exclusions) { e21 -> o.string(e21) } }.let { i -> r120(i) }
 }
 
 private class RemoteDiagnosticsService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.DiagnosticsService) : dev.ide.ui.backend.DiagnosticsService {
@@ -296,27 +298,27 @@ private class RemoteDiagnosticsService(private val c: RemoteCalls, private val l
         c.call(8, 2) { o ->  }.let { i -> i.bool() }
     override fun countFeature(feature: kotlin.String): kotlin.Unit { c.call(8, 3) { o -> o.string(feature) } }
     override fun dismissError(id: kotlin.Int): kotlin.Unit { c.call(8, 4) { o -> o.int(id) } }
-    override val errorEvents: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.UiError?> by lazy { c.stateFlow(8, 5) { i -> i.opt { r131(i) } } }
+    override val errorEvents: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.UiError?> by lazy { c.stateFlow(8, 5) { i -> i.opt { r133(i) } } }
     override suspend fun exportLogs(): kotlin.String? =
         c.callSuspend(8, 6) { o ->  }.let { i -> i.opt { i.str() } }
     override suspend fun falseErrorReport(path: kotlin.String, text: kotlin.String, startOffset: kotlin.Int, endOffset: kotlin.Int, message: kotlin.String, severity: dev.ide.ui.backend.UiSeverity): kotlin.String? =
         c.callSuspend(8, 7) { o -> o.string(path); o.string(text); o.int(startOffset); o.int(endOffset); o.string(message); o.int(severity.ordinal) }.let { i -> i.opt { i.str() } }
     override fun recentLogs(): kotlin.collections.List<dev.ide.ui.backend.UiLogEntry> =
-        c.call(8, 8) { o ->  }.let { i -> i.list { r132(i) } }
-    override fun recordPerf(event: kotlin.String, ms: kotlin.Long, dims: kotlin.collections.Map<kotlin.String, kotlin.String>): kotlin.Unit { c.call(8, 9) { o -> o.string(event); o.long(ms); o.map(dims, { k21 -> o.string(k21) }, { v22 -> o.string(v22) }) } }
+        c.call(8, 8) { o ->  }.let { i -> i.list { r134(i) } }
+    override fun recordPerf(event: kotlin.String, ms: kotlin.Long, dims: kotlin.collections.Map<kotlin.String, kotlin.String>): kotlin.Unit { c.call(8, 9) { o -> o.string(event); o.long(ms); o.map(dims, { k22 -> o.string(k22) }, { v23 -> o.string(v23) }) } }
     override suspend fun saveFalseErrorReport(report: kotlin.String): kotlin.String? =
         c.callSuspend(8, 10) { o -> o.string(report) }.let { i -> i.opt { i.str() } }
     override fun setAnalyticsConsent(granted: kotlin.Boolean): kotlin.Unit { c.call(8, 11) { o -> o.bool(granted) } }
-    override fun track(event: kotlin.String, props: kotlin.collections.Map<kotlin.String, kotlin.String>): kotlin.Unit { c.call(8, 12) { o -> o.string(event); o.map(props, { k23 -> o.string(k23) }, { v24 -> o.string(v24) }) } }
+    override fun track(event: kotlin.String, props: kotlin.collections.Map<kotlin.String, kotlin.String>): kotlin.Unit { c.call(8, 12) { o -> o.string(event); o.map(props, { k24 -> o.string(k24) }, { v25 -> o.string(v25) }) } }
 }
 
 private class RemoteEditorService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.EditorService) : dev.ide.ui.backend.EditorService {
     override suspend fun actionsAt(path: kotlin.String, text: kotlin.String, selStart: kotlin.Int, selEnd: kotlin.Int): kotlin.collections.List<dev.ide.ui.backend.UiAction> =
-        c.callSuspend(9, 0) { o -> o.string(path); o.string(text); o.int(selStart); o.int(selEnd) }.let { i -> i.list { r133(i) } }
+        c.callSuspend(9, 0) { o -> o.string(path); o.string(text); o.int(selStart); o.int(selEnd) }.let { i -> i.list { r135(i) } }
     override suspend fun analyze(path: kotlin.String, text: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiDiagnostic> =
         c.callSuspend(9, 1) { o -> o.string(path); o.string(text) }.let { i -> i.list { r90(i) } }
     override suspend fun applyAction(path: kotlin.String, text: kotlin.String, selStart: kotlin.Int, selEnd: kotlin.Int, actionId: kotlin.Int): dev.ide.ui.backend.UiActionEdits =
-        c.callSuspend(9, 2) { o -> o.string(path); o.string(text); o.int(selStart); o.int(selEnd); o.int(actionId) }.let { i -> r134(i) }
+        c.callSuspend(9, 2) { o -> o.string(path); o.string(text); o.int(selStart); o.int(selEnd); o.int(actionId) }.let { i -> r136(i) }
     override suspend fun breadcrumbAt(path: kotlin.String, text: kotlin.String, offset: kotlin.Int): kotlin.collections.List<kotlin.String> =
         c.callSuspend(9, 3) { o -> o.string(path); o.string(text); o.int(offset) }.let { i -> i.list { i.str() } }
     override suspend fun caretContext(path: kotlin.String, text: kotlin.String, offset: kotlin.Int): dev.ide.ui.backend.UiCaretContext? =
@@ -327,16 +329,16 @@ private class RemoteEditorService(private val c: RemoteCalls, private val local:
         c.callSuspend(9, 6) { o -> o.string(path); o.string(text); o.int(offset) }.let { i -> r93(i) }
     override suspend fun completionAccepted(path: kotlin.String, label: kotlin.String): kotlin.Unit { c.callSuspend(9, 7) { o -> o.string(path); o.string(label) } }
     override suspend fun decorations(path: kotlin.String, text: kotlin.String): dev.ide.ui.backend.UiEditorDecorations =
-        c.callSuspend(9, 8) { o -> o.string(path); o.string(text) }.let { i -> r135(i) }
+        c.callSuspend(9, 8) { o -> o.string(path); o.string(text) }.let { i -> r137(i) }
     override suspend fun definitionAt(path: kotlin.String, text: kotlin.String, offset: kotlin.Int): dev.ide.ui.backend.UiDefinition? =
-        c.callSuspend(9, 9) { o -> o.string(path); o.string(text); o.int(offset) }.let { i -> i.opt { r138(i) } }
+        c.callSuspend(9, 9) { o -> o.string(path); o.string(text); o.int(offset) }.let { i -> i.opt { r140(i) } }
     override val diagnosticsInvalidated: kotlinx.coroutines.flow.Flow<kotlin.collections.Set<kotlin.String>> by lazy { c.events(9, 10) { i -> i.list { i.str() }.toSet() } }
     override fun documentLoaded(path: kotlin.String, text: kotlin.String): kotlin.Unit { c.call(9, 11) { o -> o.string(path); o.string(text) } }
     override suspend fun expandSelection(path: kotlin.String, text: kotlin.String, selStart: kotlin.Int, selEnd: kotlin.Int): dev.ide.ui.backend.UiTextRange? =
         c.callSuspend(9, 12) { o -> o.string(path); o.string(text); o.int(selStart); o.int(selEnd) }.let { i -> i.opt { r98(i) } }
     override val externalEdits: kotlinx.coroutines.flow.Flow<kotlin.collections.Map<kotlin.String, kotlin.collections.List<dev.ide.ui.backend.UiTextEdit>>> by lazy { c.events(9, 13) { i -> i.map({ i.str() }, { i.list { r7(i) } }) } }
     override suspend fun fileStructure(path: kotlin.String, text: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiFileSymbol> =
-        c.callSuspend(9, 14) { o -> o.string(path); o.string(text) }.let { i -> i.list { r139(i) } }
+        c.callSuspend(9, 14) { o -> o.string(path); o.string(text) }.let { i -> i.list { r141(i) } }
     override suspend fun formatDocument(path: kotlin.String, text: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiTextEdit> =
         c.callSuspend(9, 15) { o -> o.string(path); o.string(text) }.let { i -> i.list { r7(i) } }
     override suspend fun formatRange(path: kotlin.String, text: kotlin.String, selStart: kotlin.Int, selEnd: kotlin.Int): kotlin.collections.List<dev.ide.ui.backend.UiTextEdit> =
@@ -344,47 +346,47 @@ private class RemoteEditorService(private val c: RemoteCalls, private val local:
     override suspend fun hintsAt(path: kotlin.String, text: kotlin.String, startOffset: kotlin.Int, endOffset: kotlin.Int): kotlin.collections.List<dev.ide.ui.backend.UiInlayHint> =
         c.callSuspend(9, 17) { o -> o.string(path); o.string(text); o.int(startOffset); o.int(endOffset) }.let { i -> i.list { r105(i) } }
     override suspend fun implementationLocationOf(contextPath: kotlin.String, fqn: kotlin.String): dev.ide.ui.backend.UiDefinition? =
-        c.callSuspend(9, 18) { o -> o.string(contextPath); o.string(fqn) }.let { i -> i.opt { r138(i) } }
+        c.callSuspend(9, 18) { o -> o.string(contextPath); o.string(fqn) }.let { i -> i.opt { r140(i) } }
     override suspend fun inheritorMarkers(path: kotlin.String, text: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiInheritorMarker> =
-        c.callSuspend(9, 19) { o -> o.string(path); o.string(text) }.let { i -> i.list { r140(i) } }
+        c.callSuspend(9, 19) { o -> o.string(path); o.string(text) }.let { i -> i.list { r142(i) } }
     override suspend fun libraryContent(contextPath: kotlin.String, fqn: kotlin.String, forceJava: kotlin.Boolean): dev.ide.ui.backend.UiLibraryContent? =
-        c.callSuspend(9, 20) { o -> o.string(contextPath); o.string(fqn); o.bool(forceJava) }.let { i -> i.opt { r142(i) } }
+        c.callSuspend(9, 20) { o -> o.string(contextPath); o.string(fqn); o.bool(forceJava) }.let { i -> i.opt { r144(i) } }
     override suspend fun localHistory(path: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiHistoryVersion> =
-        c.callSuspend(9, 21) { o -> o.string(path) }.let { i -> i.list { r143(i) } }
+        c.callSuspend(9, 21) { o -> o.string(path) }.let { i -> i.list { r145(i) } }
     override suspend fun localHistoryText(path: kotlin.String, id: kotlin.Long): kotlin.String? =
         c.callSuspend(9, 22) { o -> o.string(path); o.long(id) }.let { i -> i.opt { i.str() } }
     override suspend fun navigationOptions(path: kotlin.String, text: kotlin.String, offset: kotlin.Int): kotlin.collections.List<dev.ide.ui.backend.UiNavOption> =
-        c.callSuspend(9, 23) { o -> o.string(path); o.string(text); o.int(offset) }.let { i -> i.list { r144(i) } }
+        c.callSuspend(9, 23) { o -> o.string(path); o.string(text); o.int(offset) }.let { i -> i.list { r146(i) } }
     override suspend fun navigationTargets(path: kotlin.String, text: kotlin.String, offset: kotlin.Int, kind: dev.ide.ui.backend.UiNavKind): kotlin.collections.List<dev.ide.ui.backend.UiNavTarget> =
-        c.callSuspend(9, 24) { o -> o.string(path); o.string(text); o.int(offset); o.int(kind.ordinal) }.let { i -> i.list { r145(i) } }
-    override fun onActiveEditorChanged(path: kotlin.String?): kotlin.Unit { c.call(9, 25) { o -> o.opt(path) { n25 -> o.string(n25) } } }
+        c.callSuspend(9, 24) { o -> o.string(path); o.string(text); o.int(offset); o.int(kind.ordinal) }.let { i -> i.list { r147(i) } }
+    override fun onActiveEditorChanged(path: kotlin.String?): kotlin.Unit { c.call(9, 25) { o -> o.opt(path) { n26 -> o.string(n26) } } }
     override fun onFileClosed(path: kotlin.String): kotlin.Unit { c.call(9, 26) { o -> o.string(path) } }
     override fun onFileOpened(path: kotlin.String): kotlin.Unit { c.call(9, 27) { o -> o.string(path) } }
     override fun onSelectionChanged(path: kotlin.String, start: kotlin.Int, end: kotlin.Int): kotlin.Unit { c.call(9, 28) { o -> o.string(path); o.int(start); o.int(end) } }
     override suspend fun optimizeImports(path: kotlin.String, text: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiTextEdit> =
         c.callSuspend(9, 29) { o -> o.string(path); o.string(text) }.let { i -> i.list { r7(i) } }
     override suspend fun prepareRename(path: kotlin.String, text: kotlin.String, offset: kotlin.Int): dev.ide.ui.backend.UiRenameTarget? =
-        c.callSuspend(9, 30) { o -> o.string(path); o.string(text); o.int(offset) }.let { i -> i.opt { r146(i) } }
+        c.callSuspend(9, 30) { o -> o.string(path); o.string(text); o.int(offset) }.let { i -> i.opt { r148(i) } }
     override suspend fun quickDocAt(path: kotlin.String, text: kotlin.String, offset: kotlin.Int): dev.ide.ui.backend.UiQuickDoc? =
-        c.callSuspend(9, 31) { o -> o.string(path); o.string(text); o.int(offset) }.let { i -> i.opt { r147(i) } }
+        c.callSuspend(9, 31) { o -> o.string(path); o.string(text); o.int(offset) }.let { i -> i.opt { r149(i) } }
     override val reanalysisRequests: kotlinx.coroutines.flow.StateFlow<kotlin.Int> by lazy { c.stateFlow(9, 32) { i -> i.int() } }
     override suspend fun rename(path: kotlin.String, text: kotlin.String, offset: kotlin.Int, newName: kotlin.String): dev.ide.ui.backend.UiRenameResult =
-        c.callSuspend(9, 33) { o -> o.string(path); o.string(text); o.int(offset); o.string(newName) }.let { i -> r148(i) }
+        c.callSuspend(9, 33) { o -> o.string(path); o.string(text); o.int(offset); o.string(newName) }.let { i -> r150(i) }
     override suspend fun resourceSwatches(path: kotlin.String, text: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiResourceSwatch> =
-        c.callSuspend(9, 34) { o -> o.string(path); o.string(text) }.let { i -> i.list { r149(i) } }
+        c.callSuspend(9, 34) { o -> o.string(path); o.string(text) }.let { i -> i.list { r151(i) } }
     override fun saveFile(path: kotlin.String, text: kotlin.String): kotlin.Unit { c.call(9, 35) { o -> o.string(path); o.string(text) } }
     override suspend fun semanticTokens(path: kotlin.String, text: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiSemanticToken> =
-        c.callSuspend(9, 36) { o -> o.string(path); o.string(text) }.let { i -> i.list { r180(i) } }
+        c.callSuspend(9, 36) { o -> o.string(path); o.string(text) }.let { i -> i.list { r182(i) } }
     override suspend fun signatureHelp(path: kotlin.String, text: kotlin.String, offset: kotlin.Int): dev.ide.ui.backend.UiSignatureHelp? =
-        c.callSuspend(9, 37) { o -> o.string(path); o.string(text); o.int(offset) }.let { i -> i.opt { r181(i) } }
+        c.callSuspend(9, 37) { o -> o.string(path); o.string(text); o.int(offset) }.let { i -> i.opt { r183(i) } }
     override fun updateDocument(path: kotlin.String, text: kotlin.String): kotlin.Unit { c.call(9, 38) { o -> o.string(path); o.string(text) } }
     override suspend fun usageHighlights(path: kotlin.String, text: kotlin.String, offset: kotlin.Int): kotlin.collections.List<dev.ide.ui.backend.UiUsageHighlight>? =
-        c.callSuspend(9, 39) { o -> o.string(path); o.string(text); o.int(offset) }.let { i -> i.opt { i.list { r184(i) } } }
+        c.callSuspend(9, 39) { o -> o.string(path); o.string(text); o.int(offset) }.let { i -> i.opt { i.list { r186(i) } } }
 }
 
 private class RemoteFileService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.FileService) : dev.ide.ui.backend.FileService {
     override fun conflictsIn(kind: dev.ide.ui.backend.UiTransferKind, paths: kotlin.collections.List<kotlin.String>, destDir: kotlin.String): kotlin.collections.List<kotlin.String> =
-        c.call(10, 0) { o -> o.int(kind.ordinal); o.list(paths) { e26 -> o.string(e26) }; o.string(destDir) }.let { i -> i.list { i.str() } }
+        c.call(10, 0) { o -> o.int(kind.ordinal); o.list(paths) { e27 -> o.string(e27) }; o.string(destDir) }.let { i -> i.list { i.str() } }
     override fun copyPath(path: kotlin.String, destDir: kotlin.String): kotlin.String? =
         c.call(10, 1) { o -> o.string(path); o.string(destDir) }.let { i -> i.opt { i.str() } }
     override fun createDirectory(parentPath: kotlin.String, name: kotlin.String): kotlin.String? =
@@ -400,14 +402,14 @@ private class RemoteFileService(private val c: RemoteCalls, private val local: d
     override fun deletePath(path: kotlin.String): kotlin.Boolean =
         c.call(10, 7) { o -> o.string(path) }.let { i -> i.bool() }
     override fun deletePaths(paths: kotlin.collections.List<kotlin.String>): dev.ide.ui.backend.UiDeleteResult =
-        c.call(10, 8) { o -> o.list(paths) { e27 -> o.string(e27) } }.let { i -> r185(i) }
+        c.call(10, 8) { o -> o.list(paths) { e28 -> o.string(e28) } }.let { i -> r187(i) }
     override fun expandedTreeState(mode: dev.ide.ui.backend.TreeViewMode): kotlin.collections.List<kotlin.String>? =
         c.call(10, 9) { o -> o.int(mode.ordinal) }.let { i -> i.opt { i.list { i.str() } } }
     override val fileSystemEpoch: kotlinx.coroutines.flow.StateFlow<kotlin.Int> by lazy { c.stateFlow(10, 10) { i -> i.int() } }
     override fun fileTree(mode: dev.ide.ui.backend.TreeViewMode): dev.ide.ui.backend.TreeNode =
-        c.call(10, 11) { o -> o.int(mode.ordinal) }.let { i -> r186(i) }
+        c.call(10, 11) { o -> o.int(mode.ordinal) }.let { i -> r188(i) }
     override fun listDirectory(dirPath: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiDirEntry> =
-        c.call(10, 12) { o -> o.string(dirPath) }.let { i -> i.list { r188(i) } }
+        c.call(10, 12) { o -> o.string(dirPath) }.let { i -> i.list { r190(i) } }
     override fun moduleNameForFile(path: kotlin.String): kotlin.String? =
         c.call(10, 13) { o -> o.string(path) }.let { i -> i.opt { i.str() } }
     override fun movePath(path: kotlin.String, destDir: kotlin.String): kotlin.String? =
@@ -415,80 +417,80 @@ private class RemoteFileService(private val c: RemoteCalls, private val local: d
     override fun readFile(path: kotlin.String): kotlin.String =
         c.call(10, 15) { o -> o.string(path) }.let { i -> i.str() }
     override suspend fun renamePath(path: kotlin.String, newName: kotlin.String): dev.ide.ui.backend.UiRenameResult =
-        c.callSuspend(10, 16) { o -> o.string(path); o.string(newName) }.let { i -> r148(i) }
-    override fun saveExpandedTreeState(mode: dev.ide.ui.backend.TreeViewMode, ids: kotlin.collections.List<kotlin.String>): kotlin.Unit { c.call(10, 17) { o -> o.int(mode.ordinal); o.list(ids) { e28 -> o.string(e28) } } }
+        c.callSuspend(10, 16) { o -> o.string(path); o.string(newName) }.let { i -> r150(i) }
+    override fun saveExpandedTreeState(mode: dev.ide.ui.backend.TreeViewMode, ids: kotlin.collections.List<kotlin.String>): kotlin.Unit { c.call(10, 17) { o -> o.int(mode.ordinal); o.list(ids) { e29 -> o.string(e29) } } }
     override val supportsUndo: kotlin.Boolean
         get() = c.call(10, 18) {}.let { i -> i.bool() }
     override fun transferPaths(kind: dev.ide.ui.backend.UiTransferKind, items: kotlin.collections.List<dev.ide.ui.backend.UiTransferItem>, destDir: kotlin.String): dev.ide.ui.backend.UiTransferResult =
-        c.call(10, 19) { o -> o.int(kind.ordinal); o.list(items) { e29 -> w189(o, e29) }; o.string(destDir) }.let { i -> r190(i) }
+        c.call(10, 19) { o -> o.int(kind.ordinal); o.list(items) { e30 -> w191(o, e30) }; o.string(destDir) }.let { i -> r192(i) }
     override fun undoFileOperation(token: kotlin.String): dev.ide.ui.backend.UiUndoResult =
-        c.call(10, 20) { o -> o.string(token) }.let { i -> r191(i) }
+        c.call(10, 20) { o -> o.string(token) }.let { i -> r193(i) }
 }
 
 private class RemoteIconService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.IconService) : dev.ide.ui.backend.IconService {
     override suspend fun applyAppIcon(spec: dev.ide.ui.backend.UiAppIconSpec, rasters: kotlin.collections.List<dev.ide.ui.backend.UiRasterFile>): dev.ide.ui.backend.UiIconImportResult =
-        c.callSuspend(11, 0) { o -> w192(o, spec); o.list(rasters) { e30 -> w201(o, e30) } }.let { i -> r202(i) }
+        c.callSuspend(11, 0) { o -> w194(o, spec); o.list(rasters) { e31 -> w203(o, e31) } }.let { i -> r204(i) }
     override suspend fun composeIconArtwork(name: kotlin.String, variant: dev.ide.ui.backend.UiIconVariant): dev.ide.ui.backend.UiIconArtwork? =
-        c.callSuspend(11, 1) { o -> o.string(name); w199(o, variant) }.let { i -> i.opt { r203(i) } }
+        c.callSuspend(11, 1) { o -> o.string(name); w201(o, variant) }.let { i -> i.opt { r205(i) } }
     override suspend fun composeIcons(moduleName: kotlin.String?): kotlin.collections.List<dev.ide.ui.backend.UiIconEntry> =
-        c.callSuspend(11, 2) { o -> o.opt(moduleName) { n31 -> o.string(n31) } }.let { i -> i.list { r204(i) } }
+        c.callSuspend(11, 2) { o -> o.opt(moduleName) { n32 -> o.string(n32) } }.let { i -> i.list { r206(i) } }
     override suspend fun copyResource(sourcePath: kotlin.String, request: dev.ide.ui.backend.UiIconImport): dev.ide.ui.backend.UiIconImportResult =
-        c.callSuspend(11, 3) { o -> o.string(sourcePath); w205(o, request) }.let { i -> r202(i) }
+        c.callSuspend(11, 3) { o -> o.string(sourcePath); w207(o, request) }.let { i -> r204(i) }
     override fun existingResource(target: dev.ide.ui.backend.UiIconTarget, resType: kotlin.String, name: kotlin.String): kotlin.String? =
-        c.call(11, 4) { o -> w206(o, target); o.string(resType); o.string(name) }.let { i -> i.opt { i.str() } }
+        c.call(11, 4) { o -> w208(o, target); o.string(resType); o.string(name) }.let { i -> i.opt { i.str() } }
     override suspend fun iconArtwork(repoId: kotlin.String, name: kotlin.String, variant: dev.ide.ui.backend.UiIconVariant): dev.ide.ui.backend.UiIconArtwork? =
-        c.callSuspend(11, 5) { o -> o.string(repoId); o.string(name); w199(o, variant) }.let { i -> i.opt { r203(i) } }
+        c.callSuspend(11, 5) { o -> o.string(repoId); o.string(name); w201(o, variant) }.let { i -> i.opt { r205(i) } }
     override suspend fun iconInsertion(path: kotlin.String, text: kotlin.String, caret: kotlin.Int, ref: dev.ide.ui.backend.UiIconRef): kotlin.collections.List<dev.ide.ui.backend.UiTextEdit> =
-        c.callSuspend(11, 6) { o -> o.string(path); o.string(text); o.int(caret); w207(o, ref) }.let { i -> i.list { r7(i) } }
+        c.callSuspend(11, 6) { o -> o.string(path); o.string(text); o.int(caret); w209(o, ref) }.let { i -> i.list { r7(i) } }
     override fun iconRepositories(): kotlin.collections.List<dev.ide.ui.backend.UiIconRepo> =
-        c.call(11, 7) { o ->  }.let { i -> i.list { r210(i) } }
+        c.call(11, 7) { o ->  }.let { i -> i.list { r212(i) } }
     override suspend fun iconUsages(resType: kotlin.String, name: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiNavTarget> =
-        c.callSuspend(11, 8) { o -> o.string(resType); o.string(name) }.let { i -> i.list { r145(i) } }
+        c.callSuspend(11, 8) { o -> o.string(resType); o.string(name) }.let { i -> i.list { r147(i) } }
     override suspend fun importIcon(repoId: kotlin.String, name: kotlin.String, variant: dev.ide.ui.backend.UiIconVariant, request: dev.ide.ui.backend.UiIconImport): dev.ide.ui.backend.UiIconImportResult =
-        c.callSuspend(11, 9) { o -> o.string(repoId); o.string(name); w199(o, variant); w205(o, request) }.let { i -> r202(i) }
+        c.callSuspend(11, 9) { o -> o.string(repoId); o.string(name); w201(o, variant); w207(o, request) }.let { i -> r204(i) }
     override suspend fun importRaster(bytes: kotlin.ByteArray, extension: kotlin.String, request: dev.ide.ui.backend.UiIconImport): dev.ide.ui.backend.UiIconImportResult =
-        c.callSuspend(11, 10) { o -> o.bytes(bytes); o.string(extension); w205(o, request) }.let { i -> r202(i) }
+        c.callSuspend(11, 10) { o -> o.bytes(bytes); o.string(extension); w207(o, request) }.let { i -> r204(i) }
     override suspend fun importSvg(svgText: kotlin.String, request: dev.ide.ui.backend.UiIconImport): dev.ide.ui.backend.UiIconImportResult =
-        c.callSuspend(11, 11) { o -> o.string(svgText); w205(o, request) }.let { i -> r202(i) }
+        c.callSuspend(11, 11) { o -> o.string(svgText); w207(o, request) }.let { i -> r204(i) }
     override fun importTargets(): kotlin.collections.List<dev.ide.ui.backend.UiIconTarget> =
-        c.call(11, 12) { o ->  }.let { i -> i.list { r206(i) } }
+        c.call(11, 12) { o ->  }.let { i -> i.list { r208(i) } }
     override suspend fun launcherIcon(moduleName: kotlin.String?): dev.ide.ui.backend.UiAppIconState? =
-        c.callSuspend(11, 13) { o -> o.opt(moduleName) { n32 -> o.string(n32) } }.let { i -> i.opt { r211(i) } }
+        c.callSuspend(11, 13) { o -> o.opt(moduleName) { n33 -> o.string(n33) } }.let { i -> i.opt { r213(i) } }
     override suspend fun loadRepository(repoId: kotlin.String): dev.ide.ui.backend.UiIconLoadResult =
-        c.callSuspend(11, 14) { o -> o.string(repoId) }.let { i -> r212(i) }
+        c.callSuspend(11, 14) { o -> o.string(repoId) }.let { i -> r214(i) }
     override suspend fun planAppIcon(spec: dev.ide.ui.backend.UiAppIconSpec): dev.ide.ui.backend.UiAppIconPlan? =
-        c.callSuspend(11, 15) { o -> w192(o, spec) }.let { i -> i.opt { r213(i) } }
+        c.callSuspend(11, 15) { o -> w194(o, spec) }.let { i -> i.opt { r215(i) } }
     override suspend fun previewAppIcon(spec: dev.ide.ui.backend.UiAppIconSpec): dev.ide.ui.backend.UiAppIconPreview? =
-        c.callSuspend(11, 16) { o -> w192(o, spec) }.let { i -> i.opt { r215(i) } }
+        c.callSuspend(11, 16) { o -> w194(o, spec) }.let { i -> i.opt { r217(i) } }
     override suspend fun previewSvg(svgText: kotlin.String, colorArgb: kotlin.Long?): dev.ide.ui.backend.UiIconArtwork? =
-        c.callSuspend(11, 17) { o -> o.string(svgText); o.opt(colorArgb) { n33 -> o.long(n33) } }.let { i -> i.opt { r203(i) } }
+        c.callSuspend(11, 17) { o -> o.string(svgText); o.opt(colorArgb) { n34 -> o.long(n34) } }.let { i -> i.opt { r205(i) } }
     override suspend fun projectIcons(moduleName: kotlin.String?): kotlin.collections.List<dev.ide.ui.backend.UiResourceIcon> =
-        c.callSuspend(11, 18) { o -> o.opt(moduleName) { n34 -> o.string(n34) } }.let { i -> i.list { r216(i) } }
+        c.callSuspend(11, 18) { o -> o.opt(moduleName) { n35 -> o.string(n35) } }.let { i -> i.list { r218(i) } }
     override suspend fun renameIcon(resType: kotlin.String, oldName: kotlin.String, newName: kotlin.String): dev.ide.ui.backend.UiRenameResult =
-        c.callSuspend(11, 19) { o -> o.string(resType); o.string(oldName); o.string(newName) }.let { i -> r148(i) }
+        c.callSuspend(11, 19) { o -> o.string(resType); o.string(oldName); o.string(newName) }.let { i -> r150(i) }
     override suspend fun resourceArtwork(path: kotlin.String): dev.ide.ui.backend.UiIconArtwork? =
-        c.callSuspend(11, 20) { o -> o.string(path) }.let { i -> i.opt { r203(i) } }
+        c.callSuspend(11, 20) { o -> o.string(path) }.let { i -> i.opt { r205(i) } }
     override suspend fun resourceBytes(path: kotlin.String): kotlin.ByteArray? =
         c.callSuspend(11, 21) { o -> o.string(path) }.let { i -> i.opt { i.bytes() } }
     override suspend fun searchIcons(repoId: kotlin.String, query: kotlin.String, limit: kotlin.Int): kotlin.collections.List<dev.ide.ui.backend.UiIconEntry> =
-        c.callSuspend(11, 22) { o -> o.string(repoId); o.string(query); o.int(limit) }.let { i -> i.list { r204(i) } }
+        c.callSuspend(11, 22) { o -> o.string(repoId); o.string(query); o.int(limit) }.let { i -> i.list { r206(i) } }
 }
 
 private class RemoteLearnService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.LearnService) : dev.ide.ui.backend.LearnService {
     override suspend fun accept(threadId: kotlin.String, answerId: kotlin.String?): kotlin.String? =
-        c.callSuspend(12, 0) { o -> o.string(threadId); o.opt(answerId) { n35 -> o.string(n35) } }.let { i -> i.opt { i.str() } }
+        c.callSuspend(12, 0) { o -> o.string(threadId); o.opt(answerId) { n36 -> o.string(n36) } }.let { i -> i.opt { i.str() } }
     override fun account(): dev.ide.ui.backend.UiLearnAccount? =
-        c.call(12, 1) { o ->  }.let { i -> i.opt { r218(i) } }
+        c.call(12, 1) { o ->  }.let { i -> i.opt { r220(i) } }
     override suspend fun analyze(language: kotlin.String, code: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiDiagnostic> =
         c.callSuspend(12, 2) { o -> o.string(language); o.string(code) }.let { i -> i.list { r90(i) } }
     override suspend fun answer(threadId: kotlin.String, body: kotlin.String, code: kotlin.String?): dev.ide.ui.backend.UiLearnWrite =
-        c.callSuspend(12, 3) { o -> o.string(threadId); o.string(body); o.opt(code) { n36 -> o.string(n36) } }.let { i -> r220(i) }
+        c.callSuspend(12, 3) { o -> o.string(threadId); o.string(body); o.opt(code) { n37 -> o.string(n37) } }.let { i -> r222(i) }
     override suspend fun askQuestion(lessonId: kotlin.String, stepId: kotlin.String?, title: kotlin.String, body: kotlin.String, code: kotlin.String?, errorText: kotlin.String?): dev.ide.ui.backend.UiLearnWrite =
-        c.callSuspend(12, 4) { o -> o.string(lessonId); o.opt(stepId) { n37 -> o.string(n37) }; o.string(title); o.string(body); o.opt(code) { n38 -> o.string(n38) }; o.opt(errorText) { n39 -> o.string(n39) } }.let { i -> r220(i) }
+        c.callSuspend(12, 4) { o -> o.string(lessonId); o.opt(stepId) { n38 -> o.string(n38) }; o.string(title); o.string(body); o.opt(code) { n39 -> o.string(n39) }; o.opt(errorText) { n40 -> o.string(n40) } }.let { i -> r222(i) }
     override suspend fun catalog(): dev.ide.ui.backend.UiLearnCatalog =
-        c.callSuspend(12, 5) { o ->  }.let { i -> r221(i) }
+        c.callSuspend(12, 5) { o ->  }.let { i -> r223(i) }
     override suspend fun check(lessonId: kotlin.String, stepId: kotlin.String, code: kotlin.String): dev.ide.ui.backend.UiExerciseResult =
-        c.callSuspend(12, 6) { o -> o.string(lessonId); o.string(stepId); o.string(code) }.let { i -> r225(i) }
+        c.callSuspend(12, 6) { o -> o.string(lessonId); o.string(stepId); o.string(code) }.let { i -> r227(i) }
     override fun communityAvailable(): kotlin.Boolean =
         c.call(12, 7) { o ->  }.let { i -> i.bool() }
     override suspend fun complete(language: kotlin.String, code: kotlin.String, offset: kotlin.Int): dev.ide.ui.backend.UiCompletionResult =
@@ -504,7 +506,7 @@ private class RemoteLearnService(private val c: RemoteCalls, private val local: 
     override fun learnAvailable(): kotlin.Boolean =
         c.call(12, 13) { o ->  }.let { i -> i.bool() }
     override suspend fun lesson(id: kotlin.String): dev.ide.ui.backend.UiLesson? =
-        c.callSuspend(12, 14) { o -> o.string(id) }.let { i -> i.opt { r226(i) } }
+        c.callSuspend(12, 14) { o -> o.string(id) }.let { i -> i.opt { r228(i) } }
     override suspend fun likeSolution(solutionId: kotlin.String, like: kotlin.Boolean): kotlin.String? =
         c.callSuspend(12, 15) { o -> o.string(solutionId); o.bool(like) }.let { i -> i.opt { i.str() } }
     override fun markStepComplete(lessonId: kotlin.String, stepId: kotlin.String): kotlin.Unit { c.call(12, 16) { o -> o.string(lessonId); o.string(stepId) } }
@@ -513,97 +515,97 @@ private class RemoteLearnService(private val c: RemoteCalls, private val local: 
     override suspend fun prepare(language: kotlin.String): kotlin.Boolean =
         c.callSuspend(12, 18) { o -> o.string(language) }.let { i -> i.bool() }
     override suspend fun prepareStep(lessonId: kotlin.String, stepId: kotlin.String, content: kotlin.String?): kotlin.String? =
-        c.callSuspend(12, 19) { o -> o.string(lessonId); o.string(stepId); o.opt(content) { n40 -> o.string(n40) } }.let { i -> i.opt { i.str() } }
+        c.callSuspend(12, 19) { o -> o.string(lessonId); o.string(stepId); o.opt(content) { n41 -> o.string(n41) } }.let { i -> i.opt { i.str() } }
     override fun progress(): dev.ide.ui.backend.UiLearnProgress =
-        c.call(12, 20) { o ->  }.let { i -> r237(i) }
+        c.call(12, 20) { o ->  }.let { i -> r239(i) }
     override suspend fun publicProfile(handle: kotlin.String): dev.ide.ui.backend.UiLearnPublicProfile? =
-        c.callSuspend(12, 21) { o -> o.string(handle) }.let { i -> i.opt { r238(i) } }
+        c.callSuspend(12, 21) { o -> o.string(handle) }.let { i -> i.opt { r240(i) } }
     override fun recordVisit(lessonId: kotlin.String, stepIndex: kotlin.Int): kotlin.Unit { c.call(12, 22) { o -> o.string(lessonId); o.int(stepIndex) } }
     override suspend fun refreshCatalog(): kotlin.Boolean =
         c.callSuspend(12, 23) { o ->  }.let { i -> i.bool() }
     override suspend fun report(kind: kotlin.String, id: kotlin.String, reason: kotlin.String, detail: kotlin.String?): kotlin.String? =
-        c.callSuspend(12, 24) { o -> o.string(kind); o.string(id); o.string(reason); o.opt(detail) { n41 -> o.string(n41) } }.let { i -> i.opt { i.str() } }
+        c.callSuspend(12, 24) { o -> o.string(kind); o.string(id); o.string(reason); o.opt(detail) { n42 -> o.string(n42) } }.let { i -> i.opt { i.str() } }
     override suspend fun reportQueue(): kotlin.collections.List<dev.ide.ui.backend.UiLearnReport>? =
-        c.callSuspend(12, 25) { o ->  }.let { i -> i.opt { i.list { r239(i) } } }
+        c.callSuspend(12, 25) { o ->  }.let { i -> i.opt { i.list { r241(i) } } }
     override suspend fun resolveReport(reportId: kotlin.String, hide: kotlin.Boolean): kotlin.String? =
         c.callSuspend(12, 26) { o -> o.string(reportId); o.bool(hide) }.let { i -> i.opt { i.str() } }
     override fun resume(): dev.ide.ui.backend.UiResumePoint? =
-        c.call(12, 27) { o ->  }.let { i -> i.opt { r240(i) } }
+        c.call(12, 27) { o ->  }.let { i -> i.opt { r242(i) } }
     override suspend fun setShareSolutions(share: kotlin.Boolean): kotlin.String? =
         c.callSuspend(12, 28) { o -> o.bool(share) }.let { i -> i.opt { i.str() } }
     override fun shareSolutions(): kotlin.Boolean =
         c.call(12, 29) { o ->  }.let { i -> i.bool() }
     override suspend fun solutions(lessonId: kotlin.String, stepId: kotlin.String, sort: kotlin.String): dev.ide.ui.backend.UiLearnSolutionPage? =
-        c.callSuspend(12, 30) { o -> o.string(lessonId); o.string(stepId); o.string(sort) }.let { i -> i.opt { r241(i) } }
+        c.callSuspend(12, 30) { o -> o.string(lessonId); o.string(stepId); o.string(sort) }.let { i -> i.opt { r243(i) } }
     override suspend fun syncProgress(): kotlin.Boolean =
         c.callSuspend(12, 31) { o ->  }.let { i -> i.bool() }
     override suspend fun thread(threadId: kotlin.String): dev.ide.ui.backend.UiLearnThread? =
-        c.callSuspend(12, 32) { o -> o.string(threadId) }.let { i -> i.opt { r244(i) } }
+        c.callSuspend(12, 32) { o -> o.string(threadId) }.let { i -> i.opt { r246(i) } }
     override suspend fun threadCount(lessonId: kotlin.String): kotlin.Int =
         c.callSuspend(12, 33) { o -> o.string(lessonId) }.let { i -> i.int() }
     override suspend fun threads(lessonId: kotlin.String, stepId: kotlin.String?): kotlin.collections.List<dev.ide.ui.backend.UiLearnThreadSummary>? =
-        c.callSuspend(12, 34) { o -> o.string(lessonId); o.opt(stepId) { n42 -> o.string(n42) } }.let { i -> i.opt { i.list { r246(i) } } }
+        c.callSuspend(12, 34) { o -> o.string(lessonId); o.opt(stepId) { n43 -> o.string(n43) } }.let { i -> i.opt { i.list { r248(i) } } }
     override suspend fun vote(answerId: kotlin.String, up: kotlin.Boolean): kotlin.String? =
         c.callSuspend(12, 35) { o -> o.string(answerId); o.bool(up) }.let { i -> i.opt { i.str() } }
 }
 
 private class RemoteModuleService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.ModuleService) : dev.ide.ui.backend.ModuleService {
     override suspend fun acceptToolchainWarning(moduleName: kotlin.String, warningId: kotlin.String): dev.ide.ui.backend.UiConfigResult =
-        c.callSuspend(13, 0) { o -> o.string(moduleName); o.string(warningId) }.let { i -> r247(i) }
+        c.callSuspend(13, 0) { o -> o.string(moduleName); o.string(warningId) }.let { i -> r249(i) }
     override suspend fun addModuleFeature(moduleName: kotlin.String, featureId: kotlin.String): dev.ide.ui.backend.UiConfigResult =
-        c.callSuspend(13, 1) { o -> o.string(moduleName); o.string(featureId) }.let { i -> r247(i) }
+        c.callSuspend(13, 1) { o -> o.string(moduleName); o.string(featureId) }.let { i -> r249(i) }
     override fun addSourceRoot(moduleName: kotlin.String, sourceSetName: kotlin.String, dirName: kotlin.String, role: dev.ide.ui.backend.UiSourceRootRole): kotlin.String? =
         c.call(13, 2) { o -> o.string(moduleName); o.string(sourceSetName); o.string(dirName); o.int(role.ordinal) }.let { i -> i.opt { i.str() } }
     override fun addSourceSet(moduleName: kotlin.String, name: kotlin.String): kotlin.Boolean =
         c.call(13, 3) { o -> o.string(moduleName); o.string(name) }.let { i -> i.bool() }
     override suspend fun appIdentity(moduleName: kotlin.String): dev.ide.ui.backend.UiAppIdentity? =
-        c.callSuspend(13, 4) { o -> o.string(moduleName) }.let { i -> i.opt { r248(i) } }
+        c.callSuspend(13, 4) { o -> o.string(moduleName) }.let { i -> i.opt { r250(i) } }
     override suspend fun applyAppRename(request: dev.ide.ui.backend.UiAppRenameRequest): dev.ide.ui.backend.UiAppRenameResult =
-        c.callSuspend(13, 5) { o -> w249(o, request) }.let { i -> r250(i) }
+        c.callSuspend(13, 5) { o -> w251(o, request) }.let { i -> r252(i) }
     override fun availableModuleTypes(): kotlin.collections.List<dev.ide.ui.backend.UiModuleTypeOption> =
-        c.call(13, 6) { o ->  }.let { i -> i.list { r251(i) } }
+        c.call(13, 6) { o ->  }.let { i -> i.list { r253(i) } }
     override fun configurableModules(): kotlin.collections.List<dev.ide.ui.backend.UiModuleRef> =
-        c.call(13, 7) { o ->  }.let { i -> i.list { r259(i) } }
+        c.call(13, 7) { o ->  }.let { i -> i.list { r261(i) } }
     override suspend fun configureKotlin(path: kotlin.String): dev.ide.ui.backend.UiConfigResult =
-        c.callSuspend(13, 8) { o -> o.string(path) }.let { i -> r247(i) }
+        c.callSuspend(13, 8) { o -> o.string(path) }.let { i -> r249(i) }
     override suspend fun createModule(name: kotlin.String, typeId: kotlin.String, languageLevel: kotlin.String?, facetValues: kotlin.collections.Map<kotlin.String, kotlin.collections.Map<kotlin.String, kotlin.Any?>>, parentDir: kotlin.String): dev.ide.ui.backend.UiConfigResult =
-        c.callSuspend(13, 9) { o -> o.string(name); o.string(typeId); o.opt(languageLevel) { n43 -> o.string(n43) }; o.map(facetValues, { k44 -> o.string(k44) }, { v45 -> o.map(v45, { k46 -> o.string(k46) }, { v47 -> o.any(v47) }) }); o.string(parentDir) }.let { i -> r247(i) }
+        c.callSuspend(13, 9) { o -> o.string(name); o.string(typeId); o.opt(languageLevel) { n44 -> o.string(n44) }; o.map(facetValues, { k45 -> o.string(k45) }, { v46 -> o.map(v46, { k47 -> o.string(k47) }, { v48 -> o.any(v48) }) }); o.string(parentDir) }.let { i -> r249(i) }
     override suspend fun createProguardFile(moduleName: kotlin.String, entry: kotlin.String): kotlin.String? =
         c.callSuspend(13, 10) { o -> o.string(moduleName); o.string(entry) }.let { i -> i.opt { i.str() } }
     override suspend fun fixToolchainWarning(moduleName: kotlin.String, warningId: kotlin.String): dev.ide.ui.backend.UiConfigResult =
-        c.callSuspend(13, 11) { o -> o.string(moduleName); o.string(warningId) }.let { i -> r247(i) }
+        c.callSuspend(13, 11) { o -> o.string(moduleName); o.string(warningId) }.let { i -> r249(i) }
     override suspend fun getBuildFeatures(moduleName: kotlin.String): dev.ide.ui.backend.UiBuildFeatures? =
-        c.callSuspend(13, 12) { o -> o.string(moduleName) }.let { i -> i.opt { r260(i) } }
+        c.callSuspend(13, 12) { o -> o.string(moduleName) }.let { i -> i.opt { r262(i) } }
     override suspend fun getCompilerPlugins(moduleName: kotlin.String): dev.ide.ui.backend.UiCompilerPlugins? =
-        c.callSuspend(13, 13) { o -> o.string(moduleName) }.let { i -> i.opt { r262(i) } }
+        c.callSuspend(13, 13) { o -> o.string(moduleName) }.let { i -> i.opt { r264(i) } }
     override suspend fun getModuleConfig(moduleName: kotlin.String): dev.ide.ui.backend.UiModuleConfig? =
-        c.callSuspend(13, 14) { o -> o.string(moduleName) }.let { i -> i.opt { r264(i) } }
+        c.callSuspend(13, 14) { o -> o.string(moduleName) }.let { i -> i.opt { r266(i) } }
     override suspend fun getPackagingOptions(moduleName: kotlin.String): dev.ide.ui.backend.UiPackagingOptions? =
-        c.callSuspend(13, 15) { o -> o.string(moduleName) }.let { i -> i.opt { r270(i) } }
+        c.callSuspend(13, 15) { o -> o.string(moduleName) }.let { i -> i.opt { r272(i) } }
     override suspend fun isKotlinConfigured(path: kotlin.String): kotlin.Boolean =
         c.callSuspend(13, 16) { o -> o.string(path) }.let { i -> i.bool() }
     override suspend fun missingProguardFiles(moduleName: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiMissingProguardFile> =
-        c.callSuspend(13, 17) { o -> o.string(moduleName) }.let { i -> i.list { r272(i) } }
+        c.callSuspend(13, 17) { o -> o.string(moduleName) }.let { i -> i.list { r274(i) } }
     override fun moduleSourceSets(moduleName: kotlin.String): kotlin.collections.List<kotlin.String> =
         c.call(13, 18) { o -> o.string(moduleName) }.let { i -> i.list { i.str() } }
     override suspend fun previewAppRename(request: dev.ide.ui.backend.UiAppRenameRequest): dev.ide.ui.backend.UiAppRenamePreview =
-        c.callSuspend(13, 19) { o -> w249(o, request) }.let { i -> r273(i) }
+        c.callSuspend(13, 19) { o -> w251(o, request) }.let { i -> r275(i) }
     override fun removeModule(name: kotlin.String): kotlin.Boolean =
         c.call(13, 20) { o -> o.string(name) }.let { i -> i.bool() }
     override fun removeSourceRoot(moduleName: kotlin.String, sourceSetName: kotlin.String, rootPath: kotlin.String): kotlin.Boolean =
         c.call(13, 21) { o -> o.string(moduleName); o.string(sourceSetName); o.string(rootPath) }.let { i -> i.bool() }
     override suspend fun setBuildFeature(moduleName: kotlin.String, feature: kotlin.String, enabled: kotlin.Boolean): dev.ide.ui.backend.UiConfigResult =
-        c.callSuspend(13, 22) { o -> o.string(moduleName); o.string(feature); o.bool(enabled) }.let { i -> r247(i) }
+        c.callSuspend(13, 22) { o -> o.string(moduleName); o.string(feature); o.bool(enabled) }.let { i -> r249(i) }
     override suspend fun setCompilerPlugin(moduleName: kotlin.String, pluginId: kotlin.String, enabled: kotlin.Boolean): dev.ide.ui.backend.UiConfigResult =
-        c.callSuspend(13, 23) { o -> o.string(moduleName); o.string(pluginId); o.bool(enabled) }.let { i -> r247(i) }
+        c.callSuspend(13, 23) { o -> o.string(moduleName); o.string(pluginId); o.bool(enabled) }.let { i -> r249(i) }
     override fun setSourceSetScope(moduleName: kotlin.String, sourceSetName: kotlin.String, scope: dev.ide.ui.backend.UiSourceSetScope): kotlin.Boolean =
         c.call(13, 24) { o -> o.string(moduleName); o.string(sourceSetName); o.int(scope.ordinal) }.let { i -> i.bool() }
     override suspend fun toolchainWarnings(): kotlin.collections.List<dev.ide.ui.backend.UiToolchainWarning> =
-        c.callSuspend(13, 25) { o ->  }.let { i -> i.list { r274(i) } }
+        c.callSuspend(13, 25) { o ->  }.let { i -> i.list { r276(i) } }
     override suspend fun updateModuleConfig(moduleName: kotlin.String, edit: dev.ide.ui.backend.UiModuleConfigEdit): dev.ide.ui.backend.UiConfigResult =
-        c.callSuspend(13, 26) { o -> o.string(moduleName); w275(o, edit) }.let { i -> r247(i) }
+        c.callSuspend(13, 26) { o -> o.string(moduleName); w277(o, edit) }.let { i -> r249(i) }
     override suspend fun updatePackagingOptions(moduleName: kotlin.String, resources: dev.ide.ui.backend.UiPackagingRules, jniLibs: dev.ide.ui.backend.UiPackagingRules, noCompress: kotlin.collections.List<kotlin.String>): dev.ide.ui.backend.UiConfigResult =
-        c.callSuspend(13, 27) { o -> o.string(moduleName); w271(o, resources); w271(o, jniLibs); o.list(noCompress) { e48 -> o.string(e48) } }.let { i -> r247(i) }
+        c.callSuspend(13, 27) { o -> o.string(moduleName); w273(o, resources); w273(o, jniLibs); o.list(noCompress) { e49 -> o.string(e49) } }.let { i -> r249(i) }
 }
 
 private class RemoteNotificationService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.NotificationService) : dev.ide.ui.backend.NotificationService {
@@ -611,7 +613,7 @@ private class RemoteNotificationService(private val c: RemoteCalls, private val 
     override fun dismiss(id: kotlin.String): kotlin.Unit { c.call(14, 1) { o -> o.string(id) } }
     override fun markAllRead(): kotlin.Unit { c.call(14, 2) { o ->  } }
     override fun markRead(id: kotlin.String): kotlin.Unit { c.call(14, 3) { o -> o.string(id) } }
-    private val flow4 by lazy { c.stateFlow(14, 4) { i -> i.list { r276(i) } } }
+    private val flow4 by lazy { c.stateFlow(14, 4) { i -> i.list { r278(i) } } }
     override fun notifications(): kotlinx.coroutines.flow.StateFlow<kotlin.collections.List<dev.ide.ui.backend.UiNotification>> = flow4
     private val flow5 by lazy { c.stateFlow(14, 5) { i -> i.int() } }
     override fun unreadCount(): kotlinx.coroutines.flow.StateFlow<kotlin.Int> = flow5
@@ -619,20 +621,20 @@ private class RemoteNotificationService(private val c: RemoteCalls, private val 
 
 private class RemotePreviewService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.PreviewService) : dev.ide.ui.backend.PreviewService {
     override suspend fun colorResources(path: kotlin.String, text: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiColorEntry> =
-        c.callSuspend(15, 0) { o -> o.string(path); o.string(text) }.let { i -> i.list { r282(i) } }
+        c.callSuspend(15, 0) { o -> o.string(path); o.string(text) }.let { i -> i.list { r284(i) } }
     override suspend fun composePreviewReady(path: kotlin.String): kotlin.Boolean =
         c.callSuspend(15, 1) { o -> o.string(path) }.let { i -> i.bool() }
     override suspend fun composePreviews(path: kotlin.String, text: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiComposePreview> =
-        c.callSuspend(15, 2) { o -> o.string(path); o.string(text) }.let { i -> i.list { r283(i) } }
+        c.callSuspend(15, 2) { o -> o.string(path); o.string(text) }.let { i -> i.list { r285(i) } }
     override suspend fun drawablePreview(path: kotlin.String, text: kotlin.String): dev.ide.ui.backend.UiDrawable? =
-        c.callSuspend(15, 3) { o -> o.string(path); o.string(text) }.let { i -> i.opt { r152(i) } }
+        c.callSuspend(15, 3) { o -> o.string(path); o.string(text) }.let { i -> i.opt { r154(i) } }
     override suspend fun isLiveLiteralEdit(path: kotlin.String, text: kotlin.String): kotlin.Boolean =
         c.callSuspend(15, 4) { o -> o.string(path); o.string(text) }.let { i -> i.bool() }
-    override val previewProgress: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.PreviewProgress?> by lazy { c.stateFlow(15, 5) { i -> i.opt { r285(i) } } }
+    override val previewProgress: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.PreviewProgress?> by lazy { c.stateFlow(15, 5) { i -> i.opt { r287(i) } } }
     override suspend fun resourceImageBytes(path: kotlin.String): kotlin.ByteArray? =
         c.callSuspend(15, 6) { o -> o.string(path) }.let { i -> i.opt { i.bytes() } }
     override suspend fun runComposePreview(path: kotlin.String, text: kotlin.String, functionName: kotlin.String): dev.ide.ui.backend.UiPreviewResult =
-        c.callSuspend(15, 7) { o -> o.string(path); o.string(text); o.string(functionName) }.let { i -> r286(i) }
+        c.callSuspend(15, 7) { o -> o.string(path); o.string(text); o.string(functionName) }.let { i -> r288(i) }
 }
 
 private class RemoteProjectService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.ProjectService) : dev.ide.ui.backend.ProjectService {
@@ -641,22 +643,22 @@ private class RemoteProjectService(private val c: RemoteCalls, private val local
     override suspend fun clearStorageCategory(id: kotlin.String): kotlin.Boolean =
         c.callSuspend(16, 1) { o -> o.string(id) }.let { i -> i.bool() }
     override fun compatibilityInfo(): dev.ide.ui.backend.UiCompatibilityInfo? =
-        c.call(16, 2) { o ->  }.let { i -> i.opt { r288(i) } }
+        c.call(16, 2) { o ->  }.let { i -> i.opt { r290(i) } }
     override suspend fun convertToNative(): dev.ide.ui.backend.UiConvertResult =
-        c.callSuspend(16, 3) { o ->  }.let { i -> r289(i) }
+        c.callSuspend(16, 3) { o ->  }.let { i -> r291(i) }
     override suspend fun createProject(templateId: kotlin.String, args: kotlin.collections.Map<kotlin.String, kotlin.String>): dev.ide.ui.backend.UiProjectResult =
-        c.callSuspend(16, 4) { o -> o.string(templateId); o.map(args, { k49 -> o.string(k49) }, { v50 -> o.string(v50) }) }.let { i -> r290(i) }
+        c.callSuspend(16, 4) { o -> o.string(templateId); o.map(args, { k50 -> o.string(k50) }, { v51 -> o.string(v51) }) }.let { i -> r292(i) }
     override suspend fun deleteProject(rootPath: kotlin.String): kotlin.Boolean =
         c.callSuspend(16, 5) { o -> o.string(rootPath) }.let { i -> i.bool() }
     override suspend fun discardProjectArchive(): kotlin.Unit { c.callSuspend(16, 6) { o ->  } }
     override suspend fun exportGradleProject(rootPath: kotlin.String): dev.ide.ui.backend.UiGradleExport? =
-        c.callSuspend(16, 7) { o -> o.string(rootPath) }.let { i -> i.opt { r291(i) } }
+        c.callSuspend(16, 7) { o -> o.string(rootPath) }.let { i -> i.opt { r293(i) } }
     override suspend fun exportPlan(rootPath: kotlin.String): dev.ide.ui.backend.UiExportPlan? =
-        c.callSuspend(16, 8) { o -> o.string(rootPath) }.let { i -> i.opt { r292(i) } }
+        c.callSuspend(16, 8) { o -> o.string(rootPath) }.let { i -> i.opt { r294(i) } }
     override suspend fun exportProject(rootPath: kotlin.String, options: dev.ide.ui.backend.UiExportOptions): kotlin.String? =
-        c.callSuspend(16, 9) { o -> o.string(rootPath); w294(o, options) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(16, 9) { o -> o.string(rootPath); w296(o, options) }.let { i -> i.opt { i.str() } }
     override suspend fun extractProjectArchive(archivePath: kotlin.String): dev.ide.ui.backend.UiProjectArchive? =
-        c.callSuspend(16, 10) { o -> o.string(archivePath) }.let { i -> i.opt { r295(i) } }
+        c.callSuspend(16, 10) { o -> o.string(archivePath) }.let { i -> i.opt { r297(i) } }
     override fun hasLegacyData(): kotlin.Boolean =
         c.call(16, 11) { o ->  }.let { i -> i.bool() }
     override fun hasSavedSession(): kotlin.Boolean =
@@ -666,49 +668,49 @@ private class RemoteProjectService(private val c: RemoteCalls, private val local
     override suspend fun importDestination(projectName: kotlin.String): kotlin.String? =
         c.callSuspend(16, 14) { o -> o.string(projectName) }.let { i -> i.opt { i.str() } }
     override suspend fun importExternalProject(sourceRootPath: kotlin.String): dev.ide.ui.backend.UiProjectResult =
-        c.callSuspend(16, 15) { o -> o.string(sourceRootPath) }.let { i -> r290(i) }
+        c.callSuspend(16, 15) { o -> o.string(sourceRootPath) }.let { i -> r292(i) }
     override suspend fun importPackage(archivePath: kotlin.String, projectName: kotlin.String?): dev.ide.ui.backend.UiProjectResult =
-        c.callSuspend(16, 16) { o -> o.string(archivePath); o.opt(projectName) { n51 -> o.string(n51) } }.let { i -> r290(i) }
+        c.callSuspend(16, 16) { o -> o.string(archivePath); o.opt(projectName) { n52 -> o.string(n52) } }.let { i -> r292(i) }
     override suspend fun inspectProjectFolder(path: kotlin.String): dev.ide.ui.backend.UiProjectFolderKind =
         c.callSuspend(16, 17) { o -> o.string(path) }.let { i -> dev.ide.ui.backend.UiProjectFolderKind.entries[i.int()] }
     override suspend fun openProject(rootPath: kotlin.String): kotlin.Boolean =
         c.callSuspend(16, 18) { o -> o.string(rootPath) }.let { i -> i.bool() }
     override fun openTabs(): dev.ide.ui.backend.UiOpenTabs =
-        c.call(16, 19) { o ->  }.let { i -> r297(i) }
+        c.call(16, 19) { o ->  }.let { i -> r299(i) }
     override suspend fun previewImportPackage(archivePath: kotlin.String): dev.ide.ui.backend.UiImportPreview? =
-        c.callSuspend(16, 20) { o -> o.string(archivePath) }.let { i -> i.opt { r299(i) } }
+        c.callSuspend(16, 20) { o -> o.string(archivePath) }.let { i -> i.opt { r301(i) } }
     override val projectEpoch: kotlinx.coroutines.flow.StateFlow<kotlin.Int> by lazy { c.stateFlow(16, 21) { i -> i.int() } }
     override suspend fun projectIcon(rootPath: kotlin.String): dev.ide.ui.backend.UiProjectIcon? =
-        c.callSuspend(16, 22) { o -> o.string(rootPath) }.let { i -> i.opt { r150(i) } }
+        c.callSuspend(16, 22) { o -> o.string(rootPath) }.let { i -> i.opt { r152(i) } }
     override val projectRenameSupported: kotlin.Boolean
         get() = c.call(16, 23) {}.let { i -> i.bool() }
     override fun projectTemplates(): kotlin.collections.List<dev.ide.ui.backend.UiProjectTemplate> =
-        c.call(16, 24) { o ->  }.let { i -> i.list { r302(i) } }
+        c.call(16, 24) { o ->  }.let { i -> i.list { r304(i) } }
     override fun projects(): kotlin.collections.List<dev.ide.ui.backend.ProjectInfo> =
-        c.call(16, 25) { o ->  }.let { i -> i.list { r287(i) } }
+        c.call(16, 25) { o ->  }.let { i -> i.list { r289(i) } }
     override fun projectsRootPath(): kotlin.String? =
         c.call(16, 26) { o ->  }.let { i -> i.opt { i.str() } }
     override suspend fun renameProject(rootPath: kotlin.String, name: kotlin.String): kotlin.Boolean =
         c.callSuspend(16, 27) { o -> o.string(rootPath); o.string(name) }.let { i -> i.bool() }
     override suspend fun revertToGradle(): dev.ide.ui.backend.UiConvertResult =
-        c.callSuspend(16, 28) { o ->  }.let { i -> r289(i) }
-    override fun saveOpenTabs(tabs: dev.ide.ui.backend.UiOpenTabs): kotlin.Unit { c.call(16, 29) { o -> w297(o, tabs) } }
+        c.callSuspend(16, 28) { o ->  }.let { i -> r291(i) }
+    override fun saveOpenTabs(tabs: dev.ide.ui.backend.UiOpenTabs): kotlin.Unit { c.call(16, 29) { o -> w299(o, tabs) } }
     override suspend fun setKmpTarget(target: kotlin.String): dev.ide.ui.backend.UiSyncResult =
-        c.callSuspend(16, 30) { o -> o.string(target) }.let { i -> r308(i) }
+        c.callSuspend(16, 30) { o -> o.string(target) }.let { i -> r310(i) }
     override suspend fun storageReport(): dev.ide.ui.backend.UiStorageReport? =
-        c.callSuspend(16, 31) { o ->  }.let { i -> i.opt { r309(i) } }
+        c.callSuspend(16, 31) { o ->  }.let { i -> i.opt { r311(i) } }
     override fun storageRootPath(): kotlin.String? =
         c.call(16, 32) { o ->  }.let { i -> i.opt { i.str() } }
     override suspend fun syncProject(): dev.ide.ui.backend.UiSyncResult =
-        c.callSuspend(16, 33) { o ->  }.let { i -> r308(i) }
+        c.callSuspend(16, 33) { o ->  }.let { i -> r310(i) }
     override fun unrecognizedProjectInfo(): dev.ide.ui.backend.UiUnrecognizedProject? =
-        c.call(16, 34) { o ->  }.let { i -> i.opt { r312(i) } }
+        c.call(16, 34) { o ->  }.let { i -> i.opt { r314(i) } }
 }
 
 private class RemoteSdkService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.SdkService) : dev.ide.ui.backend.SdkService {
     override suspend fun acceptSdkLicense(id: kotlin.String): kotlin.Unit { c.callSuspend(17, 0) { o -> o.string(id) } }
     override fun androidSourcesInfo(): dev.ide.ui.backend.UiAndroidSourcesInfo? =
-        c.call(17, 1) { o ->  }.let { i -> i.opt { r313(i) } }
+        c.call(17, 1) { o ->  }.let { i -> i.opt { r315(i) } }
     override fun cancelSdkDownload(id: kotlin.String): kotlin.Unit { c.call(17, 2) { o -> o.string(id) } }
     override fun clearSdkDownloads(): kotlin.Unit { c.call(17, 3) { o ->  } }
     override suspend fun downloadAndroidSources(): kotlin.String =
@@ -718,48 +720,48 @@ private class RemoteSdkService(private val c: RemoteCalls, private val local: de
     override suspend fun installSdkPackage(path: kotlin.String): kotlin.String =
         c.callSuspend(17, 6) { o -> o.string(path) }.let { i -> i.str() }
     override fun jdkInfo(): dev.ide.ui.backend.UiJdkInfo? =
-        c.call(17, 7) { o ->  }.let { i -> i.opt { r314(i) } }
+        c.call(17, 7) { o ->  }.let { i -> i.opt { r316(i) } }
     override suspend fun sdkLicenseText(id: kotlin.String): kotlin.String? =
         c.callSuspend(17, 8) { o -> o.string(id) }.let { i -> i.opt { i.str() } }
-    override val sdkManagerState: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.UiSdkManagerState> by lazy { c.stateFlow(17, 9) { i -> r315(i) } }
+    override val sdkManagerState: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.UiSdkManagerState> by lazy { c.stateFlow(17, 9) { i -> r317(i) } }
     override suspend fun sdkPackages(): kotlin.collections.List<dev.ide.ui.backend.UiSdkPackage> =
-        c.callSuspend(17, 10) { o ->  }.let { i -> i.list { r318(i) } }
+        c.callSuspend(17, 10) { o ->  }.let { i -> i.list { r320(i) } }
     override suspend fun sdkProjectPlatformLevels(): kotlin.collections.Set<kotlin.Int> =
         c.callSuspend(17, 11) { o ->  }.let { i -> i.list { i.int() }.toSet() }
 }
 
 private class RemoteSearchService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.SearchService) : dev.ide.ui.backend.SearchService {
     override suspend fun findInFiles(query: kotlin.String, options: dev.ide.ui.backend.UiSearchOptions, limit: kotlin.Int): kotlin.collections.List<dev.ide.ui.backend.UiTextMatch> =
-        c.callSuspend(18, 0) { o -> o.string(query); w319(o, options); o.int(limit) }.let { i -> i.list { r320(i) } }
-    override val indexStatus: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.IndexUiStatus> by lazy { c.stateFlow(18, 1) { i -> r321(i) } }
+        c.callSuspend(18, 0) { o -> o.string(query); w321(o, options); o.int(limit) }.let { i -> i.list { r322(i) } }
+    override val indexStatus: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.IndexUiStatus> by lazy { c.stateFlow(18, 1) { i -> r323(i) } }
     override fun reindex(): kotlin.Unit { c.call(18, 2) { o ->  } }
     override suspend fun searchMembers(query: kotlin.String, limit: kotlin.Int): kotlin.collections.List<dev.ide.ui.backend.SymbolHit> =
-        c.callSuspend(18, 3) { o -> o.string(query); o.int(limit) }.let { i -> i.list { r325(i) } }
+        c.callSuspend(18, 3) { o -> o.string(query); o.int(limit) }.let { i -> i.list { r327(i) } }
     override suspend fun searchSymbols(query: kotlin.String, limit: kotlin.Int): kotlin.collections.List<dev.ide.ui.backend.SymbolHit> =
-        c.callSuspend(18, 4) { o -> o.string(query); o.int(limit) }.let { i -> i.list { r325(i) } }
+        c.callSuspend(18, 4) { o -> o.string(query); o.int(limit) }.let { i -> i.list { r327(i) } }
 }
 
 private class RemoteSettingsService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.SettingsService) : dev.ide.ui.backend.SettingsService {
-    override val autoDisabledInspections: kotlinx.coroutines.flow.StateFlow<kotlin.collections.List<dev.ide.ui.backend.UiAutoDisabledInspection>> by lazy { c.stateFlow(19, 0) { i -> i.list { r326(i) } } }
+    override val autoDisabledInspections: kotlinx.coroutines.flow.StateFlow<kotlin.collections.List<dev.ide.ui.backend.UiAutoDisabledInspection>> by lazy { c.stateFlow(19, 0) { i -> i.list { r328(i) } } }
     override fun canRestartApplication(): kotlin.Boolean =
         c.call(19, 1) { o ->  }.let { i -> i.bool() }
     override fun checkLanguageServerCommand(command: kotlin.String): dev.ide.ui.backend.UiCommandCheck =
-        c.call(19, 2) { o -> o.string(command) }.let { i -> r327(i) }
+        c.call(19, 2) { o -> o.string(command) }.let { i -> r329(i) }
     override fun codeStyle(languageId: kotlin.String): dev.ide.ui.backend.UiCodeStyle =
-        c.call(19, 3) { o -> o.string(languageId) }.let { i -> r328(i) }
+        c.call(19, 3) { o -> o.string(languageId) }.let { i -> r330(i) }
     override fun deleteLanguageServer(id: kotlin.String): kotlin.Unit { c.call(19, 4) { o -> o.string(id) } }
     override suspend fun deletePluginLeftover(id: kotlin.String): kotlin.Boolean =
         c.callSuspend(19, 5) { o -> o.string(id) }.let { i -> i.bool() }
     override suspend fun formatStylePreview(languageId: kotlin.String, style: dev.ide.ui.backend.UiCodeStyle): kotlin.String =
-        c.callSuspend(19, 6) { o -> o.string(languageId); w328(o, style) }.let { i -> i.str() }
+        c.callSuspend(19, 6) { o -> o.string(languageId); w330(o, style) }.let { i -> i.str() }
     override fun inspections(): kotlin.collections.List<dev.ide.ui.backend.UiInspection> =
-        c.call(19, 7) { o ->  }.let { i -> i.list { r329(i) } }
+        c.call(19, 7) { o ->  }.let { i -> i.list { r331(i) } }
     override suspend fun invokeSettingAction(pageId: kotlin.String, key: kotlin.String): kotlin.String? =
         c.callSuspend(19, 8) { o -> o.string(pageId); o.string(key) }.let { i -> i.opt { i.str() } }
     override fun languageServerPresets(): kotlin.collections.List<dev.ide.ui.backend.UiLanguageServer> =
-        c.call(19, 9) { o ->  }.let { i -> i.list { r330(i) } }
+        c.call(19, 9) { o ->  }.let { i -> i.list { r332(i) } }
     override fun languageServers(): kotlin.collections.List<dev.ide.ui.backend.UiLanguageServer> =
-        c.call(19, 10) { o ->  }.let { i -> i.list { r330(i) } }
+        c.call(19, 10) { o ->  }.let { i -> i.list { r332(i) } }
     override fun languageServersSupported(): kotlin.Boolean =
         c.call(19, 11) { o ->  }.let { i -> i.bool() }
     override fun openPluginApp(id: kotlin.String): kotlin.Boolean =
@@ -767,296 +769,300 @@ private class RemoteSettingsService(private val c: RemoteCalls, private val loca
     override fun openPluginAppInfo(id: kotlin.String): kotlin.Boolean =
         c.call(19, 13) { o -> o.string(id) }.let { i -> i.bool() }
     override fun pendingPluginChanges(): kotlin.collections.List<dev.ide.ui.backend.UiPluginChange> =
-        c.call(19, 14) { o ->  }.let { i -> i.list { r331(i) } }
+        c.call(19, 14) { o ->  }.let { i -> i.list { r333(i) } }
     override fun pluginCatalog(): kotlin.collections.List<dev.ide.ui.backend.UiPluginInfo> =
-        c.call(19, 15) { o ->  }.let { i -> i.list { r332(i) } }
+        c.call(19, 15) { o ->  }.let { i -> i.list { r334(i) } }
     override suspend fun pluginDownloads(): dev.ide.ui.backend.UiPluginDownloads =
-        c.callSuspend(19, 16) { o ->  }.let { i -> r334(i) }
+        c.callSuspend(19, 16) { o ->  }.let { i -> r336(i) }
     override suspend fun pluginLeftovers(): kotlin.collections.List<dev.ide.ui.backend.UiPluginLeftover> =
-        c.callSuspend(19, 17) { o ->  }.let { i -> i.list { r336(i) } }
+        c.callSuspend(19, 17) { o ->  }.let { i -> i.list { r338(i) } }
     override fun preference(key: kotlin.String): kotlin.String? =
         c.call(19, 18) { o -> o.string(key) }.let { i -> i.opt { i.str() } }
     override fun reenableInspection(id: kotlin.String): kotlin.Unit { c.call(19, 19) { o -> o.string(id) } }
     override fun restartApplication(): kotlin.Unit { c.call(19, 20) { o ->  } }
     override fun saveLanguageServer(server: dev.ide.ui.backend.UiLanguageServer): kotlin.String? =
-        c.call(19, 21) { o -> w330(o, server) }.let { i -> i.opt { i.str() } }
-    override fun setCodeStyle(languageId: kotlin.String, style: dev.ide.ui.backend.UiCodeStyle): kotlin.Unit { c.call(19, 22) { o -> o.string(languageId); w328(o, style) } }
+        c.call(19, 21) { o -> w332(o, server) }.let { i -> i.opt { i.str() } }
+    override fun setCodeStyle(languageId: kotlin.String, style: dev.ide.ui.backend.UiCodeStyle): kotlin.Unit { c.call(19, 22) { o -> o.string(languageId); w330(o, style) } }
     override fun setInspection(id: kotlin.String, enabled: kotlin.Boolean, severity: dev.ide.ui.backend.UiSeverity): kotlin.Unit { c.call(19, 23) { o -> o.string(id); o.bool(enabled); o.int(severity.ordinal) } }
     override fun setPluginConsent(id: kotlin.String, granted: kotlin.Boolean): kotlin.Unit { c.call(19, 24) { o -> o.string(id); o.bool(granted) } }
     override fun setPluginEnabled(id: kotlin.String, enabled: kotlin.Boolean): kotlin.Unit { c.call(19, 25) { o -> o.string(id); o.bool(enabled) } }
     override fun setPreference(key: kotlin.String, value: kotlin.String): kotlin.Unit { c.call(19, 26) { o -> o.string(key); o.string(value) } }
     override fun setSetting(pageId: kotlin.String, key: kotlin.String, value: kotlin.String): kotlin.Unit { c.call(19, 27) { o -> o.string(pageId); o.string(key); o.string(value) } }
     override fun settings(): dev.ide.ui.backend.UiSettings =
-        c.call(19, 28) { o ->  }.let { i -> r337(i) }
+        c.call(19, 28) { o ->  }.let { i -> r339(i) }
     override fun settingsPages(): kotlin.collections.List<dev.ide.ui.backend.UiSettingsPage> =
-        c.call(19, 29) { o ->  }.let { i -> i.list { r338(i) } }
+        c.call(19, 29) { o ->  }.let { i -> i.list { r340(i) } }
     override fun writeSharedFile(fileName: kotlin.String, content: kotlin.String): kotlin.String? =
         c.call(19, 30) { o -> o.string(fileName); o.string(content) }.let { i -> i.opt { i.str() } }
 }
 
 private class RemoteSigningService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.SigningService) : dev.ide.ui.backend.SigningService {
     override suspend fun assignSigning(moduleName: kotlin.String, buildType: kotlin.String, keystoreId: kotlin.String?): dev.ide.ui.backend.UiConfigResult =
-        c.callSuspend(20, 0) { o -> o.string(moduleName); o.string(buildType); o.opt(keystoreId) { n52 -> o.string(n52) } }.let { i -> r247(i) }
+        c.callSuspend(20, 0) { o -> o.string(moduleName); o.string(buildType); o.opt(keystoreId) { n53 -> o.string(n53) } }.let { i -> r249(i) }
     override suspend fun createKeystore(spec: dev.ide.ui.backend.UiKeystoreSpec): dev.ide.ui.backend.UiKeystoreResult =
-        c.callSuspend(20, 1) { o -> w348(o, spec) }.let { i -> r349(i) }
+        c.callSuspend(20, 1) { o -> w350(o, spec) }.let { i -> r351(i) }
     override fun deleteKeystore(id: kotlin.String): kotlin.Boolean =
         c.call(20, 2) { o -> o.string(id) }.let { i -> i.bool() }
     override suspend fun importKeystore(filePath: kotlin.String, name: kotlin.String, storePass: kotlin.String, keyAlias: kotlin.String, keyPass: kotlin.String): dev.ide.ui.backend.UiKeystoreResult =
-        c.callSuspend(20, 3) { o -> o.string(filePath); o.string(name); o.string(storePass); o.string(keyAlias); o.string(keyPass) }.let { i -> r349(i) }
+        c.callSuspend(20, 3) { o -> o.string(filePath); o.string(name); o.string(storePass); o.string(keyAlias); o.string(keyPass) }.let { i -> r351(i) }
     override suspend fun keystores(): kotlin.collections.List<dev.ide.ui.backend.UiKeystore> =
-        c.callSuspend(20, 4) { o ->  }.let { i -> i.list { r350(i) } }
+        c.callSuspend(20, 4) { o ->  }.let { i -> i.list { r352(i) } }
     override fun signableModules(): kotlin.collections.List<kotlin.String> =
         c.call(20, 5) { o ->  }.let { i -> i.list { i.str() } }
     override suspend fun signingAssignments(moduleName: kotlin.String): dev.ide.ui.backend.UiSigningAssignments? =
-        c.callSuspend(20, 6) { o -> o.string(moduleName) }.let { i -> i.opt { r351(i) } }
+        c.callSuspend(20, 6) { o -> o.string(moduleName) }.let { i -> i.opt { r353(i) } }
     override suspend fun validateKeystore(filePath: kotlin.String, storePass: kotlin.String): dev.ide.ui.backend.UiKeystoreValidation =
-        c.callSuspend(20, 7) { o -> o.string(filePath); o.string(storePass) }.let { i -> r353(i) }
+        c.callSuspend(20, 7) { o -> o.string(filePath); o.string(storePass) }.let { i -> r355(i) }
 }
 
 private class RemoteStoreService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.StoreService) : dev.ide.ui.backend.StoreService {
     override fun accountDeletionAvailable(): kotlin.Boolean =
         c.call(21, 0) { o ->  }.let { i -> i.bool() }
+    override suspend fun announcementImage(src: kotlin.String): kotlin.String? =
+        c.callSuspend(21, 1) { o -> o.string(src) }.let { i -> i.opt { i.str() } }
     override suspend fun approveSubmission(versionId: kotlin.String, note: kotlin.String?, clearIconIfMissing: kotlin.Boolean): kotlin.String? =
-        c.callSuspend(21, 1) { o -> o.string(versionId); o.opt(note) { n53 -> o.string(n53) }; o.bool(clearIconIfMissing) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 2) { o -> o.string(versionId); o.opt(note) { n54 -> o.string(n54) }; o.bool(clearIconIfMissing) }.let { i -> i.opt { i.str() } }
     override fun authProviders(): kotlin.collections.List<kotlin.String> =
-        c.call(21, 2) { o ->  }.let { i -> i.list { i.str() } }
-    private val flow3 by lazy { c.stateFlow(21, 3) { i -> r355(i) } }
-    override fun authState(): kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.UiStoreAuthState> = flow3
+        c.call(21, 3) { o ->  }.let { i -> i.list { i.str() } }
+    private val flow4 by lazy { c.stateFlow(21, 4) { i -> r357(i) } }
+    override fun authState(): kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.UiStoreAuthState> = flow4
     override suspend fun availableUpdates(): kotlin.collections.List<dev.ide.ui.backend.UiStoreUpdate> =
-        c.callSuspend(21, 4) { o ->  }.let { i -> i.list { r357(i) } }
+        c.callSuspend(21, 5) { o ->  }.let { i -> i.list { r359(i) } }
     override suspend fun avatarFile(url: kotlin.String): kotlin.String? =
-        c.callSuspend(21, 5) { o -> o.string(url) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 6) { o -> o.string(url) }.let { i -> i.opt { i.str() } }
     override fun beginSignIn(provider: kotlin.String): kotlin.String? =
-        c.call(21, 6) { o -> o.string(provider) }.let { i -> i.opt { i.str() } }
+        c.call(21, 7) { o -> o.string(provider) }.let { i -> i.opt { i.str() } }
     override suspend fun catalog(): dev.ide.ui.backend.UiStoreCatalog =
-        c.callSuspend(21, 7) { o ->  }.let { i -> r359(i) }
-    override fun completeSignIn(redirect: kotlin.String): kotlin.Unit { c.call(21, 8) { o -> o.string(redirect) } }
+        c.callSuspend(21, 8) { o ->  }.let { i -> r361(i) }
+    override fun completeSignIn(redirect: kotlin.String): kotlin.Unit { c.call(21, 9) { o -> o.string(redirect) } }
     override suspend fun deleteAccount(): kotlin.String? =
-        c.callSuspend(21, 9) { o ->  }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 10) { o ->  }.let { i -> i.opt { i.str() } }
     override suspend fun deleteMyReview(itemId: kotlin.String): kotlin.Boolean =
-        c.callSuspend(21, 10) { o -> o.string(itemId) }.let { i -> i.bool() }
+        c.callSuspend(21, 11) { o -> o.string(itemId) }.let { i -> i.bool() }
     override suspend fun deleteReply(itemId: kotlin.String, authorId: kotlin.String): kotlin.String? =
-        c.callSuspend(21, 11) { o -> o.string(itemId); o.string(authorId) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 12) { o -> o.string(itemId); o.string(authorId) }.let { i -> i.opt { i.str() } }
     override suspend fun deleteSubmission(itemId: kotlin.String, version: kotlin.String): kotlin.String? =
-        c.callSuspend(21, 12) { o -> o.string(itemId); o.string(version) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 13) { o -> o.string(itemId); o.string(version) }.let { i -> i.opt { i.str() } }
     override suspend fun feed(seedItemId: kotlin.String?, refresh: kotlin.Boolean): dev.ide.ui.backend.UiStoreFeed? =
-        c.callSuspend(21, 13) { o -> o.opt(seedItemId) { n54 -> o.string(n54) }; o.bool(refresh) }.let { i -> i.opt { r361(i) } }
+        c.callSuspend(21, 14) { o -> o.opt(seedItemId) { n55 -> o.string(n55) }; o.bool(refresh) }.let { i -> i.opt { r363(i) } }
     override suspend fun handleAvailable(handle: kotlin.String): kotlin.Boolean? =
-        c.callSuspend(21, 14) { o -> o.string(handle) }.let { i -> i.opt { i.bool() } }
+        c.callSuspend(21, 15) { o -> o.string(handle) }.let { i -> i.opt { i.bool() } }
+    override suspend fun homeAnnouncements(localeTag: kotlin.String, allowNetwork: kotlin.Boolean): kotlin.collections.List<dev.ide.ui.backend.UiAnnouncement> =
+        c.callSuspend(21, 16) { o -> o.string(localeTag); o.bool(allowNetwork) }.let { i -> i.list { r385(i) } }
     override suspend fun install(id: kotlin.String, args: kotlin.collections.Map<kotlin.String, kotlin.String>): dev.ide.ui.backend.UiStoreInstallResult =
-        c.callSuspend(21, 15) { o -> o.string(id); o.map(args, { k55 -> o.string(k55) }, { v56 -> o.string(v56) }) }.let { i -> r383(i) }
-    private val flow16 by lazy { c.stateFlow(21, 16) { i -> i.map({ i.str() }, { r384(i) }) } }
-    override fun installProgress(): kotlinx.coroutines.flow.StateFlow<kotlin.collections.Map<kotlin.String, dev.ide.ui.backend.UiInstallProgress>> = flow16
+        c.callSuspend(21, 17) { o -> o.string(id); o.map(args, { k56 -> o.string(k56) }, { v57 -> o.string(v57) }) }.let { i -> r420(i) }
+    private val flow18 by lazy { c.stateFlow(21, 18) { i -> i.map({ i.str() }, { r421(i) }) } }
+    override fun installProgress(): kotlinx.coroutines.flow.StateFlow<kotlin.collections.Map<kotlin.String, dev.ide.ui.backend.UiInstallProgress>> = flow18
     override fun isLiked(itemId: kotlin.String): kotlin.Boolean =
-        c.call(21, 17) { o -> o.string(itemId) }.let { i -> i.bool() }
+        c.call(21, 19) { o -> o.string(itemId) }.let { i -> i.bool() }
     override fun isModerator(): kotlin.Boolean =
-        c.call(21, 18) { o ->  }.let { i -> i.bool() }
+        c.call(21, 20) { o ->  }.let { i -> i.bool() }
     override fun launchNotificationEnabled(): kotlin.Boolean =
-        c.call(21, 19) { o ->  }.let { i -> i.bool() }
+        c.call(21, 21) { o ->  }.let { i -> i.bool() }
     override suspend fun likedItems(): kotlin.collections.Set<kotlin.String> =
-        c.callSuspend(21, 20) { o ->  }.let { i -> i.list { i.str() }.toSet() }
+        c.callSuspend(21, 22) { o ->  }.let { i -> i.list { i.str() }.toSet() }
     override suspend fun listingSlugForProject(rootPath: kotlin.String): kotlin.String? =
-        c.callSuspend(21, 21) { o -> o.string(rootPath) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 23) { o -> o.string(rootPath) }.let { i -> i.opt { i.str() } }
     override suspend fun localChanges(itemId: kotlin.String): dev.ide.ui.backend.UiLocalChanges? =
-        c.callSuspend(21, 22) { o -> o.string(itemId) }.let { i -> i.opt { r385(i) } }
+        c.callSuspend(21, 24) { o -> o.string(itemId) }.let { i -> i.opt { r422(i) } }
     override suspend fun mergeUpdate(itemId: kotlin.String): dev.ide.ui.backend.UiStoreMergeResult =
-        c.callSuspend(21, 23) { o -> o.string(itemId) }.let { i -> r386(i) }
+        c.callSuspend(21, 25) { o -> o.string(itemId) }.let { i -> r423(i) }
     override fun moderationAvailable(): kotlin.Boolean =
-        c.call(21, 24) { o ->  }.let { i -> i.bool() }
+        c.call(21, 26) { o ->  }.let { i -> i.bool() }
     override suspend fun myProfile(): dev.ide.ui.backend.UiMyProfile? =
-        c.callSuspend(21, 25) { o ->  }.let { i -> i.opt { r387(i) } }
+        c.callSuspend(21, 27) { o ->  }.let { i -> i.opt { r424(i) } }
     override suspend fun myPublishedItems(): kotlin.collections.List<dev.ide.ui.backend.UiPublishedItem> =
-        c.callSuspend(21, 26) { o ->  }.let { i -> i.list { r388(i) } }
+        c.callSuspend(21, 28) { o ->  }.let { i -> i.list { r425(i) } }
     override suspend fun mySubmissions(): kotlin.collections.List<dev.ide.ui.backend.UiStoreSubmission> =
-        c.callSuspend(21, 27) { o ->  }.let { i -> i.list { r389(i) } }
+        c.callSuspend(21, 29) { o ->  }.let { i -> i.list { r426(i) } }
     override suspend fun openReports(): kotlin.collections.List<dev.ide.ui.backend.UiReportedContent> =
-        c.callSuspend(21, 28) { o ->  }.let { i -> i.list { r390(i) } }
+        c.callSuspend(21, 30) { o ->  }.let { i -> i.list { r427(i) } }
     override suspend fun packFailure(rootPath: kotlin.String): kotlin.String? =
-        c.callSuspend(21, 29) { o -> o.string(rootPath) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 31) { o -> o.string(rootPath) }.let { i -> i.opt { i.str() } }
     override suspend fun packProject(rootPath: kotlin.String): dev.ide.ui.backend.UiPackagedProject? =
-        c.callSuspend(21, 30) { o -> o.string(rootPath) }.let { i -> i.opt { r391(i) } }
+        c.callSuspend(21, 32) { o -> o.string(rootPath) }.let { i -> i.opt { r428(i) } }
     override suspend fun publisherProfile(handle: kotlin.String): dev.ide.ui.backend.UiPublisherProfile? =
-        c.callSuspend(21, 31) { o -> o.string(handle) }.let { i -> i.opt { r392(i) } }
+        c.callSuspend(21, 33) { o -> o.string(handle) }.let { i -> i.opt { r429(i) } }
     override suspend fun rate(itemId: kotlin.String, stars: kotlin.Int, review: kotlin.String?): kotlin.String? =
-        c.callSuspend(21, 32) { o -> o.string(itemId); o.int(stars); o.opt(review) { n57 -> o.string(n57) } }.let { i -> i.opt { i.str() } }
-    override fun recordInstall(id: kotlin.String): kotlin.Unit { c.call(21, 33) { o -> o.string(id) } }
+        c.callSuspend(21, 34) { o -> o.string(itemId); o.int(stars); o.opt(review) { n58 -> o.string(n58) } }.let { i -> i.opt { i.str() } }
+    override fun recordInstall(id: kotlin.String): kotlin.Unit { c.call(21, 35) { o -> o.string(id) } }
     override suspend fun refreshAuthProviders(): kotlin.collections.List<kotlin.String> =
-        c.callSuspend(21, 34) { o ->  }.let { i -> i.list { i.str() } }
+        c.callSuspend(21, 36) { o ->  }.let { i -> i.list { i.str() } }
     override suspend fun rejectSubmission(versionId: kotlin.String, note: kotlin.String): kotlin.String? =
-        c.callSuspend(21, 35) { o -> o.string(versionId); o.string(note) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 37) { o -> o.string(versionId); o.string(note) }.let { i -> i.opt { i.str() } }
     override suspend fun replyToReview(itemId: kotlin.String, authorId: kotlin.String, body: kotlin.String): kotlin.String? =
-        c.callSuspend(21, 36) { o -> o.string(itemId); o.string(authorId); o.string(body) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 38) { o -> o.string(itemId); o.string(authorId); o.string(body) }.let { i -> i.opt { i.str() } }
     override suspend fun reportItem(itemId: kotlin.String, reason: dev.ide.ui.backend.UiReportReason, detail: kotlin.String?): kotlin.String? =
-        c.callSuspend(21, 37) { o -> o.string(itemId); o.int(reason.ordinal); o.opt(detail) { n58 -> o.string(n58) } }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 39) { o -> o.string(itemId); o.int(reason.ordinal); o.opt(detail) { n59 -> o.string(n59) } }.let { i -> i.opt { i.str() } }
     override suspend fun reportReview(itemId: kotlin.String, authorId: kotlin.String, reason: dev.ide.ui.backend.UiReportReason, detail: kotlin.String?): kotlin.String? =
-        c.callSuspend(21, 38) { o -> o.string(itemId); o.string(authorId); o.int(reason.ordinal); o.opt(detail) { n59 -> o.string(n59) } }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 40) { o -> o.string(itemId); o.string(authorId); o.int(reason.ordinal); o.opt(detail) { n60 -> o.string(n60) } }.let { i -> i.opt { i.str() } }
     override suspend fun resolveReport(reportId: kotlin.String, actioned: kotlin.Boolean): kotlin.String? =
-        c.callSuspend(21, 39) { o -> o.string(reportId); o.bool(actioned) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 41) { o -> o.string(reportId); o.bool(actioned) }.let { i -> i.opt { i.str() } }
     override suspend fun reviewQueue(): dev.ide.ui.backend.UiModerationQueue =
-        c.callSuspend(21, 40) { o ->  }.let { i -> r393(i) }
+        c.callSuspend(21, 42) { o ->  }.let { i -> r430(i) }
     override suspend fun reviews(itemId: kotlin.String, sort: dev.ide.ui.backend.UiReviewSort, limit: kotlin.Int, offset: kotlin.Int): dev.ide.ui.backend.UiReviewPage =
-        c.callSuspend(21, 41) { o -> o.string(itemId); o.int(sort.ordinal); o.int(limit); o.int(offset) }.let { i -> r399(i) }
+        c.callSuspend(21, 43) { o -> o.string(itemId); o.int(sort.ordinal); o.int(limit); o.int(offset) }.let { i -> r436(i) }
     override fun reviewsAvailable(): kotlin.Boolean =
-        c.call(21, 42) { o ->  }.let { i -> i.bool() }
+        c.call(21, 44) { o ->  }.let { i -> i.bool() }
     override suspend fun saveProfile(handle: kotlin.String, displayName: kotlin.String, bio: kotlin.String?, location: kotlin.String?, linkUrl: kotlin.String?): kotlin.String? =
-        c.callSuspend(21, 43) { o -> o.string(handle); o.string(displayName); o.opt(bio) { n60 -> o.string(n60) }; o.opt(location) { n61 -> o.string(n61) }; o.opt(linkUrl) { n62 -> o.string(n62) } }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 45) { o -> o.string(handle); o.string(displayName); o.opt(bio) { n61 -> o.string(n61) }; o.opt(location) { n62 -> o.string(n62) }; o.opt(linkUrl) { n63 -> o.string(n63) } }.let { i -> i.opt { i.str() } }
     override suspend fun screenshotFile(storagePath: kotlin.String): kotlin.String? =
-        c.callSuspend(21, 44) { o -> o.string(storagePath) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 46) { o -> o.string(storagePath) }.let { i -> i.opt { i.str() } }
     override suspend fun search(query: kotlin.String, category: kotlin.String?): kotlin.collections.List<dev.ide.ui.backend.UiStoreItem> =
-        c.callSuspend(21, 45) { o -> o.string(query); o.opt(category) { n63 -> o.string(n63) } }.let { i -> i.list { r358(i) } }
+        c.callSuspend(21, 47) { o -> o.string(query); o.opt(category) { n64 -> o.string(n64) } }.let { i -> i.list { r360(i) } }
     override suspend fun searchCategories(): kotlin.collections.List<dev.ide.ui.backend.UiStoreCategory> =
-        c.callSuspend(21, 46) { o ->  }.let { i -> i.list { r368(i) } }
+        c.callSuspend(21, 48) { o ->  }.let { i -> i.list { r370(i) } }
     override suspend fun searchPage(query: kotlin.String, category: kotlin.String?, offset: kotlin.Int, limit: kotlin.Int): dev.ide.ui.backend.UiStoreSearchPage =
-        c.callSuspend(21, 47) { o -> o.string(query); o.opt(category) { n64 -> o.string(n64) }; o.int(offset); o.int(limit) }.let { i -> r401(i) }
+        c.callSuspend(21, 49) { o -> o.string(query); o.opt(category) { n65 -> o.string(n65) }; o.int(offset); o.int(limit) }.let { i -> r438(i) }
     override suspend fun setFollowing(handle: kotlin.String, following: kotlin.Boolean): kotlin.String? =
-        c.callSuspend(21, 48) { o -> o.string(handle); o.bool(following) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 50) { o -> o.string(handle); o.bool(following) }.let { i -> i.opt { i.str() } }
     override suspend fun setLaunchNotification(enabled: kotlin.Boolean): kotlin.String? =
-        c.callSuspend(21, 49) { o -> o.bool(enabled) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 51) { o -> o.bool(enabled) }.let { i -> i.opt { i.str() } }
     override suspend fun setLike(itemId: kotlin.String, liked: kotlin.Boolean): kotlin.String? =
-        c.callSuspend(21, 50) { o -> o.string(itemId); o.bool(liked) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 52) { o -> o.string(itemId); o.bool(liked) }.let { i -> i.opt { i.str() } }
     override suspend fun setReviewHidden(itemId: kotlin.String, authorId: kotlin.String, hidden: kotlin.Boolean): kotlin.String? =
-        c.callSuspend(21, 51) { o -> o.string(itemId); o.string(authorId); o.bool(hidden) }.let { i -> i.opt { i.str() } }
-    override fun signOut(): kotlin.Unit { c.call(21, 52) { o ->  } }
+        c.callSuspend(21, 53) { o -> o.string(itemId); o.string(authorId); o.bool(hidden) }.let { i -> i.opt { i.str() } }
+    override fun signOut(): kotlin.Unit { c.call(21, 54) { o ->  } }
     override fun storeAvailable(): kotlin.Boolean =
-        c.call(21, 53) { o ->  }.let { i -> i.bool() }
-    override suspend fun submissionImageFile(storagePath: kotlin.String): kotlin.String? =
-        c.callSuspend(21, 54) { o -> o.string(storagePath) }.let { i -> i.opt { i.str() } }
-    override fun submissionsAvailable(): kotlin.Boolean =
         c.call(21, 55) { o ->  }.let { i -> i.bool() }
+    override suspend fun submissionImageFile(storagePath: kotlin.String): kotlin.String? =
+        c.callSuspend(21, 56) { o -> o.string(storagePath) }.let { i -> i.opt { i.str() } }
+    override fun submissionsAvailable(): kotlin.Boolean =
+        c.call(21, 57) { o ->  }.let { i -> i.bool() }
     override suspend fun submit(draft: dev.ide.ui.backend.UiSubmissionDraft, packaged: dev.ide.ui.backend.UiPackagedProject): dev.ide.ui.backend.UiSubmitResult =
-        c.callSuspend(21, 56) { o -> w402(o, draft); w391(o, packaged) }.let { i -> r403(i) }
+        c.callSuspend(21, 58) { o -> w439(o, draft); w428(o, packaged) }.let { i -> r440(i) }
     override suspend fun submitCategories(): kotlin.collections.List<kotlin.Pair<kotlin.String, kotlin.String>> =
-        c.callSuspend(21, 57) { o ->  }.let { i -> i.list { Pair(i.str(), i.str()) } }
+        c.callSuspend(21, 59) { o ->  }.let { i -> i.list { Pair(i.str(), i.str()) } }
     override suspend fun translateListing(itemId: kotlin.String, target: kotlin.String): dev.ide.ui.backend.UiTranslation =
-        c.callSuspend(21, 58) { o -> o.string(itemId); o.string(target) }.let { i -> r404(i) }
+        c.callSuspend(21, 60) { o -> o.string(itemId); o.string(target) }.let { i -> r441(i) }
     override suspend fun translateReview(itemId: kotlin.String, authorId: kotlin.String, target: kotlin.String): dev.ide.ui.backend.UiTranslation =
-        c.callSuspend(21, 59) { o -> o.string(itemId); o.string(authorId); o.string(target) }.let { i -> r404(i) }
+        c.callSuspend(21, 61) { o -> o.string(itemId); o.string(authorId); o.string(target) }.let { i -> r441(i) }
     override fun translationAvailable(): kotlin.Boolean =
-        c.call(21, 60) { o ->  }.let { i -> i.bool() }
+        c.call(21, 62) { o ->  }.let { i -> i.bool() }
     override suspend fun update(itemId: kotlin.String, asCopy: kotlin.Boolean): dev.ide.ui.backend.UiStoreInstallResult =
-        c.callSuspend(21, 61) { o -> o.string(itemId); o.bool(asCopy) }.let { i -> r383(i) }
+        c.callSuspend(21, 63) { o -> o.string(itemId); o.bool(asCopy) }.let { i -> r420(i) }
     override suspend fun updateFor(itemId: kotlin.String): dev.ide.ui.backend.UiStoreUpdate? =
-        c.callSuspend(21, 62) { o -> o.string(itemId) }.let { i -> i.opt { r357(i) } }
+        c.callSuspend(21, 64) { o -> o.string(itemId) }.let { i -> i.opt { r359(i) } }
     override suspend fun versionHistory(itemId: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiVersionNote> =
-        c.callSuspend(21, 63) { o -> o.string(itemId) }.let { i -> i.list { r405(i) } }
+        c.callSuspend(21, 65) { o -> o.string(itemId) }.let { i -> i.list { r442(i) } }
     override suspend fun voteReview(itemId: kotlin.String, authorId: kotlin.String, helpful: kotlin.Boolean): kotlin.String? =
-        c.callSuspend(21, 64) { o -> o.string(itemId); o.string(authorId); o.bool(helpful) }.let { i -> i.opt { i.str() } }
+        c.callSuspend(21, 66) { o -> o.string(itemId); o.string(authorId); o.bool(helpful) }.let { i -> i.opt { i.str() } }
     override suspend fun withdrawSubmission(itemId: kotlin.String, version: kotlin.String): kotlin.Boolean =
-        c.callSuspend(21, 65) { o -> o.string(itemId); o.string(version) }.let { i -> i.bool() }
+        c.callSuspend(21, 67) { o -> o.string(itemId); o.string(version) }.let { i -> i.bool() }
 }
 
 private class RemoteVcsService(private val c: RemoteCalls, private val local: dev.ide.ui.backend.VcsService) : dev.ide.ui.backend.VcsService {
     override suspend fun abortMerge(): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 0) { o ->  }.let { i -> r406(i) }
-    override val accounts: kotlinx.coroutines.flow.StateFlow<kotlin.collections.List<dev.ide.ui.backend.UiVcsAccount>> by lazy { c.stateFlow(22, 1) { i -> i.list { r408(i) } } }
-    override val activity: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.UiVcsActivity> by lazy { c.stateFlow(22, 2) { i -> r409(i) } }
+        c.callSuspend(22, 0) { o ->  }.let { i -> r443(i) }
+    override val accounts: kotlinx.coroutines.flow.StateFlow<kotlin.collections.List<dev.ide.ui.backend.UiVcsAccount>> by lazy { c.stateFlow(22, 1) { i -> i.list { r445(i) } } }
+    override val activity: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.UiVcsActivity> by lazy { c.stateFlow(22, 2) { i -> r446(i) } }
     override suspend fun addDefaultIgnores(): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 3) { o ->  }.let { i -> r406(i) }
+        c.callSuspend(22, 3) { o ->  }.let { i -> r443(i) }
     override suspend fun addRemote(name: kotlin.String, url: kotlin.String): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 4) { o -> o.string(name); o.string(url) }.let { i -> r406(i) }
+        c.callSuspend(22, 4) { o -> o.string(name); o.string(url) }.let { i -> r443(i) }
     override suspend fun baseText(path: kotlin.String): kotlin.String? =
         c.callSuspend(22, 5) { o -> o.string(path) }.let { i -> i.opt { i.str() } }
     override suspend fun blame(path: kotlin.String): kotlin.collections.List<dev.ide.ui.backend.UiBlameLine?> =
-        c.callSuspend(22, 6) { o -> o.string(path) }.let { i -> i.list { i.opt { r410(i) } } }
+        c.callSuspend(22, 6) { o -> o.string(path) }.let { i -> i.list { i.opt { r447(i) } } }
     override suspend fun branches(includeRemote: kotlin.Boolean): kotlin.collections.List<dev.ide.ui.backend.UiVcsBranch> =
-        c.callSuspend(22, 7) { o -> o.bool(includeRemote) }.let { i -> i.list { r411(i) } }
+        c.callSuspend(22, 7) { o -> o.bool(includeRemote) }.let { i -> i.list { r448(i) } }
     override fun cancelSignIn(): kotlin.Unit { c.call(22, 8) { o ->  } }
     override suspend fun checkoutBranch(name: kotlin.String): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 9) { o -> o.string(name) }.let { i -> r406(i) }
+        c.callSuspend(22, 9) { o -> o.string(name) }.let { i -> r443(i) }
     override suspend fun clearHostCredentials(host: kotlin.String): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 10) { o -> o.string(host) }.let { i -> r406(i) }
+        c.callSuspend(22, 10) { o -> o.string(host) }.let { i -> r443(i) }
     override suspend fun cloneRepository(url: kotlin.String, directoryName: kotlin.String): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 11) { o -> o.string(url); o.string(directoryName) }.let { i -> r406(i) }
+        c.callSuspend(22, 11) { o -> o.string(url); o.string(directoryName) }.let { i -> r443(i) }
     override suspend fun commit(message: kotlin.String, amend: kotlin.Boolean): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 12) { o -> o.string(message); o.bool(amend) }.let { i -> r406(i) }
+        c.callSuspend(22, 12) { o -> o.string(message); o.bool(amend) }.let { i -> r443(i) }
     override suspend fun commitDetail(id: kotlin.String): dev.ide.ui.backend.UiVcsCommitDetail? =
-        c.callSuspend(22, 13) { o -> o.string(id) }.let { i -> i.opt { r412(i) } }
+        c.callSuspend(22, 13) { o -> o.string(id) }.let { i -> i.opt { r449(i) } }
     override suspend fun createBranch(name: kotlin.String, startPoint: kotlin.String?, checkout: kotlin.Boolean): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 14) { o -> o.string(name); o.opt(startPoint) { n65 -> o.string(n65) }; o.bool(checkout) }.let { i -> r406(i) }
+        c.callSuspend(22, 14) { o -> o.string(name); o.opt(startPoint) { n66 -> o.string(n66) }; o.bool(checkout) }.let { i -> r443(i) }
     override suspend fun createPullRequest(title: kotlin.String, body: kotlin.String, base: kotlin.String): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 15) { o -> o.string(title); o.string(body); o.string(base) }.let { i -> r406(i) }
+        c.callSuspend(22, 15) { o -> o.string(title); o.string(body); o.string(base) }.let { i -> r443(i) }
     override suspend fun credentialHosts(): kotlin.collections.List<kotlin.String> =
         c.callSuspend(22, 16) { o ->  }.let { i -> i.list { i.str() } }
     override suspend fun defaultBranch(): kotlin.String? =
         c.callSuspend(22, 17) { o ->  }.let { i -> i.opt { i.str() } }
     override suspend fun deleteBranch(name: kotlin.String, force: kotlin.Boolean): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 18) { o -> o.string(name); o.bool(force) }.let { i -> r406(i) }
+        c.callSuspend(22, 18) { o -> o.string(name); o.bool(force) }.let { i -> r443(i) }
     override fun deviceAuthSupported(): kotlin.Boolean =
         c.call(22, 19) { o ->  }.let { i -> i.bool() }
     override suspend fun diff(path: kotlin.String, staged: kotlin.Boolean, commitId: kotlin.String?): dev.ide.ui.backend.UiVcsDiff? =
-        c.callSuspend(22, 20) { o -> o.string(path); o.bool(staged); o.opt(commitId) { n66 -> o.string(n66) } }.let { i -> i.opt { r415(i) } }
+        c.callSuspend(22, 20) { o -> o.string(path); o.bool(staged); o.opt(commitId) { n67 -> o.string(n67) } }.let { i -> i.opt { r452(i) } }
     override suspend fun discard(paths: kotlin.collections.List<kotlin.String>): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 21) { o -> o.list(paths) { e67 -> o.string(e67) } }.let { i -> r406(i) }
+        c.callSuspend(22, 21) { o -> o.list(paths) { e68 -> o.string(e68) } }.let { i -> r443(i) }
     override suspend fun fetch(): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 22) { o ->  }.let { i -> r406(i) }
+        c.callSuspend(22, 22) { o ->  }.let { i -> r443(i) }
     override suspend fun forgeRepositories(query: kotlin.String, page: kotlin.Int): kotlin.collections.List<dev.ide.ui.backend.UiForgeRepo> =
-        c.callSuspend(22, 23) { o -> o.string(query); o.int(page) }.let { i -> i.list { r416(i) } }
+        c.callSuspend(22, 23) { o -> o.string(query); o.int(page) }.let { i -> i.list { r453(i) } }
     override suspend fun identity(): dev.ide.ui.backend.UiVcsIdentity =
-        c.callSuspend(22, 24) { o ->  }.let { i -> r417(i) }
+        c.callSuspend(22, 24) { o ->  }.let { i -> r454(i) }
     override suspend fun initRepository(): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 25) { o ->  }.let { i -> r406(i) }
+        c.callSuspend(22, 25) { o ->  }.let { i -> r443(i) }
     override suspend fun log(limit: kotlin.Int, skip: kotlin.Int, path: kotlin.String?): kotlin.collections.List<dev.ide.ui.backend.UiVcsCommit> =
-        c.callSuspend(22, 26) { o -> o.int(limit); o.int(skip); o.opt(path) { n68 -> o.string(n68) } }.let { i -> i.list { r413(i) } }
+        c.callSuspend(22, 26) { o -> o.int(limit); o.int(skip); o.opt(path) { n69 -> o.string(n69) } }.let { i -> i.list { r450(i) } }
     override suspend fun markResolved(paths: kotlin.collections.List<kotlin.String>): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 27) { o -> o.list(paths) { e69 -> o.string(e69) } }.let { i -> r406(i) }
+        c.callSuspend(22, 27) { o -> o.list(paths) { e70 -> o.string(e70) } }.let { i -> r443(i) }
     override suspend fun mergeBranch(name: kotlin.String): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 28) { o -> o.string(name) }.let { i -> r406(i) }
+        c.callSuspend(22, 28) { o -> o.string(name) }.let { i -> r443(i) }
     override suspend fun publishToForge(name: kotlin.String, description: kotlin.String, private: kotlin.Boolean): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 29) { o -> o.string(name); o.string(description); o.bool(private) }.let { i -> r406(i) }
+        c.callSuspend(22, 29) { o -> o.string(name); o.string(description); o.bool(private) }.let { i -> r443(i) }
     override suspend fun pull(): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 30) { o ->  }.let { i -> r406(i) }
+        c.callSuspend(22, 30) { o ->  }.let { i -> r443(i) }
     override suspend fun pullRequests(): kotlin.collections.List<dev.ide.ui.backend.UiForgePullRequest> =
-        c.callSuspend(22, 31) { o ->  }.let { i -> i.list { r418(i) } }
+        c.callSuspend(22, 31) { o ->  }.let { i -> i.list { r455(i) } }
     override suspend fun push(force: kotlin.Boolean): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 32) { o -> o.bool(force) }.let { i -> r406(i) }
+        c.callSuspend(22, 32) { o -> o.bool(force) }.let { i -> r443(i) }
     override suspend fun refresh(): kotlin.Unit { c.callSuspend(22, 33) { o ->  } }
     override suspend fun remotes(): kotlin.collections.List<dev.ide.ui.backend.UiVcsRemote> =
-        c.callSuspend(22, 34) { o ->  }.let { i -> i.list { r419(i) } }
+        c.callSuspend(22, 34) { o ->  }.let { i -> i.list { r456(i) } }
     override suspend fun removeRemote(name: kotlin.String): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 35) { o -> o.string(name) }.let { i -> r406(i) }
+        c.callSuspend(22, 35) { o -> o.string(name) }.let { i -> r443(i) }
     override suspend fun renameBranch(from: kotlin.String, to: kotlin.String): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 36) { o -> o.string(from); o.string(to) }.let { i -> r406(i) }
+        c.callSuspend(22, 36) { o -> o.string(from); o.string(to) }.let { i -> r443(i) }
     override suspend fun saveHostCredentials(host: kotlin.String, username: kotlin.String, password: kotlin.String): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 37) { o -> o.string(host); o.string(username); o.string(password) }.let { i -> r406(i) }
+        c.callSuspend(22, 37) { o -> o.string(host); o.string(username); o.string(password) }.let { i -> r443(i) }
     override suspend fun setActiveAccount(accountId: kotlin.String): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 38) { o -> o.string(accountId) }.let { i -> r406(i) }
+        c.callSuspend(22, 38) { o -> o.string(accountId) }.let { i -> r443(i) }
     override suspend fun setIdentity(name: kotlin.String, email: kotlin.String): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 39) { o -> o.string(name); o.string(email) }.let { i -> r406(i) }
-    override val signIn: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.UiVcsSignIn> by lazy { c.stateFlow(22, 40) { i -> r420(i) } }
+        c.callSuspend(22, 39) { o -> o.string(name); o.string(email) }.let { i -> r443(i) }
+    override val signIn: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.UiVcsSignIn> by lazy { c.stateFlow(22, 40) { i -> r457(i) } }
     override suspend fun signInWithToken(token: kotlin.String): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 41) { o -> o.string(token) }.let { i -> r406(i) }
+        c.callSuspend(22, 41) { o -> o.string(token) }.let { i -> r443(i) }
     override suspend fun signOut(accountId: kotlin.String): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 42) { o -> o.string(accountId) }.let { i -> r406(i) }
+        c.callSuspend(22, 42) { o -> o.string(accountId) }.let { i -> r443(i) }
     override suspend fun stage(paths: kotlin.collections.List<kotlin.String>): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 43) { o -> o.list(paths) { e70 -> o.string(e70) } }.let { i -> r406(i) }
+        c.callSuspend(22, 43) { o -> o.list(paths) { e71 -> o.string(e71) } }.let { i -> r443(i) }
     override suspend fun startSignIn(): kotlin.Unit { c.callSuspend(22, 44) { o ->  } }
     override suspend fun stashApply(index: kotlin.Int, drop: kotlin.Boolean): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 45) { o -> o.int(index); o.bool(drop) }.let { i -> r406(i) }
+        c.callSuspend(22, 45) { o -> o.int(index); o.bool(drop) }.let { i -> r443(i) }
     override suspend fun stashDrop(index: kotlin.Int): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 46) { o -> o.int(index) }.let { i -> r406(i) }
+        c.callSuspend(22, 46) { o -> o.int(index) }.let { i -> r443(i) }
     override suspend fun stashPush(message: kotlin.String, includeUntracked: kotlin.Boolean): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 47) { o -> o.string(message); o.bool(includeUntracked) }.let { i -> r406(i) }
+        c.callSuspend(22, 47) { o -> o.string(message); o.bool(includeUntracked) }.let { i -> r443(i) }
     override suspend fun stashes(): kotlin.collections.List<dev.ide.ui.backend.UiVcsStash> =
-        c.callSuspend(22, 48) { o ->  }.let { i -> i.list { r426(i) } }
-    override val status: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.UiVcsStatus> by lazy { c.stateFlow(22, 49) { i -> r427(i) } }
+        c.callSuspend(22, 48) { o ->  }.let { i -> i.list { r463(i) } }
+    override val status: kotlinx.coroutines.flow.StateFlow<dev.ide.ui.backend.UiVcsStatus> by lazy { c.stateFlow(22, 49) { i -> r464(i) } }
     override fun supported(): kotlin.Boolean =
         c.call(22, 50) { o ->  }.let { i -> i.bool() }
     override fun underVersionControl(): kotlin.Boolean =
         c.call(22, 51) { o ->  }.let { i -> i.bool() }
     override suspend fun unstage(paths: kotlin.collections.List<kotlin.String>): dev.ide.ui.backend.UiVcsResult =
-        c.callSuspend(22, 52) { o -> o.list(paths) { e71 -> o.string(e71) } }.let { i -> r406(i) }
+        c.callSuspend(22, 52) { o -> o.list(paths) { e72 -> o.string(e72) } }.let { i -> r443(i) }
 }
 
 // ---- values ----
 
 internal fun w0(o: RemoteOut, v: dev.ide.ui.backend.UiActionContext) {
     o.string(v.place)
-    o.opt(v.activeFilePath) { n320 -> o.string(n320) }
-    o.opt(v.selectionStart) { n321 -> o.int(n321) }
-    o.opt(v.selectionEnd) { n322 -> o.int(n322) }
-    o.opt(v.contextPath) { n323 -> o.string(n323) }
-    o.opt(v.caret) { n324 -> w1(o, n324) }
-    o.opt(v.documentText) { n325 -> o.string(n325) }
+    o.opt(v.activeFilePath) { n323 -> o.string(n323) }
+    o.opt(v.selectionStart) { n324 -> o.int(n324) }
+    o.opt(v.selectionEnd) { n325 -> o.int(n325) }
+    o.opt(v.contextPath) { n326 -> o.string(n326) }
+    o.opt(v.caret) { n327 -> w1(o, n327) }
+    o.opt(v.documentText) { n328 -> o.string(n328) }
 }
 internal fun r0(i: RemoteIn): dev.ide.ui.backend.UiActionContext = dev.ide.ui.backend.UiActionContext(
     place = i.str(),
@@ -1070,13 +1076,13 @@ internal fun r0(i: RemoteIn): dev.ide.ui.backend.UiActionContext = dev.ide.ui.ba
 
 internal fun w1(o: RemoteOut, v: dev.ide.ui.backend.UiCaretContext) {
     o.int(v.offset)
-    o.opt(v.languageId) { n318 -> o.string(n318) }
+    o.opt(v.languageId) { n321 -> o.string(n321) }
     o.string(v.nodeKind)
     o.int(v.nodeStart)
     o.int(v.nodeEnd)
     o.string(v.nodeText)
     o.bool(v.nodeTextTruncated)
-    o.list(v.ancestors) { e319 -> w2(o, e319) }
+    o.list(v.ancestors) { e322 -> w2(o, e322) }
 }
 internal fun r1(i: RemoteIn): dev.ide.ui.backend.UiCaretContext = dev.ide.ui.backend.UiCaretContext(
     offset = i.int(),
@@ -1103,7 +1109,7 @@ internal fun r2(i: RemoteIn): dev.ide.ui.backend.UiCaretAncestor = dev.ide.ui.ba
 internal fun w3(o: RemoteOut, v: dev.ide.ui.backend.UiActionItem) {
     o.string(v.id)
     o.string(v.text)
-    o.opt(v.iconId) { n326 -> o.string(n326) }
+    o.opt(v.iconId) { n329 -> o.string(n329) }
     o.bool(v.enabled)
 }
 internal fun r3(i: RemoteIn): dev.ide.ui.backend.UiActionItem = dev.ide.ui.backend.UiActionItem(
@@ -1114,8 +1120,8 @@ internal fun r3(i: RemoteIn): dev.ide.ui.backend.UiActionItem = dev.ide.ui.backe
 )
 
 internal fun w4(o: RemoteOut, v: dev.ide.ui.backend.UiActionResult) {
-    o.opt(v.message) { n332 -> o.string(n332) }
-    o.list(v.effects) { e333 -> w5(o, e333) }
+    o.opt(v.message) { n335 -> o.string(n335) }
+    o.list(v.effects) { e336 -> w5(o, e336) }
 }
 internal fun r4(i: RemoteIn): dev.ide.ui.backend.UiActionResult = dev.ide.ui.backend.UiActionResult(
     message = i.opt { i.str() },
@@ -1153,7 +1159,7 @@ internal fun r5(i: RemoteIn): dev.ide.ui.backend.UiActionEffect = when (val tag 
 }
 
 internal fun w6(o: RemoteOut, v: dev.ide.ui.backend.UiActionEffect.ApplyEdits) {
-    o.list(v.edits) { e327 -> w7(o, e327) }
+    o.list(v.edits) { e330 -> w7(o, e330) }
 }
 internal fun r6(i: RemoteIn): dev.ide.ui.backend.UiActionEffect.ApplyEdits = dev.ide.ui.backend.UiActionEffect.ApplyEdits(
     edits = i.list { r7(i) },
@@ -1171,7 +1177,7 @@ internal fun r7(i: RemoteIn): dev.ide.ui.backend.UiTextEdit = dev.ide.ui.backend
 )
 
 internal fun w8(o: RemoteOut, v: dev.ide.ui.backend.UiActionEffect.ApplyWorkspaceEdit) {
-    o.map(v.edits, { k328 -> o.string(k328) }, { v329 -> o.list(v329) { e330 -> w7(o, e330) } })
+    o.map(v.edits, { k331 -> o.string(k331) }, { v332 -> o.list(v332) { e333 -> w7(o, e333) } })
 }
 internal fun r8(i: RemoteIn): dev.ide.ui.backend.UiActionEffect.ApplyWorkspaceEdit = dev.ide.ui.backend.UiActionEffect.ApplyWorkspaceEdit(
     edits = i.map({ i.str() }, { i.list { r7(i) } }),
@@ -1211,7 +1217,7 @@ internal fun r12(i: RemoteIn): dev.ide.ui.backend.UiActionEffect.Navigate = dev.
 
 internal fun w13(o: RemoteOut, v: dev.ide.ui.backend.UiActionEffect.OpenFile) {
     o.string(v.path)
-    o.opt(v.offset) { n331 -> o.int(n331) }
+    o.opt(v.offset) { n334 -> o.int(n334) }
 }
 internal fun r13(i: RemoteIn): dev.ide.ui.backend.UiActionEffect.OpenFile = dev.ide.ui.backend.UiActionEffect.OpenFile(
     path = i.str(),
@@ -1247,7 +1253,7 @@ internal fun r17(i: RemoteIn): dev.ide.ui.backend.UiActionEffect.Select = dev.id
 )
 
 internal fun w18(o: RemoteOut, v: dev.ide.ui.backend.UiMenuGroup) {
-    o.list(v.items) { e336 -> w19(o, e336) }
+    o.list(v.items) { e339 -> w19(o, e339) }
 }
 internal fun r18(i: RemoteIn): dev.ide.ui.backend.UiMenuGroup = dev.ide.ui.backend.UiMenuGroup(
     items = i.list { r19(i) },
@@ -1279,8 +1285,8 @@ internal fun r21(i: RemoteIn): dev.ide.ui.backend.UiMenuNode.Separator = dev.ide
 
 internal fun w22(o: RemoteOut, v: dev.ide.ui.backend.UiMenuNode.Submenu) {
     o.string(v.text)
-    o.opt(v.iconId) { n334 -> o.string(n334) }
-    o.list(v.items) { e335 -> w19(o, e335) }
+    o.opt(v.iconId) { n337 -> o.string(n337) }
+    o.list(v.items) { e338 -> w19(o, e338) }
 }
 internal fun r22(i: RemoteIn): dev.ide.ui.backend.UiMenuNode.Submenu = dev.ide.ui.backend.UiMenuNode.Submenu(
     text = i.str(),
@@ -1291,12 +1297,12 @@ internal fun r22(i: RemoteIn): dev.ide.ui.backend.UiMenuNode.Submenu = dev.ide.u
 internal fun w23(o: RemoteOut, v: dev.ide.ui.backend.UiAgentAttachment) {
     o.int(v.kind.ordinal)
     o.string(v.name)
-    o.opt(v.path) { n337 -> o.string(n337) }
-    o.opt(v.mediaType) { n338 -> o.string(n338) }
-    o.opt(v.base64) { n339 -> o.string(n339) }
-    o.opt(v.text) { n340 -> o.string(n340) }
-    o.opt(v.startLine) { n341 -> o.int(n341) }
-    o.opt(v.endLine) { n342 -> o.int(n342) }
+    o.opt(v.path) { n340 -> o.string(n340) }
+    o.opt(v.mediaType) { n341 -> o.string(n341) }
+    o.opt(v.base64) { n342 -> o.string(n342) }
+    o.opt(v.text) { n343 -> o.string(n343) }
+    o.opt(v.startLine) { n344 -> o.int(n344) }
+    o.opt(v.endLine) { n345 -> o.int(n345) }
 }
 internal fun r23(i: RemoteIn): dev.ide.ui.backend.UiAgentAttachment = dev.ide.ui.backend.UiAgentAttachment(
     kind = dev.ide.ui.backend.UiAgentAttachmentKind.entries[i.int()],
@@ -1310,11 +1316,11 @@ internal fun r23(i: RemoteIn): dev.ide.ui.backend.UiAgentAttachment = dev.ide.ui
 )
 
 internal fun w24(o: RemoteOut, v: dev.ide.ui.backend.UiAgentChatState) {
-    o.list(v.messages) { e354 -> w25(o, e354) }
+    o.list(v.messages) { e357 -> w25(o, e357) }
     o.bool(v.busy)
-    o.list(v.pendingAttachments) { e355 -> w23(o, e355) }
-    o.list(v.todos) { e356 -> w34(o, e356) }
-    o.opt(v.sessionId) { n357 -> o.string(n357) }
+    o.list(v.pendingAttachments) { e358 -> w23(o, e358) }
+    o.list(v.todos) { e359 -> w34(o, e359) }
+    o.opt(v.sessionId) { n360 -> o.string(n360) }
     o.bool(v.creatingApp)
 }
 internal fun r24(i: RemoteIn): dev.ide.ui.backend.UiAgentChatState = dev.ide.ui.backend.UiAgentChatState(
@@ -1331,18 +1337,18 @@ internal fun w25(o: RemoteOut, v: dev.ide.ui.backend.UiAgentMessage) {
     o.int(v.role.ordinal)
     o.string(v.text)
     o.string(v.thinking)
-    o.list(v.toolCalls) { e348 -> w26(o, e348) }
+    o.list(v.toolCalls) { e351 -> w26(o, e351) }
     o.bool(v.streaming)
     o.bool(v.isError)
     o.bool(v.canRetry)
-    o.opt(v.usage) { n349 -> w29(o, n349) }
-    o.list(v.attachments) { e350 -> w23(o, e350) }
-    o.opt(v.waitUntilMs) { n351 -> o.long(n351) }
+    o.opt(v.usage) { n352 -> w29(o, n352) }
+    o.list(v.attachments) { e353 -> w23(o, e353) }
+    o.opt(v.waitUntilMs) { n354 -> o.long(n354) }
     o.string(v.waitReason)
-    o.opt(v.suggestedModel) { n352 -> o.string(n352) }
+    o.opt(v.suggestedModel) { n355 -> o.string(n355) }
     o.bool(v.canUndo)
     o.bool(v.undone)
-    o.list(v.segments) { e353 -> w30(o, e353) }
+    o.list(v.segments) { e356 -> w30(o, e356) }
 }
 internal fun r25(i: RemoteIn): dev.ide.ui.backend.UiAgentMessage = dev.ide.ui.backend.UiAgentMessage(
     id = i.long(),
@@ -1368,10 +1374,10 @@ internal fun w26(o: RemoteOut, v: dev.ide.ui.backend.UiAgentToolCall) {
     o.string(v.title)
     o.int(v.status.ordinal)
     o.string(v.detail)
-    o.list(v.changes) { e345 -> w27(o, e345) }
+    o.list(v.changes) { e348 -> w27(o, e348) }
     o.string(v.input)
     o.string(v.output)
-    o.list(v.images) { e346 -> w28(o, e346) }
+    o.list(v.images) { e349 -> w28(o, e349) }
 }
 internal fun r26(i: RemoteIn): dev.ide.ui.backend.UiAgentToolCall = dev.ide.ui.backend.UiAgentToolCall(
     id = i.str(),
@@ -1386,8 +1392,8 @@ internal fun r26(i: RemoteIn): dev.ide.ui.backend.UiAgentToolCall = dev.ide.ui.b
 
 internal fun w27(o: RemoteOut, v: dev.ide.ui.backend.UiAgentFileChange) {
     o.string(v.path)
-    o.opt(v.before) { n343 -> o.string(n343) }
-    o.opt(v.after) { n344 -> o.string(n344) }
+    o.opt(v.before) { n346 -> o.string(n346) }
+    o.opt(v.after) { n347 -> o.string(n347) }
 }
 internal fun r27(i: RemoteIn): dev.ide.ui.backend.UiAgentFileChange = dev.ide.ui.backend.UiAgentFileChange(
     path = i.str(),
@@ -1446,7 +1452,7 @@ internal fun r32(i: RemoteIn): dev.ide.ui.backend.UiAgentSegment.Thinking = dev.
 )
 
 internal fun w33(o: RemoteOut, v: dev.ide.ui.backend.UiAgentSegment.Tools) {
-    o.list(v.ids) { e347 -> o.string(e347) }
+    o.list(v.ids) { e350 -> o.string(e350) }
 }
 internal fun r33(i: RemoteIn): dev.ide.ui.backend.UiAgentSegment.Tools = dev.ide.ui.backend.UiAgentSegment.Tools(
     ids = i.list { i.str() },
@@ -1471,7 +1477,7 @@ internal fun r35(i: RemoteIn): dev.ide.ui.backend.UiAgentCommand = dev.ide.ui.ba
 )
 
 internal fun w36(o: RemoteOut, v: dev.ide.ui.backend.UiAgentConfig) {
-    o.list(v.providers) { e360 -> w37(o, e360) }
+    o.list(v.providers) { e363 -> w37(o, e363) }
     o.string(v.selectedProvider)
     o.string(v.model)
     o.bool(v.configured)
@@ -1494,10 +1500,10 @@ internal fun r36(i: RemoteIn): dev.ide.ui.backend.UiAgentConfig = dev.ide.ui.bac
 internal fun w37(o: RemoteOut, v: dev.ide.ui.backend.UiAgentProvider) {
     o.string(v.id)
     o.string(v.displayName)
-    o.list(v.models) { e358 -> w38(o, e358) }
+    o.list(v.models) { e361 -> w38(o, e361) }
     o.string(v.defaultModel)
     o.string(v.apiKey)
-    o.list(v.backupKeys) { e359 -> o.string(e359) }
+    o.list(v.backupKeys) { e362 -> o.string(e362) }
 }
 internal fun r37(i: RemoteIn): dev.ide.ui.backend.UiAgentProvider = dev.ide.ui.backend.UiAgentProvider(
     id = i.str(),
@@ -1520,12 +1526,12 @@ internal fun r38(i: RemoteIn): dev.ide.ui.backend.UiAgentModel = dev.ide.ui.back
 internal fun w39(o: RemoteOut, v: dev.ide.ui.backend.UiAgentConnections) {
     o.bool(v.mcpSupported)
     o.bool(v.stdioSupported)
-    o.list(v.servers) { e368 -> w40(o, e368) }
-    o.list(v.skills) { e369 -> w42(o, e369) }
-    o.opt(v.appSkillsDir) { n370 -> o.string(n370) }
-    o.opt(v.projectSkillsDir) { n371 -> o.string(n371) }
-    o.opt(v.appConfigFile) { n372 -> o.string(n372) }
-    o.opt(v.projectConfigFile) { n373 -> o.string(n373) }
+    o.list(v.servers) { e371 -> w40(o, e371) }
+    o.list(v.skills) { e372 -> w42(o, e372) }
+    o.opt(v.appSkillsDir) { n373 -> o.string(n373) }
+    o.opt(v.projectSkillsDir) { n374 -> o.string(n374) }
+    o.opt(v.appConfigFile) { n375 -> o.string(n375) }
+    o.opt(v.projectConfigFile) { n376 -> o.string(n376) }
     o.bool(v.projectOpen)
 }
 internal fun r39(i: RemoteIn): dev.ide.ui.backend.UiAgentConnections = dev.ide.ui.backend.UiAgentConnections(
@@ -1545,8 +1551,8 @@ internal fun w40(o: RemoteOut, v: dev.ide.ui.backend.UiMcpServer) {
     o.int(v.scope.ordinal)
     o.bool(v.enabled)
     o.int(v.status.ordinal)
-    o.opt(v.error) { n366 -> o.string(n366) }
-    o.list(v.tools) { e367 -> o.string(e367) }
+    o.opt(v.error) { n369 -> o.string(n369) }
+    o.list(v.tools) { e370 -> o.string(e370) }
     o.bool(v.signedIn)
     o.bool(v.signInPending)
     o.bool(v.shadowed)
@@ -1567,10 +1573,10 @@ internal fun w41(o: RemoteOut, v: dev.ide.ui.backend.UiMcpServerConfig) {
     o.string(v.name)
     o.int(v.transport.ordinal)
     o.string(v.url)
-    o.map(v.headers, { k361 -> o.string(k361) }, { v362 -> o.string(v362) })
+    o.map(v.headers, { k364 -> o.string(k364) }, { v365 -> o.string(v365) })
     o.string(v.command)
-    o.list(v.args) { e363 -> o.string(e363) }
-    o.map(v.env, { k364 -> o.string(k364) }, { v365 -> o.string(v365) })
+    o.list(v.args) { e366 -> o.string(e366) }
+    o.map(v.env, { k367 -> o.string(k367) }, { v368 -> o.string(v368) })
 }
 internal fun r41(i: RemoteIn): dev.ide.ui.backend.UiMcpServerConfig = dev.ide.ui.backend.UiMcpServerConfig(
     name = i.str(),
@@ -1601,7 +1607,7 @@ internal fun w43(o: RemoteOut, v: dev.ide.ui.backend.UiFreeAiState) {
     o.bool(v.available)
     o.bool(v.signedIn)
     o.bool(v.loading)
-    o.opt(v.userId) { n376 -> o.string(n376) }
+    o.opt(v.userId) { n379 -> o.string(n379) }
     o.bool(v.enabled)
     o.int(v.points)
     o.int(v.freePoints)
@@ -1610,9 +1616,9 @@ internal fun w43(o: RemoteOut, v: dev.ide.ui.backend.UiFreeAiState) {
     o.int(v.adPoints)
     o.int(v.adsLeftToday)
     o.int(v.adDailyCap)
-    o.opt(v.error) { n377 -> o.string(n377) }
-    o.list(v.models) { e378 -> w44(o, e378) }
-    o.opt(v.usage) { n379 -> w45(o, n379) }
+    o.opt(v.error) { n380 -> o.string(n380) }
+    o.list(v.models) { e381 -> w44(o, e381) }
+    o.opt(v.usage) { n382 -> w45(o, n382) }
 }
 internal fun r43(i: RemoteIn): dev.ide.ui.backend.UiFreeAiState = dev.ide.ui.backend.UiFreeAiState(
     available = i.bool(),
@@ -1658,8 +1664,8 @@ internal fun w45(o: RemoteOut, v: dev.ide.ui.backend.UiFreeAiUsage) {
     o.int(v.stepsToday)
     o.double(v.spentWeek)
     o.int(v.stepsWeek)
-    o.list(v.byModelWeek) { e374 -> o.string(e374.first); o.double(e374.second); o.int(e374.third) }
-    o.list(v.recent) { e375 -> w46(o, e375) }
+    o.list(v.byModelWeek) { e377 -> o.string(e377.first); o.double(e377.second); o.int(e377.third) }
+    o.list(v.recent) { e378 -> w46(o, e378) }
 }
 internal fun r45(i: RemoteIn): dev.ide.ui.backend.UiFreeAiUsage = dev.ide.ui.backend.UiFreeAiUsage(
     points = i.double(),
@@ -1704,7 +1710,7 @@ internal fun w47(o: RemoteOut, v: dev.ide.ui.backend.UiMcpHost) {
     o.bool(v.running)
     o.int(v.port)
     o.string(v.url)
-    o.opt(v.error) { n380 -> o.string(n380) }
+    o.opt(v.error) { n383 -> o.string(n383) }
 }
 internal fun r47(i: RemoteIn): dev.ide.ui.backend.UiMcpHost = dev.ide.ui.backend.UiMcpHost(
     supported = i.bool(),
@@ -1759,7 +1765,7 @@ internal fun r50(i: RemoteIn): dev.ide.ui.backend.UiOpenRouterSignIn = when (val
 }
 
 internal fun w51(o: RemoteOut, v: dev.ide.ui.backend.UiOpenRouterSignIn.Connected) {
-    o.opt(v.freeModel) { n381 -> o.string(n381) }
+    o.opt(v.freeModel) { n384 -> o.string(n384) }
 }
 internal fun r51(i: RemoteIn): dev.ide.ui.backend.UiOpenRouterSignIn.Connected = dev.ide.ui.backend.UiOpenRouterSignIn.Connected(
     freeModel = i.opt { i.str() },
@@ -1782,8 +1788,8 @@ internal fun w55(o: RemoteOut, v: dev.ide.ui.backend.UiAgentPermissionRequest) {
     o.int(v.id)
     o.string(v.tool)
     o.string(v.summary)
-    o.opt(v.path) { n382 -> o.string(n382) }
-    o.list(v.changes) { e383 -> w27(o, e383) }
+    o.opt(v.path) { n385 -> o.string(n385) }
+    o.list(v.changes) { e386 -> w27(o, e386) }
 }
 internal fun r55(i: RemoteIn): dev.ide.ui.backend.UiAgentPermissionRequest = dev.ide.ui.backend.UiAgentPermissionRequest(
     id = i.int(),
@@ -1795,7 +1801,7 @@ internal fun r55(i: RemoteIn): dev.ide.ui.backend.UiAgentPermissionRequest = dev
 
 internal fun w56(o: RemoteOut, v: dev.ide.ui.backend.UiAgentQuestionRequest) {
     o.int(v.id)
-    o.list(v.questions) { e385 -> w57(o, e385) }
+    o.list(v.questions) { e388 -> w57(o, e388) }
 }
 internal fun r56(i: RemoteIn): dev.ide.ui.backend.UiAgentQuestionRequest = dev.ide.ui.backend.UiAgentQuestionRequest(
     id = i.int(),
@@ -1805,7 +1811,7 @@ internal fun r56(i: RemoteIn): dev.ide.ui.backend.UiAgentQuestionRequest = dev.i
 internal fun w57(o: RemoteOut, v: dev.ide.ui.backend.UiAgentQuestion) {
     o.string(v.question)
     o.string(v.header)
-    o.list(v.options) { e384 -> w58(o, e384) }
+    o.list(v.options) { e387 -> w58(o, e387) }
     o.bool(v.multiSelect)
 }
 internal fun r57(i: RemoteIn): dev.ide.ui.backend.UiAgentQuestion = dev.ide.ui.backend.UiAgentQuestion(
@@ -1855,11 +1861,11 @@ internal fun r60(i: RemoteIn): dev.ide.ui.backend.UiAgentSessionSummary = dev.id
 internal fun w61(o: RemoteOut, v: dev.ide.ui.backend.UiAgentUsageLimits) {
     o.string(v.providerName)
     o.bool(v.reported)
-    o.list(v.meters) { e387 -> w62(o, e387) }
-    o.opt(v.spentTodayUsd) { n388 -> o.double(n388) }
-    o.opt(v.spentMonthUsd) { n389 -> o.double(n389) }
+    o.list(v.meters) { e390 -> w62(o, e390) }
+    o.opt(v.spentTodayUsd) { n391 -> o.double(n391) }
+    o.opt(v.spentMonthUsd) { n392 -> o.double(n392) }
     o.bool(v.usingFreeModel)
-    o.opt(v.error) { n390 -> o.string(n390) }
+    o.opt(v.error) { n393 -> o.string(n393) }
 }
 internal fun r61(i: RemoteIn): dev.ide.ui.backend.UiAgentUsageLimits = dev.ide.ui.backend.UiAgentUsageLimits(
     providerName = i.str(),
@@ -1875,7 +1881,7 @@ internal fun w62(o: RemoteOut, v: dev.ide.ui.backend.UiUsageMeter) {
     o.int(v.kind.ordinal)
     o.double(v.used)
     o.double(v.limit)
-    o.opt(v.resetsAtMs) { n386 -> o.long(n386) }
+    o.opt(v.resetsAtMs) { n389 -> o.long(n389) }
 }
 internal fun r62(i: RemoteIn): dev.ide.ui.backend.UiUsageMeter = dev.ide.ui.backend.UiUsageMeter(
     kind = dev.ide.ui.backend.UiUsageMeterKind.entries[i.int()],
@@ -2040,7 +2046,7 @@ internal fun w75(o: RemoteOut, v: dev.ide.ui.backend.UiBlockNode) {
     o.string(v.category)
     o.int(v.start)
     o.int(v.end)
-    o.list(v.parts) { e392 -> w76(o, e392) }
+    o.list(v.parts) { e395 -> w76(o, e395) }
     o.string(v.valueKind)
 }
 internal fun r75(i: RemoteIn): dev.ide.ui.backend.UiBlockNode = dev.ide.ui.backend.UiBlockNode(
@@ -2086,7 +2092,7 @@ internal fun w78(o: RemoteOut, v: dev.ide.ui.backend.UiBlockPart.Slot) {
     o.bool(v.multiple)
     o.int(v.start)
     o.int(v.end)
-    o.list(v.children) { e391 -> w75(o, e391) }
+    o.list(v.children) { e394 -> w75(o, e394) }
     o.string(v.valueKind)
 }
 internal fun r78(i: RemoteIn): dev.ide.ui.backend.UiBlockPart.Slot = dev.ide.ui.backend.UiBlockPart.Slot(
@@ -2099,9 +2105,9 @@ internal fun r78(i: RemoteIn): dev.ide.ui.backend.UiBlockPart.Slot = dev.ide.ui.
 )
 
 internal fun w79(o: RemoteOut, v: dev.ide.ui.backend.AppLogUi) {
-    o.list(v.lines) { e393 -> w80(o, e393) }
+    o.list(v.lines) { e396 -> w80(o, e396) }
     o.bool(v.connected)
-    o.opt(v.packageName) { n394 -> o.string(n394) }
+    o.opt(v.packageName) { n397 -> o.string(n397) }
 }
 internal fun r79(i: RemoteIn): dev.ide.ui.backend.AppLogUi = dev.ide.ui.backend.AppLogUi(
     lines = i.list { r80(i) },
@@ -2131,11 +2137,11 @@ internal fun r80(i: RemoteIn): dev.ide.ui.backend.AppLogLineUi = dev.ide.ui.back
 internal fun w81(o: RemoteOut, v: dev.ide.ui.backend.BuildState) {
     o.int(v.status.ordinal)
     o.string(v.moduleName)
-    o.list(v.steps) { e399 -> w82(o, e399) }
-    o.list(v.log) { e400 -> w83(o, e400) }
-    o.list(v.diagnostics) { e401 -> w84(o, e401) }
+    o.list(v.steps) { e402 -> w82(o, e402) }
+    o.list(v.log) { e403 -> w83(o, e403) }
+    o.list(v.diagnostics) { e404 -> w84(o, e404) }
     o.long(v.elapsedMs)
-    o.opt(v.banner) { n402 -> o.string(n402) }
+    o.opt(v.banner) { n405 -> o.string(n405) }
     o.bool(v.stopped)
 }
 internal fun r81(i: RemoteIn): dev.ide.ui.backend.BuildState = dev.ide.ui.backend.BuildState(
@@ -2161,7 +2167,7 @@ internal fun r82(i: RemoteIn): dev.ide.ui.backend.BuildStepUi = dev.ide.ui.backe
 internal fun w83(o: RemoteOut, v: dev.ide.ui.backend.BuildLogLine) {
     o.string(v.message)
     o.int(v.level.ordinal)
-    o.opt(v.task) { n395 -> o.string(n395) }
+    o.opt(v.task) { n398 -> o.string(n398) }
     o.string(v.timeLabel)
     o.long(v.timestampMs)
 }
@@ -2178,11 +2184,11 @@ internal fun w84(o: RemoteOut, v: dev.ide.ui.backend.BuildDiagnosticUi) {
     o.string(v.message)
     o.string(v.kind)
     o.string(v.source)
-    o.opt(v.file) { n396 -> o.string(n396) }
+    o.opt(v.file) { n399 -> o.string(n399) }
     o.int(v.line)
     o.int(v.column)
-    o.opt(v.detail) { n397 -> o.string(n397) }
-    o.opt(v.task) { n398 -> o.string(n398) }
+    o.opt(v.detail) { n400 -> o.string(n400) }
+    o.opt(v.task) { n401 -> o.string(n401) }
 }
 internal fun r84(i: RemoteIn): dev.ide.ui.backend.BuildDiagnosticUi = dev.ide.ui.backend.BuildDiagnosticUi(
     severity = dev.ide.ui.backend.UiSeverity.entries[i.int()],
@@ -2212,10 +2218,10 @@ internal fun w86(o: RemoteOut, v: dev.ide.ui.backend.RunConsoleUi) {
     o.string(v.moduleName)
     o.string(v.mainClass)
     o.int(v.phase.ordinal)
-    o.list(v.transcript) { e403 -> w87(o, e403) }
+    o.list(v.transcript) { e406 -> w87(o, e406) }
     o.bool(v.acceptsInput)
-    o.opt(v.exitCode) { n404 -> o.int(n404) }
-    o.opt(v.frame) { n405 -> w88(o, n405) }
+    o.opt(v.exitCode) { n407 -> o.int(n407) }
+    o.opt(v.frame) { n408 -> w88(o, n408) }
 }
 internal fun r86(i: RemoteIn): dev.ide.ui.backend.RunConsoleUi = dev.ide.ui.backend.RunConsoleUi(
     id = i.int(),
@@ -2283,21 +2289,23 @@ internal fun r90(i: RemoteIn): dev.ide.ui.backend.UiDiagnostic = dev.ide.ui.back
 internal fun w91(o: RemoteOut, v: dev.ide.ui.backend.UiChallengeBoard) {
     o.string(v.date)
     o.int(v.total)
-    o.list(v.rows) { e407 -> w92(o, e407) }
-    o.opt(v.you) { n408 -> w92(o, n408) }
+    o.list(v.rows) { e410 -> w92(o, e410) }
+    o.opt(v.you) { n411 -> w92(o, n411) }
+    o.bool(v.solutionsOpen)
 }
 internal fun r91(i: RemoteIn): dev.ide.ui.backend.UiChallengeBoard = dev.ide.ui.backend.UiChallengeBoard(
     date = i.str(),
     total = i.int(),
     rows = i.list { r92(i) },
     you = i.opt { r92(i) },
+    solutionsOpen = i.bool(),
 )
 
 internal fun w92(o: RemoteOut, v: dev.ide.ui.backend.UiChallengeRank) {
     o.int(v.rank)
     o.string(v.handle)
     o.string(v.displayName)
-    o.opt(v.avatarUrl) { n406 -> o.string(n406) }
+    o.opt(v.avatarUrl) { n409 -> o.string(n409) }
     o.int(v.score)
     o.int(v.language.ordinal)
     o.string(v.timeClass)
@@ -2325,7 +2333,7 @@ internal fun r92(i: RemoteIn): dev.ide.ui.backend.UiChallengeRank = dev.ide.ui.b
 )
 
 internal fun w93(o: RemoteOut, v: dev.ide.ui.backend.UiCompletionResult) {
-    o.list(v.items) { e418 -> w94(o, e418) }
+    o.list(v.items) { e421 -> w94(o, e421) }
     o.int(v.replaceStart)
     o.int(v.replaceEnd)
     o.bool(v.mayFilterLocally)
@@ -2342,14 +2350,14 @@ internal fun r93(i: RemoteIn): dev.ide.ui.backend.UiCompletionResult = dev.ide.u
 internal fun w94(o: RemoteOut, v: dev.ide.ui.backend.UiCompletionItem) {
     o.string(v.label)
     o.string(v.insertText)
-    o.opt(v.detail) { n412 -> o.string(n412) }
-    o.opt(v.container) { n413 -> o.string(n413) }
-    o.opt(v.documentation) { n414 -> o.string(n414) }
+    o.opt(v.detail) { n415 -> o.string(n415) }
+    o.opt(v.container) { n416 -> o.string(n416) }
+    o.opt(v.documentation) { n417 -> o.string(n417) }
     o.int(v.kind.ordinal)
     o.int(v.sortPriority)
-    o.list(v.additionalEdits) { e415 -> w7(o, e415) }
-    o.opt(v.caret) { n416 -> w95(o, n416) }
-    o.opt(v.snippet) { n417 -> w96(o, n417) }
+    o.list(v.additionalEdits) { e418 -> w7(o, e418) }
+    o.opt(v.caret) { n419 -> w95(o, n419) }
+    o.opt(v.snippet) { n420 -> w96(o, n420) }
 }
 internal fun r94(i: RemoteIn): dev.ide.ui.backend.UiCompletionItem = dev.ide.ui.backend.UiCompletionItem(
     label = i.str(),
@@ -2374,7 +2382,7 @@ internal fun r95(i: RemoteIn): dev.ide.ui.backend.UiCaret = dev.ide.ui.backend.U
 )
 
 internal fun w96(o: RemoteOut, v: dev.ide.ui.backend.UiSnippet) {
-    o.list(v.stops) { e411 -> w97(o, e411) }
+    o.list(v.stops) { e414 -> w97(o, e414) }
     o.int(v.finalCaretOffset)
 }
 internal fun r96(i: RemoteIn): dev.ide.ui.backend.UiSnippet = dev.ide.ui.backend.UiSnippet(
@@ -2384,8 +2392,8 @@ internal fun r96(i: RemoteIn): dev.ide.ui.backend.UiSnippet = dev.ide.ui.backend
 
 internal fun w97(o: RemoteOut, v: dev.ide.ui.backend.UiSnippetStop) {
     o.int(v.index)
-    o.list(v.ranges) { e409 -> w98(o, e409) }
-    o.list(v.choices) { e410 -> o.string(e410) }
+    o.list(v.ranges) { e412 -> w98(o, e412) }
+    o.list(v.choices) { e413 -> o.string(e413) }
 }
 internal fun r97(i: RemoteIn): dev.ide.ui.backend.UiSnippetStop = dev.ide.ui.backend.UiSnippetStop(
     index = i.int(),
@@ -2405,9 +2413,9 @@ internal fun r98(i: RemoteIn): dev.ide.ui.backend.UiTextRange = dev.ide.ui.backe
 internal fun w99(o: RemoteOut, v: dev.ide.ui.backend.UiChallengeDay) {
     o.string(v.date)
     o.bool(v.scheduled)
-    o.opt(v.reason) { n432 -> o.string(n432) }
+    o.opt(v.reason) { n435 -> o.string(n435) }
     o.long(v.nextDropAtMs)
-    o.opt(v.problem) { n433 -> w100(o, n433) }
+    o.opt(v.problem) { n436 -> w100(o, n436) }
     o.int(v.solvedCount)
     o.int(v.solverCount)
     w103(o, v.you)
@@ -2429,16 +2437,16 @@ internal fun w100(o: RemoteOut, v: dev.ide.ui.backend.UiChallengeProblem) {
     o.string(v.title)
     o.string(v.difficulty)
     o.string(v.statement)
-    o.opt(v.constraints) { n421 -> o.string(n421) }
-    o.opt(v.hint) { n422 -> o.string(n422) }
-    o.list(v.tags) { e423 -> o.string(e423) }
+    o.opt(v.constraints) { n424 -> o.string(n424) }
+    o.opt(v.hint) { n425 -> o.string(n425) }
+    o.list(v.tags) { e426 -> o.string(e426) }
     o.int(v.timeLimitMs)
     o.string(v.compareMode)
     o.int(v.featuredLanguage.ordinal)
-    o.opt(v.optimalTime) { n424 -> o.string(n424) }
-    o.opt(v.optimalSpace) { n425 -> o.string(n425) }
-    o.map(v.materials, { k426 -> o.int(k426.ordinal) }, { v427 -> w101(o, v427) })
-    o.list(v.samples) { e428 -> w102(o, e428) }
+    o.opt(v.optimalTime) { n427 -> o.string(n427) }
+    o.opt(v.optimalSpace) { n428 -> o.string(n428) }
+    o.map(v.materials, { k429 -> o.int(k429.ordinal) }, { v430 -> w101(o, v430) })
+    o.list(v.samples) { e431 -> w102(o, e431) }
 }
 internal fun r100(i: RemoteIn): dev.ide.ui.backend.UiChallengeProblem = dev.ide.ui.backend.UiChallengeProblem(
     id = i.str(),
@@ -2464,7 +2472,7 @@ internal fun w101(o: RemoteOut, v: dev.ide.ui.backend.UiChallengeMaterial) {
     o.string(v.harness)
     o.string(v.functionName)
     o.string(v.returnType)
-    o.list(v.parameters) { e419 -> o.string(e419.first); o.string(e419.second) }
+    o.list(v.parameters) { e422 -> o.string(e422.first); o.string(e422.second) }
 }
 internal fun r101(i: RemoteIn): dev.ide.ui.backend.UiChallengeMaterial = dev.ide.ui.backend.UiChallengeMaterial(
     language = dev.ide.ui.backend.UiChallengeLanguage.entries[i.int()],
@@ -2479,7 +2487,7 @@ internal fun w102(o: RemoteOut, v: dev.ide.ui.backend.UiChallengeSample) {
     o.int(v.idx)
     o.string(v.inputJson)
     o.string(v.expectedJson)
-    o.opt(v.explanation) { n420 -> o.string(n420) }
+    o.opt(v.explanation) { n423 -> o.string(n423) }
 }
 internal fun r102(i: RemoteIn): dev.ide.ui.backend.UiChallengeSample = dev.ide.ui.backend.UiChallengeSample(
     idx = i.int(),
@@ -2493,9 +2501,9 @@ internal fun w103(o: RemoteOut, v: dev.ide.ui.backend.UiChallengeProgress) {
     o.long(v.startedAtMs)
     o.int(v.attempts)
     o.bool(v.solved)
-    o.opt(v.language) { n429 -> o.int(n429.ordinal) }
-    o.opt(v.timeClass) { n430 -> o.string(n430) }
-    o.opt(v.spaceClass) { n431 -> o.string(n431) }
+    o.opt(v.language) { n432 -> o.int(n432.ordinal) }
+    o.opt(v.timeClass) { n433 -> o.string(n433) }
+    o.opt(v.spaceClass) { n434 -> o.string(n434) }
     o.long(v.runtimeNs)
     o.long(v.solveMs)
     o.int(v.streak)
@@ -2530,9 +2538,9 @@ internal fun r104(i: RemoteIn): dev.ide.ui.backend.UiFoldRegion = dev.ide.ui.bac
 
 internal fun w105(o: RemoteOut, v: dev.ide.ui.backend.UiInlayHint) {
     o.int(v.offset)
-    o.list(v.parts) { e435 -> w106(o, e435) }
+    o.list(v.parts) { e438 -> w106(o, e438) }
     o.int(v.kind.ordinal)
-    o.opt(v.tooltip) { n436 -> o.string(n436) }
+    o.opt(v.tooltip) { n439 -> o.string(n439) }
     o.bool(v.paddingLeft)
     o.bool(v.paddingRight)
 }
@@ -2547,7 +2555,7 @@ internal fun r105(i: RemoteIn): dev.ide.ui.backend.UiInlayHint = dev.ide.ui.back
 
 internal fun w106(o: RemoteOut, v: dev.ide.ui.backend.UiInlayPart) {
     o.string(v.text)
-    o.opt(v.navOffset) { n434 -> o.int(n434) }
+    o.opt(v.navOffset) { n437 -> o.int(n437) }
 }
 internal fun r106(i: RemoteIn): dev.ide.ui.backend.UiInlayPart = dev.ide.ui.backend.UiInlayPart(
     text = i.str(),
@@ -2556,7 +2564,7 @@ internal fun r106(i: RemoteIn): dev.ide.ui.backend.UiInlayPart = dev.ide.ui.back
 
 internal fun w107(o: RemoteOut, v: dev.ide.ui.backend.UiJudgeProgress) {
     o.int(v.language.ordinal)
-    o.list(v.steps) { e441 -> w108(o, e441) }
+    o.list(v.steps) { e444 -> w108(o, e444) }
     o.long(v.startedAtMs)
     o.bool(v.live)
     o.bool(v.finished)
@@ -2572,9 +2580,9 @@ internal fun r107(i: RemoteIn): dev.ide.ui.backend.UiJudgeProgress = dev.ide.ui.
 internal fun w108(o: RemoteOut, v: dev.ide.ui.backend.UiJudgeStepStatus) {
     o.int(v.step.ordinal)
     o.int(v.state.ordinal)
-    o.opt(v.ms) { n437 -> o.long(n437) }
-    o.opt(v.startedAtMs) { n438 -> o.long(n438) }
-    o.map(v.detail, { k439 -> o.string(k439) }, { v440 -> o.string(v440) })
+    o.opt(v.ms) { n440 -> o.long(n440) }
+    o.opt(v.startedAtMs) { n441 -> o.long(n441) }
+    o.map(v.detail, { k442 -> o.string(k442) }, { v443 -> o.string(v443) })
 }
 internal fun r108(i: RemoteIn): dev.ide.ui.backend.UiJudgeStepStatus = dev.ide.ui.backend.UiJudgeStepStatus(
     step = dev.ide.ui.backend.UiJudgeStep.entries[i.int()],
@@ -2586,11 +2594,11 @@ internal fun r108(i: RemoteIn): dev.ide.ui.backend.UiJudgeStepStatus = dev.ide.u
 
 internal fun w109(o: RemoteOut, v: dev.ide.ui.backend.UiChallengeProfile) {
     o.bool(v.signedIn)
-    o.opt(v.handle) { n444 -> o.string(n444) }
-    o.opt(v.displayName) { n445 -> o.string(n445) }
-    o.opt(v.avatarUrl) { n446 -> o.string(n446) }
+    o.opt(v.handle) { n447 -> o.string(n447) }
+    o.opt(v.displayName) { n448 -> o.string(n448) }
+    o.opt(v.avatarUrl) { n449 -> o.string(n449) }
     w110(o, v.streak)
-    o.list(v.history) { e447 -> w111(o, e447) }
+    o.list(v.history) { e450 -> w111(o, e450) }
 }
 internal fun r109(i: RemoteIn): dev.ide.ui.backend.UiChallengeProfile = dev.ide.ui.backend.UiChallengeProfile(
     signedIn = i.bool(),
@@ -2618,8 +2626,8 @@ internal fun w111(o: RemoteOut, v: dev.ide.ui.backend.UiChallengeHistoryEntry) {
     o.string(v.title)
     o.string(v.difficulty)
     o.bool(v.solved)
-    o.opt(v.language) { n442 -> o.int(n442.ordinal) }
-    o.opt(v.timeClass) { n443 -> o.string(n443) }
+    o.opt(v.language) { n445 -> o.int(n445.ordinal) }
+    o.opt(v.timeClass) { n446 -> o.string(n446) }
     o.long(v.runtimeNs)
     o.long(v.solveMs)
     o.int(v.attempts)
@@ -2639,8 +2647,8 @@ internal fun r111(i: RemoteIn): dev.ide.ui.backend.UiChallengeHistoryEntry = dev
 
 internal fun w112(o: RemoteOut, v: dev.ide.ui.backend.UiLocalRun) {
     o.bool(v.compiled)
-    o.list(v.diagnostics) { e450 -> o.string(e450) }
-    o.list(v.outcomes) { e451 -> w113(o, e451) }
+    o.list(v.diagnostics) { e453 -> o.string(e453) }
+    o.list(v.outcomes) { e454 -> w113(o, e454) }
     o.long(v.elapsedMs)
 }
 internal fun r112(i: RemoteIn): dev.ide.ui.backend.UiLocalRun = dev.ide.ui.backend.UiLocalRun(
@@ -2654,8 +2662,8 @@ internal fun w113(o: RemoteOut, v: dev.ide.ui.backend.UiSampleOutcome) {
     o.int(v.idx)
     o.bool(v.passed)
     o.string(v.expectedJson)
-    o.opt(v.actualJson) { n448 -> o.string(n448) }
-    o.opt(v.error) { n449 -> o.string(n449) }
+    o.opt(v.actualJson) { n451 -> o.string(n451) }
+    o.opt(v.error) { n452 -> o.string(n452) }
 }
 internal fun r113(i: RemoteIn): dev.ide.ui.backend.UiSampleOutcome = dev.ide.ui.backend.UiSampleOutcome(
     idx = i.int(),
@@ -2665,29 +2673,108 @@ internal fun r113(i: RemoteIn): dev.ide.ui.backend.UiSampleOutcome = dev.ide.ui.
     error = i.opt { i.str() },
 )
 
-internal fun w114(o: RemoteOut, v: dev.ide.ui.backend.UiChallengeVerdict) {
+internal fun w114(o: RemoteOut, v: dev.ide.ui.backend.UiChallengeSolution) {
+    o.string(v.date)
+    o.int(v.lock.ordinal)
+    o.opt(v.title) { n458 -> o.string(n458) }
+    o.opt(v.optimalTime) { n459 -> o.string(n459) }
+    o.opt(v.optimalSpace) { n460 -> o.string(n460) }
+    o.bool(v.counted)
+    o.list(v.referenceGrowth) { e461 -> w115(o, e461) }
+    o.opt(v.solution) { n462 -> w116(o, n462) }
+    o.opt(v.you) { n463 -> w116(o, n463) }
+}
+internal fun r114(i: RemoteIn): dev.ide.ui.backend.UiChallengeSolution = dev.ide.ui.backend.UiChallengeSolution(
+    date = i.str(),
+    lock = dev.ide.ui.backend.UiSolutionLock.entries[i.int()],
+    title = i.opt { i.str() },
+    optimalTime = i.opt { i.str() },
+    optimalSpace = i.opt { i.str() },
+    counted = i.bool(),
+    referenceGrowth = i.list { r115(i) },
+    solution = i.opt { r116(i) },
+    you = i.opt { r116(i) },
+)
+
+internal fun w115(o: RemoteOut, v: dev.ide.ui.backend.UiGrowthPoint) {
+    o.int(v.n)
+    o.long(v.ns)
+    o.long(v.bytes)
+}
+internal fun r115(i: RemoteIn): dev.ide.ui.backend.UiGrowthPoint = dev.ide.ui.backend.UiGrowthPoint(
+    n = i.int(),
+    ns = i.long(),
+    bytes = i.long(),
+)
+
+internal fun w116(o: RemoteOut, v: dev.ide.ui.backend.UiChallengeSolutionEntry) {
+    o.int(v.rank)
+    o.string(v.handle)
+    o.string(v.displayName)
+    o.opt(v.avatarUrl) { n455 -> o.string(n455) }
+    o.int(v.score)
+    o.int(v.language.ordinal)
+    o.string(v.timeClass)
+    o.string(v.spaceClass)
+    o.int(v.timeSteps)
+    o.int(v.spaceSteps)
+    o.long(v.runtimeNs)
+    o.long(v.allocBytes)
+    o.long(v.solveMs)
+    o.int(v.attempts)
+    o.string(v.source)
+    o.opt(v.growthExponent) { n456 -> o.double(n456) }
+    o.list(v.growth) { e457 -> w115(o, e457) }
+    o.int(v.testsPassed)
+    o.int(v.testsTotal)
+    o.bool(v.isYou)
+}
+internal fun r116(i: RemoteIn): dev.ide.ui.backend.UiChallengeSolutionEntry = dev.ide.ui.backend.UiChallengeSolutionEntry(
+    rank = i.int(),
+    handle = i.str(),
+    displayName = i.str(),
+    avatarUrl = i.opt { i.str() },
+    score = i.int(),
+    language = dev.ide.ui.backend.UiChallengeLanguage.entries[i.int()],
+    timeClass = i.str(),
+    spaceClass = i.str(),
+    timeSteps = i.int(),
+    spaceSteps = i.int(),
+    runtimeNs = i.long(),
+    allocBytes = i.long(),
+    solveMs = i.long(),
+    attempts = i.int(),
+    source = i.str(),
+    growthExponent = i.opt { i.double() },
+    growth = i.list { r115(i) },
+    testsPassed = i.int(),
+    testsTotal = i.int(),
+    isYou = i.bool(),
+)
+
+internal fun w117(o: RemoteOut, v: dev.ide.ui.backend.UiChallengeVerdict) {
     o.string(v.verdict)
     o.int(v.testsPassed)
     o.int(v.testsTotal)
-    o.opt(v.message) { n452 -> o.string(n452) }
-    o.opt(v.timeClass) { n453 -> o.string(n453) }
-    o.opt(v.spaceClass) { n454 -> o.string(n454) }
-    o.opt(v.growthExponent) { n455 -> o.double(n455) }
+    o.opt(v.message) { n464 -> o.string(n464) }
+    o.opt(v.timeClass) { n465 -> o.string(n465) }
+    o.opt(v.spaceClass) { n466 -> o.string(n466) }
+    o.opt(v.growthExponent) { n467 -> o.double(n467) }
     o.long(v.runtimeNs)
     o.long(v.allocBytes)
-    o.list(v.growth) { e456 -> w115(o, e456) }
-    o.list(v.referenceGrowth) { e457 -> w115(o, e457) }
-    o.opt(v.optimalTime) { n458 -> o.string(n458) }
-    o.opt(v.optimalSpace) { n459 -> o.string(n459) }
+    o.list(v.growth) { e468 -> w115(o, e468) }
+    o.list(v.referenceGrowth) { e469 -> w115(o, e469) }
+    o.opt(v.optimalTime) { n470 -> o.string(n470) }
+    o.opt(v.optimalSpace) { n471 -> o.string(n471) }
     o.bool(v.practice)
     o.int(v.judgedMs)
-    o.opt(v.rank) { n460 -> o.int(n460) }
-    o.opt(v.total) { n461 -> o.int(n461) }
-    o.opt(v.score) { n462 -> o.int(n462) }
-    o.opt(v.streak) { n463 -> o.int(n463) }
-    o.opt(v.error) { n464 -> o.string(n464) }
+    o.opt(v.rank) { n472 -> o.int(n472) }
+    o.opt(v.total) { n473 -> o.int(n473) }
+    o.opt(v.score) { n474 -> o.int(n474) }
+    o.opt(v.streak) { n475 -> o.int(n475) }
+    o.opt(v.error) { n476 -> o.string(n476) }
 }
-internal fun r114(i: RemoteIn): dev.ide.ui.backend.UiChallengeVerdict = dev.ide.ui.backend.UiChallengeVerdict(
+internal fun r117(i: RemoteIn): dev.ide.ui.backend.UiChallengeVerdict = dev.ide.ui.backend.UiChallengeVerdict(
     verdict = i.str(),
     testsPassed = i.int(),
     testsTotal = i.int(),
@@ -2710,28 +2797,17 @@ internal fun r114(i: RemoteIn): dev.ide.ui.backend.UiChallengeVerdict = dev.ide.
     error = i.opt { i.str() },
 )
 
-internal fun w115(o: RemoteOut, v: dev.ide.ui.backend.UiGrowthPoint) {
-    o.int(v.n)
-    o.long(v.ns)
-    o.long(v.bytes)
-}
-internal fun r115(i: RemoteIn): dev.ide.ui.backend.UiGrowthPoint = dev.ide.ui.backend.UiGrowthPoint(
-    n = i.int(),
-    ns = i.long(),
-    bytes = i.long(),
-)
-
-internal fun w116(o: RemoteOut, v: dev.ide.ui.backend.UiMacro) {
+internal fun w118(o: RemoteOut, v: dev.ide.ui.backend.UiMacro) {
     o.string(v.abbreviation)
     o.string(v.template)
     o.string(v.description)
-    o.list(v.languages) { e465 -> o.string(e465) }
+    o.list(v.languages) { e477 -> o.string(e477) }
     o.bool(v.enabled)
     o.bool(v.builtIn)
-    o.opt(v.receiverType) { n466 -> o.string(n466) }
+    o.opt(v.receiverType) { n478 -> o.string(n478) }
     o.bool(v.static)
 }
-internal fun r116(i: RemoteIn): dev.ide.ui.backend.UiMacro = dev.ide.ui.backend.UiMacro(
+internal fun r118(i: RemoteIn): dev.ide.ui.backend.UiMacro = dev.ide.ui.backend.UiMacro(
     abbreviation = i.str(),
     template = i.str(),
     description = i.str(),
@@ -2742,160 +2818,160 @@ internal fun r116(i: RemoteIn): dev.ide.ui.backend.UiMacro = dev.ide.ui.backend.
     static = i.bool(),
 )
 
-internal fun w117(o: RemoteOut, v: dev.ide.ui.backend.UiSymbolKey) {
+internal fun w119(o: RemoteOut, v: dev.ide.ui.backend.UiSymbolKey) {
     o.string(v.label)
     o.string(v.insert)
     o.bool(v.pinned)
-    o.opt(v.action) { n467 -> o.string(n467) }
+    o.opt(v.action) { n479 -> o.string(n479) }
 }
-internal fun r117(i: RemoteIn): dev.ide.ui.backend.UiSymbolKey = dev.ide.ui.backend.UiSymbolKey(
+internal fun r119(i: RemoteIn): dev.ide.ui.backend.UiSymbolKey = dev.ide.ui.backend.UiSymbolKey(
     label = i.str(),
     insert = i.str(),
     pinned = i.bool(),
     action = i.opt { i.str() },
 )
 
-internal fun w118(o: RemoteOut, v: dev.ide.ui.backend.UiAddResult) {
+internal fun w120(o: RemoteOut, v: dev.ide.ui.backend.UiAddResult) {
     o.bool(v.success)
     o.string(v.message)
     o.int(v.added)
 }
-internal fun r118(i: RemoteIn): dev.ide.ui.backend.UiAddResult = dev.ide.ui.backend.UiAddResult(
+internal fun r120(i: RemoteIn): dev.ide.ui.backend.UiAddResult = dev.ide.ui.backend.UiAddResult(
     success = i.bool(),
     message = i.str(),
     added = i.int(),
 )
 
-internal fun w119(o: RemoteOut, v: dev.ide.ui.backend.UiArtifactSearch) {
-    o.list(v.hits) { e469 -> w120(o, e469) }
+internal fun w121(o: RemoteOut, v: dev.ide.ui.backend.UiArtifactSearch) {
+    o.list(v.hits) { e481 -> w122(o, e481) }
     o.bool(v.indexUnavailable)
 }
-internal fun r119(i: RemoteIn): dev.ide.ui.backend.UiArtifactSearch = dev.ide.ui.backend.UiArtifactSearch(
-    hits = i.list { r120(i) },
+internal fun r121(i: RemoteIn): dev.ide.ui.backend.UiArtifactSearch = dev.ide.ui.backend.UiArtifactSearch(
+    hits = i.list { r122(i) },
     indexUnavailable = i.bool(),
 )
 
-internal fun w120(o: RemoteOut, v: dev.ide.ui.backend.UiArtifactHit) {
+internal fun w122(o: RemoteOut, v: dev.ide.ui.backend.UiArtifactHit) {
     o.string(v.coordinate)
     o.string(v.packaging)
     o.bool(v.compatible)
-    o.opt(v.incompatibleReason) { n468 -> o.string(n468) }
+    o.opt(v.incompatibleReason) { n480 -> o.string(n480) }
 }
-internal fun r120(i: RemoteIn): dev.ide.ui.backend.UiArtifactHit = dev.ide.ui.backend.UiArtifactHit(
+internal fun r122(i: RemoteIn): dev.ide.ui.backend.UiArtifactHit = dev.ide.ui.backend.UiArtifactHit(
     coordinate = i.str(),
     packaging = i.str(),
     compatible = i.bool(),
     incompatibleReason = i.opt { i.str() },
 )
 
-internal fun w121(o: RemoteOut, v: dev.ide.ui.backend.UiCachedVersion) {
+internal fun w123(o: RemoteOut, v: dev.ide.ui.backend.UiCachedVersion) {
     o.string(v.version)
     o.long(v.bytes)
 }
-internal fun r121(i: RemoteIn): dev.ide.ui.backend.UiCachedVersion = dev.ide.ui.backend.UiCachedVersion(
+internal fun r123(i: RemoteIn): dev.ide.ui.backend.UiCachedVersion = dev.ide.ui.backend.UiCachedVersion(
     version = i.str(),
     bytes = i.long(),
 )
 
-internal fun w122(o: RemoteOut, v: dev.ide.ui.backend.UiDepModule) {
+internal fun w124(o: RemoteOut, v: dev.ide.ui.backend.UiDepModule) {
     o.string(v.name)
     o.string(v.buildSystem)
     o.bool(v.acceptsAar)
     o.int(v.dependencyCount)
 }
-internal fun r122(i: RemoteIn): dev.ide.ui.backend.UiDepModule = dev.ide.ui.backend.UiDepModule(
+internal fun r124(i: RemoteIn): dev.ide.ui.backend.UiDepModule = dev.ide.ui.backend.UiDepModule(
     name = i.str(),
     buildSystem = i.str(),
     acceptsAar = i.bool(),
     dependencyCount = i.int(),
 )
 
-internal fun w123(o: RemoteOut, v: dev.ide.ui.backend.DepsResolveState) {
+internal fun w125(o: RemoteOut, v: dev.ide.ui.backend.DepsResolveState) {
     o.bool(v.resolving)
     o.string(v.message)
     o.double(v.fraction)
-    o.list(v.log) { e470 -> o.string(e470) }
-    o.list(v.unresolved) { e471 -> w124(o, e471) }
-    o.list(v.warnings) { e472 -> w125(o, e472) }
+    o.list(v.log) { e482 -> o.string(e482) }
+    o.list(v.unresolved) { e483 -> w126(o, e483) }
+    o.list(v.warnings) { e484 -> w127(o, e484) }
 }
-internal fun r123(i: RemoteIn): dev.ide.ui.backend.DepsResolveState = dev.ide.ui.backend.DepsResolveState(
+internal fun r125(i: RemoteIn): dev.ide.ui.backend.DepsResolveState = dev.ide.ui.backend.DepsResolveState(
     resolving = i.bool(),
     message = i.str(),
     fraction = i.double(),
     log = i.list { i.str() },
-    unresolved = i.list { r124(i) },
-    warnings = i.list { r125(i) },
+    unresolved = i.list { r126(i) },
+    warnings = i.list { r127(i) },
 )
 
-internal fun w124(o: RemoteOut, v: dev.ide.ui.backend.UiUnresolvedDependency) {
+internal fun w126(o: RemoteOut, v: dev.ide.ui.backend.UiUnresolvedDependency) {
     o.string(v.module)
     o.string(v.coordinate)
     o.string(v.reason)
 }
-internal fun r124(i: RemoteIn): dev.ide.ui.backend.UiUnresolvedDependency = dev.ide.ui.backend.UiUnresolvedDependency(
+internal fun r126(i: RemoteIn): dev.ide.ui.backend.UiUnresolvedDependency = dev.ide.ui.backend.UiUnresolvedDependency(
     module = i.str(),
     coordinate = i.str(),
     reason = i.str(),
 )
 
-internal fun w125(o: RemoteOut, v: dev.ide.ui.backend.UiDependencyWarning) {
+internal fun w127(o: RemoteOut, v: dev.ide.ui.backend.UiDependencyWarning) {
     o.string(v.module)
     o.string(v.coordinate)
     o.string(v.message)
 }
-internal fun r125(i: RemoteIn): dev.ide.ui.backend.UiDependencyWarning = dev.ide.ui.backend.UiDependencyWarning(
+internal fun r127(i: RemoteIn): dev.ide.ui.backend.UiDependencyWarning = dev.ide.ui.backend.UiDependencyWarning(
     module = i.str(),
     coordinate = i.str(),
     message = i.str(),
 )
 
-internal fun w126(o: RemoteOut, v: dev.ide.ui.backend.UiMissingLibrary) {
+internal fun w128(o: RemoteOut, v: dev.ide.ui.backend.UiMissingLibrary) {
     o.string(v.coordinate)
     o.string(v.label)
 }
-internal fun r126(i: RemoteIn): dev.ide.ui.backend.UiMissingLibrary = dev.ide.ui.backend.UiMissingLibrary(
+internal fun r128(i: RemoteIn): dev.ide.ui.backend.UiMissingLibrary = dev.ide.ui.backend.UiMissingLibrary(
     coordinate = i.str(),
     label = i.str(),
 )
 
-internal fun w127(o: RemoteOut, v: dev.ide.ui.backend.UiModuleDeps) {
+internal fun w129(o: RemoteOut, v: dev.ide.ui.backend.UiModuleDeps) {
     o.string(v.moduleName)
     o.string(v.buildSystem)
     o.bool(v.acceptsAar)
-    o.list(v.declared) { e479 -> w128(o, e479) }
-    o.list(v.nodes) { e480 -> w128(o, e480) }
-    o.list(v.conflicts) { e481 -> w129(o, e481) }
-    o.list(v.cycles) { e482 -> o.list(e482) { e483 -> o.string(e483) } }
-    o.list(v.unresolved) { e484 -> o.string(e484) }
+    o.list(v.declared) { e491 -> w130(o, e491) }
+    o.list(v.nodes) { e492 -> w130(o, e492) }
+    o.list(v.conflicts) { e493 -> w131(o, e493) }
+    o.list(v.cycles) { e494 -> o.list(e494) { e495 -> o.string(e495) } }
+    o.list(v.unresolved) { e496 -> o.string(e496) }
 }
-internal fun r127(i: RemoteIn): dev.ide.ui.backend.UiModuleDeps = dev.ide.ui.backend.UiModuleDeps(
+internal fun r129(i: RemoteIn): dev.ide.ui.backend.UiModuleDeps = dev.ide.ui.backend.UiModuleDeps(
     moduleName = i.str(),
     buildSystem = i.str(),
     acceptsAar = i.bool(),
-    declared = i.list { r128(i) },
-    nodes = i.list { r128(i) },
-    conflicts = i.list { r129(i) },
+    declared = i.list { r130(i) },
+    nodes = i.list { r130(i) },
+    conflicts = i.list { r131(i) },
     cycles = i.list { i.list { i.str() } },
     unresolved = i.list { i.str() },
 )
 
-internal fun w128(o: RemoteOut, v: dev.ide.ui.backend.UiDependencyNode) {
+internal fun w130(o: RemoteOut, v: dev.ide.ui.backend.UiDependencyNode) {
     o.string(v.coordinate)
     o.string(v.group)
     o.string(v.name)
     o.string(v.version)
     o.int(v.kind.ordinal)
     o.bool(v.declared)
-    o.opt(v.scope) { n473 -> o.string(n473) }
+    o.opt(v.scope) { n485 -> o.string(n485) }
     o.bool(v.compatible)
-    o.opt(v.incompatibleReason) { n474 -> o.string(n474) }
+    o.opt(v.incompatibleReason) { n486 -> o.string(n486) }
     o.bool(v.inConflict)
     o.bool(v.local)
-    o.list(v.children) { e475 -> o.string(e475) }
-    o.list(v.exclusions) { e476 -> o.string(e476) }
-    o.opt(v.variant) { n477 -> o.string(n477) }
+    o.list(v.children) { e487 -> o.string(e487) }
+    o.list(v.exclusions) { e488 -> o.string(e488) }
+    o.opt(v.variant) { n489 -> o.string(n489) }
 }
-internal fun r128(i: RemoteIn): dev.ide.ui.backend.UiDependencyNode = dev.ide.ui.backend.UiDependencyNode(
+internal fun r130(i: RemoteIn): dev.ide.ui.backend.UiDependencyNode = dev.ide.ui.backend.UiDependencyNode(
     coordinate = i.str(),
     group = i.str(),
     name = i.str(),
@@ -2912,36 +2988,36 @@ internal fun r128(i: RemoteIn): dev.ide.ui.backend.UiDependencyNode = dev.ide.ui
     variant = i.opt { i.str() },
 )
 
-internal fun w129(o: RemoteOut, v: dev.ide.ui.backend.UiVersionConflict) {
+internal fun w131(o: RemoteOut, v: dev.ide.ui.backend.UiVersionConflict) {
     o.string(v.artifact)
-    o.list(v.requested) { e478 -> o.string(e478) }
+    o.list(v.requested) { e490 -> o.string(e490) }
     o.string(v.chosen)
 }
-internal fun r129(i: RemoteIn): dev.ide.ui.backend.UiVersionConflict = dev.ide.ui.backend.UiVersionConflict(
+internal fun r131(i: RemoteIn): dev.ide.ui.backend.UiVersionConflict = dev.ide.ui.backend.UiVersionConflict(
     artifact = i.str(),
     requested = i.list { i.str() },
     chosen = i.str(),
 )
 
-internal fun w130(o: RemoteOut, v: dev.ide.ui.backend.UiRepository) {
+internal fun w132(o: RemoteOut, v: dev.ide.ui.backend.UiRepository) {
     o.string(v.name)
     o.string(v.url)
     o.bool(v.builtin)
 }
-internal fun r130(i: RemoteIn): dev.ide.ui.backend.UiRepository = dev.ide.ui.backend.UiRepository(
+internal fun r132(i: RemoteIn): dev.ide.ui.backend.UiRepository = dev.ide.ui.backend.UiRepository(
     name = i.str(),
     url = i.str(),
     builtin = i.bool(),
 )
 
-internal fun w131(o: RemoteOut, v: dev.ide.ui.backend.UiError) {
+internal fun w133(o: RemoteOut, v: dev.ide.ui.backend.UiError) {
     o.int(v.id)
     o.string(v.title)
     o.string(v.message)
     o.string(v.detail)
     o.string(v.timeLabel)
 }
-internal fun r131(i: RemoteIn): dev.ide.ui.backend.UiError = dev.ide.ui.backend.UiError(
+internal fun r133(i: RemoteIn): dev.ide.ui.backend.UiError = dev.ide.ui.backend.UiError(
     id = i.int(),
     title = i.str(),
     message = i.str(),
@@ -2949,17 +3025,17 @@ internal fun r131(i: RemoteIn): dev.ide.ui.backend.UiError = dev.ide.ui.backend.
     timeLabel = i.str(),
 )
 
-internal fun w132(o: RemoteOut, v: dev.ide.ui.backend.UiLogEntry) {
+internal fun w134(o: RemoteOut, v: dev.ide.ui.backend.UiLogEntry) {
     o.string(v.level)
     o.string(v.tag)
     o.string(v.message)
     o.long(v.timestampMs)
     o.string(v.timeLabel)
     o.string(v.thread)
-    o.opt(v.stackTrace) { n485 -> o.string(n485) }
-    o.opt(v.source) { n486 -> o.string(n486) }
+    o.opt(v.stackTrace) { n497 -> o.string(n497) }
+    o.opt(v.source) { n498 -> o.string(n498) }
 }
-internal fun r132(i: RemoteIn): dev.ide.ui.backend.UiLogEntry = dev.ide.ui.backend.UiLogEntry(
+internal fun r134(i: RemoteIn): dev.ide.ui.backend.UiLogEntry = dev.ide.ui.backend.UiLogEntry(
     level = i.str(),
     tag = i.str(),
     message = i.str(),
@@ -2970,14 +3046,14 @@ internal fun r132(i: RemoteIn): dev.ide.ui.backend.UiLogEntry = dev.ide.ui.backe
     source = i.opt { i.str() },
 )
 
-internal fun w133(o: RemoteOut, v: dev.ide.ui.backend.UiAction) {
+internal fun w135(o: RemoteOut, v: dev.ide.ui.backend.UiAction) {
     o.int(v.id)
     o.string(v.title)
     o.int(v.kind.ordinal)
-    o.opt(v.actionId) { n487 -> o.string(n487) }
-    o.opt(v.iconId) { n488 -> o.string(n488) }
+    o.opt(v.actionId) { n499 -> o.string(n499) }
+    o.opt(v.iconId) { n500 -> o.string(n500) }
 }
-internal fun r133(i: RemoteIn): dev.ide.ui.backend.UiAction = dev.ide.ui.backend.UiAction(
+internal fun r135(i: RemoteIn): dev.ide.ui.backend.UiAction = dev.ide.ui.backend.UiAction(
     id = i.int(),
     title = i.str(),
     kind = dev.ide.ui.backend.UiActionKind.entries[i.int()],
@@ -2985,35 +3061,35 @@ internal fun r133(i: RemoteIn): dev.ide.ui.backend.UiAction = dev.ide.ui.backend
     iconId = i.opt { i.str() },
 )
 
-internal fun w134(o: RemoteOut, v: dev.ide.ui.backend.UiActionEdits) {
-    o.list(v.focal) { e489 -> w7(o, e489) }
-    o.map(v.others, { k490 -> o.string(k490) }, { v491 -> o.list(v491) { e492 -> w7(o, e492) } })
+internal fun w136(o: RemoteOut, v: dev.ide.ui.backend.UiActionEdits) {
+    o.list(v.focal) { e501 -> w7(o, e501) }
+    o.map(v.others, { k502 -> o.string(k502) }, { v503 -> o.list(v503) { e504 -> w7(o, e504) } })
 }
-internal fun r134(i: RemoteIn): dev.ide.ui.backend.UiActionEdits = dev.ide.ui.backend.UiActionEdits(
+internal fun r136(i: RemoteIn): dev.ide.ui.backend.UiActionEdits = dev.ide.ui.backend.UiActionEdits(
     focal = i.list { r7(i) },
     others = i.map({ i.str() }, { i.list { r7(i) } }),
 )
 
-internal fun w135(o: RemoteOut, v: dev.ide.ui.backend.UiEditorDecorations) {
-    o.list(v.ranges) { e496 -> w136(o, e496) }
-    o.list(v.gutter) { e497 -> w137(o, e497) }
-    o.list(v.inlays) { e498 -> w105(o, e498) }
+internal fun w137(o: RemoteOut, v: dev.ide.ui.backend.UiEditorDecorations) {
+    o.list(v.ranges) { e508 -> w138(o, e508) }
+    o.list(v.gutter) { e509 -> w139(o, e509) }
+    o.list(v.inlays) { e510 -> w105(o, e510) }
 }
-internal fun r135(i: RemoteIn): dev.ide.ui.backend.UiEditorDecorations = dev.ide.ui.backend.UiEditorDecorations(
-    ranges = i.list { r136(i) },
-    gutter = i.list { r137(i) },
+internal fun r137(i: RemoteIn): dev.ide.ui.backend.UiEditorDecorations = dev.ide.ui.backend.UiEditorDecorations(
+    ranges = i.list { r138(i) },
+    gutter = i.list { r139(i) },
     inlays = i.list { r105(i) },
 )
 
-internal fun w136(o: RemoteOut, v: dev.ide.ui.backend.UiTextDecoration) {
+internal fun w138(o: RemoteOut, v: dev.ide.ui.backend.UiTextDecoration) {
     o.int(v.startOffset)
     o.int(v.endOffset)
     o.int(v.style.ordinal)
     o.int(v.tint.ordinal)
-    o.opt(v.tooltip) { n493 -> o.string(n493) }
+    o.opt(v.tooltip) { n505 -> o.string(n505) }
     o.int(v.order)
 }
-internal fun r136(i: RemoteIn): dev.ide.ui.backend.UiTextDecoration = dev.ide.ui.backend.UiTextDecoration(
+internal fun r138(i: RemoteIn): dev.ide.ui.backend.UiTextDecoration = dev.ide.ui.backend.UiTextDecoration(
     startOffset = i.int(),
     endOffset = i.int(),
     style = dev.ide.ui.backend.UiDecorationStyle.entries[i.int()],
@@ -3022,16 +3098,16 @@ internal fun r136(i: RemoteIn): dev.ide.ui.backend.UiTextDecoration = dev.ide.ui
     order = i.int(),
 )
 
-internal fun w137(o: RemoteOut, v: dev.ide.ui.backend.UiGutterMark) {
+internal fun w139(o: RemoteOut, v: dev.ide.ui.backend.UiGutterMark) {
     o.int(v.line)
     o.string(v.iconId)
     o.int(v.tint.ordinal)
-    o.opt(v.tooltip) { n494 -> o.string(n494) }
-    o.opt(v.actionId) { n495 -> o.string(n495) }
+    o.opt(v.tooltip) { n506 -> o.string(n506) }
+    o.opt(v.actionId) { n507 -> o.string(n507) }
     o.int(v.order)
     o.int(v.anchorOffset)
 }
-internal fun r137(i: RemoteIn): dev.ide.ui.backend.UiGutterMark = dev.ide.ui.backend.UiGutterMark(
+internal fun r139(i: RemoteIn): dev.ide.ui.backend.UiGutterMark = dev.ide.ui.backend.UiGutterMark(
     line = i.int(),
     iconId = i.str(),
     tint = dev.ide.ui.backend.UiDecorationTint.entries[i.int()],
@@ -3041,24 +3117,24 @@ internal fun r137(i: RemoteIn): dev.ide.ui.backend.UiGutterMark = dev.ide.ui.bac
     anchorOffset = i.int(),
 )
 
-internal fun w138(o: RemoteOut, v: dev.ide.ui.backend.UiDefinition) {
+internal fun w140(o: RemoteOut, v: dev.ide.ui.backend.UiDefinition) {
     o.string(v.path)
     o.int(v.offset)
 }
-internal fun r138(i: RemoteIn): dev.ide.ui.backend.UiDefinition = dev.ide.ui.backend.UiDefinition(
+internal fun r140(i: RemoteIn): dev.ide.ui.backend.UiDefinition = dev.ide.ui.backend.UiDefinition(
     path = i.str(),
     offset = i.int(),
 )
 
-internal fun w139(o: RemoteOut, v: dev.ide.ui.backend.UiFileSymbol) {
+internal fun w141(o: RemoteOut, v: dev.ide.ui.backend.UiFileSymbol) {
     o.string(v.name)
-    o.opt(v.detail) { n499 -> o.string(n499) }
+    o.opt(v.detail) { n511 -> o.string(n511) }
     o.string(v.kind)
     o.int(v.nameOffset)
     o.int(v.endOffset)
     o.int(v.depth)
 }
-internal fun r139(i: RemoteIn): dev.ide.ui.backend.UiFileSymbol = dev.ide.ui.backend.UiFileSymbol(
+internal fun r141(i: RemoteIn): dev.ide.ui.backend.UiFileSymbol = dev.ide.ui.backend.UiFileSymbol(
     name = i.str(),
     detail = i.opt { i.str() },
     kind = i.str(),
@@ -3067,90 +3143,90 @@ internal fun r139(i: RemoteIn): dev.ide.ui.backend.UiFileSymbol = dev.ide.ui.bac
     depth = i.int(),
 )
 
-internal fun w140(o: RemoteOut, v: dev.ide.ui.backend.UiInheritorMarker) {
+internal fun w142(o: RemoteOut, v: dev.ide.ui.backend.UiInheritorMarker) {
     o.int(v.offset)
     o.bool(v.isInterface)
-    o.list(v.targets) { e500 -> w141(o, e500) }
+    o.list(v.targets) { e512 -> w143(o, e512) }
 }
-internal fun r140(i: RemoteIn): dev.ide.ui.backend.UiInheritorMarker = dev.ide.ui.backend.UiInheritorMarker(
+internal fun r142(i: RemoteIn): dev.ide.ui.backend.UiInheritorMarker = dev.ide.ui.backend.UiInheritorMarker(
     offset = i.int(),
     isInterface = i.bool(),
-    targets = i.list { r141(i) },
+    targets = i.list { r143(i) },
 )
 
-internal fun w141(o: RemoteOut, v: dev.ide.ui.backend.UiInheritorTarget) {
+internal fun w143(o: RemoteOut, v: dev.ide.ui.backend.UiInheritorTarget) {
     o.string(v.fqn)
     o.string(v.kind)
 }
-internal fun r141(i: RemoteIn): dev.ide.ui.backend.UiInheritorTarget = dev.ide.ui.backend.UiInheritorTarget(
+internal fun r143(i: RemoteIn): dev.ide.ui.backend.UiInheritorTarget = dev.ide.ui.backend.UiInheritorTarget(
     fqn = i.str(),
     kind = i.str(),
 )
 
-internal fun w142(o: RemoteOut, v: dev.ide.ui.backend.UiLibraryContent) {
+internal fun w144(o: RemoteOut, v: dev.ide.ui.backend.UiLibraryContent) {
     o.string(v.path)
     o.string(v.name)
     o.string(v.text)
     o.string(v.kind)
 }
-internal fun r142(i: RemoteIn): dev.ide.ui.backend.UiLibraryContent = dev.ide.ui.backend.UiLibraryContent(
+internal fun r144(i: RemoteIn): dev.ide.ui.backend.UiLibraryContent = dev.ide.ui.backend.UiLibraryContent(
     path = i.str(),
     name = i.str(),
     text = i.str(),
     kind = i.str(),
 )
 
-internal fun w143(o: RemoteOut, v: dev.ide.ui.backend.UiHistoryVersion) {
+internal fun w145(o: RemoteOut, v: dev.ide.ui.backend.UiHistoryVersion) {
     o.long(v.id)
     o.long(v.timeMs)
     o.long(v.sizeChars)
 }
-internal fun r143(i: RemoteIn): dev.ide.ui.backend.UiHistoryVersion = dev.ide.ui.backend.UiHistoryVersion(
+internal fun r145(i: RemoteIn): dev.ide.ui.backend.UiHistoryVersion = dev.ide.ui.backend.UiHistoryVersion(
     id = i.long(),
     timeMs = i.long(),
     sizeChars = i.long(),
 )
 
-internal fun w144(o: RemoteOut, v: dev.ide.ui.backend.UiNavOption) {
+internal fun w146(o: RemoteOut, v: dev.ide.ui.backend.UiNavOption) {
     o.int(v.kind.ordinal)
-    o.list(v.targets) { e501 -> w145(o, e501) }
+    o.list(v.targets) { e513 -> w147(o, e513) }
 }
-internal fun r144(i: RemoteIn): dev.ide.ui.backend.UiNavOption = dev.ide.ui.backend.UiNavOption(
+internal fun r146(i: RemoteIn): dev.ide.ui.backend.UiNavOption = dev.ide.ui.backend.UiNavOption(
     kind = dev.ide.ui.backend.UiNavKind.entries[i.int()],
-    targets = i.list { r145(i) },
+    targets = i.list { r147(i) },
 )
 
-internal fun w145(o: RemoteOut, v: dev.ide.ui.backend.UiNavTarget) {
+internal fun w147(o: RemoteOut, v: dev.ide.ui.backend.UiNavTarget) {
     o.string(v.path)
     o.int(v.offset)
     o.string(v.label)
     o.string(v.kind)
 }
-internal fun r145(i: RemoteIn): dev.ide.ui.backend.UiNavTarget = dev.ide.ui.backend.UiNavTarget(
+internal fun r147(i: RemoteIn): dev.ide.ui.backend.UiNavTarget = dev.ide.ui.backend.UiNavTarget(
     path = i.str(),
     offset = i.int(),
     label = i.str(),
     kind = i.str(),
 )
 
-internal fun w146(o: RemoteOut, v: dev.ide.ui.backend.UiRenameTarget) {
+internal fun w148(o: RemoteOut, v: dev.ide.ui.backend.UiRenameTarget) {
     o.string(v.oldName)
     o.string(v.kind)
 }
-internal fun r146(i: RemoteIn): dev.ide.ui.backend.UiRenameTarget = dev.ide.ui.backend.UiRenameTarget(
+internal fun r148(i: RemoteIn): dev.ide.ui.backend.UiRenameTarget = dev.ide.ui.backend.UiRenameTarget(
     oldName = i.str(),
     kind = i.str(),
 )
 
-internal fun w147(o: RemoteOut, v: dev.ide.ui.backend.UiQuickDoc) {
+internal fun w149(o: RemoteOut, v: dev.ide.ui.backend.UiQuickDoc) {
     o.string(v.signature)
     o.string(v.name)
     o.string(v.kind)
-    o.opt(v.container) { n502 -> o.string(n502) }
-    o.opt(v.doc) { n503 -> o.string(n503) }
+    o.opt(v.container) { n514 -> o.string(n514) }
+    o.opt(v.doc) { n515 -> o.string(n515) }
     o.string(v.docFormat)
 }
-internal fun r147(i: RemoteIn): dev.ide.ui.backend.UiQuickDoc = dev.ide.ui.backend.UiQuickDoc(
+internal fun r149(i: RemoteIn): dev.ide.ui.backend.UiQuickDoc = dev.ide.ui.backend.UiQuickDoc(
     signature = i.str(),
     name = i.str(),
     kind = i.str(),
@@ -3159,14 +3235,14 @@ internal fun r147(i: RemoteIn): dev.ide.ui.backend.UiQuickDoc = dev.ide.ui.backe
     docFormat = i.str(),
 )
 
-internal fun w148(o: RemoteOut, v: dev.ide.ui.backend.UiRenameResult) {
+internal fun w150(o: RemoteOut, v: dev.ide.ui.backend.UiRenameResult) {
     o.bool(v.success)
     o.string(v.message)
     o.int(v.occurrences)
     o.int(v.filesChanged)
-    o.opt(v.newPath) { n504 -> o.string(n504) }
+    o.opt(v.newPath) { n516 -> o.string(n516) }
 }
-internal fun r148(i: RemoteIn): dev.ide.ui.backend.UiRenameResult = dev.ide.ui.backend.UiRenameResult(
+internal fun r150(i: RemoteIn): dev.ide.ui.backend.UiRenameResult = dev.ide.ui.backend.UiRenameResult(
     success = i.bool(),
     message = i.str(),
     occurrences = i.int(),
@@ -3174,108 +3250,108 @@ internal fun r148(i: RemoteIn): dev.ide.ui.backend.UiRenameResult = dev.ide.ui.b
     newPath = i.opt { i.str() },
 )
 
-internal fun w149(o: RemoteOut, v: dev.ide.ui.backend.UiResourceSwatch) {
+internal fun w151(o: RemoteOut, v: dev.ide.ui.backend.UiResourceSwatch) {
     o.int(v.offset)
-    o.opt(v.color) { n530 -> o.long(n530) }
-    o.opt(v.image) { n531 -> w150(o, n531) }
-    o.opt(v.targetPath) { n532 -> o.string(n532) }
+    o.opt(v.color) { n542 -> o.long(n542) }
+    o.opt(v.image) { n543 -> w152(o, n543) }
+    o.opt(v.targetPath) { n544 -> o.string(n544) }
     o.int(v.targetOffset)
 }
-internal fun r149(i: RemoteIn): dev.ide.ui.backend.UiResourceSwatch = dev.ide.ui.backend.UiResourceSwatch(
+internal fun r151(i: RemoteIn): dev.ide.ui.backend.UiResourceSwatch = dev.ide.ui.backend.UiResourceSwatch(
     offset = i.int(),
     color = i.opt { i.long() },
-    image = i.opt { r150(i) },
+    image = i.opt { r152(i) },
     targetPath = i.opt { i.str() },
     targetOffset = i.int(),
 )
 
-internal fun w150(o: RemoteOut, v: dev.ide.ui.backend.UiProjectIcon) {
+internal fun w152(o: RemoteOut, v: dev.ide.ui.backend.UiProjectIcon) {
     when (v) {
-        is dev.ide.ui.backend.UiProjectIcon.Drawable -> { o.int(0); w151(o, v) }
-        is dev.ide.ui.backend.UiProjectIcon.Raster -> { o.int(1); w179(o, v) }
+        is dev.ide.ui.backend.UiProjectIcon.Drawable -> { o.int(0); w153(o, v) }
+        is dev.ide.ui.backend.UiProjectIcon.Raster -> { o.int(1); w181(o, v) }
     }
 }
-internal fun r150(i: RemoteIn): dev.ide.ui.backend.UiProjectIcon = when (val tag = i.int()) {
-    0 -> r151(i)
-    1 -> r179(i)
+internal fun r152(i: RemoteIn): dev.ide.ui.backend.UiProjectIcon = when (val tag = i.int()) {
+    0 -> r153(i)
+    1 -> r181(i)
     else -> error("unknown UiProjectIcon $tag")
 }
 
-internal fun w151(o: RemoteOut, v: dev.ide.ui.backend.UiProjectIcon.Drawable) {
-    w152(o, v.drawable)
+internal fun w153(o: RemoteOut, v: dev.ide.ui.backend.UiProjectIcon.Drawable) {
+    w154(o, v.drawable)
 }
-internal fun r151(i: RemoteIn): dev.ide.ui.backend.UiProjectIcon.Drawable = dev.ide.ui.backend.UiProjectIcon.Drawable(
-    drawable = r152(i),
+internal fun r153(i: RemoteIn): dev.ide.ui.backend.UiProjectIcon.Drawable = dev.ide.ui.backend.UiProjectIcon.Drawable(
+    drawable = r154(i),
 )
 
-internal fun w152(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable) {
+internal fun w154(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable) {
     when (v) {
-        is dev.ide.ui.backend.UiDrawable.AnimatedVector -> { o.int(0); w153(o, v) }
-        is dev.ide.ui.backend.UiDrawable.Bitmap -> { o.int(1); w168(o, v) }
-        is dev.ide.ui.backend.UiDrawable.Frames -> { o.int(2); w169(o, v) }
-        is dev.ide.ui.backend.UiDrawable.Layers -> { o.int(3); w171(o, v) }
-        is dev.ide.ui.backend.UiDrawable.Shape -> { o.int(4); w173(o, v) }
-        is dev.ide.ui.backend.UiDrawable.SolidColor -> { o.int(5); w175(o, v) }
-        is dev.ide.ui.backend.UiDrawable.States -> { o.int(6); w176(o, v) }
-        is dev.ide.ui.backend.UiDrawable.Unsupported -> { o.int(7); w178(o, v) }
-        is dev.ide.ui.backend.UiDrawable.Vector -> { o.int(8); w154(o, v) }
+        is dev.ide.ui.backend.UiDrawable.AnimatedVector -> { o.int(0); w155(o, v) }
+        is dev.ide.ui.backend.UiDrawable.Bitmap -> { o.int(1); w170(o, v) }
+        is dev.ide.ui.backend.UiDrawable.Frames -> { o.int(2); w171(o, v) }
+        is dev.ide.ui.backend.UiDrawable.Layers -> { o.int(3); w173(o, v) }
+        is dev.ide.ui.backend.UiDrawable.Shape -> { o.int(4); w175(o, v) }
+        is dev.ide.ui.backend.UiDrawable.SolidColor -> { o.int(5); w177(o, v) }
+        is dev.ide.ui.backend.UiDrawable.States -> { o.int(6); w178(o, v) }
+        is dev.ide.ui.backend.UiDrawable.Unsupported -> { o.int(7); w180(o, v) }
+        is dev.ide.ui.backend.UiDrawable.Vector -> { o.int(8); w156(o, v) }
     }
 }
-internal fun r152(i: RemoteIn): dev.ide.ui.backend.UiDrawable = when (val tag = i.int()) {
-    0 -> r153(i)
-    1 -> r168(i)
-    2 -> r169(i)
-    3 -> r171(i)
-    4 -> r173(i)
-    5 -> r175(i)
-    6 -> r176(i)
-    7 -> r178(i)
-    8 -> r154(i)
+internal fun r154(i: RemoteIn): dev.ide.ui.backend.UiDrawable = when (val tag = i.int()) {
+    0 -> r155(i)
+    1 -> r170(i)
+    2 -> r171(i)
+    3 -> r173(i)
+    4 -> r175(i)
+    5 -> r177(i)
+    6 -> r178(i)
+    7 -> r180(i)
+    8 -> r156(i)
     else -> error("unknown UiDrawable $tag")
 }
 
-internal fun w153(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.AnimatedVector) {
-    w154(o, v.vector)
-    o.list(v.targets) { e519 -> w158(o, e519) }
+internal fun w155(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.AnimatedVector) {
+    w156(o, v.vector)
+    o.list(v.targets) { e531 -> w160(o, e531) }
 }
-internal fun r153(i: RemoteIn): dev.ide.ui.backend.UiDrawable.AnimatedVector = dev.ide.ui.backend.UiDrawable.AnimatedVector(
-    vector = r154(i),
-    targets = i.list { r158(i) },
+internal fun r155(i: RemoteIn): dev.ide.ui.backend.UiDrawable.AnimatedVector = dev.ide.ui.backend.UiDrawable.AnimatedVector(
+    vector = r156(i),
+    targets = i.list { r160(i) },
 )
 
-internal fun w154(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.Vector) {
+internal fun w156(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.Vector) {
     o.float(v.widthDp)
     o.float(v.heightDp)
     o.float(v.viewportWidth)
     o.float(v.viewportHeight)
     o.float(v.rootAlpha)
-    o.list(v.nodes) { e511 -> w155(o, e511) }
-    o.opt(v.name) { n512 -> o.string(n512) }
+    o.list(v.nodes) { e523 -> w157(o, e523) }
+    o.opt(v.name) { n524 -> o.string(n524) }
 }
-internal fun r154(i: RemoteIn): dev.ide.ui.backend.UiDrawable.Vector = dev.ide.ui.backend.UiDrawable.Vector(
+internal fun r156(i: RemoteIn): dev.ide.ui.backend.UiDrawable.Vector = dev.ide.ui.backend.UiDrawable.Vector(
     widthDp = i.float(),
     heightDp = i.float(),
     viewportWidth = i.float(),
     viewportHeight = i.float(),
     rootAlpha = i.float(),
-    nodes = i.list { r155(i) },
+    nodes = i.list { r157(i) },
     name = i.opt { i.str() },
 )
 
-internal fun w155(o: RemoteOut, v: dev.ide.ui.backend.UiVectorNode) {
+internal fun w157(o: RemoteOut, v: dev.ide.ui.backend.UiVectorNode) {
     when (v) {
-        is dev.ide.ui.backend.UiVectorGroup -> { o.int(0); w156(o, v) }
-        is dev.ide.ui.backend.UiVectorPath -> { o.int(1); w157(o, v) }
+        is dev.ide.ui.backend.UiVectorGroup -> { o.int(0); w158(o, v) }
+        is dev.ide.ui.backend.UiVectorPath -> { o.int(1); w159(o, v) }
     }
 }
-internal fun r155(i: RemoteIn): dev.ide.ui.backend.UiVectorNode = when (val tag = i.int()) {
-    0 -> r156(i)
-    1 -> r157(i)
+internal fun r157(i: RemoteIn): dev.ide.ui.backend.UiVectorNode = when (val tag = i.int()) {
+    0 -> r158(i)
+    1 -> r159(i)
     else -> error("unknown UiVectorNode $tag")
 }
 
-internal fun w156(o: RemoteOut, v: dev.ide.ui.backend.UiVectorGroup) {
-    o.list(v.children) { e505 -> w155(o, e505) }
+internal fun w158(o: RemoteOut, v: dev.ide.ui.backend.UiVectorGroup) {
+    o.list(v.children) { e517 -> w157(o, e517) }
     o.float(v.translateX)
     o.float(v.translateY)
     o.float(v.scaleX)
@@ -3283,11 +3359,11 @@ internal fun w156(o: RemoteOut, v: dev.ide.ui.backend.UiVectorGroup) {
     o.float(v.rotation)
     o.float(v.pivotX)
     o.float(v.pivotY)
-    o.opt(v.clipPathData) { n506 -> o.string(n506) }
-    o.opt(v.name) { n507 -> o.string(n507) }
+    o.opt(v.clipPathData) { n518 -> o.string(n518) }
+    o.opt(v.name) { n519 -> o.string(n519) }
 }
-internal fun r156(i: RemoteIn): dev.ide.ui.backend.UiVectorGroup = dev.ide.ui.backend.UiVectorGroup(
-    children = i.list { r155(i) },
+internal fun r158(i: RemoteIn): dev.ide.ui.backend.UiVectorGroup = dev.ide.ui.backend.UiVectorGroup(
+    children = i.list { r157(i) },
     translateX = i.float(),
     translateY = i.float(),
     scaleX = i.float(),
@@ -3299,10 +3375,10 @@ internal fun r156(i: RemoteIn): dev.ide.ui.backend.UiVectorGroup = dev.ide.ui.ba
     name = i.opt { i.str() },
 )
 
-internal fun w157(o: RemoteOut, v: dev.ide.ui.backend.UiVectorPath) {
+internal fun w159(o: RemoteOut, v: dev.ide.ui.backend.UiVectorPath) {
     o.string(v.pathData)
-    o.opt(v.fillColor) { n508 -> o.long(n508) }
-    o.opt(v.strokeColor) { n509 -> o.long(n509) }
+    o.opt(v.fillColor) { n520 -> o.long(n520) }
+    o.opt(v.strokeColor) { n521 -> o.long(n521) }
     o.float(v.strokeWidthVp)
     o.float(v.fillAlpha)
     o.float(v.strokeAlpha)
@@ -3310,12 +3386,12 @@ internal fun w157(o: RemoteOut, v: dev.ide.ui.backend.UiVectorPath) {
     o.string(v.strokeCap)
     o.string(v.strokeJoin)
     o.float(v.strokeMiter)
-    o.opt(v.name) { n510 -> o.string(n510) }
+    o.opt(v.name) { n522 -> o.string(n522) }
     o.float(v.trimPathStart)
     o.float(v.trimPathEnd)
     o.float(v.trimPathOffset)
 }
-internal fun r157(i: RemoteIn): dev.ide.ui.backend.UiVectorPath = dev.ide.ui.backend.UiVectorPath(
+internal fun r159(i: RemoteIn): dev.ide.ui.backend.UiVectorPath = dev.ide.ui.backend.UiVectorPath(
     pathData = i.str(),
     fillColor = i.opt { i.long() },
     strokeColor = i.opt { i.long() },
@@ -3332,100 +3408,100 @@ internal fun r157(i: RemoteIn): dev.ide.ui.backend.UiVectorPath = dev.ide.ui.bac
     trimPathOffset = i.float(),
 )
 
-internal fun w158(o: RemoteOut, v: dev.ide.ui.backend.UiAnimationTarget) {
+internal fun w160(o: RemoteOut, v: dev.ide.ui.backend.UiAnimationTarget) {
     o.string(v.name)
-    w159(o, v.animator)
+    w161(o, v.animator)
 }
-internal fun r158(i: RemoteIn): dev.ide.ui.backend.UiAnimationTarget = dev.ide.ui.backend.UiAnimationTarget(
+internal fun r160(i: RemoteIn): dev.ide.ui.backend.UiAnimationTarget = dev.ide.ui.backend.UiAnimationTarget(
     name = i.str(),
-    animator = r159(i),
+    animator = r161(i),
 )
 
-internal fun w159(o: RemoteOut, v: dev.ide.ui.backend.UiAnimator) {
+internal fun w161(o: RemoteOut, v: dev.ide.ui.backend.UiAnimator) {
     when (v) {
-        is dev.ide.ui.backend.UiAnimator.Property -> { o.int(0); w160(o, v) }
-        is dev.ide.ui.backend.UiAnimator.Set -> { o.int(1); w167(o, v) }
+        is dev.ide.ui.backend.UiAnimator.Property -> { o.int(0); w162(o, v) }
+        is dev.ide.ui.backend.UiAnimator.Set -> { o.int(1); w169(o, v) }
     }
 }
-internal fun r159(i: RemoteIn): dev.ide.ui.backend.UiAnimator = when (val tag = i.int()) {
-    0 -> r160(i)
-    1 -> r167(i)
+internal fun r161(i: RemoteIn): dev.ide.ui.backend.UiAnimator = when (val tag = i.int()) {
+    0 -> r162(i)
+    1 -> r169(i)
     else -> error("unknown UiAnimator $tag")
 }
 
-internal fun w160(o: RemoteOut, v: dev.ide.ui.backend.UiAnimator.Property) {
+internal fun w162(o: RemoteOut, v: dev.ide.ui.backend.UiAnimator.Property) {
     o.string(v.property)
-    o.list(v.keyframes) { e517 -> w161(o, e517) }
+    o.list(v.keyframes) { e529 -> w163(o, e529) }
     o.long(v.durationMs)
     o.long(v.startOffsetMs)
     o.int(v.repeatCount)
     o.bool(v.reverse)
-    w166(o, v.interpolator)
+    w168(o, v.interpolator)
 }
-internal fun r160(i: RemoteIn): dev.ide.ui.backend.UiAnimator.Property = dev.ide.ui.backend.UiAnimator.Property(
+internal fun r162(i: RemoteIn): dev.ide.ui.backend.UiAnimator.Property = dev.ide.ui.backend.UiAnimator.Property(
     property = i.str(),
-    keyframes = i.list { r161(i) },
+    keyframes = i.list { r163(i) },
     durationMs = i.long(),
     startOffsetMs = i.long(),
     repeatCount = i.int(),
     reverse = i.bool(),
-    interpolator = r166(i),
+    interpolator = r168(i),
 )
 
-internal fun w161(o: RemoteOut, v: dev.ide.ui.backend.UiKeyframe) {
+internal fun w163(o: RemoteOut, v: dev.ide.ui.backend.UiKeyframe) {
     o.float(v.fraction)
-    o.opt(v.value) { n515 -> w162(o, n515) }
-    o.opt(v.interpolator) { n516 -> w166(o, n516) }
+    o.opt(v.value) { n527 -> w164(o, n527) }
+    o.opt(v.interpolator) { n528 -> w168(o, n528) }
 }
-internal fun r161(i: RemoteIn): dev.ide.ui.backend.UiKeyframe = dev.ide.ui.backend.UiKeyframe(
+internal fun r163(i: RemoteIn): dev.ide.ui.backend.UiKeyframe = dev.ide.ui.backend.UiKeyframe(
     fraction = i.float(),
-    value = i.opt { r162(i) },
-    interpolator = i.opt { r166(i) },
+    value = i.opt { r164(i) },
+    interpolator = i.opt { r168(i) },
 )
 
-internal fun w162(o: RemoteOut, v: dev.ide.ui.backend.UiAnimatedValue) {
+internal fun w164(o: RemoteOut, v: dev.ide.ui.backend.UiAnimatedValue) {
     when (v) {
-        is dev.ide.ui.backend.UiAnimatedValue.Color -> { o.int(0); w163(o, v) }
-        is dev.ide.ui.backend.UiAnimatedValue.Number -> { o.int(1); w164(o, v) }
-        is dev.ide.ui.backend.UiAnimatedValue.PathData -> { o.int(2); w165(o, v) }
+        is dev.ide.ui.backend.UiAnimatedValue.Color -> { o.int(0); w165(o, v) }
+        is dev.ide.ui.backend.UiAnimatedValue.Number -> { o.int(1); w166(o, v) }
+        is dev.ide.ui.backend.UiAnimatedValue.PathData -> { o.int(2); w167(o, v) }
     }
 }
-internal fun r162(i: RemoteIn): dev.ide.ui.backend.UiAnimatedValue = when (val tag = i.int()) {
-    0 -> r163(i)
-    1 -> r164(i)
-    2 -> r165(i)
+internal fun r164(i: RemoteIn): dev.ide.ui.backend.UiAnimatedValue = when (val tag = i.int()) {
+    0 -> r165(i)
+    1 -> r166(i)
+    2 -> r167(i)
     else -> error("unknown UiAnimatedValue $tag")
 }
 
-internal fun w163(o: RemoteOut, v: dev.ide.ui.backend.UiAnimatedValue.Color) {
+internal fun w165(o: RemoteOut, v: dev.ide.ui.backend.UiAnimatedValue.Color) {
     o.long(v.argb)
 }
-internal fun r163(i: RemoteIn): dev.ide.ui.backend.UiAnimatedValue.Color = dev.ide.ui.backend.UiAnimatedValue.Color(
+internal fun r165(i: RemoteIn): dev.ide.ui.backend.UiAnimatedValue.Color = dev.ide.ui.backend.UiAnimatedValue.Color(
     argb = i.long(),
 )
 
-internal fun w164(o: RemoteOut, v: dev.ide.ui.backend.UiAnimatedValue.Number) {
+internal fun w166(o: RemoteOut, v: dev.ide.ui.backend.UiAnimatedValue.Number) {
     o.float(v.value)
 }
-internal fun r164(i: RemoteIn): dev.ide.ui.backend.UiAnimatedValue.Number = dev.ide.ui.backend.UiAnimatedValue.Number(
+internal fun r166(i: RemoteIn): dev.ide.ui.backend.UiAnimatedValue.Number = dev.ide.ui.backend.UiAnimatedValue.Number(
     value = i.float(),
 )
 
-internal fun w165(o: RemoteOut, v: dev.ide.ui.backend.UiAnimatedValue.PathData) {
+internal fun w167(o: RemoteOut, v: dev.ide.ui.backend.UiAnimatedValue.PathData) {
     o.string(v.data)
 }
-internal fun r165(i: RemoteIn): dev.ide.ui.backend.UiAnimatedValue.PathData = dev.ide.ui.backend.UiAnimatedValue.PathData(
+internal fun r167(i: RemoteIn): dev.ide.ui.backend.UiAnimatedValue.PathData = dev.ide.ui.backend.UiAnimatedValue.PathData(
     data = i.str(),
 )
 
-internal fun w166(o: RemoteOut, v: dev.ide.ui.backend.UiInterpolator) {
+internal fun w168(o: RemoteOut, v: dev.ide.ui.backend.UiInterpolator) {
     o.string(v.kind)
     o.float(v.factor)
     o.float(v.extraTension)
-    o.list(v.points) { e513 -> o.float(e513) }
-    o.opt(v.pathData) { n514 -> o.string(n514) }
+    o.list(v.points) { e525 -> o.float(e525) }
+    o.opt(v.pathData) { n526 -> o.string(n526) }
 }
-internal fun r166(i: RemoteIn): dev.ide.ui.backend.UiInterpolator = dev.ide.ui.backend.UiInterpolator(
+internal fun r168(i: RemoteIn): dev.ide.ui.backend.UiInterpolator = dev.ide.ui.backend.UiInterpolator(
     kind = i.str(),
     factor = i.float(),
     extraTension = i.float(),
@@ -3433,73 +3509,73 @@ internal fun r166(i: RemoteIn): dev.ide.ui.backend.UiInterpolator = dev.ide.ui.b
     pathData = i.opt { i.str() },
 )
 
-internal fun w167(o: RemoteOut, v: dev.ide.ui.backend.UiAnimator.Set) {
-    o.list(v.children) { e518 -> w159(o, e518) }
+internal fun w169(o: RemoteOut, v: dev.ide.ui.backend.UiAnimator.Set) {
+    o.list(v.children) { e530 -> w161(o, e530) }
     o.bool(v.sequential)
 }
-internal fun r167(i: RemoteIn): dev.ide.ui.backend.UiAnimator.Set = dev.ide.ui.backend.UiAnimator.Set(
-    children = i.list { r159(i) },
+internal fun r169(i: RemoteIn): dev.ide.ui.backend.UiAnimator.Set = dev.ide.ui.backend.UiAnimator.Set(
+    children = i.list { r161(i) },
     sequential = i.bool(),
 )
 
-internal fun w168(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.Bitmap) {
+internal fun w170(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.Bitmap) {
     o.string(v.resType)
     o.string(v.resName)
-    o.opt(v.filePath) { n520 -> o.string(n520) }
+    o.opt(v.filePath) { n532 -> o.string(n532) }
 }
-internal fun r168(i: RemoteIn): dev.ide.ui.backend.UiDrawable.Bitmap = dev.ide.ui.backend.UiDrawable.Bitmap(
+internal fun r170(i: RemoteIn): dev.ide.ui.backend.UiDrawable.Bitmap = dev.ide.ui.backend.UiDrawable.Bitmap(
     resType = i.str(),
     resName = i.str(),
     filePath = i.opt { i.str() },
 )
 
-internal fun w169(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.Frames) {
-    o.list(v.frames) { e521 -> w170(o, e521) }
+internal fun w171(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.Frames) {
+    o.list(v.frames) { e533 -> w172(o, e533) }
     o.bool(v.oneShot)
 }
-internal fun r169(i: RemoteIn): dev.ide.ui.backend.UiDrawable.Frames = dev.ide.ui.backend.UiDrawable.Frames(
-    frames = i.list { r170(i) },
+internal fun r171(i: RemoteIn): dev.ide.ui.backend.UiDrawable.Frames = dev.ide.ui.backend.UiDrawable.Frames(
+    frames = i.list { r172(i) },
     oneShot = i.bool(),
 )
 
-internal fun w170(o: RemoteOut, v: dev.ide.ui.backend.UiFrame) {
-    w152(o, v.drawable)
+internal fun w172(o: RemoteOut, v: dev.ide.ui.backend.UiFrame) {
+    w154(o, v.drawable)
     o.int(v.durationMs)
 }
-internal fun r170(i: RemoteIn): dev.ide.ui.backend.UiFrame = dev.ide.ui.backend.UiFrame(
-    drawable = r152(i),
+internal fun r172(i: RemoteIn): dev.ide.ui.backend.UiFrame = dev.ide.ui.backend.UiFrame(
+    drawable = r154(i),
     durationMs = i.int(),
 )
 
-internal fun w171(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.Layers) {
-    o.list(v.layers) { e522 -> w172(o, e522) }
+internal fun w173(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.Layers) {
+    o.list(v.layers) { e534 -> w174(o, e534) }
     o.bool(v.adaptive)
 }
-internal fun r171(i: RemoteIn): dev.ide.ui.backend.UiDrawable.Layers = dev.ide.ui.backend.UiDrawable.Layers(
-    layers = i.list { r172(i) },
+internal fun r173(i: RemoteIn): dev.ide.ui.backend.UiDrawable.Layers = dev.ide.ui.backend.UiDrawable.Layers(
+    layers = i.list { r174(i) },
     adaptive = i.bool(),
 )
 
-internal fun w172(o: RemoteOut, v: dev.ide.ui.backend.UiLayer) {
-    w152(o, v.drawable)
+internal fun w174(o: RemoteOut, v: dev.ide.ui.backend.UiLayer) {
+    w154(o, v.drawable)
     o.float(v.insetLeftDp)
     o.float(v.insetTopDp)
     o.float(v.insetRightDp)
     o.float(v.insetBottomDp)
 }
-internal fun r172(i: RemoteIn): dev.ide.ui.backend.UiLayer = dev.ide.ui.backend.UiLayer(
-    drawable = r152(i),
+internal fun r174(i: RemoteIn): dev.ide.ui.backend.UiLayer = dev.ide.ui.backend.UiLayer(
+    drawable = r154(i),
     insetLeftDp = i.float(),
     insetTopDp = i.float(),
     insetRightDp = i.float(),
     insetBottomDp = i.float(),
 )
 
-internal fun w173(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.Shape) {
+internal fun w175(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.Shape) {
     o.string(v.shape)
-    o.opt(v.solidColor) { n524 -> o.long(n524) }
-    o.opt(v.gradient) { n525 -> w174(o, n525) }
-    o.opt(v.strokeColor) { n526 -> o.long(n526) }
+    o.opt(v.solidColor) { n536 -> o.long(n536) }
+    o.opt(v.gradient) { n537 -> w176(o, n537) }
+    o.opt(v.strokeColor) { n538 -> o.long(n538) }
     o.float(v.strokeWidthDp)
     o.float(v.dashWidthDp)
     o.float(v.dashGapDp)
@@ -3512,10 +3588,10 @@ internal fun w173(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.Shape) {
     o.float(v.innerRadiusFraction)
     o.float(v.thicknessFraction)
 }
-internal fun r173(i: RemoteIn): dev.ide.ui.backend.UiDrawable.Shape = dev.ide.ui.backend.UiDrawable.Shape(
+internal fun r175(i: RemoteIn): dev.ide.ui.backend.UiDrawable.Shape = dev.ide.ui.backend.UiDrawable.Shape(
     shape = i.str(),
     solidColor = i.opt { i.long() },
-    gradient = i.opt { r174(i) },
+    gradient = i.opt { r176(i) },
     strokeColor = i.opt { i.long() },
     strokeWidthDp = i.float(),
     dashWidthDp = i.float(),
@@ -3530,17 +3606,17 @@ internal fun r173(i: RemoteIn): dev.ide.ui.backend.UiDrawable.Shape = dev.ide.ui
     thicknessFraction = i.float(),
 )
 
-internal fun w174(o: RemoteOut, v: dev.ide.ui.backend.UiGradient) {
+internal fun w176(o: RemoteOut, v: dev.ide.ui.backend.UiGradient) {
     o.string(v.kind)
     o.long(v.startColor)
-    o.opt(v.centerColor) { n523 -> o.long(n523) }
+    o.opt(v.centerColor) { n535 -> o.long(n535) }
     o.long(v.endColor)
     o.int(v.angle)
     o.float(v.centerX)
     o.float(v.centerY)
     o.float(v.radiusFraction)
 }
-internal fun r174(i: RemoteIn): dev.ide.ui.backend.UiGradient = dev.ide.ui.backend.UiGradient(
+internal fun r176(i: RemoteIn): dev.ide.ui.backend.UiGradient = dev.ide.ui.backend.UiGradient(
     kind = i.str(),
     startColor = i.long(),
     centerColor = i.opt { i.long() },
@@ -3551,145 +3627,145 @@ internal fun r174(i: RemoteIn): dev.ide.ui.backend.UiGradient = dev.ide.ui.backe
     radiusFraction = i.float(),
 )
 
-internal fun w175(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.SolidColor) {
+internal fun w177(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.SolidColor) {
     o.long(v.color)
 }
-internal fun r175(i: RemoteIn): dev.ide.ui.backend.UiDrawable.SolidColor = dev.ide.ui.backend.UiDrawable.SolidColor(
+internal fun r177(i: RemoteIn): dev.ide.ui.backend.UiDrawable.SolidColor = dev.ide.ui.backend.UiDrawable.SolidColor(
     color = i.long(),
 )
 
-internal fun w176(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.States) {
-    o.list(v.states) { e528 -> w177(o, e528) }
-    o.opt(v.defaultLayer) { n529 -> w152(o, n529) }
+internal fun w178(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.States) {
+    o.list(v.states) { e540 -> w179(o, e540) }
+    o.opt(v.defaultLayer) { n541 -> w154(o, n541) }
 }
-internal fun r176(i: RemoteIn): dev.ide.ui.backend.UiDrawable.States = dev.ide.ui.backend.UiDrawable.States(
-    states = i.list { r177(i) },
-    defaultLayer = i.opt { r152(i) },
+internal fun r178(i: RemoteIn): dev.ide.ui.backend.UiDrawable.States = dev.ide.ui.backend.UiDrawable.States(
+    states = i.list { r179(i) },
+    defaultLayer = i.opt { r154(i) },
 )
 
-internal fun w177(o: RemoteOut, v: dev.ide.ui.backend.UiStateLayer) {
-    o.list(v.states) { e527 -> o.string(e527) }
-    w152(o, v.drawable)
+internal fun w179(o: RemoteOut, v: dev.ide.ui.backend.UiStateLayer) {
+    o.list(v.states) { e539 -> o.string(e539) }
+    w154(o, v.drawable)
 }
-internal fun r177(i: RemoteIn): dev.ide.ui.backend.UiStateLayer = dev.ide.ui.backend.UiStateLayer(
+internal fun r179(i: RemoteIn): dev.ide.ui.backend.UiStateLayer = dev.ide.ui.backend.UiStateLayer(
     states = i.list { i.str() },
-    drawable = r152(i),
+    drawable = r154(i),
 )
 
-internal fun w178(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.Unsupported) {
+internal fun w180(o: RemoteOut, v: dev.ide.ui.backend.UiDrawable.Unsupported) {
     o.string(v.rootTag)
     o.string(v.message)
 }
-internal fun r178(i: RemoteIn): dev.ide.ui.backend.UiDrawable.Unsupported = dev.ide.ui.backend.UiDrawable.Unsupported(
+internal fun r180(i: RemoteIn): dev.ide.ui.backend.UiDrawable.Unsupported = dev.ide.ui.backend.UiDrawable.Unsupported(
     rootTag = i.str(),
     message = i.str(),
 )
 
-internal fun w179(o: RemoteOut, v: dev.ide.ui.backend.UiProjectIcon.Raster) {
+internal fun w181(o: RemoteOut, v: dev.ide.ui.backend.UiProjectIcon.Raster) {
     o.bytes(v.bytes)
 }
-internal fun r179(i: RemoteIn): dev.ide.ui.backend.UiProjectIcon.Raster = dev.ide.ui.backend.UiProjectIcon.Raster(
+internal fun r181(i: RemoteIn): dev.ide.ui.backend.UiProjectIcon.Raster = dev.ide.ui.backend.UiProjectIcon.Raster(
     bytes = i.bytes(),
 )
 
-internal fun w180(o: RemoteOut, v: dev.ide.ui.backend.UiSemanticToken) {
+internal fun w182(o: RemoteOut, v: dev.ide.ui.backend.UiSemanticToken) {
     o.int(v.startOffset)
     o.int(v.endOffset)
     o.string(v.kind)
-    o.list(v.modifiers.toList()) { e533 -> o.int(e533.ordinal) }
+    o.list(v.modifiers.toList()) { e545 -> o.int(e545.ordinal) }
 }
-internal fun r180(i: RemoteIn): dev.ide.ui.backend.UiSemanticToken = dev.ide.ui.backend.UiSemanticToken(
+internal fun r182(i: RemoteIn): dev.ide.ui.backend.UiSemanticToken = dev.ide.ui.backend.UiSemanticToken(
     startOffset = i.int(),
     endOffset = i.int(),
     kind = i.str(),
     modifiers = i.list { dev.ide.ui.backend.UiHighlightModifier.entries[i.int()] }.toSet(),
 )
 
-internal fun w181(o: RemoteOut, v: dev.ide.ui.backend.UiSignatureHelp) {
-    o.list(v.signatures) { e537 -> w182(o, e537) }
+internal fun w183(o: RemoteOut, v: dev.ide.ui.backend.UiSignatureHelp) {
+    o.list(v.signatures) { e549 -> w184(o, e549) }
     o.int(v.activeSignature)
     o.int(v.activeParameter)
 }
-internal fun r181(i: RemoteIn): dev.ide.ui.backend.UiSignatureHelp = dev.ide.ui.backend.UiSignatureHelp(
-    signatures = i.list { r182(i) },
+internal fun r183(i: RemoteIn): dev.ide.ui.backend.UiSignatureHelp = dev.ide.ui.backend.UiSignatureHelp(
+    signatures = i.list { r184(i) },
     activeSignature = i.int(),
     activeParameter = i.int(),
 )
 
-internal fun w182(o: RemoteOut, v: dev.ide.ui.backend.UiSignature) {
+internal fun w184(o: RemoteOut, v: dev.ide.ui.backend.UiSignature) {
     o.string(v.label)
-    o.list(v.parameters) { e534 -> w183(o, e534) }
-    o.opt(v.documentation) { n535 -> o.string(n535) }
-    o.opt(v.activeParameter) { n536 -> o.int(n536) }
+    o.list(v.parameters) { e546 -> w185(o, e546) }
+    o.opt(v.documentation) { n547 -> o.string(n547) }
+    o.opt(v.activeParameter) { n548 -> o.int(n548) }
 }
-internal fun r182(i: RemoteIn): dev.ide.ui.backend.UiSignature = dev.ide.ui.backend.UiSignature(
+internal fun r184(i: RemoteIn): dev.ide.ui.backend.UiSignature = dev.ide.ui.backend.UiSignature(
     label = i.str(),
-    parameters = i.list { r183(i) },
+    parameters = i.list { r185(i) },
     documentation = i.opt { i.str() },
     activeParameter = i.opt { i.int() },
 )
 
-internal fun w183(o: RemoteOut, v: dev.ide.ui.backend.UiSignatureParam) {
+internal fun w185(o: RemoteOut, v: dev.ide.ui.backend.UiSignatureParam) {
     o.string(v.label)
     o.int(v.start)
     o.int(v.end)
     o.bool(v.alreadyNamed)
 }
-internal fun r183(i: RemoteIn): dev.ide.ui.backend.UiSignatureParam = dev.ide.ui.backend.UiSignatureParam(
+internal fun r185(i: RemoteIn): dev.ide.ui.backend.UiSignatureParam = dev.ide.ui.backend.UiSignatureParam(
     label = i.str(),
     start = i.int(),
     end = i.int(),
     alreadyNamed = i.bool(),
 )
 
-internal fun w184(o: RemoteOut, v: dev.ide.ui.backend.UiUsageHighlight) {
+internal fun w186(o: RemoteOut, v: dev.ide.ui.backend.UiUsageHighlight) {
     o.int(v.startOffset)
     o.int(v.endOffset)
     o.bool(v.write)
 }
-internal fun r184(i: RemoteIn): dev.ide.ui.backend.UiUsageHighlight = dev.ide.ui.backend.UiUsageHighlight(
+internal fun r186(i: RemoteIn): dev.ide.ui.backend.UiUsageHighlight = dev.ide.ui.backend.UiUsageHighlight(
     startOffset = i.int(),
     endOffset = i.int(),
     write = i.bool(),
 )
 
-internal fun w185(o: RemoteOut, v: dev.ide.ui.backend.UiDeleteResult) {
-    o.list(v.deleted) { e538 -> o.string(e538) }
-    o.map(v.failed, { k539 -> o.string(k539) }, { v540 -> o.string(v540) })
-    o.opt(v.undoToken) { n541 -> o.string(n541) }
+internal fun w187(o: RemoteOut, v: dev.ide.ui.backend.UiDeleteResult) {
+    o.list(v.deleted) { e550 -> o.string(e550) }
+    o.map(v.failed, { k551 -> o.string(k551) }, { v552 -> o.string(v552) })
+    o.opt(v.undoToken) { n553 -> o.string(n553) }
 }
-internal fun r185(i: RemoteIn): dev.ide.ui.backend.UiDeleteResult = dev.ide.ui.backend.UiDeleteResult(
+internal fun r187(i: RemoteIn): dev.ide.ui.backend.UiDeleteResult = dev.ide.ui.backend.UiDeleteResult(
     deleted = i.list { i.str() },
     failed = i.map({ i.str() }, { i.str() }),
     undoToken = i.opt { i.str() },
 )
 
-internal fun w186(o: RemoteOut, v: dev.ide.ui.backend.TreeNode) {
+internal fun w188(o: RemoteOut, v: dev.ide.ui.backend.TreeNode) {
     o.string(v.id)
     o.string(v.name)
     o.int(v.kind.ordinal)
-    o.opt(v.filePath) { n542 -> o.string(n542) }
+    o.opt(v.filePath) { n554 -> o.string(n554) }
     o.string(v.iconId)
-    o.list(v.children) { e543 -> w186(o, e543) }
-    o.opt(v.gitStatus) { n544 -> o.int(n544.ordinal) }
-    o.opt(v.sourceRootPath) { n545 -> o.string(n545) }
-    o.list(v.packageSegments) { e546 -> w187(o, e546) }
-    o.opt(v.resDirPath) { n547 -> o.string(n547) }
-    o.opt(v.aidlRootPath) { n548 -> o.string(n548) }
-    o.opt(v.moduleConfigName) { n549 -> o.string(n549) }
-    o.opt(v.dirPath) { n550 -> o.string(n550) }
-    o.opt(v.styleHint) { n551 -> o.string(n551) }
+    o.list(v.children) { e555 -> w188(o, e555) }
+    o.opt(v.gitStatus) { n556 -> o.int(n556.ordinal) }
+    o.opt(v.sourceRootPath) { n557 -> o.string(n557) }
+    o.list(v.packageSegments) { e558 -> w189(o, e558) }
+    o.opt(v.resDirPath) { n559 -> o.string(n559) }
+    o.opt(v.aidlRootPath) { n560 -> o.string(n560) }
+    o.opt(v.moduleConfigName) { n561 -> o.string(n561) }
+    o.opt(v.dirPath) { n562 -> o.string(n562) }
+    o.opt(v.styleHint) { n563 -> o.string(n563) }
 }
-internal fun r186(i: RemoteIn): dev.ide.ui.backend.TreeNode = dev.ide.ui.backend.TreeNode(
+internal fun r188(i: RemoteIn): dev.ide.ui.backend.TreeNode = dev.ide.ui.backend.TreeNode(
     id = i.str(),
     name = i.str(),
     kind = dev.ide.ui.backend.NodeKind.entries[i.int()],
     filePath = i.opt { i.str() },
     iconId = i.str(),
-    children = i.list { r186(i) },
+    children = i.list { r188(i) },
     gitStatus = i.opt { dev.ide.ui.backend.GitStatus.entries[i.int()] },
     sourceRootPath = i.opt { i.str() },
-    packageSegments = i.list { r187(i) },
+    packageSegments = i.list { r189(i) },
     resDirPath = i.opt { i.str() },
     aidlRootPath = i.opt { i.str() },
     moduleConfigName = i.opt { i.str() },
@@ -3697,58 +3773,58 @@ internal fun r186(i: RemoteIn): dev.ide.ui.backend.TreeNode = dev.ide.ui.backend
     styleHint = i.opt { i.str() },
 )
 
-internal fun w187(o: RemoteOut, v: dev.ide.ui.backend.PackageSegment) {
+internal fun w189(o: RemoteOut, v: dev.ide.ui.backend.PackageSegment) {
     o.string(v.packageName)
     o.string(v.dirPath)
 }
-internal fun r187(i: RemoteIn): dev.ide.ui.backend.PackageSegment = dev.ide.ui.backend.PackageSegment(
+internal fun r189(i: RemoteIn): dev.ide.ui.backend.PackageSegment = dev.ide.ui.backend.PackageSegment(
     packageName = i.str(),
     dirPath = i.str(),
 )
 
-internal fun w188(o: RemoteOut, v: dev.ide.ui.backend.UiDirEntry) {
+internal fun w190(o: RemoteOut, v: dev.ide.ui.backend.UiDirEntry) {
     o.string(v.name)
     o.string(v.path)
     o.bool(v.isDirectory)
     o.string(v.iconId)
 }
-internal fun r188(i: RemoteIn): dev.ide.ui.backend.UiDirEntry = dev.ide.ui.backend.UiDirEntry(
+internal fun r190(i: RemoteIn): dev.ide.ui.backend.UiDirEntry = dev.ide.ui.backend.UiDirEntry(
     name = i.str(),
     path = i.str(),
     isDirectory = i.bool(),
     iconId = i.str(),
 )
 
-internal fun w189(o: RemoteOut, v: dev.ide.ui.backend.UiTransferItem) {
+internal fun w191(o: RemoteOut, v: dev.ide.ui.backend.UiTransferItem) {
     o.string(v.path)
     o.int(v.onConflict.ordinal)
 }
-internal fun r189(i: RemoteIn): dev.ide.ui.backend.UiTransferItem = dev.ide.ui.backend.UiTransferItem(
+internal fun r191(i: RemoteIn): dev.ide.ui.backend.UiTransferItem = dev.ide.ui.backend.UiTransferItem(
     path = i.str(),
     onConflict = dev.ide.ui.backend.UiConflictChoice.entries[i.int()],
 )
 
-internal fun w190(o: RemoteOut, v: dev.ide.ui.backend.UiTransferResult) {
-    o.map(v.done, { k552 -> o.string(k552) }, { v553 -> o.string(v553) })
-    o.list(v.skipped) { e554 -> o.string(e554) }
-    o.map(v.failed, { k555 -> o.string(k555) }, { v556 -> o.string(v556) })
-    o.opt(v.undoToken) { n557 -> o.string(n557) }
+internal fun w192(o: RemoteOut, v: dev.ide.ui.backend.UiTransferResult) {
+    o.map(v.done, { k564 -> o.string(k564) }, { v565 -> o.string(v565) })
+    o.list(v.skipped) { e566 -> o.string(e566) }
+    o.map(v.failed, { k567 -> o.string(k567) }, { v568 -> o.string(v568) })
+    o.opt(v.undoToken) { n569 -> o.string(n569) }
 }
-internal fun r190(i: RemoteIn): dev.ide.ui.backend.UiTransferResult = dev.ide.ui.backend.UiTransferResult(
+internal fun r192(i: RemoteIn): dev.ide.ui.backend.UiTransferResult = dev.ide.ui.backend.UiTransferResult(
     done = i.map({ i.str() }, { i.str() }),
     skipped = i.list { i.str() },
     failed = i.map({ i.str() }, { i.str() }),
     undoToken = i.opt { i.str() },
 )
 
-internal fun w191(o: RemoteOut, v: dev.ide.ui.backend.UiUndoResult) {
+internal fun w193(o: RemoteOut, v: dev.ide.ui.backend.UiUndoResult) {
     o.bool(v.ok)
     o.string(v.message)
-    o.map(v.moved, { k558 -> o.string(k558) }, { v559 -> o.string(v559) })
-    o.list(v.removed) { e560 -> o.string(e560) }
-    o.list(v.restored) { e561 -> o.string(e561) }
+    o.map(v.moved, { k570 -> o.string(k570) }, { v571 -> o.string(v571) })
+    o.list(v.removed) { e572 -> o.string(e572) }
+    o.list(v.restored) { e573 -> o.string(e573) }
 }
-internal fun r191(i: RemoteIn): dev.ide.ui.backend.UiUndoResult = dev.ide.ui.backend.UiUndoResult(
+internal fun r193(i: RemoteIn): dev.ide.ui.backend.UiUndoResult = dev.ide.ui.backend.UiUndoResult(
     ok = i.bool(),
     message = i.str(),
     moved = i.map({ i.str() }, { i.str() }),
@@ -3756,111 +3832,111 @@ internal fun r191(i: RemoteIn): dev.ide.ui.backend.UiUndoResult = dev.ide.ui.bac
     restored = i.list { i.str() },
 )
 
-internal fun w192(o: RemoteOut, v: dev.ide.ui.backend.UiAppIconSpec) {
+internal fun w194(o: RemoteOut, v: dev.ide.ui.backend.UiAppIconSpec) {
     o.string(v.moduleName)
     o.string(v.name)
-    w193(o, v.background)
-    w193(o, v.foreground)
-    w193(o, v.monochrome)
+    w195(o, v.background)
+    w195(o, v.foreground)
+    w195(o, v.monochrome)
     o.bool(v.generateRasters)
     o.bool(v.generateRoundIcon)
     o.bool(v.generatePlayStoreIcon)
 }
-internal fun r192(i: RemoteIn): dev.ide.ui.backend.UiAppIconSpec = dev.ide.ui.backend.UiAppIconSpec(
+internal fun r194(i: RemoteIn): dev.ide.ui.backend.UiAppIconSpec = dev.ide.ui.backend.UiAppIconSpec(
     moduleName = i.str(),
     name = i.str(),
-    background = r193(i),
-    foreground = r193(i),
-    monochrome = r193(i),
+    background = r195(i),
+    foreground = r195(i),
+    monochrome = r195(i),
     generateRasters = i.bool(),
     generateRoundIcon = i.bool(),
     generatePlayStoreIcon = i.bool(),
 )
 
-internal fun w193(o: RemoteOut, v: dev.ide.ui.backend.UiIconLayer) {
+internal fun w195(o: RemoteOut, v: dev.ide.ui.backend.UiIconLayer) {
     when (v) {
-        is dev.ide.ui.backend.UiIconLayer.Color -> { o.int(0); w194(o, v) }
-        is dev.ide.ui.backend.UiIconLayer.Gradient -> { o.int(1); w195(o, v) }
-        is dev.ide.ui.backend.UiIconLayer.ImageFile -> { o.int(2); w196(o, v) }
-        is dev.ide.ui.backend.UiIconLayer.None -> { o.int(3); w197(o, v) }
-        is dev.ide.ui.backend.UiIconLayer.RepoIcon -> { o.int(4); w198(o, v) }
-        is dev.ide.ui.backend.UiIconLayer.Resource -> { o.int(5); w200(o, v) }
+        is dev.ide.ui.backend.UiIconLayer.Color -> { o.int(0); w196(o, v) }
+        is dev.ide.ui.backend.UiIconLayer.Gradient -> { o.int(1); w197(o, v) }
+        is dev.ide.ui.backend.UiIconLayer.ImageFile -> { o.int(2); w198(o, v) }
+        is dev.ide.ui.backend.UiIconLayer.None -> { o.int(3); w199(o, v) }
+        is dev.ide.ui.backend.UiIconLayer.RepoIcon -> { o.int(4); w200(o, v) }
+        is dev.ide.ui.backend.UiIconLayer.Resource -> { o.int(5); w202(o, v) }
     }
 }
-internal fun r193(i: RemoteIn): dev.ide.ui.backend.UiIconLayer = when (val tag = i.int()) {
-    0 -> r194(i)
-    1 -> r195(i)
-    2 -> r196(i)
-    3 -> r197(i)
-    4 -> r198(i)
-    5 -> r200(i)
+internal fun r195(i: RemoteIn): dev.ide.ui.backend.UiIconLayer = when (val tag = i.int()) {
+    0 -> r196(i)
+    1 -> r197(i)
+    2 -> r198(i)
+    3 -> r199(i)
+    4 -> r200(i)
+    5 -> r202(i)
     else -> error("unknown UiIconLayer $tag")
 }
 
-internal fun w194(o: RemoteOut, v: dev.ide.ui.backend.UiIconLayer.Color) {
+internal fun w196(o: RemoteOut, v: dev.ide.ui.backend.UiIconLayer.Color) {
     o.long(v.argb)
 }
-internal fun r194(i: RemoteIn): dev.ide.ui.backend.UiIconLayer.Color = dev.ide.ui.backend.UiIconLayer.Color(
+internal fun r196(i: RemoteIn): dev.ide.ui.backend.UiIconLayer.Color = dev.ide.ui.backend.UiIconLayer.Color(
     argb = i.long(),
 )
 
-internal fun w195(o: RemoteOut, v: dev.ide.ui.backend.UiIconLayer.Gradient) {
+internal fun w197(o: RemoteOut, v: dev.ide.ui.backend.UiIconLayer.Gradient) {
     o.long(v.startArgb)
     o.long(v.endArgb)
     o.int(v.angle)
 }
-internal fun r195(i: RemoteIn): dev.ide.ui.backend.UiIconLayer.Gradient = dev.ide.ui.backend.UiIconLayer.Gradient(
+internal fun r197(i: RemoteIn): dev.ide.ui.backend.UiIconLayer.Gradient = dev.ide.ui.backend.UiIconLayer.Gradient(
     startArgb = i.long(),
     endArgb = i.long(),
     angle = i.int(),
 )
 
-internal fun w196(o: RemoteOut, v: dev.ide.ui.backend.UiIconLayer.ImageFile) {
+internal fun w198(o: RemoteOut, v: dev.ide.ui.backend.UiIconLayer.ImageFile) {
     o.string(v.path)
 }
-internal fun r196(i: RemoteIn): dev.ide.ui.backend.UiIconLayer.ImageFile = dev.ide.ui.backend.UiIconLayer.ImageFile(
+internal fun r198(i: RemoteIn): dev.ide.ui.backend.UiIconLayer.ImageFile = dev.ide.ui.backend.UiIconLayer.ImageFile(
     path = i.str(),
 )
 
-internal fun w197(o: RemoteOut, v: dev.ide.ui.backend.UiIconLayer.None) {}
-internal fun r197(i: RemoteIn): dev.ide.ui.backend.UiIconLayer.None = dev.ide.ui.backend.UiIconLayer.None
+internal fun w199(o: RemoteOut, v: dev.ide.ui.backend.UiIconLayer.None) {}
+internal fun r199(i: RemoteIn): dev.ide.ui.backend.UiIconLayer.None = dev.ide.ui.backend.UiIconLayer.None
 
-internal fun w198(o: RemoteOut, v: dev.ide.ui.backend.UiIconLayer.RepoIcon) {
+internal fun w200(o: RemoteOut, v: dev.ide.ui.backend.UiIconLayer.RepoIcon) {
     o.string(v.repoId)
     o.string(v.name)
-    w199(o, v.variant)
+    w201(o, v.variant)
     o.float(v.scale)
     o.float(v.offsetX)
     o.float(v.offsetY)
-    o.opt(v.tintArgb) { n562 -> o.long(n562) }
+    o.opt(v.tintArgb) { n574 -> o.long(n574) }
 }
-internal fun r198(i: RemoteIn): dev.ide.ui.backend.UiIconLayer.RepoIcon = dev.ide.ui.backend.UiIconLayer.RepoIcon(
+internal fun r200(i: RemoteIn): dev.ide.ui.backend.UiIconLayer.RepoIcon = dev.ide.ui.backend.UiIconLayer.RepoIcon(
     repoId = i.str(),
     name = i.str(),
-    variant = r199(i),
+    variant = r201(i),
     scale = i.float(),
     offsetX = i.float(),
     offsetY = i.float(),
     tintArgb = i.opt { i.long() },
 )
 
-internal fun w199(o: RemoteOut, v: dev.ide.ui.backend.UiIconVariant) {
+internal fun w201(o: RemoteOut, v: dev.ide.ui.backend.UiIconVariant) {
     o.string(v.style)
     o.bool(v.filled)
 }
-internal fun r199(i: RemoteIn): dev.ide.ui.backend.UiIconVariant = dev.ide.ui.backend.UiIconVariant(
+internal fun r201(i: RemoteIn): dev.ide.ui.backend.UiIconVariant = dev.ide.ui.backend.UiIconVariant(
     style = i.str(),
     filled = i.bool(),
 )
 
-internal fun w200(o: RemoteOut, v: dev.ide.ui.backend.UiIconLayer.Resource) {
+internal fun w202(o: RemoteOut, v: dev.ide.ui.backend.UiIconLayer.Resource) {
     o.string(v.path)
     o.float(v.scale)
     o.float(v.offsetX)
     o.float(v.offsetY)
-    o.opt(v.tintArgb) { n563 -> o.long(n563) }
+    o.opt(v.tintArgb) { n575 -> o.long(n575) }
 }
-internal fun r200(i: RemoteIn): dev.ide.ui.backend.UiIconLayer.Resource = dev.ide.ui.backend.UiIconLayer.Resource(
+internal fun r202(i: RemoteIn): dev.ide.ui.backend.UiIconLayer.Resource = dev.ide.ui.backend.UiIconLayer.Resource(
     path = i.str(),
     scale = i.float(),
     offsetX = i.float(),
@@ -3868,23 +3944,23 @@ internal fun r200(i: RemoteIn): dev.ide.ui.backend.UiIconLayer.Resource = dev.id
     tintArgb = i.opt { i.long() },
 )
 
-internal fun w201(o: RemoteOut, v: dev.ide.ui.backend.UiRasterFile) {
+internal fun w203(o: RemoteOut, v: dev.ide.ui.backend.UiRasterFile) {
     o.string(v.relativePath)
     o.bytes(v.bytes)
 }
-internal fun r201(i: RemoteIn): dev.ide.ui.backend.UiRasterFile = dev.ide.ui.backend.UiRasterFile(
+internal fun r203(i: RemoteIn): dev.ide.ui.backend.UiRasterFile = dev.ide.ui.backend.UiRasterFile(
     relativePath = i.str(),
     bytes = i.bytes(),
 )
 
-internal fun w202(o: RemoteOut, v: dev.ide.ui.backend.UiIconImportResult) {
+internal fun w204(o: RemoteOut, v: dev.ide.ui.backend.UiIconImportResult) {
     o.bool(v.ok)
-    o.opt(v.path) { n564 -> o.string(n564) }
-    o.opt(v.message) { n565 -> o.string(n565) }
-    o.opt(v.conflictPath) { n566 -> o.string(n566) }
-    o.list(v.warnings) { e567 -> o.string(e567) }
+    o.opt(v.path) { n576 -> o.string(n576) }
+    o.opt(v.message) { n577 -> o.string(n577) }
+    o.opt(v.conflictPath) { n578 -> o.string(n578) }
+    o.list(v.warnings) { e579 -> o.string(e579) }
 }
-internal fun r202(i: RemoteIn): dev.ide.ui.backend.UiIconImportResult = dev.ide.ui.backend.UiIconImportResult(
+internal fun r204(i: RemoteIn): dev.ide.ui.backend.UiIconImportResult = dev.ide.ui.backend.UiIconImportResult(
     ok = i.bool(),
     path = i.opt { i.str() },
     message = i.opt { i.str() },
@@ -3892,24 +3968,24 @@ internal fun r202(i: RemoteIn): dev.ide.ui.backend.UiIconImportResult = dev.ide.
     warnings = i.list { i.str() },
 )
 
-internal fun w203(o: RemoteOut, v: dev.ide.ui.backend.UiIconArtwork) {
-    w152(o, v.drawable)
-    o.list(v.warnings) { e568 -> o.string(e568) }
+internal fun w205(o: RemoteOut, v: dev.ide.ui.backend.UiIconArtwork) {
+    w154(o, v.drawable)
+    o.list(v.warnings) { e580 -> o.string(e580) }
 }
-internal fun r203(i: RemoteIn): dev.ide.ui.backend.UiIconArtwork = dev.ide.ui.backend.UiIconArtwork(
-    drawable = r152(i),
+internal fun r205(i: RemoteIn): dev.ide.ui.backend.UiIconArtwork = dev.ide.ui.backend.UiIconArtwork(
+    drawable = r154(i),
     warnings = i.list { i.str() },
 )
 
-internal fun w204(o: RemoteOut, v: dev.ide.ui.backend.UiIconEntry) {
+internal fun w206(o: RemoteOut, v: dev.ide.ui.backend.UiIconEntry) {
     o.string(v.repoId)
     o.string(v.name)
     o.string(v.displayName)
-    o.opt(v.category) { n569 -> o.string(n569) }
-    o.list(v.styles) { e570 -> o.string(e570) }
+    o.opt(v.category) { n581 -> o.string(n581) }
+    o.list(v.styles) { e582 -> o.string(e582) }
     o.bool(v.supportsFill)
 }
-internal fun r204(i: RemoteIn): dev.ide.ui.backend.UiIconEntry = dev.ide.ui.backend.UiIconEntry(
+internal fun r206(i: RemoteIn): dev.ide.ui.backend.UiIconEntry = dev.ide.ui.backend.UiIconEntry(
     repoId = i.str(),
     name = i.str(),
     displayName = i.str(),
@@ -3918,16 +3994,16 @@ internal fun r204(i: RemoteIn): dev.ide.ui.backend.UiIconEntry = dev.ide.ui.back
     supportsFill = i.bool(),
 )
 
-internal fun w205(o: RemoteOut, v: dev.ide.ui.backend.UiIconImport) {
-    w206(o, v.target)
+internal fun w207(o: RemoteOut, v: dev.ide.ui.backend.UiIconImport) {
+    w208(o, v.target)
     o.string(v.resType)
     o.string(v.name)
     o.float(v.sizeDp)
-    o.opt(v.colorArgb) { n571 -> o.long(n571) }
+    o.opt(v.colorArgb) { n583 -> o.long(n583) }
     o.bool(v.overwrite)
 }
-internal fun r205(i: RemoteIn): dev.ide.ui.backend.UiIconImport = dev.ide.ui.backend.UiIconImport(
-    target = r206(i),
+internal fun r207(i: RemoteIn): dev.ide.ui.backend.UiIconImport = dev.ide.ui.backend.UiIconImport(
+    target = r208(i),
     resType = i.str(),
     name = i.str(),
     sizeDp = i.float(),
@@ -3935,59 +4011,59 @@ internal fun r205(i: RemoteIn): dev.ide.ui.backend.UiIconImport = dev.ide.ui.bac
     overwrite = i.bool(),
 )
 
-internal fun w206(o: RemoteOut, v: dev.ide.ui.backend.UiIconTarget) {
+internal fun w208(o: RemoteOut, v: dev.ide.ui.backend.UiIconTarget) {
     o.string(v.moduleName)
     o.string(v.sourceSetName)
     o.string(v.resDirPath)
     o.bool(v.isDefault)
 }
-internal fun r206(i: RemoteIn): dev.ide.ui.backend.UiIconTarget = dev.ide.ui.backend.UiIconTarget(
+internal fun r208(i: RemoteIn): dev.ide.ui.backend.UiIconTarget = dev.ide.ui.backend.UiIconTarget(
     moduleName = i.str(),
     sourceSetName = i.str(),
     resDirPath = i.str(),
     isDefault = i.bool(),
 )
 
-internal fun w207(o: RemoteOut, v: dev.ide.ui.backend.UiIconRef) {
+internal fun w209(o: RemoteOut, v: dev.ide.ui.backend.UiIconRef) {
     when (v) {
-        is dev.ide.ui.backend.UiIconRef.ComposeIcon -> { o.int(0); w208(o, v) }
-        is dev.ide.ui.backend.UiIconRef.Resource -> { o.int(1); w209(o, v) }
+        is dev.ide.ui.backend.UiIconRef.ComposeIcon -> { o.int(0); w210(o, v) }
+        is dev.ide.ui.backend.UiIconRef.Resource -> { o.int(1); w211(o, v) }
     }
 }
-internal fun r207(i: RemoteIn): dev.ide.ui.backend.UiIconRef = when (val tag = i.int()) {
-    0 -> r208(i)
-    1 -> r209(i)
+internal fun r209(i: RemoteIn): dev.ide.ui.backend.UiIconRef = when (val tag = i.int()) {
+    0 -> r210(i)
+    1 -> r211(i)
     else -> error("unknown UiIconRef $tag")
 }
 
-internal fun w208(o: RemoteOut, v: dev.ide.ui.backend.UiIconRef.ComposeIcon) {
+internal fun w210(o: RemoteOut, v: dev.ide.ui.backend.UiIconRef.ComposeIcon) {
     o.string(v.property)
     o.string(v.style)
 }
-internal fun r208(i: RemoteIn): dev.ide.ui.backend.UiIconRef.ComposeIcon = dev.ide.ui.backend.UiIconRef.ComposeIcon(
+internal fun r210(i: RemoteIn): dev.ide.ui.backend.UiIconRef.ComposeIcon = dev.ide.ui.backend.UiIconRef.ComposeIcon(
     property = i.str(),
     style = i.str(),
 )
 
-internal fun w209(o: RemoteOut, v: dev.ide.ui.backend.UiIconRef.Resource) {
+internal fun w211(o: RemoteOut, v: dev.ide.ui.backend.UiIconRef.Resource) {
     o.string(v.resType)
     o.string(v.name)
 }
-internal fun r209(i: RemoteIn): dev.ide.ui.backend.UiIconRef.Resource = dev.ide.ui.backend.UiIconRef.Resource(
+internal fun r211(i: RemoteIn): dev.ide.ui.backend.UiIconRef.Resource = dev.ide.ui.backend.UiIconRef.Resource(
     resType = i.str(),
     name = i.str(),
 )
 
-internal fun w210(o: RemoteOut, v: dev.ide.ui.backend.UiIconRepo) {
+internal fun w212(o: RemoteOut, v: dev.ide.ui.backend.UiIconRepo) {
     o.string(v.id)
     o.string(v.displayName)
     o.string(v.license)
-    o.opt(v.attribution) { n572 -> o.string(n572) }
+    o.opt(v.attribution) { n584 -> o.string(n584) }
     o.bool(v.requiresNetwork)
     o.bool(v.loaded)
     o.int(v.iconCount)
 }
-internal fun r210(i: RemoteIn): dev.ide.ui.backend.UiIconRepo = dev.ide.ui.backend.UiIconRepo(
+internal fun r212(i: RemoteIn): dev.ide.ui.backend.UiIconRepo = dev.ide.ui.backend.UiIconRepo(
     id = i.str(),
     displayName = i.str(),
     license = i.str(),
@@ -3997,126 +4073,126 @@ internal fun r210(i: RemoteIn): dev.ide.ui.backend.UiIconRepo = dev.ide.ui.backe
     iconCount = i.int(),
 )
 
-internal fun w211(o: RemoteOut, v: dev.ide.ui.backend.UiAppIconState) {
+internal fun w213(o: RemoteOut, v: dev.ide.ui.backend.UiAppIconState) {
     o.string(v.moduleName)
-    o.opt(v.iconRef) { n573 -> o.string(n573) }
-    o.opt(v.roundIconRef) { n574 -> o.string(n574) }
-    o.opt(v.current) { n575 -> w152(o, n575) }
-    o.opt(v.currentBytes) { n576 -> o.bytes(n576) }
+    o.opt(v.iconRef) { n585 -> o.string(n585) }
+    o.opt(v.roundIconRef) { n586 -> o.string(n586) }
+    o.opt(v.current) { n587 -> w154(o, n587) }
+    o.opt(v.currentBytes) { n588 -> o.bytes(n588) }
 }
-internal fun r211(i: RemoteIn): dev.ide.ui.backend.UiAppIconState = dev.ide.ui.backend.UiAppIconState(
+internal fun r213(i: RemoteIn): dev.ide.ui.backend.UiAppIconState = dev.ide.ui.backend.UiAppIconState(
     moduleName = i.str(),
     iconRef = i.opt { i.str() },
     roundIconRef = i.opt { i.str() },
-    current = i.opt { r152(i) },
+    current = i.opt { r154(i) },
     currentBytes = i.opt { i.bytes() },
 )
 
-internal fun w212(o: RemoteOut, v: dev.ide.ui.backend.UiIconLoadResult) {
+internal fun w214(o: RemoteOut, v: dev.ide.ui.backend.UiIconLoadResult) {
     o.bool(v.ok)
-    o.opt(v.message) { n577 -> o.string(n577) }
+    o.opt(v.message) { n589 -> o.string(n589) }
     o.int(v.iconCount)
 }
-internal fun r212(i: RemoteIn): dev.ide.ui.backend.UiIconLoadResult = dev.ide.ui.backend.UiIconLoadResult(
+internal fun r214(i: RemoteIn): dev.ide.ui.backend.UiIconLoadResult = dev.ide.ui.backend.UiIconLoadResult(
     ok = i.bool(),
     message = i.opt { i.str() },
     iconCount = i.int(),
 )
 
-internal fun w213(o: RemoteOut, v: dev.ide.ui.backend.UiAppIconPlan) {
+internal fun w215(o: RemoteOut, v: dev.ide.ui.backend.UiAppIconPlan) {
     o.string(v.resDirPath)
-    o.list(v.files) { e578 -> o.string(e578) }
-    o.list(v.rasters) { e579 -> w214(o, e579) }
-    o.list(v.replacing) { e580 -> o.string(e580) }
-    o.opt(v.manifestChange) { n581 -> o.string(n581) }
-    o.list(v.warnings) { e582 -> o.string(e582) }
+    o.list(v.files) { e590 -> o.string(e590) }
+    o.list(v.rasters) { e591 -> w216(o, e591) }
+    o.list(v.replacing) { e592 -> o.string(e592) }
+    o.opt(v.manifestChange) { n593 -> o.string(n593) }
+    o.list(v.warnings) { e594 -> o.string(e594) }
 }
-internal fun r213(i: RemoteIn): dev.ide.ui.backend.UiAppIconPlan = dev.ide.ui.backend.UiAppIconPlan(
+internal fun r215(i: RemoteIn): dev.ide.ui.backend.UiAppIconPlan = dev.ide.ui.backend.UiAppIconPlan(
     resDirPath = i.str(),
     files = i.list { i.str() },
-    rasters = i.list { r214(i) },
+    rasters = i.list { r216(i) },
     replacing = i.list { i.str() },
     manifestChange = i.opt { i.str() },
     warnings = i.list { i.str() },
 )
 
-internal fun w214(o: RemoteOut, v: dev.ide.ui.backend.UiAppIconRaster) {
+internal fun w216(o: RemoteOut, v: dev.ide.ui.backend.UiAppIconRaster) {
     o.string(v.relativePath)
     o.int(v.pixels)
     o.bool(v.round)
     o.bool(v.opaque)
 }
-internal fun r214(i: RemoteIn): dev.ide.ui.backend.UiAppIconRaster = dev.ide.ui.backend.UiAppIconRaster(
+internal fun r216(i: RemoteIn): dev.ide.ui.backend.UiAppIconRaster = dev.ide.ui.backend.UiAppIconRaster(
     relativePath = i.str(),
     pixels = i.int(),
     round = i.bool(),
     opaque = i.bool(),
 )
 
-internal fun w215(o: RemoteOut, v: dev.ide.ui.backend.UiAppIconPreview) {
-    o.opt(v.background) { n583 -> w152(o, n583) }
-    o.opt(v.foreground) { n584 -> w152(o, n584) }
-    o.opt(v.monochrome) { n585 -> w152(o, n585) }
-    o.map(v.images, { k586 -> o.string(k586) }, { v587 -> o.bytes(v587) })
-    o.list(v.warnings) { e588 -> o.string(e588) }
+internal fun w217(o: RemoteOut, v: dev.ide.ui.backend.UiAppIconPreview) {
+    o.opt(v.background) { n595 -> w154(o, n595) }
+    o.opt(v.foreground) { n596 -> w154(o, n596) }
+    o.opt(v.monochrome) { n597 -> w154(o, n597) }
+    o.map(v.images, { k598 -> o.string(k598) }, { v599 -> o.bytes(v599) })
+    o.list(v.warnings) { e600 -> o.string(e600) }
 }
-internal fun r215(i: RemoteIn): dev.ide.ui.backend.UiAppIconPreview = dev.ide.ui.backend.UiAppIconPreview(
-    background = i.opt { r152(i) },
-    foreground = i.opt { r152(i) },
-    monochrome = i.opt { r152(i) },
+internal fun r217(i: RemoteIn): dev.ide.ui.backend.UiAppIconPreview = dev.ide.ui.backend.UiAppIconPreview(
+    background = i.opt { r154(i) },
+    foreground = i.opt { r154(i) },
+    monochrome = i.opt { r154(i) },
     images = i.map({ i.str() }, { i.bytes() }),
     warnings = i.list { i.str() },
 )
 
-internal fun w216(o: RemoteOut, v: dev.ide.ui.backend.UiResourceIcon) {
+internal fun w218(o: RemoteOut, v: dev.ide.ui.backend.UiResourceIcon) {
     o.string(v.moduleName)
     o.string(v.resType)
     o.string(v.name)
-    o.list(v.configurations) { e589 -> w217(o, e589) }
+    o.list(v.configurations) { e601 -> w219(o, e601) }
 }
-internal fun r216(i: RemoteIn): dev.ide.ui.backend.UiResourceIcon = dev.ide.ui.backend.UiResourceIcon(
+internal fun r218(i: RemoteIn): dev.ide.ui.backend.UiResourceIcon = dev.ide.ui.backend.UiResourceIcon(
     moduleName = i.str(),
     resType = i.str(),
     name = i.str(),
-    configurations = i.list { r217(i) },
+    configurations = i.list { r219(i) },
 )
 
-internal fun w217(o: RemoteOut, v: dev.ide.ui.backend.UiResourceConfig) {
+internal fun w219(o: RemoteOut, v: dev.ide.ui.backend.UiResourceConfig) {
     o.string(v.qualifier)
     o.string(v.path)
     o.bool(v.isRaster)
 }
-internal fun r217(i: RemoteIn): dev.ide.ui.backend.UiResourceConfig = dev.ide.ui.backend.UiResourceConfig(
+internal fun r219(i: RemoteIn): dev.ide.ui.backend.UiResourceConfig = dev.ide.ui.backend.UiResourceConfig(
     qualifier = i.str(),
     path = i.str(),
     isRaster = i.bool(),
 )
 
-internal fun w218(o: RemoteOut, v: dev.ide.ui.backend.UiLearnAccount) {
+internal fun w220(o: RemoteOut, v: dev.ide.ui.backend.UiLearnAccount) {
     o.bool(v.signedIn)
     o.bool(v.available)
     o.int(v.streak)
     o.int(v.bestStreak)
     o.bool(v.activeToday)
-    o.list(v.badges) { e591 -> w219(o, e591) }
+    o.list(v.badges) { e603 -> w221(o, e603) }
 }
-internal fun r218(i: RemoteIn): dev.ide.ui.backend.UiLearnAccount = dev.ide.ui.backend.UiLearnAccount(
+internal fun r220(i: RemoteIn): dev.ide.ui.backend.UiLearnAccount = dev.ide.ui.backend.UiLearnAccount(
     signedIn = i.bool(),
     available = i.bool(),
     streak = i.int(),
     bestStreak = i.int(),
     activeToday = i.bool(),
-    badges = i.list { r219(i) },
+    badges = i.list { r221(i) },
 )
 
-internal fun w219(o: RemoteOut, v: dev.ide.ui.backend.UiLearnBadge) {
+internal fun w221(o: RemoteOut, v: dev.ide.ui.backend.UiLearnBadge) {
     o.string(v.trackId)
     o.string(v.title)
     o.string(v.iconId)
-    o.opt(v.accentColor) { n590 -> o.long(n590) }
+    o.opt(v.accentColor) { n602 -> o.long(n602) }
     o.string(v.earnedAt)
 }
-internal fun r219(i: RemoteIn): dev.ide.ui.backend.UiLearnBadge = dev.ide.ui.backend.UiLearnBadge(
+internal fun r221(i: RemoteIn): dev.ide.ui.backend.UiLearnBadge = dev.ide.ui.backend.UiLearnBadge(
     trackId = i.str(),
     title = i.str(),
     iconId = i.str(),
@@ -4124,39 +4200,39 @@ internal fun r219(i: RemoteIn): dev.ide.ui.backend.UiLearnBadge = dev.ide.ui.bac
     earnedAt = i.str(),
 )
 
-internal fun w220(o: RemoteOut, v: dev.ide.ui.backend.UiLearnWrite) {
-    o.opt(v.id) { n592 -> o.string(n592) }
-    o.opt(v.error) { n593 -> o.string(n593) }
+internal fun w222(o: RemoteOut, v: dev.ide.ui.backend.UiLearnWrite) {
+    o.opt(v.id) { n604 -> o.string(n604) }
+    o.opt(v.error) { n605 -> o.string(n605) }
 }
-internal fun r220(i: RemoteIn): dev.ide.ui.backend.UiLearnWrite = dev.ide.ui.backend.UiLearnWrite(
+internal fun r222(i: RemoteIn): dev.ide.ui.backend.UiLearnWrite = dev.ide.ui.backend.UiLearnWrite(
     id = i.opt { i.str() },
     error = i.opt { i.str() },
 )
 
-internal fun w221(o: RemoteOut, v: dev.ide.ui.backend.UiLearnCatalog) {
-    o.list(v.tracks) { e599 -> w222(o, e599) }
-    o.list(v.paths) { e600 -> w224(o, e600) }
+internal fun w223(o: RemoteOut, v: dev.ide.ui.backend.UiLearnCatalog) {
+    o.list(v.tracks) { e611 -> w224(o, e611) }
+    o.list(v.paths) { e612 -> w226(o, e612) }
     o.long(v.version)
 }
-internal fun r221(i: RemoteIn): dev.ide.ui.backend.UiLearnCatalog = dev.ide.ui.backend.UiLearnCatalog(
-    tracks = i.list { r222(i) },
-    paths = i.list { r224(i) },
+internal fun r223(i: RemoteIn): dev.ide.ui.backend.UiLearnCatalog = dev.ide.ui.backend.UiLearnCatalog(
+    tracks = i.list { r224(i) },
+    paths = i.list { r226(i) },
     version = i.long(),
 )
 
-internal fun w222(o: RemoteOut, v: dev.ide.ui.backend.UiLearnTrack) {
+internal fun w224(o: RemoteOut, v: dev.ide.ui.backend.UiLearnTrack) {
     o.string(v.id)
     o.string(v.title)
     o.string(v.subtitle)
     o.string(v.iconId)
-    o.opt(v.accentColor) { n594 -> o.long(n594) }
+    o.opt(v.accentColor) { n606 -> o.long(n606) }
     o.string(v.language)
     o.string(v.category)
-    o.list(v.lessons) { e595 -> w223(o, e595) }
+    o.list(v.lessons) { e607 -> w225(o, e607) }
     o.string(v.level)
-    o.list(v.prerequisites) { e596 -> o.string(e596) }
+    o.list(v.prerequisites) { e608 -> o.string(e608) }
 }
-internal fun r222(i: RemoteIn): dev.ide.ui.backend.UiLearnTrack = dev.ide.ui.backend.UiLearnTrack(
+internal fun r224(i: RemoteIn): dev.ide.ui.backend.UiLearnTrack = dev.ide.ui.backend.UiLearnTrack(
     id = i.str(),
     title = i.str(),
     subtitle = i.str(),
@@ -4164,12 +4240,12 @@ internal fun r222(i: RemoteIn): dev.ide.ui.backend.UiLearnTrack = dev.ide.ui.bac
     accentColor = i.opt { i.long() },
     language = i.str(),
     category = i.str(),
-    lessons = i.list { r223(i) },
+    lessons = i.list { r225(i) },
     level = i.str(),
     prerequisites = i.list { i.str() },
 )
 
-internal fun w223(o: RemoteOut, v: dev.ide.ui.backend.UiLessonSummary) {
+internal fun w225(o: RemoteOut, v: dev.ide.ui.backend.UiLessonSummary) {
     o.string(v.id)
     o.string(v.title)
     o.string(v.summary)
@@ -4178,7 +4254,7 @@ internal fun w223(o: RemoteOut, v: dev.ide.ui.backend.UiLessonSummary) {
     o.int(v.stepCount)
     o.string(v.kind)
 }
-internal fun r223(i: RemoteIn): dev.ide.ui.backend.UiLessonSummary = dev.ide.ui.backend.UiLessonSummary(
+internal fun r225(i: RemoteIn): dev.ide.ui.backend.UiLessonSummary = dev.ide.ui.backend.UiLessonSummary(
     id = i.str(),
     title = i.str(),
     summary = i.str(),
@@ -4188,15 +4264,15 @@ internal fun r223(i: RemoteIn): dev.ide.ui.backend.UiLessonSummary = dev.ide.ui.
     kind = i.str(),
 )
 
-internal fun w224(o: RemoteOut, v: dev.ide.ui.backend.UiLearnPath) {
+internal fun w226(o: RemoteOut, v: dev.ide.ui.backend.UiLearnPath) {
     o.string(v.id)
     o.string(v.title)
     o.string(v.subtitle)
     o.string(v.iconId)
-    o.opt(v.accentColor) { n597 -> o.long(n597) }
-    o.list(v.trackIds) { e598 -> o.string(e598) }
+    o.opt(v.accentColor) { n609 -> o.long(n609) }
+    o.list(v.trackIds) { e610 -> o.string(e610) }
 }
-internal fun r224(i: RemoteIn): dev.ide.ui.backend.UiLearnPath = dev.ide.ui.backend.UiLearnPath(
+internal fun r226(i: RemoteIn): dev.ide.ui.backend.UiLearnPath = dev.ide.ui.backend.UiLearnPath(
     id = i.str(),
     title = i.str(),
     subtitle = i.str(),
@@ -4205,16 +4281,16 @@ internal fun r224(i: RemoteIn): dev.ide.ui.backend.UiLearnPath = dev.ide.ui.back
     trackIds = i.list { i.str() },
 )
 
-internal fun w225(o: RemoteOut, v: dev.ide.ui.backend.UiExerciseResult) {
+internal fun w227(o: RemoteOut, v: dev.ide.ui.backend.UiExerciseResult) {
     o.bool(v.passed)
     o.bool(v.compiled)
     o.string(v.output)
     o.string(v.message)
-    o.list(v.diagnostics) { e601 -> o.string(e601) }
+    o.list(v.diagnostics) { e613 -> o.string(e613) }
     o.string(v.verdict)
-    o.list(v.args) { e602 -> o.string(e602) }
+    o.list(v.args) { e614 -> o.string(e614) }
 }
-internal fun r225(i: RemoteIn): dev.ide.ui.backend.UiExerciseResult = dev.ide.ui.backend.UiExerciseResult(
+internal fun r227(i: RemoteIn): dev.ide.ui.backend.UiExerciseResult = dev.ide.ui.backend.UiExerciseResult(
     passed = i.bool(),
     compiled = i.bool(),
     output = i.str(),
@@ -4224,143 +4300,143 @@ internal fun r225(i: RemoteIn): dev.ide.ui.backend.UiExerciseResult = dev.ide.ui
     args = i.list { i.str() },
 )
 
-internal fun w226(o: RemoteOut, v: dev.ide.ui.backend.UiLesson) {
+internal fun w228(o: RemoteOut, v: dev.ide.ui.backend.UiLesson) {
     o.string(v.id)
     o.string(v.trackId)
     o.string(v.title)
     o.string(v.summary)
     o.string(v.language)
-    o.list(v.steps) { e607 -> w227(o, e607) }
+    o.list(v.steps) { e619 -> w229(o, e619) }
     o.string(v.kind)
 }
-internal fun r226(i: RemoteIn): dev.ide.ui.backend.UiLesson = dev.ide.ui.backend.UiLesson(
+internal fun r228(i: RemoteIn): dev.ide.ui.backend.UiLesson = dev.ide.ui.backend.UiLesson(
     id = i.str(),
     trackId = i.str(),
     title = i.str(),
     summary = i.str(),
     language = i.str(),
-    steps = i.list { r227(i) },
+    steps = i.list { r229(i) },
     kind = i.str(),
 )
 
-internal fun w227(o: RemoteOut, v: dev.ide.ui.backend.UiLessonStep) {
+internal fun w229(o: RemoteOut, v: dev.ide.ui.backend.UiLessonStep) {
     when (v) {
-        is dev.ide.ui.backend.UiLessonStep.Concept -> { o.int(0); w228(o, v) }
-        is dev.ide.ui.backend.UiLessonStep.Interactive -> { o.int(1); w235(o, v) }
-        is dev.ide.ui.backend.UiLessonStep.Quiz -> { o.int(2); w236(o, v) }
+        is dev.ide.ui.backend.UiLessonStep.Concept -> { o.int(0); w230(o, v) }
+        is dev.ide.ui.backend.UiLessonStep.Interactive -> { o.int(1); w237(o, v) }
+        is dev.ide.ui.backend.UiLessonStep.Quiz -> { o.int(2); w238(o, v) }
     }
 }
-internal fun r227(i: RemoteIn): dev.ide.ui.backend.UiLessonStep = when (val tag = i.int()) {
-    0 -> r228(i)
-    1 -> r235(i)
-    2 -> r236(i)
+internal fun r229(i: RemoteIn): dev.ide.ui.backend.UiLessonStep = when (val tag = i.int()) {
+    0 -> r230(i)
+    1 -> r237(i)
+    2 -> r238(i)
     else -> error("unknown UiLessonStep $tag")
 }
 
-internal fun w228(o: RemoteOut, v: dev.ide.ui.backend.UiLessonStep.Concept) {
+internal fun w230(o: RemoteOut, v: dev.ide.ui.backend.UiLessonStep.Concept) {
     o.string(v.id)
     o.string(v.title)
-    o.list(v.blocks) { e603 -> w229(o, e603) }
+    o.list(v.blocks) { e615 -> w231(o, e615) }
 }
-internal fun r228(i: RemoteIn): dev.ide.ui.backend.UiLessonStep.Concept = dev.ide.ui.backend.UiLessonStep.Concept(
+internal fun r230(i: RemoteIn): dev.ide.ui.backend.UiLessonStep.Concept = dev.ide.ui.backend.UiLessonStep.Concept(
     id = i.str(),
     title = i.str(),
-    blocks = i.list { r229(i) },
+    blocks = i.list { r231(i) },
 )
 
-internal fun w229(o: RemoteOut, v: dev.ide.ui.backend.UiContentBlock) {
+internal fun w231(o: RemoteOut, v: dev.ide.ui.backend.UiContentBlock) {
     when (v) {
-        is dev.ide.ui.backend.UiContentBlock.Callout -> { o.int(0); w230(o, v) }
-        is dev.ide.ui.backend.UiContentBlock.Code -> { o.int(1); w231(o, v) }
-        is dev.ide.ui.backend.UiContentBlock.ComposePreview -> { o.int(2); w232(o, v) }
-        is dev.ide.ui.backend.UiContentBlock.LayoutPreview -> { o.int(3); w233(o, v) }
-        is dev.ide.ui.backend.UiContentBlock.Text -> { o.int(4); w234(o, v) }
+        is dev.ide.ui.backend.UiContentBlock.Callout -> { o.int(0); w232(o, v) }
+        is dev.ide.ui.backend.UiContentBlock.Code -> { o.int(1); w233(o, v) }
+        is dev.ide.ui.backend.UiContentBlock.ComposePreview -> { o.int(2); w234(o, v) }
+        is dev.ide.ui.backend.UiContentBlock.LayoutPreview -> { o.int(3); w235(o, v) }
+        is dev.ide.ui.backend.UiContentBlock.Text -> { o.int(4); w236(o, v) }
     }
 }
-internal fun r229(i: RemoteIn): dev.ide.ui.backend.UiContentBlock = when (val tag = i.int()) {
-    0 -> r230(i)
-    1 -> r231(i)
-    2 -> r232(i)
-    3 -> r233(i)
-    4 -> r234(i)
+internal fun r231(i: RemoteIn): dev.ide.ui.backend.UiContentBlock = when (val tag = i.int()) {
+    0 -> r232(i)
+    1 -> r233(i)
+    2 -> r234(i)
+    3 -> r235(i)
+    4 -> r236(i)
     else -> error("unknown UiContentBlock $tag")
 }
 
-internal fun w230(o: RemoteOut, v: dev.ide.ui.backend.UiContentBlock.Callout) {
+internal fun w232(o: RemoteOut, v: dev.ide.ui.backend.UiContentBlock.Callout) {
     o.string(v.kind)
     o.string(v.text)
 }
-internal fun r230(i: RemoteIn): dev.ide.ui.backend.UiContentBlock.Callout = dev.ide.ui.backend.UiContentBlock.Callout(
+internal fun r232(i: RemoteIn): dev.ide.ui.backend.UiContentBlock.Callout = dev.ide.ui.backend.UiContentBlock.Callout(
     kind = i.str(),
     text = i.str(),
 )
 
-internal fun w231(o: RemoteOut, v: dev.ide.ui.backend.UiContentBlock.Code) {
+internal fun w233(o: RemoteOut, v: dev.ide.ui.backend.UiContentBlock.Code) {
     o.string(v.code)
     o.string(v.language)
 }
-internal fun r231(i: RemoteIn): dev.ide.ui.backend.UiContentBlock.Code = dev.ide.ui.backend.UiContentBlock.Code(
+internal fun r233(i: RemoteIn): dev.ide.ui.backend.UiContentBlock.Code = dev.ide.ui.backend.UiContentBlock.Code(
     code = i.str(),
     language = i.str(),
 )
 
-internal fun w232(o: RemoteOut, v: dev.ide.ui.backend.UiContentBlock.ComposePreview) {
+internal fun w234(o: RemoteOut, v: dev.ide.ui.backend.UiContentBlock.ComposePreview) {
     o.string(v.code)
     o.bool(v.interactive)
     o.string(v.caption)
 }
-internal fun r232(i: RemoteIn): dev.ide.ui.backend.UiContentBlock.ComposePreview = dev.ide.ui.backend.UiContentBlock.ComposePreview(
+internal fun r234(i: RemoteIn): dev.ide.ui.backend.UiContentBlock.ComposePreview = dev.ide.ui.backend.UiContentBlock.ComposePreview(
     code = i.str(),
     interactive = i.bool(),
     caption = i.str(),
 )
 
-internal fun w233(o: RemoteOut, v: dev.ide.ui.backend.UiContentBlock.LayoutPreview) {
+internal fun w235(o: RemoteOut, v: dev.ide.ui.backend.UiContentBlock.LayoutPreview) {
     o.string(v.xml)
     o.bool(v.interactive)
     o.string(v.caption)
 }
-internal fun r233(i: RemoteIn): dev.ide.ui.backend.UiContentBlock.LayoutPreview = dev.ide.ui.backend.UiContentBlock.LayoutPreview(
+internal fun r235(i: RemoteIn): dev.ide.ui.backend.UiContentBlock.LayoutPreview = dev.ide.ui.backend.UiContentBlock.LayoutPreview(
     xml = i.str(),
     interactive = i.bool(),
     caption = i.str(),
 )
 
-internal fun w234(o: RemoteOut, v: dev.ide.ui.backend.UiContentBlock.Text) {
+internal fun w236(o: RemoteOut, v: dev.ide.ui.backend.UiContentBlock.Text) {
     o.string(v.md)
 }
-internal fun r234(i: RemoteIn): dev.ide.ui.backend.UiContentBlock.Text = dev.ide.ui.backend.UiContentBlock.Text(
+internal fun r236(i: RemoteIn): dev.ide.ui.backend.UiContentBlock.Text = dev.ide.ui.backend.UiContentBlock.Text(
     md = i.str(),
 )
 
-internal fun w235(o: RemoteOut, v: dev.ide.ui.backend.UiLessonStep.Interactive) {
+internal fun w237(o: RemoteOut, v: dev.ide.ui.backend.UiLessonStep.Interactive) {
     o.string(v.id)
     o.string(v.title)
-    o.list(v.blocks) { e604 -> w229(o, e604) }
+    o.list(v.blocks) { e616 -> w231(o, e616) }
     o.string(v.starterCode)
     o.string(v.language)
-    o.list(v.hints) { e605 -> o.string(e605) }
+    o.list(v.hints) { e617 -> o.string(e617) }
     o.string(v.solution)
 }
-internal fun r235(i: RemoteIn): dev.ide.ui.backend.UiLessonStep.Interactive = dev.ide.ui.backend.UiLessonStep.Interactive(
+internal fun r237(i: RemoteIn): dev.ide.ui.backend.UiLessonStep.Interactive = dev.ide.ui.backend.UiLessonStep.Interactive(
     id = i.str(),
     title = i.str(),
-    blocks = i.list { r229(i) },
+    blocks = i.list { r231(i) },
     starterCode = i.str(),
     language = i.str(),
     hints = i.list { i.str() },
     solution = i.str(),
 )
 
-internal fun w236(o: RemoteOut, v: dev.ide.ui.backend.UiLessonStep.Quiz) {
+internal fun w238(o: RemoteOut, v: dev.ide.ui.backend.UiLessonStep.Quiz) {
     o.string(v.id)
     o.string(v.title)
     o.string(v.prompt)
-    o.list(v.options) { e606 -> o.string(e606) }
+    o.list(v.options) { e618 -> o.string(e618) }
     o.int(v.correctIndex)
     o.string(v.explanation)
 }
-internal fun r236(i: RemoteIn): dev.ide.ui.backend.UiLessonStep.Quiz = dev.ide.ui.backend.UiLessonStep.Quiz(
+internal fun r238(i: RemoteIn): dev.ide.ui.backend.UiLessonStep.Quiz = dev.ide.ui.backend.UiLessonStep.Quiz(
     id = i.str(),
     title = i.str(),
     prompt = i.str(),
@@ -4369,39 +4445,39 @@ internal fun r236(i: RemoteIn): dev.ide.ui.backend.UiLessonStep.Quiz = dev.ide.u
     explanation = i.str(),
 )
 
-internal fun w237(o: RemoteOut, v: dev.ide.ui.backend.UiLearnProgress) {
-    o.map(v.completedByLesson, { k608 -> o.string(k608) }, { v609 -> o.list(v609.toList()) { e610 -> o.string(e610) } })
+internal fun w239(o: RemoteOut, v: dev.ide.ui.backend.UiLearnProgress) {
+    o.map(v.completedByLesson, { k620 -> o.string(k620) }, { v621 -> o.list(v621.toList()) { e622 -> o.string(e622) } })
 }
-internal fun r237(i: RemoteIn): dev.ide.ui.backend.UiLearnProgress = dev.ide.ui.backend.UiLearnProgress(
+internal fun r239(i: RemoteIn): dev.ide.ui.backend.UiLearnProgress = dev.ide.ui.backend.UiLearnProgress(
     completedByLesson = i.map({ i.str() }, { i.list { i.str() }.toSet() }),
 )
 
-internal fun w238(o: RemoteOut, v: dev.ide.ui.backend.UiLearnPublicProfile) {
-    o.list(v.badges) { e611 -> w219(o, e611) }
+internal fun w240(o: RemoteOut, v: dev.ide.ui.backend.UiLearnPublicProfile) {
+    o.list(v.badges) { e623 -> w221(o, e623) }
     o.int(v.streak)
     o.int(v.bestStreak)
     o.int(v.lessonsStarted)
 }
-internal fun r238(i: RemoteIn): dev.ide.ui.backend.UiLearnPublicProfile = dev.ide.ui.backend.UiLearnPublicProfile(
-    badges = i.list { r219(i) },
+internal fun r240(i: RemoteIn): dev.ide.ui.backend.UiLearnPublicProfile = dev.ide.ui.backend.UiLearnPublicProfile(
+    badges = i.list { r221(i) },
     streak = i.int(),
     bestStreak = i.int(),
     lessonsStarted = i.int(),
 )
 
-internal fun w239(o: RemoteOut, v: dev.ide.ui.backend.UiLearnReport) {
+internal fun w241(o: RemoteOut, v: dev.ide.ui.backend.UiLearnReport) {
     o.string(v.id)
     o.string(v.kind)
     o.string(v.reason)
-    o.opt(v.detail) { n612 -> o.string(n612) }
+    o.opt(v.detail) { n624 -> o.string(n624) }
     o.int(v.reports)
     o.string(v.excerpt)
-    o.opt(v.authorHandle) { n613 -> o.string(n613) }
-    o.opt(v.lessonTitle) { n614 -> o.string(n614) }
+    o.opt(v.authorHandle) { n625 -> o.string(n625) }
+    o.opt(v.lessonTitle) { n626 -> o.string(n626) }
     o.bool(v.hidden)
     o.long(v.createdAtMs)
 }
-internal fun r239(i: RemoteIn): dev.ide.ui.backend.UiLearnReport = dev.ide.ui.backend.UiLearnReport(
+internal fun r241(i: RemoteIn): dev.ide.ui.backend.UiLearnReport = dev.ide.ui.backend.UiLearnReport(
     id = i.str(),
     kind = i.str(),
     reason = i.str(),
@@ -4414,7 +4490,7 @@ internal fun r239(i: RemoteIn): dev.ide.ui.backend.UiLearnReport = dev.ide.ui.ba
     createdAtMs = i.long(),
 )
 
-internal fun w240(o: RemoteOut, v: dev.ide.ui.backend.UiResumePoint) {
+internal fun w242(o: RemoteOut, v: dev.ide.ui.backend.UiResumePoint) {
     o.string(v.trackId)
     o.string(v.lessonId)
     o.int(v.stepIndex)
@@ -4422,7 +4498,7 @@ internal fun w240(o: RemoteOut, v: dev.ide.ui.backend.UiResumePoint) {
     o.string(v.lessonTitle)
     o.float(v.fractionComplete)
 }
-internal fun r240(i: RemoteIn): dev.ide.ui.backend.UiResumePoint = dev.ide.ui.backend.UiResumePoint(
+internal fun r242(i: RemoteIn): dev.ide.ui.backend.UiResumePoint = dev.ide.ui.backend.UiResumePoint(
     trackId = i.str(),
     lessonId = i.str(),
     stepIndex = i.int(),
@@ -4431,66 +4507,66 @@ internal fun r240(i: RemoteIn): dev.ide.ui.backend.UiResumePoint = dev.ide.ui.ba
     fractionComplete = i.float(),
 )
 
-internal fun w241(o: RemoteOut, v: dev.ide.ui.backend.UiLearnSolutionPage) {
+internal fun w243(o: RemoteOut, v: dev.ide.ui.backend.UiLearnSolutionPage) {
     o.bool(v.unlocked)
-    o.list(v.solutions) { e617 -> w242(o, e617) }
+    o.list(v.solutions) { e629 -> w244(o, e629) }
 }
-internal fun r241(i: RemoteIn): dev.ide.ui.backend.UiLearnSolutionPage = dev.ide.ui.backend.UiLearnSolutionPage(
+internal fun r243(i: RemoteIn): dev.ide.ui.backend.UiLearnSolutionPage = dev.ide.ui.backend.UiLearnSolutionPage(
     unlocked = i.bool(),
-    solutions = i.list { r242(i) },
+    solutions = i.list { r244(i) },
 )
 
-internal fun w242(o: RemoteOut, v: dev.ide.ui.backend.UiLearnSolution) {
+internal fun w244(o: RemoteOut, v: dev.ide.ui.backend.UiLearnSolution) {
     o.string(v.id)
     o.string(v.code)
     o.string(v.language)
-    w243(o, v.author)
+    w245(o, v.author)
     o.int(v.likes)
     o.bool(v.likedByMe)
     o.bool(v.mine)
     o.long(v.createdAtMs)
 }
-internal fun r242(i: RemoteIn): dev.ide.ui.backend.UiLearnSolution = dev.ide.ui.backend.UiLearnSolution(
+internal fun r244(i: RemoteIn): dev.ide.ui.backend.UiLearnSolution = dev.ide.ui.backend.UiLearnSolution(
     id = i.str(),
     code = i.str(),
     language = i.str(),
-    author = r243(i),
+    author = r245(i),
     likes = i.int(),
     likedByMe = i.bool(),
     mine = i.bool(),
     createdAtMs = i.long(),
 )
 
-internal fun w243(o: RemoteOut, v: dev.ide.ui.backend.UiLearnAuthor) {
+internal fun w245(o: RemoteOut, v: dev.ide.ui.backend.UiLearnAuthor) {
     o.string(v.name)
-    o.opt(v.handle) { n615 -> o.string(n615) }
-    o.opt(v.avatarUrl) { n616 -> o.string(n616) }
+    o.opt(v.handle) { n627 -> o.string(n627) }
+    o.opt(v.avatarUrl) { n628 -> o.string(n628) }
 }
-internal fun r243(i: RemoteIn): dev.ide.ui.backend.UiLearnAuthor = dev.ide.ui.backend.UiLearnAuthor(
+internal fun r245(i: RemoteIn): dev.ide.ui.backend.UiLearnAuthor = dev.ide.ui.backend.UiLearnAuthor(
     name = i.str(),
     handle = i.opt { i.str() },
     avatarUrl = i.opt { i.str() },
 )
 
-internal fun w244(o: RemoteOut, v: dev.ide.ui.backend.UiLearnThread) {
+internal fun w246(o: RemoteOut, v: dev.ide.ui.backend.UiLearnThread) {
     o.string(v.id)
     o.string(v.lessonId)
     o.string(v.lessonTitle)
-    o.opt(v.stepId) { n619 -> o.string(n619) }
-    o.opt(v.stepTitle) { n620 -> o.string(n620) }
+    o.opt(v.stepId) { n631 -> o.string(n631) }
+    o.opt(v.stepTitle) { n632 -> o.string(n632) }
     o.string(v.title)
     o.string(v.body)
-    o.opt(v.code) { n621 -> o.string(n621) }
-    o.opt(v.language) { n622 -> o.string(n622) }
-    o.opt(v.errorText) { n623 -> o.string(n623) }
-    w243(o, v.author)
+    o.opt(v.code) { n633 -> o.string(n633) }
+    o.opt(v.language) { n634 -> o.string(n634) }
+    o.opt(v.errorText) { n635 -> o.string(n635) }
+    w245(o, v.author)
     o.long(v.createdAtMs)
     o.bool(v.mine)
-    o.opt(v.acceptedPost) { n624 -> o.string(n624) }
-    o.list(v.answers) { e625 -> w245(o, e625) }
+    o.opt(v.acceptedPost) { n636 -> o.string(n636) }
+    o.list(v.answers) { e637 -> w247(o, e637) }
     o.bool(v.canModerate)
 }
-internal fun r244(i: RemoteIn): dev.ide.ui.backend.UiLearnThread = dev.ide.ui.backend.UiLearnThread(
+internal fun r246(i: RemoteIn): dev.ide.ui.backend.UiLearnThread = dev.ide.ui.backend.UiLearnThread(
     id = i.str(),
     lessonId = i.str(),
     lessonTitle = i.str(),
@@ -4501,30 +4577,30 @@ internal fun r244(i: RemoteIn): dev.ide.ui.backend.UiLearnThread = dev.ide.ui.ba
     code = i.opt { i.str() },
     language = i.opt { i.str() },
     errorText = i.opt { i.str() },
-    author = r243(i),
+    author = r245(i),
     createdAtMs = i.long(),
     mine = i.bool(),
     acceptedPost = i.opt { i.str() },
-    answers = i.list { r245(i) },
+    answers = i.list { r247(i) },
     canModerate = i.bool(),
 )
 
-internal fun w245(o: RemoteOut, v: dev.ide.ui.backend.UiLearnAnswer) {
+internal fun w247(o: RemoteOut, v: dev.ide.ui.backend.UiLearnAnswer) {
     o.string(v.id)
     o.string(v.body)
-    o.opt(v.code) { n618 -> o.string(n618) }
-    w243(o, v.author)
+    o.opt(v.code) { n630 -> o.string(n630) }
+    w245(o, v.author)
     o.int(v.score)
     o.bool(v.votedByMe)
     o.bool(v.mine)
     o.bool(v.accepted)
     o.long(v.createdAtMs)
 }
-internal fun r245(i: RemoteIn): dev.ide.ui.backend.UiLearnAnswer = dev.ide.ui.backend.UiLearnAnswer(
+internal fun r247(i: RemoteIn): dev.ide.ui.backend.UiLearnAnswer = dev.ide.ui.backend.UiLearnAnswer(
     id = i.str(),
     body = i.str(),
     code = i.opt { i.str() },
-    author = r243(i),
+    author = r245(i),
     score = i.int(),
     votedByMe = i.bool(),
     mine = i.bool(),
@@ -4532,13 +4608,13 @@ internal fun r245(i: RemoteIn): dev.ide.ui.backend.UiLearnAnswer = dev.ide.ui.ba
     createdAtMs = i.long(),
 )
 
-internal fun w246(o: RemoteOut, v: dev.ide.ui.backend.UiLearnThreadSummary) {
+internal fun w248(o: RemoteOut, v: dev.ide.ui.backend.UiLearnThreadSummary) {
     o.string(v.id)
     o.string(v.lessonId)
-    o.opt(v.stepId) { n626 -> o.string(n626) }
-    o.opt(v.stepTitle) { n627 -> o.string(n627) }
+    o.opt(v.stepId) { n638 -> o.string(n638) }
+    o.opt(v.stepTitle) { n639 -> o.string(n639) }
     o.string(v.title)
-    w243(o, v.author)
+    w245(o, v.author)
     o.int(v.answers)
     o.bool(v.accepted)
     o.bool(v.hasCode)
@@ -4546,13 +4622,13 @@ internal fun w246(o: RemoteOut, v: dev.ide.ui.backend.UiLearnThreadSummary) {
     o.long(v.lastActivityAtMs)
     o.bool(v.mine)
 }
-internal fun r246(i: RemoteIn): dev.ide.ui.backend.UiLearnThreadSummary = dev.ide.ui.backend.UiLearnThreadSummary(
+internal fun r248(i: RemoteIn): dev.ide.ui.backend.UiLearnThreadSummary = dev.ide.ui.backend.UiLearnThreadSummary(
     id = i.str(),
     lessonId = i.str(),
     stepId = i.opt { i.str() },
     stepTitle = i.opt { i.str() },
     title = i.str(),
-    author = r243(i),
+    author = r245(i),
     answers = i.int(),
     accepted = i.bool(),
     hasCode = i.bool(),
@@ -4561,177 +4637,177 @@ internal fun r246(i: RemoteIn): dev.ide.ui.backend.UiLearnThreadSummary = dev.id
     mine = i.bool(),
 )
 
-internal fun w247(o: RemoteOut, v: dev.ide.ui.backend.UiConfigResult) {
+internal fun w249(o: RemoteOut, v: dev.ide.ui.backend.UiConfigResult) {
     o.bool(v.success)
     o.string(v.message)
 }
-internal fun r247(i: RemoteIn): dev.ide.ui.backend.UiConfigResult = dev.ide.ui.backend.UiConfigResult(
+internal fun r249(i: RemoteIn): dev.ide.ui.backend.UiConfigResult = dev.ide.ui.backend.UiConfigResult(
     success = i.bool(),
     message = i.str(),
 )
 
-internal fun w248(o: RemoteOut, v: dev.ide.ui.backend.UiAppIdentity) {
+internal fun w250(o: RemoteOut, v: dev.ide.ui.backend.UiAppIdentity) {
     o.string(v.module)
-    o.opt(v.packageName) { n628 -> o.string(n628) }
-    o.opt(v.appName) { n629 -> o.string(n629) }
-    o.opt(v.applicationId) { n630 -> o.string(n630) }
+    o.opt(v.packageName) { n640 -> o.string(n640) }
+    o.opt(v.appName) { n641 -> o.string(n641) }
+    o.opt(v.applicationId) { n642 -> o.string(n642) }
 }
-internal fun r248(i: RemoteIn): dev.ide.ui.backend.UiAppIdentity = dev.ide.ui.backend.UiAppIdentity(
+internal fun r250(i: RemoteIn): dev.ide.ui.backend.UiAppIdentity = dev.ide.ui.backend.UiAppIdentity(
     module = i.str(),
     packageName = i.opt { i.str() },
     appName = i.opt { i.str() },
     applicationId = i.opt { i.str() },
 )
 
-internal fun w249(o: RemoteOut, v: dev.ide.ui.backend.UiAppRenameRequest) {
+internal fun w251(o: RemoteOut, v: dev.ide.ui.backend.UiAppRenameRequest) {
     o.string(v.module)
-    o.opt(v.newPackage) { n631 -> o.string(n631) }
-    o.opt(v.newAppName) { n632 -> o.string(n632) }
+    o.opt(v.newPackage) { n643 -> o.string(n643) }
+    o.opt(v.newAppName) { n644 -> o.string(n644) }
     o.bool(v.changeApplicationId)
 }
-internal fun r249(i: RemoteIn): dev.ide.ui.backend.UiAppRenameRequest = dev.ide.ui.backend.UiAppRenameRequest(
+internal fun r251(i: RemoteIn): dev.ide.ui.backend.UiAppRenameRequest = dev.ide.ui.backend.UiAppRenameRequest(
     module = i.str(),
     newPackage = i.opt { i.str() },
     newAppName = i.opt { i.str() },
     changeApplicationId = i.bool(),
 )
 
-internal fun w250(o: RemoteOut, v: dev.ide.ui.backend.UiAppRenameResult) {
+internal fun w252(o: RemoteOut, v: dev.ide.ui.backend.UiAppRenameResult) {
     o.bool(v.success)
     o.string(v.message)
-    o.map(v.movedPaths, { k633 -> o.string(k633) }, { v634 -> o.string(v634) })
+    o.map(v.movedPaths, { k645 -> o.string(k645) }, { v646 -> o.string(v646) })
 }
-internal fun r250(i: RemoteIn): dev.ide.ui.backend.UiAppRenameResult = dev.ide.ui.backend.UiAppRenameResult(
+internal fun r252(i: RemoteIn): dev.ide.ui.backend.UiAppRenameResult = dev.ide.ui.backend.UiAppRenameResult(
     success = i.bool(),
     message = i.str(),
     movedPaths = i.map({ i.str() }, { i.str() }),
 )
 
-internal fun w251(o: RemoteOut, v: dev.ide.ui.backend.UiModuleTypeOption) {
+internal fun w253(o: RemoteOut, v: dev.ide.ui.backend.UiModuleTypeOption) {
     o.string(v.id)
     o.string(v.displayName)
-    o.list(v.languageLevels) { e639 -> o.string(e639) }
+    o.list(v.languageLevels) { e651 -> o.string(e651) }
     o.string(v.defaultLanguageLevel)
-    o.list(v.defaultFacets) { e640 -> w252(o, e640) }
+    o.list(v.defaultFacets) { e652 -> w254(o, e652) }
 }
-internal fun r251(i: RemoteIn): dev.ide.ui.backend.UiModuleTypeOption = dev.ide.ui.backend.UiModuleTypeOption(
+internal fun r253(i: RemoteIn): dev.ide.ui.backend.UiModuleTypeOption = dev.ide.ui.backend.UiModuleTypeOption(
     id = i.str(),
     displayName = i.str(),
     languageLevels = i.list { i.str() },
     defaultLanguageLevel = i.str(),
-    defaultFacets = i.list { r252(i) },
+    defaultFacets = i.list { r254(i) },
 )
 
-internal fun w252(o: RemoteOut, v: dev.ide.ui.backend.UiFacetConfig) {
+internal fun w254(o: RemoteOut, v: dev.ide.ui.backend.UiFacetConfig) {
     o.string(v.table)
     o.string(v.title)
-    o.list(v.fields) { e638 -> w253(o, e638) }
+    o.list(v.fields) { e650 -> w255(o, e650) }
 }
-internal fun r252(i: RemoteIn): dev.ide.ui.backend.UiFacetConfig = dev.ide.ui.backend.UiFacetConfig(
+internal fun r254(i: RemoteIn): dev.ide.ui.backend.UiFacetConfig = dev.ide.ui.backend.UiFacetConfig(
     table = i.str(),
     title = i.str(),
-    fields = i.list { r253(i) },
+    fields = i.list { r255(i) },
 )
 
-internal fun w253(o: RemoteOut, v: dev.ide.ui.backend.UiConfigField) {
+internal fun w255(o: RemoteOut, v: dev.ide.ui.backend.UiConfigField) {
     when (v) {
-        is dev.ide.ui.backend.UiConfigField.Bool -> { o.int(0); w254(o, v) }
-        is dev.ide.ui.backend.UiConfigField.Number -> { o.int(1); w255(o, v) }
-        is dev.ide.ui.backend.UiConfigField.StringList -> { o.int(2); w256(o, v) }
-        is dev.ide.ui.backend.UiConfigField.TableList -> { o.int(3); w257(o, v) }
-        is dev.ide.ui.backend.UiConfigField.Text -> { o.int(4); w258(o, v) }
+        is dev.ide.ui.backend.UiConfigField.Bool -> { o.int(0); w256(o, v) }
+        is dev.ide.ui.backend.UiConfigField.Number -> { o.int(1); w257(o, v) }
+        is dev.ide.ui.backend.UiConfigField.StringList -> { o.int(2); w258(o, v) }
+        is dev.ide.ui.backend.UiConfigField.TableList -> { o.int(3); w259(o, v) }
+        is dev.ide.ui.backend.UiConfigField.Text -> { o.int(4); w260(o, v) }
     }
 }
-internal fun r253(i: RemoteIn): dev.ide.ui.backend.UiConfigField = when (val tag = i.int()) {
-    0 -> r254(i)
-    1 -> r255(i)
-    2 -> r256(i)
-    3 -> r257(i)
-    4 -> r258(i)
+internal fun r255(i: RemoteIn): dev.ide.ui.backend.UiConfigField = when (val tag = i.int()) {
+    0 -> r256(i)
+    1 -> r257(i)
+    2 -> r258(i)
+    3 -> r259(i)
+    4 -> r260(i)
     else -> error("unknown UiConfigField $tag")
 }
 
-internal fun w254(o: RemoteOut, v: dev.ide.ui.backend.UiConfigField.Bool) {
+internal fun w256(o: RemoteOut, v: dev.ide.ui.backend.UiConfigField.Bool) {
     o.string(v.key)
     o.string(v.label)
     o.bool(v.value)
 }
-internal fun r254(i: RemoteIn): dev.ide.ui.backend.UiConfigField.Bool = dev.ide.ui.backend.UiConfigField.Bool(
+internal fun r256(i: RemoteIn): dev.ide.ui.backend.UiConfigField.Bool = dev.ide.ui.backend.UiConfigField.Bool(
     key = i.str(),
     label = i.str(),
     value = i.bool(),
 )
 
-internal fun w255(o: RemoteOut, v: dev.ide.ui.backend.UiConfigField.Number) {
+internal fun w257(o: RemoteOut, v: dev.ide.ui.backend.UiConfigField.Number) {
     o.string(v.key)
     o.string(v.label)
     o.long(v.value)
 }
-internal fun r255(i: RemoteIn): dev.ide.ui.backend.UiConfigField.Number = dev.ide.ui.backend.UiConfigField.Number(
+internal fun r257(i: RemoteIn): dev.ide.ui.backend.UiConfigField.Number = dev.ide.ui.backend.UiConfigField.Number(
     key = i.str(),
     label = i.str(),
     value = i.long(),
 )
 
-internal fun w256(o: RemoteOut, v: dev.ide.ui.backend.UiConfigField.StringList) {
+internal fun w258(o: RemoteOut, v: dev.ide.ui.backend.UiConfigField.StringList) {
     o.string(v.key)
     o.string(v.label)
-    o.list(v.values) { e635 -> o.string(e635) }
+    o.list(v.values) { e647 -> o.string(e647) }
 }
-internal fun r256(i: RemoteIn): dev.ide.ui.backend.UiConfigField.StringList = dev.ide.ui.backend.UiConfigField.StringList(
+internal fun r258(i: RemoteIn): dev.ide.ui.backend.UiConfigField.StringList = dev.ide.ui.backend.UiConfigField.StringList(
     key = i.str(),
     label = i.str(),
     values = i.list { i.str() },
 )
 
-internal fun w257(o: RemoteOut, v: dev.ide.ui.backend.UiConfigField.TableList) {
+internal fun w259(o: RemoteOut, v: dev.ide.ui.backend.UiConfigField.TableList) {
     o.string(v.key)
     o.string(v.label)
-    o.list(v.rows) { e636 -> o.list(e636) { e637 -> w253(o, e637) } }
+    o.list(v.rows) { e648 -> o.list(e648) { e649 -> w255(o, e649) } }
 }
-internal fun r257(i: RemoteIn): dev.ide.ui.backend.UiConfigField.TableList = dev.ide.ui.backend.UiConfigField.TableList(
+internal fun r259(i: RemoteIn): dev.ide.ui.backend.UiConfigField.TableList = dev.ide.ui.backend.UiConfigField.TableList(
     key = i.str(),
     label = i.str(),
-    rows = i.list { i.list { r253(i) } },
+    rows = i.list { i.list { r255(i) } },
 )
 
-internal fun w258(o: RemoteOut, v: dev.ide.ui.backend.UiConfigField.Text) {
+internal fun w260(o: RemoteOut, v: dev.ide.ui.backend.UiConfigField.Text) {
     o.string(v.key)
     o.string(v.label)
     o.string(v.value)
 }
-internal fun r258(i: RemoteIn): dev.ide.ui.backend.UiConfigField.Text = dev.ide.ui.backend.UiConfigField.Text(
+internal fun r260(i: RemoteIn): dev.ide.ui.backend.UiConfigField.Text = dev.ide.ui.backend.UiConfigField.Text(
     key = i.str(),
     label = i.str(),
     value = i.str(),
 )
 
-internal fun w259(o: RemoteOut, v: dev.ide.ui.backend.UiModuleRef) {
+internal fun w261(o: RemoteOut, v: dev.ide.ui.backend.UiModuleRef) {
     o.string(v.name)
     o.string(v.typeDisplay)
 }
-internal fun r259(i: RemoteIn): dev.ide.ui.backend.UiModuleRef = dev.ide.ui.backend.UiModuleRef(
+internal fun r261(i: RemoteIn): dev.ide.ui.backend.UiModuleRef = dev.ide.ui.backend.UiModuleRef(
     name = i.str(),
     typeDisplay = i.str(),
 )
 
-internal fun w260(o: RemoteOut, v: dev.ide.ui.backend.UiBuildFeatures) {
+internal fun w262(o: RemoteOut, v: dev.ide.ui.backend.UiBuildFeatures) {
     o.string(v.moduleName)
-    o.list(v.features) { e642 -> w261(o, e642) }
+    o.list(v.features) { e654 -> w263(o, e654) }
 }
-internal fun r260(i: RemoteIn): dev.ide.ui.backend.UiBuildFeatures = dev.ide.ui.backend.UiBuildFeatures(
+internal fun r262(i: RemoteIn): dev.ide.ui.backend.UiBuildFeatures = dev.ide.ui.backend.UiBuildFeatures(
     moduleName = i.str(),
-    features = i.list { r261(i) },
+    features = i.list { r263(i) },
 )
 
-internal fun w261(o: RemoteOut, v: dev.ide.ui.backend.UiBuildFeature) {
+internal fun w263(o: RemoteOut, v: dev.ide.ui.backend.UiBuildFeature) {
     o.string(v.id)
     o.string(v.title)
     o.string(v.description)
     o.bool(v.enabled)
-    o.opt(v.note) { n641 -> o.string(n641) }
+    o.opt(v.note) { n653 -> o.string(n653) }
 }
-internal fun r261(i: RemoteIn): dev.ide.ui.backend.UiBuildFeature = dev.ide.ui.backend.UiBuildFeature(
+internal fun r263(i: RemoteIn): dev.ide.ui.backend.UiBuildFeature = dev.ide.ui.backend.UiBuildFeature(
     id = i.str(),
     title = i.str(),
     description = i.str(),
@@ -4739,24 +4815,24 @@ internal fun r261(i: RemoteIn): dev.ide.ui.backend.UiBuildFeature = dev.ide.ui.b
     note = i.opt { i.str() },
 )
 
-internal fun w262(o: RemoteOut, v: dev.ide.ui.backend.UiCompilerPlugins) {
+internal fun w264(o: RemoteOut, v: dev.ide.ui.backend.UiCompilerPlugins) {
     o.string(v.moduleName)
-    o.list(v.plugins) { e644 -> w263(o, e644) }
+    o.list(v.plugins) { e656 -> w265(o, e656) }
 }
-internal fun r262(i: RemoteIn): dev.ide.ui.backend.UiCompilerPlugins = dev.ide.ui.backend.UiCompilerPlugins(
+internal fun r264(i: RemoteIn): dev.ide.ui.backend.UiCompilerPlugins = dev.ide.ui.backend.UiCompilerPlugins(
     moduleName = i.str(),
-    plugins = i.list { r263(i) },
+    plugins = i.list { r265(i) },
 )
 
-internal fun w263(o: RemoteOut, v: dev.ide.ui.backend.UiCompilerPlugin) {
+internal fun w265(o: RemoteOut, v: dev.ide.ui.backend.UiCompilerPlugin) {
     o.string(v.id)
     o.string(v.title)
     o.string(v.description)
     o.bool(v.enabled)
     o.bool(v.applied)
-    o.opt(v.note) { n643 -> o.string(n643) }
+    o.opt(v.note) { n655 -> o.string(n655) }
 }
-internal fun r263(i: RemoteIn): dev.ide.ui.backend.UiCompilerPlugin = dev.ide.ui.backend.UiCompilerPlugin(
+internal fun r265(i: RemoteIn): dev.ide.ui.backend.UiCompilerPlugin = dev.ide.ui.backend.UiCompilerPlugin(
     id = i.str(),
     title = i.str(),
     description = i.str(),
@@ -4765,157 +4841,157 @@ internal fun r263(i: RemoteIn): dev.ide.ui.backend.UiCompilerPlugin = dev.ide.ui
     note = i.opt { i.str() },
 )
 
-internal fun w264(o: RemoteOut, v: dev.ide.ui.backend.UiModuleConfig) {
+internal fun w266(o: RemoteOut, v: dev.ide.ui.backend.UiModuleConfig) {
     o.string(v.name)
     o.string(v.typeId)
     o.string(v.typeDisplay)
     o.string(v.languageLevel)
-    o.list(v.languageLevels) { e648 -> o.string(e648) }
+    o.list(v.languageLevels) { e660 -> o.string(e660) }
     o.string(v.outputDir)
-    o.list(v.sourceSets) { e649 -> w265(o, e649) }
-    o.list(v.facets) { e650 -> w252(o, e650) }
-    o.opt(v.runConfig) { n651 -> w266(o, n651) }
+    o.list(v.sourceSets) { e661 -> w267(o, e661) }
+    o.list(v.facets) { e662 -> w254(o, e662) }
+    o.opt(v.runConfig) { n663 -> w268(o, n663) }
     o.string(v.platformSdk)
     o.string(v.resolvedSdk)
-    o.list(v.availableSdks) { e652 -> w267(o, e652) }
-    o.opt(v.missingPlatform) { n653 -> w268(o, n653) }
-    o.list(v.kmpTargets) { e654 -> o.string(e654) }
-    o.opt(v.kmpActiveTarget) { n655 -> o.string(n655) }
-    o.list(v.addableFeatures) { e656 -> w269(o, e656) }
+    o.list(v.availableSdks) { e664 -> w269(o, e664) }
+    o.opt(v.missingPlatform) { n665 -> w270(o, n665) }
+    o.list(v.kmpTargets) { e666 -> o.string(e666) }
+    o.opt(v.kmpActiveTarget) { n667 -> o.string(n667) }
+    o.list(v.addableFeatures) { e668 -> w271(o, e668) }
 }
-internal fun r264(i: RemoteIn): dev.ide.ui.backend.UiModuleConfig = dev.ide.ui.backend.UiModuleConfig(
+internal fun r266(i: RemoteIn): dev.ide.ui.backend.UiModuleConfig = dev.ide.ui.backend.UiModuleConfig(
     name = i.str(),
     typeId = i.str(),
     typeDisplay = i.str(),
     languageLevel = i.str(),
     languageLevels = i.list { i.str() },
     outputDir = i.str(),
-    sourceSets = i.list { r265(i) },
-    facets = i.list { r252(i) },
-    runConfig = i.opt { r266(i) },
+    sourceSets = i.list { r267(i) },
+    facets = i.list { r254(i) },
+    runConfig = i.opt { r268(i) },
     platformSdk = i.str(),
     resolvedSdk = i.str(),
-    availableSdks = i.list { r267(i) },
-    missingPlatform = i.opt { r268(i) },
+    availableSdks = i.list { r269(i) },
+    missingPlatform = i.opt { r270(i) },
     kmpTargets = i.list { i.str() },
     kmpActiveTarget = i.opt { i.str() },
-    addableFeatures = i.list { r269(i) },
+    addableFeatures = i.list { r271(i) },
 )
 
-internal fun w265(o: RemoteOut, v: dev.ide.ui.backend.UiSourceSetInfo) {
+internal fun w267(o: RemoteOut, v: dev.ide.ui.backend.UiSourceSetInfo) {
     o.string(v.name)
     o.string(v.scope)
-    o.list(v.roots) { e645 -> o.string(e645) }
+    o.list(v.roots) { e657 -> o.string(e657) }
 }
-internal fun r265(i: RemoteIn): dev.ide.ui.backend.UiSourceSetInfo = dev.ide.ui.backend.UiSourceSetInfo(
+internal fun r267(i: RemoteIn): dev.ide.ui.backend.UiSourceSetInfo = dev.ide.ui.backend.UiSourceSetInfo(
     name = i.str(),
     scope = i.str(),
     roots = i.list { i.str() },
 )
 
-internal fun w266(o: RemoteOut, v: dev.ide.ui.backend.UiRunConfig) {
+internal fun w268(o: RemoteOut, v: dev.ide.ui.backend.UiRunConfig) {
     o.string(v.mainClass)
-    o.list(v.detectedMainClasses) { e646 -> o.string(e646) }
-    o.opt(v.autoDetected) { n647 -> o.string(n647) }
+    o.list(v.detectedMainClasses) { e658 -> o.string(e658) }
+    o.opt(v.autoDetected) { n659 -> o.string(n659) }
 }
-internal fun r266(i: RemoteIn): dev.ide.ui.backend.UiRunConfig = dev.ide.ui.backend.UiRunConfig(
+internal fun r268(i: RemoteIn): dev.ide.ui.backend.UiRunConfig = dev.ide.ui.backend.UiRunConfig(
     mainClass = i.str(),
     detectedMainClasses = i.list { i.str() },
     autoDetected = i.opt { i.str() },
 )
 
-internal fun w267(o: RemoteOut, v: dev.ide.ui.backend.UiSdkOption) {
+internal fun w269(o: RemoteOut, v: dev.ide.ui.backend.UiSdkOption) {
     o.string(v.name)
     o.string(v.label)
 }
-internal fun r267(i: RemoteIn): dev.ide.ui.backend.UiSdkOption = dev.ide.ui.backend.UiSdkOption(
+internal fun r269(i: RemoteIn): dev.ide.ui.backend.UiSdkOption = dev.ide.ui.backend.UiSdkOption(
     name = i.str(),
     label = i.str(),
 )
 
-internal fun w268(o: RemoteOut, v: dev.ide.ui.backend.UiMissingPlatform) {
+internal fun w270(o: RemoteOut, v: dev.ide.ui.backend.UiMissingPlatform) {
     o.int(v.compileSdk)
     o.int(v.usedLevel)
 }
-internal fun r268(i: RemoteIn): dev.ide.ui.backend.UiMissingPlatform = dev.ide.ui.backend.UiMissingPlatform(
+internal fun r270(i: RemoteIn): dev.ide.ui.backend.UiMissingPlatform = dev.ide.ui.backend.UiMissingPlatform(
     compileSdk = i.int(),
     usedLevel = i.int(),
 )
 
-internal fun w269(o: RemoteOut, v: dev.ide.ui.backend.UiModuleFeature) {
+internal fun w271(o: RemoteOut, v: dev.ide.ui.backend.UiModuleFeature) {
     o.string(v.id)
     o.string(v.title)
     o.string(v.description)
 }
-internal fun r269(i: RemoteIn): dev.ide.ui.backend.UiModuleFeature = dev.ide.ui.backend.UiModuleFeature(
+internal fun r271(i: RemoteIn): dev.ide.ui.backend.UiModuleFeature = dev.ide.ui.backend.UiModuleFeature(
     id = i.str(),
     title = i.str(),
     description = i.str(),
 )
 
-internal fun w270(o: RemoteOut, v: dev.ide.ui.backend.UiPackagingOptions) {
+internal fun w272(o: RemoteOut, v: dev.ide.ui.backend.UiPackagingOptions) {
     o.string(v.moduleName)
-    w271(o, v.resources)
-    w271(o, v.jniLibs)
-    o.list(v.defaultResourceExcludes) { e660 -> o.string(e660) }
-    o.list(v.defaultResourceMerges) { e661 -> o.string(e661) }
-    o.list(v.noCompress) { e662 -> o.string(e662) }
-    o.list(v.defaultNoCompress) { e663 -> o.string(e663) }
+    w273(o, v.resources)
+    w273(o, v.jniLibs)
+    o.list(v.defaultResourceExcludes) { e672 -> o.string(e672) }
+    o.list(v.defaultResourceMerges) { e673 -> o.string(e673) }
+    o.list(v.noCompress) { e674 -> o.string(e674) }
+    o.list(v.defaultNoCompress) { e675 -> o.string(e675) }
 }
-internal fun r270(i: RemoteIn): dev.ide.ui.backend.UiPackagingOptions = dev.ide.ui.backend.UiPackagingOptions(
+internal fun r272(i: RemoteIn): dev.ide.ui.backend.UiPackagingOptions = dev.ide.ui.backend.UiPackagingOptions(
     moduleName = i.str(),
-    resources = r271(i),
-    jniLibs = r271(i),
+    resources = r273(i),
+    jniLibs = r273(i),
     defaultResourceExcludes = i.list { i.str() },
     defaultResourceMerges = i.list { i.str() },
     noCompress = i.list { i.str() },
     defaultNoCompress = i.list { i.str() },
 )
 
-internal fun w271(o: RemoteOut, v: dev.ide.ui.backend.UiPackagingRules) {
-    o.list(v.excludes) { e657 -> o.string(e657) }
-    o.list(v.pickFirsts) { e658 -> o.string(e658) }
-    o.list(v.merges) { e659 -> o.string(e659) }
+internal fun w273(o: RemoteOut, v: dev.ide.ui.backend.UiPackagingRules) {
+    o.list(v.excludes) { e669 -> o.string(e669) }
+    o.list(v.pickFirsts) { e670 -> o.string(e670) }
+    o.list(v.merges) { e671 -> o.string(e671) }
 }
-internal fun r271(i: RemoteIn): dev.ide.ui.backend.UiPackagingRules = dev.ide.ui.backend.UiPackagingRules(
+internal fun r273(i: RemoteIn): dev.ide.ui.backend.UiPackagingRules = dev.ide.ui.backend.UiPackagingRules(
     excludes = i.list { i.str() },
     pickFirsts = i.list { i.str() },
     merges = i.list { i.str() },
 )
 
-internal fun w272(o: RemoteOut, v: dev.ide.ui.backend.UiMissingProguardFile) {
+internal fun w274(o: RemoteOut, v: dev.ide.ui.backend.UiMissingProguardFile) {
     o.string(v.buildType)
     o.string(v.entry)
     o.bool(v.consumer)
 }
-internal fun r272(i: RemoteIn): dev.ide.ui.backend.UiMissingProguardFile = dev.ide.ui.backend.UiMissingProguardFile(
+internal fun r274(i: RemoteIn): dev.ide.ui.backend.UiMissingProguardFile = dev.ide.ui.backend.UiMissingProguardFile(
     buildType = i.str(),
     entry = i.str(),
     consumer = i.bool(),
 )
 
-internal fun w273(o: RemoteOut, v: dev.ide.ui.backend.UiAppRenamePreview) {
-    o.opt(v.error) { n664 -> o.string(n664) }
-    o.list(v.files) { e665 -> o.string(e665) }
+internal fun w275(o: RemoteOut, v: dev.ide.ui.backend.UiAppRenamePreview) {
+    o.opt(v.error) { n676 -> o.string(n676) }
+    o.list(v.files) { e677 -> o.string(e677) }
     o.int(v.moved)
-    o.list(v.notes) { e666 -> o.string(e666) }
+    o.list(v.notes) { e678 -> o.string(e678) }
 }
-internal fun r273(i: RemoteIn): dev.ide.ui.backend.UiAppRenamePreview = dev.ide.ui.backend.UiAppRenamePreview(
+internal fun r275(i: RemoteIn): dev.ide.ui.backend.UiAppRenamePreview = dev.ide.ui.backend.UiAppRenamePreview(
     error = i.opt { i.str() },
     files = i.list { i.str() },
     moved = i.int(),
     notes = i.list { i.str() },
 )
 
-internal fun w274(o: RemoteOut, v: dev.ide.ui.backend.UiToolchainWarning) {
+internal fun w276(o: RemoteOut, v: dev.ide.ui.backend.UiToolchainWarning) {
     o.string(v.id)
     o.string(v.moduleName)
     o.string(v.title)
     o.string(v.detail)
-    o.opt(v.fixLabel) { n667 -> o.string(n667) }
+    o.opt(v.fixLabel) { n679 -> o.string(n679) }
     o.bool(v.acceptable)
 }
-internal fun r274(i: RemoteIn): dev.ide.ui.backend.UiToolchainWarning = dev.ide.ui.backend.UiToolchainWarning(
+internal fun r276(i: RemoteIn): dev.ide.ui.backend.UiToolchainWarning = dev.ide.ui.backend.UiToolchainWarning(
     id = i.str(),
     moduleName = i.str(),
     title = i.str(),
@@ -4924,131 +5000,131 @@ internal fun r274(i: RemoteIn): dev.ide.ui.backend.UiToolchainWarning = dev.ide.
     acceptable = i.bool(),
 )
 
-internal fun w275(o: RemoteOut, v: dev.ide.ui.backend.UiModuleConfigEdit) {
-    o.opt(v.languageLevel) { n668 -> o.string(n668) }
-    o.map(v.facetValues, { k669 -> o.string(k669) }, { v670 -> o.map(v670, { k671 -> o.string(k671) }, { v672 -> o.any(v672) }) })
-    o.opt(v.mainClass) { n673 -> o.string(n673) }
-    o.opt(v.platformSdk) { n674 -> o.string(n674) }
+internal fun w277(o: RemoteOut, v: dev.ide.ui.backend.UiModuleConfigEdit) {
+    o.opt(v.languageLevel) { n680 -> o.string(n680) }
+    o.map(v.facetValues, { k681 -> o.string(k681) }, { v682 -> o.map(v682, { k683 -> o.string(k683) }, { v684 -> o.any(v684) }) })
+    o.opt(v.mainClass) { n685 -> o.string(n685) }
+    o.opt(v.platformSdk) { n686 -> o.string(n686) }
 }
-internal fun r275(i: RemoteIn): dev.ide.ui.backend.UiModuleConfigEdit = dev.ide.ui.backend.UiModuleConfigEdit(
+internal fun r277(i: RemoteIn): dev.ide.ui.backend.UiModuleConfigEdit = dev.ide.ui.backend.UiModuleConfigEdit(
     languageLevel = i.opt { i.str() },
     facetValues = i.map({ i.str() }, { i.map({ i.str() }, { i.any() }) }),
     mainClass = i.opt { i.str() },
     platformSdk = i.opt { i.str() },
 )
 
-internal fun w276(o: RemoteOut, v: dev.ide.ui.backend.UiNotification) {
+internal fun w278(o: RemoteOut, v: dev.ide.ui.backend.UiNotification) {
     o.string(v.id)
     o.int(v.kind.ordinal)
     o.string(v.title)
-    o.opt(v.body) { n675 -> o.string(n675) }
+    o.opt(v.body) { n687 -> o.string(n687) }
     o.long(v.timestampMs)
     o.bool(v.read)
-    o.opt(v.target) { n676 -> w277(o, n676) }
-    o.opt(v.key) { n677 -> o.string(n677) }
-    o.opt(v.source) { n678 -> o.string(n678) }
+    o.opt(v.target) { n688 -> w279(o, n688) }
+    o.opt(v.key) { n689 -> o.string(n689) }
+    o.opt(v.source) { n690 -> o.string(n690) }
     o.int(v.level.ordinal)
     o.int(v.count)
 }
-internal fun r276(i: RemoteIn): dev.ide.ui.backend.UiNotification = dev.ide.ui.backend.UiNotification(
+internal fun r278(i: RemoteIn): dev.ide.ui.backend.UiNotification = dev.ide.ui.backend.UiNotification(
     id = i.str(),
     kind = dev.ide.ui.backend.UiNotificationKind.entries[i.int()],
     title = i.str(),
     body = i.opt { i.str() },
     timestampMs = i.long(),
     read = i.bool(),
-    target = i.opt { r277(i) },
+    target = i.opt { r279(i) },
     key = i.opt { i.str() },
     source = i.opt { i.str() },
     level = dev.ide.ui.backend.UiNotificationLevel.entries[i.int()],
     count = i.int(),
 )
 
-internal fun w277(o: RemoteOut, v: dev.ide.ui.backend.UiNotificationTarget) {
+internal fun w279(o: RemoteOut, v: dev.ide.ui.backend.UiNotificationTarget) {
     when (v) {
-        is dev.ide.ui.backend.UiNotificationTarget.Project -> { o.int(0); w278(o, v) }
-        is dev.ide.ui.backend.UiNotificationTarget.Screen -> { o.int(1); w279(o, v) }
-        is dev.ide.ui.backend.UiNotificationTarget.StoreItem -> { o.int(2); w280(o, v) }
-        is dev.ide.ui.backend.UiNotificationTarget.Submissions -> { o.int(3); w281(o, v) }
+        is dev.ide.ui.backend.UiNotificationTarget.Project -> { o.int(0); w280(o, v) }
+        is dev.ide.ui.backend.UiNotificationTarget.Screen -> { o.int(1); w281(o, v) }
+        is dev.ide.ui.backend.UiNotificationTarget.StoreItem -> { o.int(2); w282(o, v) }
+        is dev.ide.ui.backend.UiNotificationTarget.Submissions -> { o.int(3); w283(o, v) }
     }
 }
-internal fun r277(i: RemoteIn): dev.ide.ui.backend.UiNotificationTarget = when (val tag = i.int()) {
-    0 -> r278(i)
-    1 -> r279(i)
-    2 -> r280(i)
-    3 -> r281(i)
+internal fun r279(i: RemoteIn): dev.ide.ui.backend.UiNotificationTarget = when (val tag = i.int()) {
+    0 -> r280(i)
+    1 -> r281(i)
+    2 -> r282(i)
+    3 -> r283(i)
     else -> error("unknown UiNotificationTarget $tag")
 }
 
-internal fun w278(o: RemoteOut, v: dev.ide.ui.backend.UiNotificationTarget.Project) {
+internal fun w280(o: RemoteOut, v: dev.ide.ui.backend.UiNotificationTarget.Project) {
     o.string(v.rootPath)
 }
-internal fun r278(i: RemoteIn): dev.ide.ui.backend.UiNotificationTarget.Project = dev.ide.ui.backend.UiNotificationTarget.Project(
+internal fun r280(i: RemoteIn): dev.ide.ui.backend.UiNotificationTarget.Project = dev.ide.ui.backend.UiNotificationTarget.Project(
     rootPath = i.str(),
 )
 
-internal fun w279(o: RemoteOut, v: dev.ide.ui.backend.UiNotificationTarget.Screen) {
+internal fun w281(o: RemoteOut, v: dev.ide.ui.backend.UiNotificationTarget.Screen) {
     o.string(v.route)
 }
-internal fun r279(i: RemoteIn): dev.ide.ui.backend.UiNotificationTarget.Screen = dev.ide.ui.backend.UiNotificationTarget.Screen(
+internal fun r281(i: RemoteIn): dev.ide.ui.backend.UiNotificationTarget.Screen = dev.ide.ui.backend.UiNotificationTarget.Screen(
     route = i.str(),
 )
 
-internal fun w280(o: RemoteOut, v: dev.ide.ui.backend.UiNotificationTarget.StoreItem) {
+internal fun w282(o: RemoteOut, v: dev.ide.ui.backend.UiNotificationTarget.StoreItem) {
     o.string(v.itemId)
 }
-internal fun r280(i: RemoteIn): dev.ide.ui.backend.UiNotificationTarget.StoreItem = dev.ide.ui.backend.UiNotificationTarget.StoreItem(
+internal fun r282(i: RemoteIn): dev.ide.ui.backend.UiNotificationTarget.StoreItem = dev.ide.ui.backend.UiNotificationTarget.StoreItem(
     itemId = i.str(),
 )
 
-internal fun w281(o: RemoteOut, v: dev.ide.ui.backend.UiNotificationTarget.Submissions) {}
-internal fun r281(i: RemoteIn): dev.ide.ui.backend.UiNotificationTarget.Submissions = dev.ide.ui.backend.UiNotificationTarget.Submissions
+internal fun w283(o: RemoteOut, v: dev.ide.ui.backend.UiNotificationTarget.Submissions) {}
+internal fun r283(i: RemoteIn): dev.ide.ui.backend.UiNotificationTarget.Submissions = dev.ide.ui.backend.UiNotificationTarget.Submissions
 
-internal fun w282(o: RemoteOut, v: dev.ide.ui.backend.UiColorEntry) {
+internal fun w284(o: RemoteOut, v: dev.ide.ui.backend.UiColorEntry) {
     o.string(v.name)
     o.string(v.rawValue)
-    o.opt(v.argb) { n679 -> o.long(n679) }
+    o.opt(v.argb) { n691 -> o.long(n691) }
 }
-internal fun r282(i: RemoteIn): dev.ide.ui.backend.UiColorEntry = dev.ide.ui.backend.UiColorEntry(
+internal fun r284(i: RemoteIn): dev.ide.ui.backend.UiColorEntry = dev.ide.ui.backend.UiColorEntry(
     name = i.str(),
     rawValue = i.str(),
     argb = i.opt { i.long() },
 )
 
-internal fun w283(o: RemoteOut, v: dev.ide.ui.backend.UiComposePreview) {
+internal fun w285(o: RemoteOut, v: dev.ide.ui.backend.UiComposePreview) {
     o.string(v.functionName)
     o.int(v.offset)
     o.string(v.variantId)
     o.string(v.label)
-    o.opt(v.group) { n688 -> o.string(n688) }
+    o.opt(v.group) { n700 -> o.string(n700) }
     o.int(v.arity)
-    w284(o, v.config)
+    w286(o, v.config)
     o.bool(v.hasParameter)
 }
-internal fun r283(i: RemoteIn): dev.ide.ui.backend.UiComposePreview = dev.ide.ui.backend.UiComposePreview(
+internal fun r285(i: RemoteIn): dev.ide.ui.backend.UiComposePreview = dev.ide.ui.backend.UiComposePreview(
     functionName = i.str(),
     offset = i.int(),
     variantId = i.str(),
     label = i.str(),
     group = i.opt { i.str() },
     arity = i.int(),
-    config = r284(i),
+    config = r286(i),
     hasParameter = i.bool(),
 )
 
-internal fun w284(o: RemoteOut, v: dev.ide.ui.backend.UiPreviewConfig) {
-    o.opt(v.widthDp) { n680 -> o.int(n680) }
-    o.opt(v.heightDp) { n681 -> o.int(n681) }
+internal fun w286(o: RemoteOut, v: dev.ide.ui.backend.UiPreviewConfig) {
+    o.opt(v.widthDp) { n692 -> o.int(n692) }
+    o.opt(v.heightDp) { n693 -> o.int(n693) }
     o.bool(v.showBackground)
-    o.opt(v.backgroundColor) { n682 -> o.long(n682) }
-    o.opt(v.fontScale) { n683 -> o.float(n683) }
-    o.opt(v.nightMode) { n684 -> o.bool(n684) }
-    o.opt(v.locale) { n685 -> o.string(n685) }
-    o.opt(v.apiLevel) { n686 -> o.int(n686) }
+    o.opt(v.backgroundColor) { n694 -> o.long(n694) }
+    o.opt(v.fontScale) { n695 -> o.float(n695) }
+    o.opt(v.nightMode) { n696 -> o.bool(n696) }
+    o.opt(v.locale) { n697 -> o.string(n697) }
+    o.opt(v.apiLevel) { n698 -> o.int(n698) }
     o.bool(v.showSystemUi)
-    o.opt(v.device) { n687 -> o.string(n687) }
+    o.opt(v.device) { n699 -> o.string(n699) }
 }
-internal fun r284(i: RemoteIn): dev.ide.ui.backend.UiPreviewConfig = dev.ide.ui.backend.UiPreviewConfig(
+internal fun r286(i: RemoteIn): dev.ide.ui.backend.UiPreviewConfig = dev.ide.ui.backend.UiPreviewConfig(
     widthDp = i.opt { i.int() },
     heightDp = i.opt { i.int() },
     showBackground = i.bool(),
@@ -5061,23 +5137,23 @@ internal fun r284(i: RemoteIn): dev.ide.ui.backend.UiPreviewConfig = dev.ide.ui.
     device = i.opt { i.str() },
 )
 
-internal fun w285(o: RemoteOut, v: dev.ide.ui.backend.PreviewProgress) {
+internal fun w287(o: RemoteOut, v: dev.ide.ui.backend.PreviewProgress) {
     o.string(v.stage)
 }
-internal fun r285(i: RemoteIn): dev.ide.ui.backend.PreviewProgress = dev.ide.ui.backend.PreviewProgress(
+internal fun r287(i: RemoteIn): dev.ide.ui.backend.PreviewProgress = dev.ide.ui.backend.PreviewProgress(
     stage = i.str(),
 )
 
-internal fun w286(o: RemoteOut, v: dev.ide.ui.backend.UiPreviewResult) {
+internal fun w288(o: RemoteOut, v: dev.ide.ui.backend.UiPreviewResult) {
     o.bool(v.ok)
     o.string(v.message)
 }
-internal fun r286(i: RemoteIn): dev.ide.ui.backend.UiPreviewResult = dev.ide.ui.backend.UiPreviewResult(
+internal fun r288(i: RemoteIn): dev.ide.ui.backend.UiPreviewResult = dev.ide.ui.backend.UiPreviewResult(
     ok = i.bool(),
     message = i.str(),
 )
 
-internal fun w287(o: RemoteOut, v: dev.ide.ui.backend.ProjectInfo) {
+internal fun w289(o: RemoteOut, v: dev.ide.ui.backend.ProjectInfo) {
     o.string(v.name)
     o.string(v.rootPath)
     o.int(v.moduleCount)
@@ -5086,7 +5162,7 @@ internal fun w287(o: RemoteOut, v: dev.ide.ui.backend.ProjectInfo) {
     o.long(v.lastOpened)
     o.bool(v.unrecognized)
 }
-internal fun r287(i: RemoteIn): dev.ide.ui.backend.ProjectInfo = dev.ide.ui.backend.ProjectInfo(
+internal fun r289(i: RemoteIn): dev.ide.ui.backend.ProjectInfo = dev.ide.ui.backend.ProjectInfo(
     name = i.str(),
     rootPath = i.str(),
     moduleCount = i.int(),
@@ -5096,68 +5172,68 @@ internal fun r287(i: RemoteIn): dev.ide.ui.backend.ProjectInfo = dev.ide.ui.back
     unrecognized = i.bool(),
 )
 
-internal fun w288(o: RemoteOut, v: dev.ide.ui.backend.UiCompatibilityInfo) {
+internal fun w290(o: RemoteOut, v: dev.ide.ui.backend.UiCompatibilityInfo) {
     o.string(v.summary)
-    o.list(v.notes) { e689 -> o.string(e689) }
+    o.list(v.notes) { e701 -> o.string(e701) }
     o.bool(v.syncNeeded)
-    o.opt(v.kmpTarget) { n690 -> o.string(n690) }
+    o.opt(v.kmpTarget) { n702 -> o.string(n702) }
 }
-internal fun r288(i: RemoteIn): dev.ide.ui.backend.UiCompatibilityInfo = dev.ide.ui.backend.UiCompatibilityInfo(
+internal fun r290(i: RemoteIn): dev.ide.ui.backend.UiCompatibilityInfo = dev.ide.ui.backend.UiCompatibilityInfo(
     summary = i.str(),
     notes = i.list { i.str() },
     syncNeeded = i.bool(),
     kmpTarget = i.opt { i.str() },
 )
 
-internal fun w289(o: RemoteOut, v: dev.ide.ui.backend.UiConvertResult) {
+internal fun w291(o: RemoteOut, v: dev.ide.ui.backend.UiConvertResult) {
     o.bool(v.ok)
     o.string(v.message)
     o.bool(v.canRevert)
 }
-internal fun r289(i: RemoteIn): dev.ide.ui.backend.UiConvertResult = dev.ide.ui.backend.UiConvertResult(
+internal fun r291(i: RemoteIn): dev.ide.ui.backend.UiConvertResult = dev.ide.ui.backend.UiConvertResult(
     ok = i.bool(),
     message = i.str(),
     canRevert = i.bool(),
 )
 
-internal fun w290(o: RemoteOut, v: dev.ide.ui.backend.UiProjectResult) {
+internal fun w292(o: RemoteOut, v: dev.ide.ui.backend.UiProjectResult) {
     o.bool(v.success)
     o.string(v.message)
-    o.opt(v.rootPath) { n691 -> o.string(n691) }
+    o.opt(v.rootPath) { n703 -> o.string(n703) }
 }
-internal fun r290(i: RemoteIn): dev.ide.ui.backend.UiProjectResult = dev.ide.ui.backend.UiProjectResult(
+internal fun r292(i: RemoteIn): dev.ide.ui.backend.UiProjectResult = dev.ide.ui.backend.UiProjectResult(
     success = i.bool(),
     message = i.str(),
     rootPath = i.opt { i.str() },
 )
 
-internal fun w291(o: RemoteOut, v: dev.ide.ui.backend.UiGradleExport) {
+internal fun w293(o: RemoteOut, v: dev.ide.ui.backend.UiGradleExport) {
     o.string(v.path)
-    o.list(v.notes) { e692 -> o.string(e692) }
+    o.list(v.notes) { e704 -> o.string(e704) }
 }
-internal fun r291(i: RemoteIn): dev.ide.ui.backend.UiGradleExport = dev.ide.ui.backend.UiGradleExport(
+internal fun r293(i: RemoteIn): dev.ide.ui.backend.UiGradleExport = dev.ide.ui.backend.UiGradleExport(
     path = i.str(),
     notes = i.list { i.str() },
 )
 
-internal fun w292(o: RemoteOut, v: dev.ide.ui.backend.UiExportPlan) {
-    o.list(v.modules) { e694 -> w293(o, e694) }
+internal fun w294(o: RemoteOut, v: dev.ide.ui.backend.UiExportPlan) {
+    o.list(v.modules) { e706 -> w295(o, e706) }
     o.long(v.bundledDepsBytes)
 }
-internal fun r292(i: RemoteIn): dev.ide.ui.backend.UiExportPlan = dev.ide.ui.backend.UiExportPlan(
-    modules = i.list { r293(i) },
+internal fun r294(i: RemoteIn): dev.ide.ui.backend.UiExportPlan = dev.ide.ui.backend.UiExportPlan(
+    modules = i.list { r295(i) },
     bundledDepsBytes = i.long(),
 )
 
-internal fun w293(o: RemoteOut, v: dev.ide.ui.backend.UiExportModule) {
+internal fun w295(o: RemoteOut, v: dev.ide.ui.backend.UiExportModule) {
     o.string(v.name)
     o.string(v.typeId)
     o.string(v.path)
     o.int(v.fileCount)
     o.long(v.sizeBytes)
-    o.list(v.dependsOn) { e693 -> o.string(e693) }
+    o.list(v.dependsOn) { e705 -> o.string(e705) }
 }
-internal fun r293(i: RemoteIn): dev.ide.ui.backend.UiExportModule = dev.ide.ui.backend.UiExportModule(
+internal fun r295(i: RemoteIn): dev.ide.ui.backend.UiExportModule = dev.ide.ui.backend.UiExportModule(
     name = i.str(),
     typeId = i.str(),
     path = i.str(),
@@ -5166,14 +5242,14 @@ internal fun r293(i: RemoteIn): dev.ide.ui.backend.UiExportModule = dev.ide.ui.b
     dependsOn = i.list { i.str() },
 )
 
-internal fun w294(o: RemoteOut, v: dev.ide.ui.backend.UiExportOptions) {
+internal fun w296(o: RemoteOut, v: dev.ide.ui.backend.UiExportOptions) {
     o.bool(v.bundleDependencies)
     o.string(v.author)
     o.string(v.description)
-    o.opt(v.includedModules) { n695 -> o.list(n695.toList()) { e696 -> o.string(e696) } }
-    o.list(v.screenshotPaths) { e697 -> o.string(e697) }
+    o.opt(v.includedModules) { n707 -> o.list(n707.toList()) { e708 -> o.string(e708) } }
+    o.list(v.screenshotPaths) { e709 -> o.string(e709) }
 }
-internal fun r294(i: RemoteIn): dev.ide.ui.backend.UiExportOptions = dev.ide.ui.backend.UiExportOptions(
+internal fun r296(i: RemoteIn): dev.ide.ui.backend.UiExportOptions = dev.ide.ui.backend.UiExportOptions(
     bundleDependencies = i.bool(),
     author = i.str(),
     description = i.str(),
@@ -5181,67 +5257,67 @@ internal fun r294(i: RemoteIn): dev.ide.ui.backend.UiExportOptions = dev.ide.ui.
     screenshotPaths = i.list { i.str() },
 )
 
-internal fun w295(o: RemoteOut, v: dev.ide.ui.backend.UiProjectArchive) {
-    o.list(v.projects) { e698 -> w296(o, e698) }
-    o.opt(v.error) { n699 -> o.string(n699) }
+internal fun w297(o: RemoteOut, v: dev.ide.ui.backend.UiProjectArchive) {
+    o.list(v.projects) { e710 -> w298(o, e710) }
+    o.opt(v.error) { n711 -> o.string(n711) }
 }
-internal fun r295(i: RemoteIn): dev.ide.ui.backend.UiProjectArchive = dev.ide.ui.backend.UiProjectArchive(
-    projects = i.list { r296(i) },
+internal fun r297(i: RemoteIn): dev.ide.ui.backend.UiProjectArchive = dev.ide.ui.backend.UiProjectArchive(
+    projects = i.list { r298(i) },
     error = i.opt { i.str() },
 )
 
-internal fun w296(o: RemoteOut, v: dev.ide.ui.backend.UiArchiveProject) {
+internal fun w298(o: RemoteOut, v: dev.ide.ui.backend.UiArchiveProject) {
     o.string(v.path)
     o.string(v.relativePath)
     o.int(v.kind.ordinal)
 }
-internal fun r296(i: RemoteIn): dev.ide.ui.backend.UiArchiveProject = dev.ide.ui.backend.UiArchiveProject(
+internal fun r298(i: RemoteIn): dev.ide.ui.backend.UiArchiveProject = dev.ide.ui.backend.UiArchiveProject(
     path = i.str(),
     relativePath = i.str(),
     kind = dev.ide.ui.backend.UiProjectFolderKind.entries[i.int()],
 )
 
-internal fun w297(o: RemoteOut, v: dev.ide.ui.backend.UiOpenTabs) {
-    o.list(v.tabs) { e700 -> w298(o, e700) }
+internal fun w299(o: RemoteOut, v: dev.ide.ui.backend.UiOpenTabs) {
+    o.list(v.tabs) { e712 -> w300(o, e712) }
     o.int(v.activeIndex)
 }
-internal fun r297(i: RemoteIn): dev.ide.ui.backend.UiOpenTabs = dev.ide.ui.backend.UiOpenTabs(
-    tabs = i.list { r298(i) },
+internal fun r299(i: RemoteIn): dev.ide.ui.backend.UiOpenTabs = dev.ide.ui.backend.UiOpenTabs(
+    tabs = i.list { r300(i) },
     activeIndex = i.int(),
 )
 
-internal fun w298(o: RemoteOut, v: dev.ide.ui.backend.UiOpenTab) {
+internal fun w300(o: RemoteOut, v: dev.ide.ui.backend.UiOpenTab) {
     o.string(v.path)
     o.int(v.caret)
     o.int(v.scrollLine)
     o.string(v.viewMode)
 }
-internal fun r298(i: RemoteIn): dev.ide.ui.backend.UiOpenTab = dev.ide.ui.backend.UiOpenTab(
+internal fun r300(i: RemoteIn): dev.ide.ui.backend.UiOpenTab = dev.ide.ui.backend.UiOpenTab(
     path = i.str(),
     caret = i.int(),
     scrollLine = i.int(),
     viewMode = i.str(),
 )
 
-internal fun w299(o: RemoteOut, v: dev.ide.ui.backend.UiImportPreview) {
+internal fun w301(o: RemoteOut, v: dev.ide.ui.backend.UiImportPreview) {
     o.string(v.name)
     o.string(v.description)
     o.string(v.author)
     o.string(v.createdBy)
     o.bool(v.isAndroid)
-    o.opt(v.packageName) { n701 -> o.string(n701) }
+    o.opt(v.packageName) { n713 -> o.string(n713) }
     o.int(v.moduleCount)
-    o.list(v.modules) { e702 -> w300(o, e702) }
+    o.list(v.modules) { e714 -> w302(o, e714) }
     o.int(v.fileCount)
     o.long(v.uncompressedSizeBytes)
     o.bool(v.hasBundledDeps)
-    o.opt(v.icon) { n703 -> w150(o, n703) }
-    o.list(v.files) { e704 -> w301(o, e704) }
+    o.opt(v.icon) { n715 -> w152(o, n715) }
+    o.list(v.files) { e716 -> w303(o, e716) }
     o.bool(v.compatible)
-    o.opt(v.incompatibleReason) { n705 -> o.string(n705) }
-    o.list(v.screenshots) { e706 -> o.bytes(e706) }
+    o.opt(v.incompatibleReason) { n717 -> o.string(n717) }
+    o.list(v.screenshots) { e718 -> o.bytes(e718) }
 }
-internal fun r299(i: RemoteIn): dev.ide.ui.backend.UiImportPreview = dev.ide.ui.backend.UiImportPreview(
+internal fun r301(i: RemoteIn): dev.ide.ui.backend.UiImportPreview = dev.ide.ui.backend.UiImportPreview(
     name = i.str(),
     description = i.str(),
     author = i.str(),
@@ -5249,103 +5325,103 @@ internal fun r299(i: RemoteIn): dev.ide.ui.backend.UiImportPreview = dev.ide.ui.
     isAndroid = i.bool(),
     packageName = i.opt { i.str() },
     moduleCount = i.int(),
-    modules = i.list { r300(i) },
+    modules = i.list { r302(i) },
     fileCount = i.int(),
     uncompressedSizeBytes = i.long(),
     hasBundledDeps = i.bool(),
-    icon = i.opt { r150(i) },
-    files = i.list { r301(i) },
+    icon = i.opt { r152(i) },
+    files = i.list { r303(i) },
     compatible = i.bool(),
     incompatibleReason = i.opt { i.str() },
     screenshots = i.list { i.bytes() },
 )
 
-internal fun w300(o: RemoteOut, v: dev.ide.ui.backend.UiPackagedModule) {
+internal fun w302(o: RemoteOut, v: dev.ide.ui.backend.UiPackagedModule) {
     o.string(v.name)
     o.string(v.typeId)
     o.int(v.fileCount)
     o.long(v.sizeBytes)
 }
-internal fun r300(i: RemoteIn): dev.ide.ui.backend.UiPackagedModule = dev.ide.ui.backend.UiPackagedModule(
+internal fun r302(i: RemoteIn): dev.ide.ui.backend.UiPackagedModule = dev.ide.ui.backend.UiPackagedModule(
     name = i.str(),
     typeId = i.str(),
     fileCount = i.int(),
     sizeBytes = i.long(),
 )
 
-internal fun w301(o: RemoteOut, v: dev.ide.ui.backend.UiPackagedEntry) {
+internal fun w303(o: RemoteOut, v: dev.ide.ui.backend.UiPackagedEntry) {
     o.string(v.path)
     o.long(v.sizeBytes)
 }
-internal fun r301(i: RemoteIn): dev.ide.ui.backend.UiPackagedEntry = dev.ide.ui.backend.UiPackagedEntry(
+internal fun r303(i: RemoteIn): dev.ide.ui.backend.UiPackagedEntry = dev.ide.ui.backend.UiPackagedEntry(
     path = i.str(),
     sizeBytes = i.long(),
 )
 
-internal fun w302(o: RemoteOut, v: dev.ide.ui.backend.UiProjectTemplate) {
+internal fun w304(o: RemoteOut, v: dev.ide.ui.backend.UiProjectTemplate) {
     o.string(v.id)
     o.string(v.displayName)
     o.string(v.description)
     o.string(v.category)
     o.string(v.iconId)
-    o.list(v.parameters) { e711 -> w303(o, e711) }
+    o.list(v.parameters) { e723 -> w305(o, e723) }
 }
-internal fun r302(i: RemoteIn): dev.ide.ui.backend.UiProjectTemplate = dev.ide.ui.backend.UiProjectTemplate(
+internal fun r304(i: RemoteIn): dev.ide.ui.backend.UiProjectTemplate = dev.ide.ui.backend.UiProjectTemplate(
     id = i.str(),
     displayName = i.str(),
     description = i.str(),
     category = i.str(),
     iconId = i.str(),
-    parameters = i.list { r303(i) },
+    parameters = i.list { r305(i) },
 )
 
-internal fun w303(o: RemoteOut, v: dev.ide.ui.backend.UiTemplateParam) {
+internal fun w305(o: RemoteOut, v: dev.ide.ui.backend.UiTemplateParam) {
     when (v) {
-        is dev.ide.ui.backend.UiTemplateParam.Choice -> { o.int(0); w304(o, v) }
-        is dev.ide.ui.backend.UiTemplateParam.Text -> { o.int(1); w306(o, v) }
-        is dev.ide.ui.backend.UiTemplateParam.Toggle -> { o.int(2); w307(o, v) }
+        is dev.ide.ui.backend.UiTemplateParam.Choice -> { o.int(0); w306(o, v) }
+        is dev.ide.ui.backend.UiTemplateParam.Text -> { o.int(1); w308(o, v) }
+        is dev.ide.ui.backend.UiTemplateParam.Toggle -> { o.int(2); w309(o, v) }
     }
 }
-internal fun r303(i: RemoteIn): dev.ide.ui.backend.UiTemplateParam = when (val tag = i.int()) {
-    0 -> r304(i)
-    1 -> r306(i)
-    2 -> r307(i)
+internal fun r305(i: RemoteIn): dev.ide.ui.backend.UiTemplateParam = when (val tag = i.int()) {
+    0 -> r306(i)
+    1 -> r308(i)
+    2 -> r309(i)
     else -> error("unknown UiTemplateParam $tag")
 }
 
-internal fun w304(o: RemoteOut, v: dev.ide.ui.backend.UiTemplateParam.Choice) {
+internal fun w306(o: RemoteOut, v: dev.ide.ui.backend.UiTemplateParam.Choice) {
     o.string(v.key)
     o.string(v.label)
-    o.list(v.options) { e707 -> w305(o, e707) }
+    o.list(v.options) { e719 -> w307(o, e719) }
     o.int(v.defaultIndex)
-    o.opt(v.help) { n708 -> o.string(n708) }
+    o.opt(v.help) { n720 -> o.string(n720) }
 }
-internal fun r304(i: RemoteIn): dev.ide.ui.backend.UiTemplateParam.Choice = dev.ide.ui.backend.UiTemplateParam.Choice(
+internal fun r306(i: RemoteIn): dev.ide.ui.backend.UiTemplateParam.Choice = dev.ide.ui.backend.UiTemplateParam.Choice(
     key = i.str(),
     label = i.str(),
-    options = i.list { r305(i) },
+    options = i.list { r307(i) },
     defaultIndex = i.int(),
     help = i.opt { i.str() },
 )
 
-internal fun w305(o: RemoteOut, v: dev.ide.ui.backend.UiTemplateParam.Choice.Option) {
+internal fun w307(o: RemoteOut, v: dev.ide.ui.backend.UiTemplateParam.Choice.Option) {
     o.string(v.value)
     o.string(v.label)
 }
-internal fun r305(i: RemoteIn): dev.ide.ui.backend.UiTemplateParam.Choice.Option = dev.ide.ui.backend.UiTemplateParam.Choice.Option(
+internal fun r307(i: RemoteIn): dev.ide.ui.backend.UiTemplateParam.Choice.Option = dev.ide.ui.backend.UiTemplateParam.Choice.Option(
     value = i.str(),
     label = i.str(),
 )
 
-internal fun w306(o: RemoteOut, v: dev.ide.ui.backend.UiTemplateParam.Text) {
+internal fun w308(o: RemoteOut, v: dev.ide.ui.backend.UiTemplateParam.Text) {
     o.string(v.key)
     o.string(v.label)
     o.string(v.default)
     o.string(v.placeholder)
     o.string(v.validation)
-    o.opt(v.help) { n709 -> o.string(n709) }
+    o.opt(v.help) { n721 -> o.string(n721) }
 }
-internal fun r306(i: RemoteIn): dev.ide.ui.backend.UiTemplateParam.Text = dev.ide.ui.backend.UiTemplateParam.Text(
+internal fun r308(i: RemoteIn): dev.ide.ui.backend.UiTemplateParam.Text = dev.ide.ui.backend.UiTemplateParam.Text(
     key = i.str(),
     label = i.str(),
     default = i.str(),
@@ -5354,53 +5430,53 @@ internal fun r306(i: RemoteIn): dev.ide.ui.backend.UiTemplateParam.Text = dev.id
     help = i.opt { i.str() },
 )
 
-internal fun w307(o: RemoteOut, v: dev.ide.ui.backend.UiTemplateParam.Toggle) {
+internal fun w309(o: RemoteOut, v: dev.ide.ui.backend.UiTemplateParam.Toggle) {
     o.string(v.key)
     o.string(v.label)
     o.bool(v.default)
-    o.opt(v.help) { n710 -> o.string(n710) }
+    o.opt(v.help) { n722 -> o.string(n722) }
 }
-internal fun r307(i: RemoteIn): dev.ide.ui.backend.UiTemplateParam.Toggle = dev.ide.ui.backend.UiTemplateParam.Toggle(
+internal fun r309(i: RemoteIn): dev.ide.ui.backend.UiTemplateParam.Toggle = dev.ide.ui.backend.UiTemplateParam.Toggle(
     key = i.str(),
     label = i.str(),
     default = i.bool(),
     help = i.opt { i.str() },
 )
 
-internal fun w308(o: RemoteOut, v: dev.ide.ui.backend.UiSyncResult) {
+internal fun w310(o: RemoteOut, v: dev.ide.ui.backend.UiSyncResult) {
     o.bool(v.ok)
     o.string(v.message)
-    o.list(v.notes) { e712 -> o.string(e712) }
+    o.list(v.notes) { e724 -> o.string(e724) }
 }
-internal fun r308(i: RemoteIn): dev.ide.ui.backend.UiSyncResult = dev.ide.ui.backend.UiSyncResult(
+internal fun r310(i: RemoteIn): dev.ide.ui.backend.UiSyncResult = dev.ide.ui.backend.UiSyncResult(
     ok = i.bool(),
     message = i.str(),
     notes = i.list { i.str() },
 )
 
-internal fun w309(o: RemoteOut, v: dev.ide.ui.backend.UiStorageReport) {
+internal fun w311(o: RemoteOut, v: dev.ide.ui.backend.UiStorageReport) {
     o.string(v.storageRootPath)
     o.long(v.totalBytes)
-    o.list(v.categories) { e713 -> w310(o, e713) }
-    o.list(v.projects) { e714 -> w311(o, e714) }
-    o.opt(v.openProjectRootPath) { n715 -> o.string(n715) }
+    o.list(v.categories) { e725 -> w312(o, e725) }
+    o.list(v.projects) { e726 -> w313(o, e726) }
+    o.opt(v.openProjectRootPath) { n727 -> o.string(n727) }
 }
-internal fun r309(i: RemoteIn): dev.ide.ui.backend.UiStorageReport = dev.ide.ui.backend.UiStorageReport(
+internal fun r311(i: RemoteIn): dev.ide.ui.backend.UiStorageReport = dev.ide.ui.backend.UiStorageReport(
     storageRootPath = i.str(),
     totalBytes = i.long(),
-    categories = i.list { r310(i) },
-    projects = i.list { r311(i) },
+    categories = i.list { r312(i) },
+    projects = i.list { r313(i) },
     openProjectRootPath = i.opt { i.str() },
 )
 
-internal fun w310(o: RemoteOut, v: dev.ide.ui.backend.UiStorageCategory) {
+internal fun w312(o: RemoteOut, v: dev.ide.ui.backend.UiStorageCategory) {
     o.string(v.id)
     o.long(v.bytes)
     o.string(v.colorId)
     o.bool(v.clearable)
     o.bool(v.destructive)
 }
-internal fun r310(i: RemoteIn): dev.ide.ui.backend.UiStorageCategory = dev.ide.ui.backend.UiStorageCategory(
+internal fun r312(i: RemoteIn): dev.ide.ui.backend.UiStorageCategory = dev.ide.ui.backend.UiStorageCategory(
     id = i.str(),
     bytes = i.long(),
     colorId = i.str(),
@@ -5408,92 +5484,92 @@ internal fun r310(i: RemoteIn): dev.ide.ui.backend.UiStorageCategory = dev.ide.u
     destructive = i.bool(),
 )
 
-internal fun w311(o: RemoteOut, v: dev.ide.ui.backend.UiStorageProject) {
+internal fun w313(o: RemoteOut, v: dev.ide.ui.backend.UiStorageProject) {
     o.string(v.name)
     o.string(v.rootPath)
     o.long(v.bytes)
     o.bool(v.isAndroid)
 }
-internal fun r311(i: RemoteIn): dev.ide.ui.backend.UiStorageProject = dev.ide.ui.backend.UiStorageProject(
+internal fun r313(i: RemoteIn): dev.ide.ui.backend.UiStorageProject = dev.ide.ui.backend.UiStorageProject(
     name = i.str(),
     rootPath = i.str(),
     bytes = i.long(),
     isAndroid = i.bool(),
 )
 
-internal fun w312(o: RemoteOut, v: dev.ide.ui.backend.UiUnrecognizedProject) {
+internal fun w314(o: RemoteOut, v: dev.ide.ui.backend.UiUnrecognizedProject) {
     o.string(v.summary)
     o.string(v.origin)
 }
-internal fun r312(i: RemoteIn): dev.ide.ui.backend.UiUnrecognizedProject = dev.ide.ui.backend.UiUnrecognizedProject(
+internal fun r314(i: RemoteIn): dev.ide.ui.backend.UiUnrecognizedProject = dev.ide.ui.backend.UiUnrecognizedProject(
     summary = i.str(),
     origin = i.str(),
 )
 
-internal fun w313(o: RemoteOut, v: dev.ide.ui.backend.UiAndroidSourcesInfo) {
+internal fun w315(o: RemoteOut, v: dev.ide.ui.backend.UiAndroidSourcesInfo) {
     o.string(v.platform)
     o.bool(v.installed)
     o.bool(v.downloadable)
 }
-internal fun r313(i: RemoteIn): dev.ide.ui.backend.UiAndroidSourcesInfo = dev.ide.ui.backend.UiAndroidSourcesInfo(
+internal fun r315(i: RemoteIn): dev.ide.ui.backend.UiAndroidSourcesInfo = dev.ide.ui.backend.UiAndroidSourcesInfo(
     platform = i.str(),
     installed = i.bool(),
     downloadable = i.bool(),
 )
 
-internal fun w314(o: RemoteOut, v: dev.ide.ui.backend.UiJdkInfo) {
+internal fun w316(o: RemoteOut, v: dev.ide.ui.backend.UiJdkInfo) {
     o.string(v.home)
     o.string(v.version)
-    o.opt(v.srcZip) { n716 -> o.string(n716) }
+    o.opt(v.srcZip) { n728 -> o.string(n728) }
     o.bool(v.androidRuntime)
 }
-internal fun r314(i: RemoteIn): dev.ide.ui.backend.UiJdkInfo = dev.ide.ui.backend.UiJdkInfo(
+internal fun r316(i: RemoteIn): dev.ide.ui.backend.UiJdkInfo = dev.ide.ui.backend.UiJdkInfo(
     home = i.str(),
     version = i.str(),
     srcZip = i.opt { i.str() },
     androidRuntime = i.bool(),
 )
 
-internal fun w315(o: RemoteOut, v: dev.ide.ui.backend.UiSdkManagerState) {
+internal fun w317(o: RemoteOut, v: dev.ide.ui.backend.UiSdkManagerState) {
     o.bool(v.busy)
     o.string(v.message)
     o.double(v.fraction)
-    o.list(v.downloads) { e719 -> w316(o, e719) }
+    o.list(v.downloads) { e731 -> w318(o, e731) }
 }
-internal fun r315(i: RemoteIn): dev.ide.ui.backend.UiSdkManagerState = dev.ide.ui.backend.UiSdkManagerState(
+internal fun r317(i: RemoteIn): dev.ide.ui.backend.UiSdkManagerState = dev.ide.ui.backend.UiSdkManagerState(
     busy = i.bool(),
     message = i.str(),
     fraction = i.double(),
-    downloads = i.list { r316(i) },
+    downloads = i.list { r318(i) },
 )
 
-internal fun w316(o: RemoteOut, v: dev.ide.ui.backend.UiSdkDownload) {
+internal fun w318(o: RemoteOut, v: dev.ide.ui.backend.UiSdkDownload) {
     o.string(v.id)
     o.string(v.label)
     o.string(v.status)
     o.double(v.fraction)
     o.string(v.detail)
-    o.opt(v.failure) { n718 -> w317(o, n718) }
+    o.opt(v.failure) { n730 -> w319(o, n730) }
 }
-internal fun r316(i: RemoteIn): dev.ide.ui.backend.UiSdkDownload = dev.ide.ui.backend.UiSdkDownload(
+internal fun r318(i: RemoteIn): dev.ide.ui.backend.UiSdkDownload = dev.ide.ui.backend.UiSdkDownload(
     id = i.str(),
     label = i.str(),
     status = i.str(),
     fraction = i.double(),
     detail = i.str(),
-    failure = i.opt { r317(i) },
+    failure = i.opt { r319(i) },
 )
 
-internal fun w317(o: RemoteOut, v: dev.ide.ui.backend.UiSdkFailure) {
+internal fun w319(o: RemoteOut, v: dev.ide.ui.backend.UiSdkFailure) {
     o.int(v.kind.ordinal)
-    o.opt(v.httpCode) { n717 -> o.int(n717) }
+    o.opt(v.httpCode) { n729 -> o.int(n729) }
 }
-internal fun r317(i: RemoteIn): dev.ide.ui.backend.UiSdkFailure = dev.ide.ui.backend.UiSdkFailure(
+internal fun r319(i: RemoteIn): dev.ide.ui.backend.UiSdkFailure = dev.ide.ui.backend.UiSdkFailure(
     kind = dev.ide.ui.backend.SdkFailureKind.entries[i.int()],
     httpCode = i.opt { i.int() },
 )
 
-internal fun w318(o: RemoteOut, v: dev.ide.ui.backend.UiSdkPackage) {
+internal fun w320(o: RemoteOut, v: dev.ide.ui.backend.UiSdkPackage) {
     o.string(v.path)
     o.string(v.displayName)
     o.string(v.category)
@@ -5501,10 +5577,10 @@ internal fun w318(o: RemoteOut, v: dev.ide.ui.backend.UiSdkPackage) {
     o.bool(v.installed)
     o.bool(v.installable)
     o.bool(v.incomplete)
-    o.opt(v.license) { n720 -> o.string(n720) }
+    o.opt(v.license) { n732 -> o.string(n732) }
     o.bool(v.licenseAccepted)
 }
-internal fun r318(i: RemoteIn): dev.ide.ui.backend.UiSdkPackage = dev.ide.ui.backend.UiSdkPackage(
+internal fun r320(i: RemoteIn): dev.ide.ui.backend.UiSdkPackage = dev.ide.ui.backend.UiSdkPackage(
     path = i.str(),
     displayName = i.str(),
     category = i.str(),
@@ -5516,18 +5592,18 @@ internal fun r318(i: RemoteIn): dev.ide.ui.backend.UiSdkPackage = dev.ide.ui.bac
     licenseAccepted = i.bool(),
 )
 
-internal fun w319(o: RemoteOut, v: dev.ide.ui.backend.UiSearchOptions) {
+internal fun w321(o: RemoteOut, v: dev.ide.ui.backend.UiSearchOptions) {
     o.bool(v.caseSensitive)
     o.bool(v.wholeWord)
     o.bool(v.regex)
 }
-internal fun r319(i: RemoteIn): dev.ide.ui.backend.UiSearchOptions = dev.ide.ui.backend.UiSearchOptions(
+internal fun r321(i: RemoteIn): dev.ide.ui.backend.UiSearchOptions = dev.ide.ui.backend.UiSearchOptions(
     caseSensitive = i.bool(),
     wholeWord = i.bool(),
     regex = i.bool(),
 )
 
-internal fun w320(o: RemoteOut, v: dev.ide.ui.backend.UiTextMatch) {
+internal fun w322(o: RemoteOut, v: dev.ide.ui.backend.UiTextMatch) {
     o.string(v.filePath)
     o.string(v.fileName)
     o.int(v.line)
@@ -5537,7 +5613,7 @@ internal fun w320(o: RemoteOut, v: dev.ide.ui.backend.UiTextMatch) {
     o.int(v.matchEnd)
     o.int(v.offset)
 }
-internal fun r320(i: RemoteIn): dev.ide.ui.backend.UiTextMatch = dev.ide.ui.backend.UiTextMatch(
+internal fun r322(i: RemoteIn): dev.ide.ui.backend.UiTextMatch = dev.ide.ui.backend.UiTextMatch(
     filePath = i.str(),
     fileName = i.str(),
     line = i.int(),
@@ -5548,50 +5624,50 @@ internal fun r320(i: RemoteIn): dev.ide.ui.backend.UiTextMatch = dev.ide.ui.back
     offset = i.int(),
 )
 
-internal fun w321(o: RemoteOut, v: dev.ide.ui.backend.IndexUiStatus) {
+internal fun w323(o: RemoteOut, v: dev.ide.ui.backend.IndexUiStatus) {
     o.bool(v.building)
     o.string(v.message)
     o.double(v.fraction)
     o.string(v.phase)
-    o.list(v.items) { e721 -> w322(o, e721) }
+    o.list(v.items) { e733 -> w324(o, e733) }
     o.int(v.processed)
     o.int(v.total)
-    o.list(v.breakdown) { e722 -> w323(o, e722) }
-    o.opt(v.stats) { n723 -> w324(o, n723) }
+    o.list(v.breakdown) { e734 -> w325(o, e734) }
+    o.opt(v.stats) { n735 -> w326(o, n735) }
 }
-internal fun r321(i: RemoteIn): dev.ide.ui.backend.IndexUiStatus = dev.ide.ui.backend.IndexUiStatus(
+internal fun r323(i: RemoteIn): dev.ide.ui.backend.IndexUiStatus = dev.ide.ui.backend.IndexUiStatus(
     building = i.bool(),
     message = i.str(),
     fraction = i.double(),
     phase = i.str(),
-    items = i.list { r322(i) },
+    items = i.list { r324(i) },
     processed = i.int(),
     total = i.int(),
-    breakdown = i.list { r323(i) },
-    stats = i.opt { r324(i) },
+    breakdown = i.list { r325(i) },
+    stats = i.opt { r326(i) },
 )
 
-internal fun w322(o: RemoteOut, v: dev.ide.ui.backend.IndexWorkItem) {
+internal fun w324(o: RemoteOut, v: dev.ide.ui.backend.IndexWorkItem) {
     o.string(v.label)
     o.int(v.state.ordinal)
 }
-internal fun r322(i: RemoteIn): dev.ide.ui.backend.IndexWorkItem = dev.ide.ui.backend.IndexWorkItem(
+internal fun r324(i: RemoteIn): dev.ide.ui.backend.IndexWorkItem = dev.ide.ui.backend.IndexWorkItem(
     label = i.str(),
     state = dev.ide.ui.backend.IndexWorkState.entries[i.int()],
 )
 
-internal fun w323(o: RemoteOut, v: dev.ide.ui.backend.IndexerUiStat) {
+internal fun w325(o: RemoteOut, v: dev.ide.ui.backend.IndexerUiStat) {
     o.string(v.id)
     o.long(v.indexMs)
     o.long(v.entries)
 }
-internal fun r323(i: RemoteIn): dev.ide.ui.backend.IndexerUiStat = dev.ide.ui.backend.IndexerUiStat(
+internal fun r325(i: RemoteIn): dev.ide.ui.backend.IndexerUiStat = dev.ide.ui.backend.IndexerUiStat(
     id = i.str(),
     indexMs = i.long(),
     entries = i.long(),
 )
 
-internal fun w324(o: RemoteOut, v: dev.ide.ui.backend.IndexUiBuildStats) {
+internal fun w326(o: RemoteOut, v: dev.ide.ui.backend.IndexUiBuildStats) {
     o.long(v.libMs)
     o.long(v.sourceMs)
     o.int(v.artifacts)
@@ -5600,7 +5676,7 @@ internal fun w324(o: RemoteOut, v: dev.ide.ui.backend.IndexUiBuildStats) {
     o.int(v.sourceFiles)
     o.int(v.sourceParsed)
 }
-internal fun r324(i: RemoteIn): dev.ide.ui.backend.IndexUiBuildStats = dev.ide.ui.backend.IndexUiBuildStats(
+internal fun r326(i: RemoteIn): dev.ide.ui.backend.IndexUiBuildStats = dev.ide.ui.backend.IndexUiBuildStats(
     libMs = i.long(),
     sourceMs = i.long(),
     artifacts = i.int(),
@@ -5610,14 +5686,14 @@ internal fun r324(i: RemoteIn): dev.ide.ui.backend.IndexUiBuildStats = dev.ide.u
     sourceParsed = i.int(),
 )
 
-internal fun w325(o: RemoteOut, v: dev.ide.ui.backend.SymbolHit) {
+internal fun w327(o: RemoteOut, v: dev.ide.ui.backend.SymbolHit) {
     o.string(v.name)
     o.string(v.detail)
     o.string(v.kind)
-    o.opt(v.filePath) { n724 -> o.string(n724) }
-    o.opt(v.offset) { n725 -> o.int(n725) }
+    o.opt(v.filePath) { n736 -> o.string(n736) }
+    o.opt(v.offset) { n737 -> o.int(n737) }
 }
-internal fun r325(i: RemoteIn): dev.ide.ui.backend.SymbolHit = dev.ide.ui.backend.SymbolHit(
+internal fun r327(i: RemoteIn): dev.ide.ui.backend.SymbolHit = dev.ide.ui.backend.SymbolHit(
     name = i.str(),
     detail = i.str(),
     kind = i.str(),
@@ -5625,7 +5701,7 @@ internal fun r325(i: RemoteIn): dev.ide.ui.backend.SymbolHit = dev.ide.ui.backen
     offset = i.opt { i.int() },
 )
 
-internal fun w326(o: RemoteOut, v: dev.ide.ui.backend.UiAutoDisabledInspection) {
+internal fun w328(o: RemoteOut, v: dev.ide.ui.backend.UiAutoDisabledInspection) {
     o.string(v.id)
     o.string(v.displayName)
     o.string(v.pluginName)
@@ -5634,7 +5710,7 @@ internal fun w326(o: RemoteOut, v: dev.ide.ui.backend.UiAutoDisabledInspection) 
     o.long(v.budgetMs)
     o.int(v.times)
 }
-internal fun r326(i: RemoteIn): dev.ide.ui.backend.UiAutoDisabledInspection = dev.ide.ui.backend.UiAutoDisabledInspection(
+internal fun r328(i: RemoteIn): dev.ide.ui.backend.UiAutoDisabledInspection = dev.ide.ui.backend.UiAutoDisabledInspection(
     id = i.str(),
     displayName = i.str(),
     pluginName = i.str(),
@@ -5644,16 +5720,16 @@ internal fun r326(i: RemoteIn): dev.ide.ui.backend.UiAutoDisabledInspection = de
     times = i.int(),
 )
 
-internal fun w327(o: RemoteOut, v: dev.ide.ui.backend.UiCommandCheck) {
+internal fun w329(o: RemoteOut, v: dev.ide.ui.backend.UiCommandCheck) {
     o.bool(v.found)
     o.string(v.message)
 }
-internal fun r327(i: RemoteIn): dev.ide.ui.backend.UiCommandCheck = dev.ide.ui.backend.UiCommandCheck(
+internal fun r329(i: RemoteIn): dev.ide.ui.backend.UiCommandCheck = dev.ide.ui.backend.UiCommandCheck(
     found = i.bool(),
     message = i.str(),
 )
 
-internal fun w328(o: RemoteOut, v: dev.ide.ui.backend.UiCodeStyle) {
+internal fun w330(o: RemoteOut, v: dev.ide.ui.backend.UiCodeStyle) {
     o.string(v.preset)
     o.int(v.indentSize)
     o.int(v.continuationIndent)
@@ -5686,7 +5762,7 @@ internal fun w328(o: RemoteOut, v: dev.ide.ui.backend.UiCodeStyle) {
     o.bool(v.xmlSpaceInEmptyTag)
     o.bool(v.xmlRearrangeAttributes)
 }
-internal fun r328(i: RemoteIn): dev.ide.ui.backend.UiCodeStyle = dev.ide.ui.backend.UiCodeStyle(
+internal fun r330(i: RemoteIn): dev.ide.ui.backend.UiCodeStyle = dev.ide.ui.backend.UiCodeStyle(
     preset = i.str(),
     indentSize = i.int(),
     continuationIndent = i.int(),
@@ -5720,7 +5796,7 @@ internal fun r328(i: RemoteIn): dev.ide.ui.backend.UiCodeStyle = dev.ide.ui.back
     xmlRearrangeAttributes = i.bool(),
 )
 
-internal fun w329(o: RemoteOut, v: dev.ide.ui.backend.UiInspection) {
+internal fun w331(o: RemoteOut, v: dev.ide.ui.backend.UiInspection) {
     o.string(v.id)
     o.string(v.displayName)
     o.string(v.language)
@@ -5729,7 +5805,7 @@ internal fun w329(o: RemoteOut, v: dev.ide.ui.backend.UiInspection) {
     o.int(v.severity.ordinal)
     o.int(v.defaultSeverity.ordinal)
 }
-internal fun r329(i: RemoteIn): dev.ide.ui.backend.UiInspection = dev.ide.ui.backend.UiInspection(
+internal fun r331(i: RemoteIn): dev.ide.ui.backend.UiInspection = dev.ide.ui.backend.UiInspection(
     id = i.str(),
     displayName = i.str(),
     language = i.str(),
@@ -5739,17 +5815,17 @@ internal fun r329(i: RemoteIn): dev.ide.ui.backend.UiInspection = dev.ide.ui.bac
     defaultSeverity = dev.ide.ui.backend.UiSeverity.entries[i.int()],
 )
 
-internal fun w330(o: RemoteOut, v: dev.ide.ui.backend.UiLanguageServer) {
+internal fun w332(o: RemoteOut, v: dev.ide.ui.backend.UiLanguageServer) {
     o.string(v.id)
     o.string(v.name)
     o.string(v.command)
-    o.list(v.extensions) { e726 -> o.string(e726) }
+    o.list(v.extensions) { e738 -> o.string(e738) }
     o.string(v.languageId)
     o.bool(v.enabled)
     o.string(v.initializationOptions)
     o.string(v.status)
 }
-internal fun r330(i: RemoteIn): dev.ide.ui.backend.UiLanguageServer = dev.ide.ui.backend.UiLanguageServer(
+internal fun r332(i: RemoteIn): dev.ide.ui.backend.UiLanguageServer = dev.ide.ui.backend.UiLanguageServer(
     id = i.str(),
     name = i.str(),
     command = i.str(),
@@ -5760,38 +5836,38 @@ internal fun r330(i: RemoteIn): dev.ide.ui.backend.UiLanguageServer = dev.ide.ui
     status = i.str(),
 )
 
-internal fun w331(o: RemoteOut, v: dev.ide.ui.backend.UiPluginChange) {
+internal fun w333(o: RemoteOut, v: dev.ide.ui.backend.UiPluginChange) {
     o.string(v.name)
     o.int(v.kind.ordinal)
 }
-internal fun r331(i: RemoteIn): dev.ide.ui.backend.UiPluginChange = dev.ide.ui.backend.UiPluginChange(
+internal fun r333(i: RemoteIn): dev.ide.ui.backend.UiPluginChange = dev.ide.ui.backend.UiPluginChange(
     name = i.str(),
     kind = dev.ide.ui.backend.UiPluginChangeKind.entries[i.int()],
 )
 
-internal fun w332(o: RemoteOut, v: dev.ide.ui.backend.UiPluginInfo) {
+internal fun w334(o: RemoteOut, v: dev.ide.ui.backend.UiPluginInfo) {
     o.string(v.id)
     o.string(v.name)
     o.string(v.version)
     o.string(v.description)
     o.bool(v.essential)
     o.bool(v.enabled)
-    o.list(v.dependsOn) { e729 -> o.string(e729) }
+    o.list(v.dependsOn) { e741 -> o.string(e741) }
     o.bool(v.builtIn)
     o.string(v.origin)
-    o.opt(v.error) { n730 -> o.string(n730) }
+    o.opt(v.error) { n742 -> o.string(n742) }
     o.bool(v.togglable)
     o.bool(v.needsConsent)
-    o.list(v.capabilities) { e731 -> o.string(e731) }
-    o.opt(v.signature) { n732 -> o.string(n732) }
-    o.opt(v.minHostVersion) { n733 -> o.string(n733) }
-    o.opt(v.apiVersion) { n734 -> o.int(n734) }
-    o.opt(v.app) { n735 -> w333(o, n735) }
-    o.list(v.optionalDependsOn) { e736 -> o.string(e736) }
-    o.list(v.missingRequired) { e737 -> o.string(e737) }
-    o.list(v.missingOptional) { e738 -> o.string(e738) }
+    o.list(v.capabilities) { e743 -> o.string(e743) }
+    o.opt(v.signature) { n744 -> o.string(n744) }
+    o.opt(v.minHostVersion) { n745 -> o.string(n745) }
+    o.opt(v.apiVersion) { n746 -> o.int(n746) }
+    o.opt(v.app) { n747 -> w335(o, n747) }
+    o.list(v.optionalDependsOn) { e748 -> o.string(e748) }
+    o.list(v.missingRequired) { e749 -> o.string(e749) }
+    o.list(v.missingOptional) { e750 -> o.string(e750) }
 }
-internal fun r332(i: RemoteIn): dev.ide.ui.backend.UiPluginInfo = dev.ide.ui.backend.UiPluginInfo(
+internal fun r334(i: RemoteIn): dev.ide.ui.backend.UiPluginInfo = dev.ide.ui.backend.UiPluginInfo(
     id = i.str(),
     name = i.str(),
     version = i.str(),
@@ -5808,23 +5884,23 @@ internal fun r332(i: RemoteIn): dev.ide.ui.backend.UiPluginInfo = dev.ide.ui.bac
     signature = i.opt { i.str() },
     minHostVersion = i.opt { i.str() },
     apiVersion = i.opt { i.int() },
-    app = i.opt { r333(i) },
+    app = i.opt { r335(i) },
     optionalDependsOn = i.list { i.str() },
     missingRequired = i.list { i.str() },
     missingOptional = i.list { i.str() },
 )
 
-internal fun w333(o: RemoteOut, v: dev.ide.ui.backend.UiPluginApp) {
+internal fun w335(o: RemoteOut, v: dev.ide.ui.backend.UiPluginApp) {
     o.string(v.packageName)
-    o.opt(v.appVersion) { n727 -> o.string(n727) }
+    o.opt(v.appVersion) { n739 -> o.string(n739) }
     o.long(v.firstInstalledAt)
     o.long(v.lastUpdatedAt)
     o.long(v.sizeBytes)
     o.bool(v.signedLikeIde)
-    o.opt(v.installer) { n728 -> o.string(n728) }
+    o.opt(v.installer) { n740 -> o.string(n740) }
     o.bool(v.canOpen)
 }
-internal fun r333(i: RemoteIn): dev.ide.ui.backend.UiPluginApp = dev.ide.ui.backend.UiPluginApp(
+internal fun r335(i: RemoteIn): dev.ide.ui.backend.UiPluginApp = dev.ide.ui.backend.UiPluginApp(
     packageName = i.str(),
     appVersion = i.opt { i.str() },
     firstInstalledAt = i.long(),
@@ -5835,34 +5911,34 @@ internal fun r333(i: RemoteIn): dev.ide.ui.backend.UiPluginApp = dev.ide.ui.back
     canOpen = i.bool(),
 )
 
-internal fun w334(o: RemoteOut, v: dev.ide.ui.backend.UiPluginDownloads) {
-    o.list(v.plugins) { e744 -> w335(o, e744) }
-    o.opt(v.unavailable) { n745 -> o.string(n745) }
+internal fun w336(o: RemoteOut, v: dev.ide.ui.backend.UiPluginDownloads) {
+    o.list(v.plugins) { e756 -> w337(o, e756) }
+    o.opt(v.unavailable) { n757 -> o.string(n757) }
     o.bool(v.cached)
 }
-internal fun r334(i: RemoteIn): dev.ide.ui.backend.UiPluginDownloads = dev.ide.ui.backend.UiPluginDownloads(
-    plugins = i.list { r335(i) },
+internal fun r336(i: RemoteIn): dev.ide.ui.backend.UiPluginDownloads = dev.ide.ui.backend.UiPluginDownloads(
+    plugins = i.list { r337(i) },
     unavailable = i.opt { i.str() },
     cached = i.bool(),
 )
 
-internal fun w335(o: RemoteOut, v: dev.ide.ui.backend.UiPluginDownload) {
+internal fun w337(o: RemoteOut, v: dev.ide.ui.backend.UiPluginDownload) {
     o.string(v.id)
     o.string(v.name)
     o.string(v.tagline)
     o.string(v.description)
     o.string(v.publisher)
     o.string(v.version)
-    o.opt(v.sizeBytes) { n739 -> o.long(n739) }
+    o.opt(v.sizeBytes) { n751 -> o.long(n751) }
     o.string(v.downloadUrl)
-    o.opt(v.pageUrl) { n740 -> o.string(n740) }
-    o.list(v.capabilities) { e741 -> o.string(e741) }
+    o.opt(v.pageUrl) { n752 -> o.string(n752) }
+    o.list(v.capabilities) { e753 -> o.string(e753) }
     o.string(v.languages)
-    o.opt(v.installedVersion) { n742 -> o.string(n742) }
+    o.opt(v.installedVersion) { n754 -> o.string(n754) }
     o.bool(v.updateAvailable)
-    o.opt(v.needsHost) { n743 -> o.string(n743) }
+    o.opt(v.needsHost) { n755 -> o.string(n755) }
 }
-internal fun r335(i: RemoteIn): dev.ide.ui.backend.UiPluginDownload = dev.ide.ui.backend.UiPluginDownload(
+internal fun r337(i: RemoteIn): dev.ide.ui.backend.UiPluginDownload = dev.ide.ui.backend.UiPluginDownload(
     id = i.str(),
     name = i.str(),
     tagline = i.str(),
@@ -5879,23 +5955,23 @@ internal fun r335(i: RemoteIn): dev.ide.ui.backend.UiPluginDownload = dev.ide.ui
     needsHost = i.opt { i.str() },
 )
 
-internal fun w336(o: RemoteOut, v: dev.ide.ui.backend.UiPluginLeftover) {
+internal fun w338(o: RemoteOut, v: dev.ide.ui.backend.UiPluginLeftover) {
     o.string(v.id)
-    o.opt(v.name) { n746 -> o.string(n746) }
+    o.opt(v.name) { n758 -> o.string(n758) }
     o.long(v.sizeBytes)
 }
-internal fun r336(i: RemoteIn): dev.ide.ui.backend.UiPluginLeftover = dev.ide.ui.backend.UiPluginLeftover(
+internal fun r338(i: RemoteIn): dev.ide.ui.backend.UiPluginLeftover = dev.ide.ui.backend.UiPluginLeftover(
     id = i.str(),
     name = i.opt { i.str() },
     sizeBytes = i.long(),
 )
 
-internal fun w337(o: RemoteOut, v: dev.ide.ui.backend.UiSettings) {
+internal fun w339(o: RemoteOut, v: dev.ide.ui.backend.UiSettings) {
     o.string(v.themeMode)
-    o.opt(v.language) { n747 -> o.string(n747) }
+    o.opt(v.language) { n759 -> o.string(n759) }
     o.int(v.accent.ordinal)
     o.long(v.customAccentColor)
-    o.opt(v.appTheme) { n748 -> o.string(n748) }
+    o.opt(v.appTheme) { n760 -> o.string(n760) }
     o.bool(v.alwaysShowToolWindowActions)
     o.bool(v.runFullScreen)
     o.bool(v.seasonalTouches)
@@ -5925,7 +6001,7 @@ internal fun w337(o: RemoteOut, v: dev.ide.ui.backend.UiSettings) {
     o.bool(v.symbolBar)
     o.bool(v.formatOnSave)
 }
-internal fun r337(i: RemoteIn): dev.ide.ui.backend.UiSettings = dev.ide.ui.backend.UiSettings(
+internal fun r339(i: RemoteIn): dev.ide.ui.backend.UiSettings = dev.ide.ui.backend.UiSettings(
     themeMode = i.str(),
     language = i.opt { i.str() },
     accent = dev.ide.ui.backend.UiAccent.entries[i.int()],
@@ -5961,55 +6037,55 @@ internal fun r337(i: RemoteIn): dev.ide.ui.backend.UiSettings = dev.ide.ui.backe
     formatOnSave = i.bool(),
 )
 
-internal fun w338(o: RemoteOut, v: dev.ide.ui.backend.UiSettingsPage) {
+internal fun w340(o: RemoteOut, v: dev.ide.ui.backend.UiSettingsPage) {
     o.string(v.id)
     o.string(v.title)
     o.string(v.iconId)
     o.string(v.scope)
-    o.list(v.controls) { e765 -> w339(o, e765) }
+    o.list(v.controls) { e777 -> w341(o, e777) }
     o.bool(v.inspectionsSection)
 }
-internal fun r338(i: RemoteIn): dev.ide.ui.backend.UiSettingsPage = dev.ide.ui.backend.UiSettingsPage(
+internal fun r340(i: RemoteIn): dev.ide.ui.backend.UiSettingsPage = dev.ide.ui.backend.UiSettingsPage(
     id = i.str(),
     title = i.str(),
     iconId = i.str(),
     scope = i.str(),
-    controls = i.list { r339(i) },
+    controls = i.list { r341(i) },
     inspectionsSection = i.bool(),
 )
 
-internal fun w339(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl) {
+internal fun w341(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl) {
     when (v) {
-        is dev.ide.ui.backend.UiSettingControl.Action -> { o.int(0); w340(o, v) }
-        is dev.ide.ui.backend.UiSettingControl.Choice -> { o.int(1); w341(o, v) }
-        is dev.ide.ui.backend.UiSettingControl.Color -> { o.int(2); w343(o, v) }
-        is dev.ide.ui.backend.UiSettingControl.Shortcut -> { o.int(3); w344(o, v) }
-        is dev.ide.ui.backend.UiSettingControl.Slider -> { o.int(4); w345(o, v) }
-        is dev.ide.ui.backend.UiSettingControl.Text -> { o.int(5); w346(o, v) }
-        is dev.ide.ui.backend.UiSettingControl.Toggle -> { o.int(6); w347(o, v) }
+        is dev.ide.ui.backend.UiSettingControl.Action -> { o.int(0); w342(o, v) }
+        is dev.ide.ui.backend.UiSettingControl.Choice -> { o.int(1); w343(o, v) }
+        is dev.ide.ui.backend.UiSettingControl.Color -> { o.int(2); w345(o, v) }
+        is dev.ide.ui.backend.UiSettingControl.Shortcut -> { o.int(3); w346(o, v) }
+        is dev.ide.ui.backend.UiSettingControl.Slider -> { o.int(4); w347(o, v) }
+        is dev.ide.ui.backend.UiSettingControl.Text -> { o.int(5); w348(o, v) }
+        is dev.ide.ui.backend.UiSettingControl.Toggle -> { o.int(6); w349(o, v) }
     }
 }
-internal fun r339(i: RemoteIn): dev.ide.ui.backend.UiSettingControl = when (val tag = i.int()) {
-    0 -> r340(i)
-    1 -> r341(i)
-    2 -> r343(i)
-    3 -> r344(i)
-    4 -> r345(i)
-    5 -> r346(i)
-    6 -> r347(i)
+internal fun r341(i: RemoteIn): dev.ide.ui.backend.UiSettingControl = when (val tag = i.int()) {
+    0 -> r342(i)
+    1 -> r343(i)
+    2 -> r345(i)
+    3 -> r346(i)
+    4 -> r347(i)
+    5 -> r348(i)
+    6 -> r349(i)
     else -> error("unknown UiSettingControl $tag")
 }
 
-internal fun w340(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Action) {
+internal fun w342(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Action) {
     o.string(v.key)
     o.string(v.title)
-    o.opt(v.description) { n749 -> o.string(n749) }
+    o.opt(v.description) { n761 -> o.string(n761) }
     o.string(v.buttonLabel)
     o.bool(v.destructive)
     o.bool(v.advanced)
-    o.opt(v.group) { n750 -> o.string(n750) }
+    o.opt(v.group) { n762 -> o.string(n762) }
 }
-internal fun r340(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Action = dev.ide.ui.backend.UiSettingControl.Action(
+internal fun r342(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Action = dev.ide.ui.backend.UiSettingControl.Action(
     key = i.str(),
     title = i.str(),
     description = i.opt { i.str() },
@@ -6019,43 +6095,43 @@ internal fun r340(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Action = dev
     group = i.opt { i.str() },
 )
 
-internal fun w341(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Choice) {
+internal fun w343(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Choice) {
     o.string(v.key)
     o.string(v.title)
-    o.opt(v.description) { n751 -> o.string(n751) }
+    o.opt(v.description) { n763 -> o.string(n763) }
     o.string(v.value)
-    o.list(v.options) { e752 -> w342(o, e752) }
+    o.list(v.options) { e764 -> w344(o, e764) }
     o.bool(v.advanced)
-    o.opt(v.group) { n753 -> o.string(n753) }
+    o.opt(v.group) { n765 -> o.string(n765) }
 }
-internal fun r341(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Choice = dev.ide.ui.backend.UiSettingControl.Choice(
+internal fun r343(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Choice = dev.ide.ui.backend.UiSettingControl.Choice(
     key = i.str(),
     title = i.str(),
     description = i.opt { i.str() },
     value = i.str(),
-    options = i.list { r342(i) },
+    options = i.list { r344(i) },
     advanced = i.bool(),
     group = i.opt { i.str() },
 )
 
-internal fun w342(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Choice.Option) {
+internal fun w344(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Choice.Option) {
     o.string(v.value)
     o.string(v.label)
 }
-internal fun r342(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Choice.Option = dev.ide.ui.backend.UiSettingControl.Choice.Option(
+internal fun r344(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Choice.Option = dev.ide.ui.backend.UiSettingControl.Choice.Option(
     value = i.str(),
     label = i.str(),
 )
 
-internal fun w343(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Color) {
+internal fun w345(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Color) {
     o.string(v.key)
     o.string(v.title)
-    o.opt(v.description) { n754 -> o.string(n754) }
+    o.opt(v.description) { n766 -> o.string(n766) }
     o.long(v.value)
     o.bool(v.advanced)
-    o.opt(v.group) { n755 -> o.string(n755) }
+    o.opt(v.group) { n767 -> o.string(n767) }
 }
-internal fun r343(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Color = dev.ide.ui.backend.UiSettingControl.Color(
+internal fun r345(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Color = dev.ide.ui.backend.UiSettingControl.Color(
     key = i.str(),
     title = i.str(),
     description = i.opt { i.str() },
@@ -6064,17 +6140,17 @@ internal fun r343(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Color = dev.
     group = i.opt { i.str() },
 )
 
-internal fun w344(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Shortcut) {
+internal fun w346(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Shortcut) {
     o.string(v.key)
     o.string(v.title)
-    o.opt(v.description) { n756 -> o.string(n756) }
+    o.opt(v.description) { n768 -> o.string(n768) }
     o.string(v.value)
     o.string(v.defaultValue)
     o.string(v.display)
     o.bool(v.advanced)
-    o.opt(v.group) { n757 -> o.string(n757) }
+    o.opt(v.group) { n769 -> o.string(n769) }
 }
-internal fun r344(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Shortcut = dev.ide.ui.backend.UiSettingControl.Shortcut(
+internal fun r346(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Shortcut = dev.ide.ui.backend.UiSettingControl.Shortcut(
     key = i.str(),
     title = i.str(),
     description = i.opt { i.str() },
@@ -6085,19 +6161,19 @@ internal fun r344(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Shortcut = d
     group = i.opt { i.str() },
 )
 
-internal fun w345(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Slider) {
+internal fun w347(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Slider) {
     o.string(v.key)
     o.string(v.title)
-    o.opt(v.description) { n758 -> o.string(n758) }
+    o.opt(v.description) { n770 -> o.string(n770) }
     o.int(v.value)
     o.int(v.min)
     o.int(v.max)
     o.int(v.step)
-    o.opt(v.unit) { n759 -> o.string(n759) }
+    o.opt(v.unit) { n771 -> o.string(n771) }
     o.bool(v.advanced)
-    o.opt(v.group) { n760 -> o.string(n760) }
+    o.opt(v.group) { n772 -> o.string(n772) }
 }
-internal fun r345(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Slider = dev.ide.ui.backend.UiSettingControl.Slider(
+internal fun r347(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Slider = dev.ide.ui.backend.UiSettingControl.Slider(
     key = i.str(),
     title = i.str(),
     description = i.opt { i.str() },
@@ -6110,16 +6186,16 @@ internal fun r345(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Slider = dev
     group = i.opt { i.str() },
 )
 
-internal fun w346(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Text) {
+internal fun w348(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Text) {
     o.string(v.key)
     o.string(v.title)
-    o.opt(v.description) { n761 -> o.string(n761) }
+    o.opt(v.description) { n773 -> o.string(n773) }
     o.string(v.value)
     o.string(v.placeholder)
     o.bool(v.advanced)
-    o.opt(v.group) { n762 -> o.string(n762) }
+    o.opt(v.group) { n774 -> o.string(n774) }
 }
-internal fun r346(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Text = dev.ide.ui.backend.UiSettingControl.Text(
+internal fun r348(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Text = dev.ide.ui.backend.UiSettingControl.Text(
     key = i.str(),
     title = i.str(),
     description = i.opt { i.str() },
@@ -6129,15 +6205,15 @@ internal fun r346(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Text = dev.i
     group = i.opt { i.str() },
 )
 
-internal fun w347(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Toggle) {
+internal fun w349(o: RemoteOut, v: dev.ide.ui.backend.UiSettingControl.Toggle) {
     o.string(v.key)
     o.string(v.title)
-    o.opt(v.description) { n763 -> o.string(n763) }
+    o.opt(v.description) { n775 -> o.string(n775) }
     o.bool(v.value)
     o.bool(v.advanced)
-    o.opt(v.group) { n764 -> o.string(n764) }
+    o.opt(v.group) { n776 -> o.string(n776) }
 }
-internal fun r347(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Toggle = dev.ide.ui.backend.UiSettingControl.Toggle(
+internal fun r349(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Toggle = dev.ide.ui.backend.UiSettingControl.Toggle(
     key = i.str(),
     title = i.str(),
     description = i.opt { i.str() },
@@ -6146,19 +6222,19 @@ internal fun r347(i: RemoteIn): dev.ide.ui.backend.UiSettingControl.Toggle = dev
     group = i.opt { i.str() },
 )
 
-internal fun w348(o: RemoteOut, v: dev.ide.ui.backend.UiKeystoreSpec) {
+internal fun w350(o: RemoteOut, v: dev.ide.ui.backend.UiKeystoreSpec) {
     o.string(v.name)
     o.string(v.storePass)
     o.string(v.keyAlias)
     o.string(v.commonName)
-    o.opt(v.organization) { n766 -> o.string(n766) }
-    o.opt(v.organizationalUnit) { n767 -> o.string(n767) }
-    o.opt(v.locality) { n768 -> o.string(n768) }
-    o.opt(v.state) { n769 -> o.string(n769) }
-    o.opt(v.country) { n770 -> o.string(n770) }
+    o.opt(v.organization) { n778 -> o.string(n778) }
+    o.opt(v.organizationalUnit) { n779 -> o.string(n779) }
+    o.opt(v.locality) { n780 -> o.string(n780) }
+    o.opt(v.state) { n781 -> o.string(n781) }
+    o.opt(v.country) { n782 -> o.string(n782) }
     o.int(v.validityYears)
 }
-internal fun r348(i: RemoteIn): dev.ide.ui.backend.UiKeystoreSpec = dev.ide.ui.backend.UiKeystoreSpec(
+internal fun r350(i: RemoteIn): dev.ide.ui.backend.UiKeystoreSpec = dev.ide.ui.backend.UiKeystoreSpec(
     name = i.str(),
     storePass = i.str(),
     keyAlias = i.str(),
@@ -6171,28 +6247,28 @@ internal fun r348(i: RemoteIn): dev.ide.ui.backend.UiKeystoreSpec = dev.ide.ui.b
     validityYears = i.int(),
 )
 
-internal fun w349(o: RemoteOut, v: dev.ide.ui.backend.UiKeystoreResult) {
+internal fun w351(o: RemoteOut, v: dev.ide.ui.backend.UiKeystoreResult) {
     o.bool(v.success)
     o.string(v.message)
-    o.opt(v.keystoreId) { n771 -> o.string(n771) }
+    o.opt(v.keystoreId) { n783 -> o.string(n783) }
 }
-internal fun r349(i: RemoteIn): dev.ide.ui.backend.UiKeystoreResult = dev.ide.ui.backend.UiKeystoreResult(
+internal fun r351(i: RemoteIn): dev.ide.ui.backend.UiKeystoreResult = dev.ide.ui.backend.UiKeystoreResult(
     success = i.bool(),
     message = i.str(),
     keystoreId = i.opt { i.str() },
 )
 
-internal fun w350(o: RemoteOut, v: dev.ide.ui.backend.UiKeystore) {
+internal fun w352(o: RemoteOut, v: dev.ide.ui.backend.UiKeystore) {
     o.string(v.id)
     o.string(v.name)
     o.string(v.fileName)
     o.string(v.keyAlias)
-    o.opt(v.certSubject) { n772 -> o.string(n772) }
-    o.opt(v.sha256) { n773 -> o.string(n773) }
-    o.opt(v.validUntilEpochMs) { n774 -> o.long(n774) }
-    o.opt(v.sha1) { n775 -> o.string(n775) }
+    o.opt(v.certSubject) { n784 -> o.string(n784) }
+    o.opt(v.sha256) { n785 -> o.string(n785) }
+    o.opt(v.validUntilEpochMs) { n786 -> o.long(n786) }
+    o.opt(v.sha1) { n787 -> o.string(n787) }
 }
-internal fun r350(i: RemoteIn): dev.ide.ui.backend.UiKeystore = dev.ide.ui.backend.UiKeystore(
+internal fun r352(i: RemoteIn): dev.ide.ui.backend.UiKeystore = dev.ide.ui.backend.UiKeystore(
     id = i.str(),
     name = i.str(),
     fileName = i.str(),
@@ -6203,42 +6279,42 @@ internal fun r350(i: RemoteIn): dev.ide.ui.backend.UiKeystore = dev.ide.ui.backe
     sha1 = i.opt { i.str() },
 )
 
-internal fun w351(o: RemoteOut, v: dev.ide.ui.backend.UiSigningAssignments) {
+internal fun w353(o: RemoteOut, v: dev.ide.ui.backend.UiSigningAssignments) {
     o.string(v.moduleName)
-    o.list(v.keystores) { e778 -> w350(o, e778) }
-    o.list(v.assignments) { e779 -> w352(o, e779) }
+    o.list(v.keystores) { e790 -> w352(o, e790) }
+    o.list(v.assignments) { e791 -> w354(o, e791) }
 }
-internal fun r351(i: RemoteIn): dev.ide.ui.backend.UiSigningAssignments = dev.ide.ui.backend.UiSigningAssignments(
+internal fun r353(i: RemoteIn): dev.ide.ui.backend.UiSigningAssignments = dev.ide.ui.backend.UiSigningAssignments(
     moduleName = i.str(),
-    keystores = i.list { r350(i) },
-    assignments = i.list { r352(i) },
+    keystores = i.list { r352(i) },
+    assignments = i.list { r354(i) },
 )
 
-internal fun w352(o: RemoteOut, v: dev.ide.ui.backend.UiSigningAssignment) {
+internal fun w354(o: RemoteOut, v: dev.ide.ui.backend.UiSigningAssignment) {
     o.string(v.buildType)
-    o.opt(v.keystoreId) { n776 -> o.string(n776) }
-    o.opt(v.keystoreName) { n777 -> o.string(n777) }
+    o.opt(v.keystoreId) { n788 -> o.string(n788) }
+    o.opt(v.keystoreName) { n789 -> o.string(n789) }
 }
-internal fun r352(i: RemoteIn): dev.ide.ui.backend.UiSigningAssignment = dev.ide.ui.backend.UiSigningAssignment(
+internal fun r354(i: RemoteIn): dev.ide.ui.backend.UiSigningAssignment = dev.ide.ui.backend.UiSigningAssignment(
     buildType = i.str(),
     keystoreId = i.opt { i.str() },
     keystoreName = i.opt { i.str() },
 )
 
-internal fun w353(o: RemoteOut, v: dev.ide.ui.backend.UiKeystoreValidation) {
+internal fun w355(o: RemoteOut, v: dev.ide.ui.backend.UiKeystoreValidation) {
     o.bool(v.valid)
-    o.list(v.aliases) { e780 -> o.string(e780) }
-    o.list(v.certs) { e781 -> w354(o, e781) }
-    o.opt(v.error) { n782 -> o.string(n782) }
+    o.list(v.aliases) { e792 -> o.string(e792) }
+    o.list(v.certs) { e793 -> w356(o, e793) }
+    o.opt(v.error) { n794 -> o.string(n794) }
 }
-internal fun r353(i: RemoteIn): dev.ide.ui.backend.UiKeystoreValidation = dev.ide.ui.backend.UiKeystoreValidation(
+internal fun r355(i: RemoteIn): dev.ide.ui.backend.UiKeystoreValidation = dev.ide.ui.backend.UiKeystoreValidation(
     valid = i.bool(),
     aliases = i.list { i.str() },
-    certs = i.list { r354(i) },
+    certs = i.list { r356(i) },
     error = i.opt { i.str() },
 )
 
-internal fun w354(o: RemoteOut, v: dev.ide.ui.backend.UiKeystoreCert) {
+internal fun w356(o: RemoteOut, v: dev.ide.ui.backend.UiKeystoreCert) {
     o.string(v.alias)
     o.string(v.subject)
     o.string(v.issuer)
@@ -6247,7 +6323,7 @@ internal fun w354(o: RemoteOut, v: dev.ide.ui.backend.UiKeystoreCert) {
     o.string(v.sha1)
     o.string(v.sha256)
 }
-internal fun r354(i: RemoteIn): dev.ide.ui.backend.UiKeystoreCert = dev.ide.ui.backend.UiKeystoreCert(
+internal fun r356(i: RemoteIn): dev.ide.ui.backend.UiKeystoreCert = dev.ide.ui.backend.UiKeystoreCert(
     alias = i.str(),
     subject = i.str(),
     issuer = i.str(),
@@ -6257,27 +6333,27 @@ internal fun r354(i: RemoteIn): dev.ide.ui.backend.UiKeystoreCert = dev.ide.ui.b
     sha256 = i.str(),
 )
 
-internal fun w355(o: RemoteOut, v: dev.ide.ui.backend.UiStoreAuthState) {
+internal fun w357(o: RemoteOut, v: dev.ide.ui.backend.UiStoreAuthState) {
     o.int(v.phase.ordinal)
-    o.opt(v.account) { n787 -> w356(o, n787) }
-    o.opt(v.message) { n788 -> o.string(n788) }
+    o.opt(v.account) { n799 -> w358(o, n799) }
+    o.opt(v.message) { n800 -> o.string(n800) }
 }
-internal fun r355(i: RemoteIn): dev.ide.ui.backend.UiStoreAuthState = dev.ide.ui.backend.UiStoreAuthState(
+internal fun r357(i: RemoteIn): dev.ide.ui.backend.UiStoreAuthState = dev.ide.ui.backend.UiStoreAuthState(
     phase = dev.ide.ui.backend.UiSignInPhase.entries[i.int()],
-    account = i.opt { r356(i) },
+    account = i.opt { r358(i) },
     message = i.opt { i.str() },
 )
 
-internal fun w356(o: RemoteOut, v: dev.ide.ui.backend.UiStoreAccount) {
+internal fun w358(o: RemoteOut, v: dev.ide.ui.backend.UiStoreAccount) {
     o.string(v.userId)
-    o.opt(v.email) { n783 -> o.string(n783) }
-    o.opt(v.handle) { n784 -> o.string(n784) }
-    o.opt(v.displayName) { n785 -> o.string(n785) }
-    o.opt(v.avatarUrl) { n786 -> o.string(n786) }
+    o.opt(v.email) { n795 -> o.string(n795) }
+    o.opt(v.handle) { n796 -> o.string(n796) }
+    o.opt(v.displayName) { n797 -> o.string(n797) }
+    o.opt(v.avatarUrl) { n798 -> o.string(n798) }
     o.bool(v.verified)
     o.bool(v.isAdmin)
 }
-internal fun r356(i: RemoteIn): dev.ide.ui.backend.UiStoreAccount = dev.ide.ui.backend.UiStoreAccount(
+internal fun r358(i: RemoteIn): dev.ide.ui.backend.UiStoreAccount = dev.ide.ui.backend.UiStoreAccount(
     userId = i.str(),
     email = i.opt { i.str() },
     handle = i.opt { i.str() },
@@ -6287,53 +6363,53 @@ internal fun r356(i: RemoteIn): dev.ide.ui.backend.UiStoreAccount = dev.ide.ui.b
     isAdmin = i.bool(),
 )
 
-internal fun w357(o: RemoteOut, v: dev.ide.ui.backend.UiStoreUpdate) {
-    w358(o, v.item)
-    o.opt(v.installedVersion) { n805 -> o.string(n805) }
-    o.opt(v.availableVersion) { n806 -> o.string(n806) }
+internal fun w359(o: RemoteOut, v: dev.ide.ui.backend.UiStoreUpdate) {
+    w360(o, v.item)
+    o.opt(v.installedVersion) { n817 -> o.string(n817) }
+    o.opt(v.availableVersion) { n818 -> o.string(n818) }
     o.string(v.rootPath)
 }
-internal fun r357(i: RemoteIn): dev.ide.ui.backend.UiStoreUpdate = dev.ide.ui.backend.UiStoreUpdate(
-    item = r358(i),
+internal fun r359(i: RemoteIn): dev.ide.ui.backend.UiStoreUpdate = dev.ide.ui.backend.UiStoreUpdate(
+    item = r360(i),
     installedVersion = i.opt { i.str() },
     availableVersion = i.opt { i.str() },
     rootPath = i.str(),
 )
 
-internal fun w358(o: RemoteOut, v: dev.ide.ui.backend.UiStoreItem) {
+internal fun w360(o: RemoteOut, v: dev.ide.ui.backend.UiStoreItem) {
     o.string(v.id)
     o.int(v.kind.ordinal)
     o.string(v.title)
     o.string(v.summary)
     o.string(v.description)
-    o.opt(v.blurb) { n789 -> o.string(n789) }
+    o.opt(v.blurb) { n801 -> o.string(n801) }
     o.string(v.category)
     o.string(v.iconId)
-    o.list(v.tags) { e790 -> o.string(e790) }
-    o.opt(v.author) { n791 -> o.string(n791) }
-    o.opt(v.authorHandle) { n792 -> o.string(n792) }
+    o.list(v.tags) { e802 -> o.string(e802) }
+    o.opt(v.author) { n803 -> o.string(n803) }
+    o.opt(v.authorHandle) { n804 -> o.string(n804) }
     o.bool(v.featured)
-    o.opt(v.accentColor) { n793 -> o.long(n793) }
+    o.opt(v.accentColor) { n805 -> o.long(n805) }
     o.int(v.installs)
     o.int(v.likes)
     o.float(v.rating)
     o.int(v.ratingCount)
-    o.opt(v.version) { n794 -> o.string(n794) }
+    o.opt(v.version) { n806 -> o.string(n806) }
     o.long(v.downloadBytes)
     o.bool(v.verified)
-    o.opt(v.readme) { n795 -> o.string(n795) }
-    o.opt(v.changelog) { n796 -> o.string(n796) }
-    o.opt(v.publishedAt) { n797 -> o.string(n797) }
-    o.opt(v.templateId) { n798 -> o.string(n798) }
+    o.opt(v.readme) { n807 -> o.string(n807) }
+    o.opt(v.changelog) { n808 -> o.string(n808) }
+    o.opt(v.publishedAt) { n809 -> o.string(n809) }
+    o.opt(v.templateId) { n810 -> o.string(n810) }
     o.bool(v.available)
-    o.list(v.highlights) { e799 -> o.string(e799) }
-    o.opt(v.language) { n800 -> o.string(n800) }
-    o.opt(v.previewKey) { n801 -> o.string(n801) }
-    o.list(v.screenshots) { e802 -> o.string(e802) }
-    o.opt(v.iconPath) { n803 -> o.string(n803) }
-    o.list(v.requiredPlugins) { e804 -> o.string(e804) }
+    o.list(v.highlights) { e811 -> o.string(e811) }
+    o.opt(v.language) { n812 -> o.string(n812) }
+    o.opt(v.previewKey) { n813 -> o.string(n813) }
+    o.list(v.screenshots) { e814 -> o.string(e814) }
+    o.opt(v.iconPath) { n815 -> o.string(n815) }
+    o.list(v.requiredPlugins) { e816 -> o.string(e816) }
 }
-internal fun r358(i: RemoteIn): dev.ide.ui.backend.UiStoreItem = dev.ide.ui.backend.UiStoreItem(
+internal fun r360(i: RemoteIn): dev.ide.ui.backend.UiStoreItem = dev.ide.ui.backend.UiStoreItem(
     id = i.str(),
     kind = dev.ide.ui.backend.UiStoreItemKind.entries[i.int()],
     title = i.str(),
@@ -6367,198 +6443,198 @@ internal fun r358(i: RemoteIn): dev.ide.ui.backend.UiStoreItem = dev.ide.ui.back
     requiredPlugins = i.list { i.str() },
 )
 
-internal fun w359(o: RemoteOut, v: dev.ide.ui.backend.UiStoreCatalog) {
-    o.list(v.featured) { e809 -> w358(o, e809) }
-    o.list(v.categories) { e810 -> o.string(e810) }
-    o.list(v.sections) { e811 -> w360(o, e811) }
+internal fun w361(o: RemoteOut, v: dev.ide.ui.backend.UiStoreCatalog) {
+    o.list(v.featured) { e821 -> w360(o, e821) }
+    o.list(v.categories) { e822 -> o.string(e822) }
+    o.list(v.sections) { e823 -> w362(o, e823) }
 }
-internal fun r359(i: RemoteIn): dev.ide.ui.backend.UiStoreCatalog = dev.ide.ui.backend.UiStoreCatalog(
-    featured = i.list { r358(i) },
+internal fun r361(i: RemoteIn): dev.ide.ui.backend.UiStoreCatalog = dev.ide.ui.backend.UiStoreCatalog(
+    featured = i.list { r360(i) },
     categories = i.list { i.str() },
-    sections = i.list { r360(i) },
+    sections = i.list { r362(i) },
 )
 
-internal fun w360(o: RemoteOut, v: dev.ide.ui.backend.UiStoreSection) {
+internal fun w362(o: RemoteOut, v: dev.ide.ui.backend.UiStoreSection) {
     o.string(v.id)
     o.string(v.title)
-    o.opt(v.subtitle) { n807 -> o.string(n807) }
-    o.list(v.items) { e808 -> w358(o, e808) }
+    o.opt(v.subtitle) { n819 -> o.string(n819) }
+    o.list(v.items) { e820 -> w360(o, e820) }
 }
-internal fun r360(i: RemoteIn): dev.ide.ui.backend.UiStoreSection = dev.ide.ui.backend.UiStoreSection(
+internal fun r362(i: RemoteIn): dev.ide.ui.backend.UiStoreSection = dev.ide.ui.backend.UiStoreSection(
     id = i.str(),
     title = i.str(),
     subtitle = i.opt { i.str() },
-    items = i.list { r358(i) },
+    items = i.list { r360(i) },
 )
 
-internal fun w361(o: RemoteOut, v: dev.ide.ui.backend.UiStoreFeed) {
+internal fun w363(o: RemoteOut, v: dev.ide.ui.backend.UiStoreFeed) {
     o.int(v.mode.ordinal)
-    w362(o, v.state)
-    o.list(v.sections) { e840 -> w364(o, e840) }
+    w364(o, v.state)
+    o.list(v.sections) { e852 -> w366(o, e852) }
     o.bool(v.fromCache)
 }
-internal fun r361(i: RemoteIn): dev.ide.ui.backend.UiStoreFeed = dev.ide.ui.backend.UiStoreFeed(
+internal fun r363(i: RemoteIn): dev.ide.ui.backend.UiStoreFeed = dev.ide.ui.backend.UiStoreFeed(
     mode = dev.ide.ui.backend.UiStoreMode.entries[i.int()],
-    state = r362(i),
-    sections = i.list { r364(i) },
+    state = r364(i),
+    sections = i.list { r366(i) },
     fromCache = i.bool(),
 )
 
-internal fun w362(o: RemoteOut, v: dev.ide.ui.backend.UiStoreState) {
+internal fun w364(o: RemoteOut, v: dev.ide.ui.backend.UiStoreState) {
     o.int(v.publishedProjectCount)
     o.bool(v.acceptingSubmissions)
-    w363(o, v.thresholds)
+    w365(o, v.thresholds)
 }
-internal fun r362(i: RemoteIn): dev.ide.ui.backend.UiStoreState = dev.ide.ui.backend.UiStoreState(
+internal fun r364(i: RemoteIn): dev.ide.ui.backend.UiStoreState = dev.ide.ui.backend.UiStoreState(
     publishedProjectCount = i.int(),
     acceptingSubmissions = i.bool(),
-    thresholds = r363(i),
+    thresholds = r365(i),
 )
 
-internal fun w363(o: RemoteOut, v: dev.ide.ui.backend.UiStoreThresholds) {
+internal fun w365(o: RemoteOut, v: dev.ide.ui.backend.UiStoreThresholds) {
     o.int(v.charts)
     o.int(v.collections)
     o.int(v.recommendations)
 }
-internal fun r363(i: RemoteIn): dev.ide.ui.backend.UiStoreThresholds = dev.ide.ui.backend.UiStoreThresholds(
+internal fun r365(i: RemoteIn): dev.ide.ui.backend.UiStoreThresholds = dev.ide.ui.backend.UiStoreThresholds(
     charts = i.int(),
     collections = i.int(),
     recommendations = i.int(),
 )
 
-internal fun w364(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection) {
+internal fun w366(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection) {
     when (v) {
-        is dev.ide.ui.backend.UiFeedSection.Bundled -> { o.int(0); w365(o, v) }
-        is dev.ide.ui.backend.UiFeedSection.Catalogue -> { o.int(1); w366(o, v) }
-        is dev.ide.ui.backend.UiFeedSection.Categories -> { o.int(2); w367(o, v) }
-        is dev.ide.ui.backend.UiFeedSection.Charts -> { o.int(3); w369(o, v) }
-        is dev.ide.ui.backend.UiFeedSection.Collections -> { o.int(4); w372(o, v) }
-        is dev.ide.ui.backend.UiFeedSection.Featured -> { o.int(5); w374(o, v) }
-        is dev.ide.ui.backend.UiFeedSection.GhostShelves -> { o.int(6); w375(o, v) }
-        is dev.ide.ui.backend.UiFeedSection.Personalized -> { o.int(7); w377(o, v) }
-        is dev.ide.ui.backend.UiFeedSection.PublishPitch -> { o.int(8); w378(o, v) }
-        is dev.ide.ui.backend.UiFeedSection.Shelf -> { o.int(9); w379(o, v) }
-        is dev.ide.ui.backend.UiFeedSection.Spotlight -> { o.int(10); w380(o, v) }
-        is dev.ide.ui.backend.UiFeedSection.Ticker -> { o.int(11); w382(o, v) }
+        is dev.ide.ui.backend.UiFeedSection.Bundled -> { o.int(0); w367(o, v) }
+        is dev.ide.ui.backend.UiFeedSection.Catalogue -> { o.int(1); w368(o, v) }
+        is dev.ide.ui.backend.UiFeedSection.Categories -> { o.int(2); w369(o, v) }
+        is dev.ide.ui.backend.UiFeedSection.Charts -> { o.int(3); w371(o, v) }
+        is dev.ide.ui.backend.UiFeedSection.Collections -> { o.int(4); w374(o, v) }
+        is dev.ide.ui.backend.UiFeedSection.Featured -> { o.int(5); w376(o, v) }
+        is dev.ide.ui.backend.UiFeedSection.GhostShelves -> { o.int(6); w377(o, v) }
+        is dev.ide.ui.backend.UiFeedSection.Personalized -> { o.int(7); w379(o, v) }
+        is dev.ide.ui.backend.UiFeedSection.PublishPitch -> { o.int(8); w380(o, v) }
+        is dev.ide.ui.backend.UiFeedSection.Shelf -> { o.int(9); w381(o, v) }
+        is dev.ide.ui.backend.UiFeedSection.Spotlight -> { o.int(10); w382(o, v) }
+        is dev.ide.ui.backend.UiFeedSection.Ticker -> { o.int(11); w384(o, v) }
     }
 }
-internal fun r364(i: RemoteIn): dev.ide.ui.backend.UiFeedSection = when (val tag = i.int()) {
-    0 -> r365(i)
-    1 -> r366(i)
-    2 -> r367(i)
-    3 -> r369(i)
-    4 -> r372(i)
-    5 -> r374(i)
-    6 -> r375(i)
-    7 -> r377(i)
-    8 -> r378(i)
-    9 -> r379(i)
-    10 -> r380(i)
-    11 -> r382(i)
+internal fun r366(i: RemoteIn): dev.ide.ui.backend.UiFeedSection = when (val tag = i.int()) {
+    0 -> r367(i)
+    1 -> r368(i)
+    2 -> r369(i)
+    3 -> r371(i)
+    4 -> r374(i)
+    5 -> r376(i)
+    6 -> r377(i)
+    7 -> r379(i)
+    8 -> r380(i)
+    9 -> r381(i)
+    10 -> r382(i)
+    11 -> r384(i)
     else -> error("unknown UiFeedSection $tag")
 }
 
-internal fun w365(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Bundled) {
+internal fun w367(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Bundled) {
     o.string(v.id)
-    o.list(v.items) { e812 -> w358(o, e812) }
+    o.list(v.items) { e824 -> w360(o, e824) }
 }
-internal fun r365(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Bundled = dev.ide.ui.backend.UiFeedSection.Bundled(
+internal fun r367(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Bundled = dev.ide.ui.backend.UiFeedSection.Bundled(
     id = i.str(),
-    items = i.list { r358(i) },
+    items = i.list { r360(i) },
 )
 
-internal fun w366(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Catalogue) {
-    o.string(v.id)
-    o.string(v.title)
-    o.list(v.items) { e813 -> w358(o, e813) }
-}
-internal fun r366(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Catalogue = dev.ide.ui.backend.UiFeedSection.Catalogue(
-    id = i.str(),
-    title = i.str(),
-    items = i.list { r358(i) },
-)
-
-internal fun w367(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Categories) {
+internal fun w368(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Catalogue) {
     o.string(v.id)
     o.string(v.title)
-    o.list(v.categories) { e814 -> w368(o, e814) }
+    o.list(v.items) { e825 -> w360(o, e825) }
 }
-internal fun r367(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Categories = dev.ide.ui.backend.UiFeedSection.Categories(
+internal fun r368(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Catalogue = dev.ide.ui.backend.UiFeedSection.Catalogue(
     id = i.str(),
     title = i.str(),
-    categories = i.list { r368(i) },
+    items = i.list { r360(i) },
 )
 
-internal fun w368(o: RemoteOut, v: dev.ide.ui.backend.UiStoreCategory) {
+internal fun w369(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Categories) {
+    o.string(v.id)
+    o.string(v.title)
+    o.list(v.categories) { e826 -> w370(o, e826) }
+}
+internal fun r369(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Categories = dev.ide.ui.backend.UiFeedSection.Categories(
+    id = i.str(),
+    title = i.str(),
+    categories = i.list { r370(i) },
+)
+
+internal fun w370(o: RemoteOut, v: dev.ide.ui.backend.UiStoreCategory) {
     o.string(v.id)
     o.string(v.title)
     o.int(v.count)
 }
-internal fun r368(i: RemoteIn): dev.ide.ui.backend.UiStoreCategory = dev.ide.ui.backend.UiStoreCategory(
+internal fun r370(i: RemoteIn): dev.ide.ui.backend.UiStoreCategory = dev.ide.ui.backend.UiStoreCategory(
     id = i.str(),
     title = i.str(),
     count = i.int(),
 )
 
-internal fun w369(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Charts) {
+internal fun w371(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Charts) {
     o.string(v.id)
-    o.list(v.tabs) { e818 -> w370(o, e818) }
-    o.opt(v.computedAt) { n819 -> o.string(n819) }
-    o.opt(v.title) { n820 -> o.string(n820) }
+    o.list(v.tabs) { e830 -> w372(o, e830) }
+    o.opt(v.computedAt) { n831 -> o.string(n831) }
+    o.opt(v.title) { n832 -> o.string(n832) }
 }
-internal fun r369(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Charts = dev.ide.ui.backend.UiFeedSection.Charts(
+internal fun r371(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Charts = dev.ide.ui.backend.UiFeedSection.Charts(
     id = i.str(),
-    tabs = i.list { r370(i) },
+    tabs = i.list { r372(i) },
     computedAt = i.opt { i.str() },
     title = i.opt { i.str() },
 )
 
-internal fun w370(o: RemoteOut, v: dev.ide.ui.backend.UiChartTab) {
+internal fun w372(o: RemoteOut, v: dev.ide.ui.backend.UiChartTab) {
     o.string(v.key)
     o.string(v.label)
-    o.list(v.entries) { e816 -> w371(o, e816) }
-    o.opt(v.metric) { n817 -> o.string(n817) }
+    o.list(v.entries) { e828 -> w373(o, e828) }
+    o.opt(v.metric) { n829 -> o.string(n829) }
 }
-internal fun r370(i: RemoteIn): dev.ide.ui.backend.UiChartTab = dev.ide.ui.backend.UiChartTab(
+internal fun r372(i: RemoteIn): dev.ide.ui.backend.UiChartTab = dev.ide.ui.backend.UiChartTab(
     key = i.str(),
     label = i.str(),
-    entries = i.list { r371(i) },
+    entries = i.list { r373(i) },
     metric = i.opt { i.str() },
 )
 
-internal fun w371(o: RemoteOut, v: dev.ide.ui.backend.UiChartEntry) {
+internal fun w373(o: RemoteOut, v: dev.ide.ui.backend.UiChartEntry) {
     o.int(v.rank)
-    o.opt(v.previousRank) { n815 -> o.int(n815) }
-    w358(o, v.item)
+    o.opt(v.previousRank) { n827 -> o.int(n827) }
+    w360(o, v.item)
 }
-internal fun r371(i: RemoteIn): dev.ide.ui.backend.UiChartEntry = dev.ide.ui.backend.UiChartEntry(
+internal fun r373(i: RemoteIn): dev.ide.ui.backend.UiChartEntry = dev.ide.ui.backend.UiChartEntry(
     rank = i.int(),
     previousRank = i.opt { i.int() },
-    item = r358(i),
+    item = r360(i),
 )
 
-internal fun w372(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Collections) {
+internal fun w374(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Collections) {
     o.string(v.id)
     o.string(v.title)
-    o.opt(v.subtitle) { n823 -> o.string(n823) }
-    o.list(v.items) { e824 -> w373(o, e824) }
+    o.opt(v.subtitle) { n835 -> o.string(n835) }
+    o.list(v.items) { e836 -> w375(o, e836) }
 }
-internal fun r372(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Collections = dev.ide.ui.backend.UiFeedSection.Collections(
+internal fun r374(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Collections = dev.ide.ui.backend.UiFeedSection.Collections(
     id = i.str(),
     title = i.str(),
     subtitle = i.opt { i.str() },
-    items = i.list { r373(i) },
+    items = i.list { r375(i) },
 )
 
-internal fun w373(o: RemoteOut, v: dev.ide.ui.backend.UiStoreCollection) {
+internal fun w375(o: RemoteOut, v: dev.ide.ui.backend.UiStoreCollection) {
     o.string(v.id)
     o.string(v.eyebrow)
     o.string(v.title)
-    o.opt(v.iconId) { n821 -> o.string(n821) }
+    o.opt(v.iconId) { n833 -> o.string(n833) }
     o.int(v.projectCount)
-    o.list(v.previewIconIds) { e822 -> o.string(e822) }
+    o.list(v.previewIconIds) { e834 -> o.string(e834) }
 }
-internal fun r373(i: RemoteIn): dev.ide.ui.backend.UiStoreCollection = dev.ide.ui.backend.UiStoreCollection(
+internal fun r375(i: RemoteIn): dev.ide.ui.backend.UiStoreCollection = dev.ide.ui.backend.UiStoreCollection(
     id = i.str(),
     eyebrow = i.str(),
     title = i.str(),
@@ -6567,32 +6643,32 @@ internal fun r373(i: RemoteIn): dev.ide.ui.backend.UiStoreCollection = dev.ide.u
     previewIconIds = i.list { i.str() },
 )
 
-internal fun w374(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Featured) {
+internal fun w376(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Featured) {
     o.string(v.id)
-    o.list(v.items) { e825 -> w358(o, e825) }
+    o.list(v.items) { e837 -> w360(o, e837) }
 }
-internal fun r374(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Featured = dev.ide.ui.backend.UiFeedSection.Featured(
+internal fun r376(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Featured = dev.ide.ui.backend.UiFeedSection.Featured(
     id = i.str(),
-    items = i.list { r358(i) },
+    items = i.list { r360(i) },
 )
 
-internal fun w375(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.GhostShelves) {
+internal fun w377(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.GhostShelves) {
     o.string(v.id)
-    o.list(v.shelves) { e828 -> w376(o, e828) }
+    o.list(v.shelves) { e840 -> w378(o, e840) }
 }
-internal fun r375(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.GhostShelves = dev.ide.ui.backend.UiFeedSection.GhostShelves(
+internal fun r377(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.GhostShelves = dev.ide.ui.backend.UiFeedSection.GhostShelves(
     id = i.str(),
-    shelves = i.list { r376(i) },
+    shelves = i.list { r378(i) },
 )
 
-internal fun w376(o: RemoteOut, v: dev.ide.ui.backend.UiGhostShelf) {
+internal fun w378(o: RemoteOut, v: dev.ide.ui.backend.UiGhostShelf) {
     o.string(v.key)
     o.int(v.have)
     o.int(v.need)
-    o.opt(v.title) { n826 -> o.string(n826) }
-    o.opt(v.note) { n827 -> o.string(n827) }
+    o.opt(v.title) { n838 -> o.string(n838) }
+    o.opt(v.note) { n839 -> o.string(n839) }
 }
-internal fun r376(i: RemoteIn): dev.ide.ui.backend.UiGhostShelf = dev.ide.ui.backend.UiGhostShelf(
+internal fun r378(i: RemoteIn): dev.ide.ui.backend.UiGhostShelf = dev.ide.ui.backend.UiGhostShelf(
     key = i.str(),
     have = i.int(),
     need = i.int(),
@@ -6600,68 +6676,68 @@ internal fun r376(i: RemoteIn): dev.ide.ui.backend.UiGhostShelf = dev.ide.ui.bac
     note = i.opt { i.str() },
 )
 
-internal fun w377(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Personalized) {
+internal fun w379(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Personalized) {
     o.string(v.id)
     o.string(v.title)
-    o.opt(v.subtitle) { n829 -> o.string(n829) }
-    o.list(v.items) { e830 -> w358(o, e830) }
+    o.opt(v.subtitle) { n841 -> o.string(n841) }
+    o.list(v.items) { e842 -> w360(o, e842) }
 }
-internal fun r377(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Personalized = dev.ide.ui.backend.UiFeedSection.Personalized(
+internal fun r379(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Personalized = dev.ide.ui.backend.UiFeedSection.Personalized(
     id = i.str(),
     title = i.str(),
     subtitle = i.opt { i.str() },
-    items = i.list { r358(i) },
+    items = i.list { r360(i) },
 )
 
-internal fun w378(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.PublishPitch) {
+internal fun w380(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.PublishPitch) {
     o.string(v.id)
     o.int(v.projectCount)
 }
-internal fun r378(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.PublishPitch = dev.ide.ui.backend.UiFeedSection.PublishPitch(
+internal fun r380(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.PublishPitch = dev.ide.ui.backend.UiFeedSection.PublishPitch(
     id = i.str(),
     projectCount = i.int(),
 )
 
-internal fun w379(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Shelf) {
+internal fun w381(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Shelf) {
     o.string(v.id)
-    o.opt(v.title) { n831 -> o.string(n831) }
-    o.opt(v.subtitle) { n832 -> o.string(n832) }
-    o.opt(v.eyebrow) { n833 -> o.string(n833) }
-    o.opt(v.iconId) { n834 -> o.string(n834) }
+    o.opt(v.title) { n843 -> o.string(n843) }
+    o.opt(v.subtitle) { n844 -> o.string(n844) }
+    o.opt(v.eyebrow) { n845 -> o.string(n845) }
+    o.opt(v.iconId) { n846 -> o.string(n846) }
     o.int(v.layout.ordinal)
-    o.list(v.items) { e835 -> w358(o, e835) }
+    o.list(v.items) { e847 -> w360(o, e847) }
 }
-internal fun r379(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Shelf = dev.ide.ui.backend.UiFeedSection.Shelf(
+internal fun r381(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Shelf = dev.ide.ui.backend.UiFeedSection.Shelf(
     id = i.str(),
     title = i.opt { i.str() },
     subtitle = i.opt { i.str() },
     eyebrow = i.opt { i.str() },
     iconId = i.opt { i.str() },
     layout = dev.ide.ui.backend.UiShelfLayout.entries[i.int()],
-    items = i.list { r358(i) },
+    items = i.list { r360(i) },
 )
 
-internal fun w380(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Spotlight) {
+internal fun w382(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Spotlight) {
     o.string(v.id)
-    w381(o, v.publisher)
+    w383(o, v.publisher)
 }
-internal fun r380(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Spotlight = dev.ide.ui.backend.UiFeedSection.Spotlight(
+internal fun r382(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Spotlight = dev.ide.ui.backend.UiFeedSection.Spotlight(
     id = i.str(),
-    publisher = r381(i),
+    publisher = r383(i),
 )
 
-internal fun w381(o: RemoteOut, v: dev.ide.ui.backend.UiStorePublisher) {
+internal fun w383(o: RemoteOut, v: dev.ide.ui.backend.UiStorePublisher) {
     o.string(v.id)
-    o.opt(v.handle) { n836 -> o.string(n836) }
+    o.opt(v.handle) { n848 -> o.string(n848) }
     o.string(v.name)
-    o.opt(v.bio) { n837 -> o.string(n837) }
+    o.opt(v.bio) { n849 -> o.string(n849) }
     o.bool(v.verified)
     o.int(v.projectCount)
     o.int(v.installCount)
-    o.opt(v.rating) { n838 -> o.float(n838) }
+    o.opt(v.rating) { n850 -> o.float(n850) }
     o.int(v.followerCount)
 }
-internal fun r381(i: RemoteIn): dev.ide.ui.backend.UiStorePublisher = dev.ide.ui.backend.UiStorePublisher(
+internal fun r383(i: RemoteIn): dev.ide.ui.backend.UiStorePublisher = dev.ide.ui.backend.UiStorePublisher(
     id = i.str(),
     handle = i.opt { i.str() },
     name = i.str(),
@@ -6673,34 +6749,471 @@ internal fun r381(i: RemoteIn): dev.ide.ui.backend.UiStorePublisher = dev.ide.ui
     followerCount = i.int(),
 )
 
-internal fun w382(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Ticker) {
+internal fun w384(o: RemoteOut, v: dev.ide.ui.backend.UiFeedSection.Ticker) {
     o.string(v.id)
-    o.list(v.terms) { e839 -> o.string(e839) }
+    o.list(v.terms) { e851 -> o.string(e851) }
 }
-internal fun r382(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Ticker = dev.ide.ui.backend.UiFeedSection.Ticker(
+internal fun r384(i: RemoteIn): dev.ide.ui.backend.UiFeedSection.Ticker = dev.ide.ui.backend.UiFeedSection.Ticker(
     id = i.str(),
     terms = i.list { i.str() },
 )
 
-internal fun w383(o: RemoteOut, v: dev.ide.ui.backend.UiStoreInstallResult) {
+internal fun w385(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncement) {
+    o.string(v.id)
+    o.int(v.revision)
+    o.int(v.priority)
+    o.bool(v.dismissible)
+    o.opt(v.endsAtMillis) { n900 -> o.long(n900) }
+    o.int(v.style.ordinal)
+    o.int(v.accent.ordinal)
+    o.opt(v.icon) { n901 -> o.string(n901) }
+    o.opt(v.action) { n902 -> w386(o, n902) }
+    o.list(v.blocks) { e903 -> w393(o, e903) }
+    o.int(v.version)
+    o.opt(v.design) { n904 -> w418(o, n904) }
+}
+internal fun r385(i: RemoteIn): dev.ide.ui.backend.UiAnnouncement = dev.ide.ui.backend.UiAnnouncement(
+    id = i.str(),
+    revision = i.int(),
+    priority = i.int(),
+    dismissible = i.bool(),
+    endsAtMillis = i.opt { i.long() },
+    style = dev.ide.ui.backend.UiAnnouncementStyle.entries[i.int()],
+    accent = dev.ide.ui.backend.UiAnnouncementAccent.entries[i.int()],
+    icon = i.opt { i.str() },
+    action = i.opt { r386(i) },
+    blocks = i.list { r393(i) },
+    version = i.int(),
+    design = i.opt { r418(i) },
+)
+
+internal fun w386(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementAction) {
+    when (v) {
+        is dev.ide.ui.backend.UiAnnouncementAction.Dismiss -> { o.int(0); w387(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementAction.Learn -> { o.int(1); w388(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementAction.Screen -> { o.int(2); w389(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementAction.Settings -> { o.int(3); w390(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementAction.StoreItem -> { o.int(4); w391(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementAction.Url -> { o.int(5); w392(o, v) }
+    }
+}
+internal fun r386(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementAction = when (val tag = i.int()) {
+    0 -> r387(i)
+    1 -> r388(i)
+    2 -> r389(i)
+    3 -> r390(i)
+    4 -> r391(i)
+    5 -> r392(i)
+    else -> error("unknown UiAnnouncementAction $tag")
+}
+
+internal fun w387(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementAction.Dismiss) {}
+internal fun r387(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementAction.Dismiss = dev.ide.ui.backend.UiAnnouncementAction.Dismiss
+
+internal fun w388(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementAction.Learn) {
+    o.string(v.id)
+}
+internal fun r388(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementAction.Learn = dev.ide.ui.backend.UiAnnouncementAction.Learn(
+    id = i.str(),
+)
+
+internal fun w389(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementAction.Screen) {
+    o.string(v.id)
+}
+internal fun r389(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementAction.Screen = dev.ide.ui.backend.UiAnnouncementAction.Screen(
+    id = i.str(),
+)
+
+internal fun w390(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementAction.Settings) {
+    o.string(v.id)
+}
+internal fun r390(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementAction.Settings = dev.ide.ui.backend.UiAnnouncementAction.Settings(
+    id = i.str(),
+)
+
+internal fun w391(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementAction.StoreItem) {
+    o.string(v.id)
+}
+internal fun r391(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementAction.StoreItem = dev.ide.ui.backend.UiAnnouncementAction.StoreItem(
+    id = i.str(),
+)
+
+internal fun w392(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementAction.Url) {
+    o.string(v.url)
+}
+internal fun r392(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementAction.Url = dev.ide.ui.backend.UiAnnouncementAction.Url(
+    url = i.str(),
+)
+
+internal fun w393(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementBlock) {
+    when (v) {
+        is dev.ide.ui.backend.UiAnnouncementBlock.Badge -> { o.int(0); w394(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementBlock.Buttons -> { o.int(1); w405(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementBlock.Chips -> { o.int(2); w407(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementBlock.Column -> { o.int(3); w408(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementBlock.Divider -> { o.int(4); w409(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementBlock.Icon -> { o.int(5); w410(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementBlock.Image -> { o.int(6); w411(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementBlock.Row -> { o.int(7); w412(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementBlock.Spacer -> { o.int(8); w413(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementBlock.Stack -> { o.int(9); w414(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementBlock.Text -> { o.int(10); w415(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementBlock.Title -> { o.int(11); w417(o, v) }
+    }
+}
+internal fun r393(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementBlock = when (val tag = i.int()) {
+    0 -> r394(i)
+    1 -> r405(i)
+    2 -> r407(i)
+    3 -> r408(i)
+    4 -> r409(i)
+    5 -> r410(i)
+    6 -> r411(i)
+    7 -> r412(i)
+    8 -> r413(i)
+    9 -> r414(i)
+    10 -> r415(i)
+    11 -> r417(i)
+    else -> error("unknown UiAnnouncementBlock $tag")
+}
+
+internal fun w394(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementBlock.Badge) {
+    o.string(v.text)
+    o.opt(v.color) { n865 -> w395(o, n865) }
+    w399(o, v.props)
+}
+internal fun r394(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementBlock.Badge = dev.ide.ui.backend.UiAnnouncementBlock.Badge(
+    text = i.str(),
+    color = i.opt { r395(i) },
+    props = r399(i),
+)
+
+internal fun w395(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementColor) {
+    when (v) {
+        is dev.ide.ui.backend.UiAnnouncementColor.Auto -> { o.int(0); w396(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementColor.Fixed -> { o.int(1); w397(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementColor.Token -> { o.int(2); w398(o, v) }
+    }
+}
+internal fun r395(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementColor = when (val tag = i.int()) {
+    0 -> r396(i)
+    1 -> r397(i)
+    2 -> r398(i)
+    else -> error("unknown UiAnnouncementColor $tag")
+}
+
+internal fun w396(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementColor.Auto) {}
+internal fun r396(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementColor.Auto = dev.ide.ui.backend.UiAnnouncementColor.Auto
+
+internal fun w397(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementColor.Fixed) {
+    o.long(v.light)
+    o.long(v.dark)
+}
+internal fun r397(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementColor.Fixed = dev.ide.ui.backend.UiAnnouncementColor.Fixed(
+    light = i.long(),
+    dark = i.long(),
+)
+
+internal fun w398(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementColor.Token) {
+    o.string(v.name)
+}
+internal fun r398(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementColor.Token = dev.ide.ui.backend.UiAnnouncementColor.Token(
+    name = i.str(),
+)
+
+internal fun w399(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementProps) {
+    o.opt(v.pad) { n856 -> o.list(n856) { e857 -> o.float(e857) } }
+    o.opt(v.align) { n858 -> o.int(n858.ordinal) }
+    o.opt(v.width) { n859 -> o.int(n859.ordinal) }
+    o.opt(v.weight) { n860 -> o.float(n860) }
+    o.opt(v.background) { n861 -> w400(o, n861) }
+    o.opt(v.corner) { n862 -> o.float(n862) }
+    o.opt(v.hideOn) { n863 -> o.int(n863.ordinal) }
+    o.opt(v.at) { n864 -> o.int(n864.ordinal) }
+}
+internal fun r399(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementProps = dev.ide.ui.backend.UiAnnouncementProps(
+    pad = i.opt { i.list { i.float() } },
+    align = i.opt { dev.ide.ui.backend.UiAnnouncementAlign.entries[i.int()] },
+    width = i.opt { dev.ide.ui.backend.UiAnnouncementWidth.entries[i.int()] },
+    weight = i.opt { i.float() },
+    background = i.opt { r400(i) },
+    corner = i.opt { i.float() },
+    hideOn = i.opt { dev.ide.ui.backend.UiAnnouncementHideOn.entries[i.int()] },
+    at = i.opt { dev.ide.ui.backend.UiAnnouncementAt.entries[i.int()] },
+)
+
+internal fun w400(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementPaint) {
+    when (v) {
+        is dev.ide.ui.backend.UiAnnouncementPaint.Image -> { o.int(0); w401(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementPaint.Linear -> { o.int(1); w402(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementPaint.Radial -> { o.int(2); w403(o, v) }
+        is dev.ide.ui.backend.UiAnnouncementPaint.Solid -> { o.int(3); w404(o, v) }
+    }
+}
+internal fun r400(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementPaint = when (val tag = i.int()) {
+    0 -> r401(i)
+    1 -> r402(i)
+    2 -> r403(i)
+    3 -> r404(i)
+    else -> error("unknown UiAnnouncementPaint $tag")
+}
+
+internal fun w401(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementPaint.Image) {
+    o.string(v.src)
+    o.int(v.fit.ordinal)
+    o.float(v.scrim)
+    o.opt(v.scrimColor) { n853 -> w395(o, n853) }
+}
+internal fun r401(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementPaint.Image = dev.ide.ui.backend.UiAnnouncementPaint.Image(
+    src = i.str(),
+    fit = dev.ide.ui.backend.UiAnnouncementFit.entries[i.int()],
+    scrim = i.float(),
+    scrimColor = i.opt { r395(i) },
+)
+
+internal fun w402(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementPaint.Linear) {
+    o.list(v.colors) { e854 -> w395(o, e854) }
+    o.float(v.angle)
+}
+internal fun r402(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementPaint.Linear = dev.ide.ui.backend.UiAnnouncementPaint.Linear(
+    colors = i.list { r395(i) },
+    angle = i.float(),
+)
+
+internal fun w403(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementPaint.Radial) {
+    o.list(v.colors) { e855 -> w395(o, e855) }
+    o.float(v.centerX)
+    o.float(v.centerY)
+    o.float(v.radius)
+}
+internal fun r403(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementPaint.Radial = dev.ide.ui.backend.UiAnnouncementPaint.Radial(
+    colors = i.list { r395(i) },
+    centerX = i.float(),
+    centerY = i.float(),
+    radius = i.float(),
+)
+
+internal fun w404(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementPaint.Solid) {
+    w395(o, v.color)
+}
+internal fun r404(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementPaint.Solid = dev.ide.ui.backend.UiAnnouncementPaint.Solid(
+    color = r395(i),
+)
+
+internal fun w405(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementBlock.Buttons) {
+    o.list(v.items) { e869 -> w406(o, e869) }
+    o.opt(v.arrange) { n870 -> o.int(n870.ordinal) }
+    w399(o, v.props)
+}
+internal fun r405(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementBlock.Buttons = dev.ide.ui.backend.UiAnnouncementBlock.Buttons(
+    items = i.list { r406(i) },
+    arrange = i.opt { dev.ide.ui.backend.UiAnnouncementArrange.entries[i.int()] },
+    props = r399(i),
+)
+
+internal fun w406(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementButton) {
+    o.string(v.label)
+    o.int(v.style.ordinal)
+    w386(o, v.action)
+    o.opt(v.color) { n866 -> w395(o, n866) }
+    o.opt(v.content) { n867 -> w395(o, n867) }
+    o.bool(v.fullWidth)
+    o.opt(v.icon) { n868 -> o.string(n868) }
+}
+internal fun r406(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementButton = dev.ide.ui.backend.UiAnnouncementButton(
+    label = i.str(),
+    style = dev.ide.ui.backend.UiAnnouncementButtonStyle.entries[i.int()],
+    action = r386(i),
+    color = i.opt { r395(i) },
+    content = i.opt { r395(i) },
+    fullWidth = i.bool(),
+    icon = i.opt { i.str() },
+)
+
+internal fun w407(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementBlock.Chips) {
+    o.list(v.items) { e871 -> o.string(e871) }
+    o.opt(v.color) { n872 -> w395(o, n872) }
+    w399(o, v.props)
+}
+internal fun r407(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementBlock.Chips = dev.ide.ui.backend.UiAnnouncementBlock.Chips(
+    items = i.list { i.str() },
+    color = i.opt { r395(i) },
+    props = r399(i),
+)
+
+internal fun w408(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementBlock.Column) {
+    o.list(v.children) { e873 -> w393(o, e873) }
+    o.opt(v.gap) { n874 -> o.float(n874) }
+    w399(o, v.props)
+}
+internal fun r408(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementBlock.Column = dev.ide.ui.backend.UiAnnouncementBlock.Column(
+    children = i.list { r393(i) },
+    gap = i.opt { i.float() },
+    props = r399(i),
+)
+
+internal fun w409(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementBlock.Divider) {
+    o.opt(v.color) { n875 -> w395(o, n875) }
+    o.opt(v.thickness) { n876 -> o.float(n876) }
+    w399(o, v.props)
+}
+internal fun r409(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementBlock.Divider = dev.ide.ui.backend.UiAnnouncementBlock.Divider(
+    color = i.opt { r395(i) },
+    thickness = i.opt { i.float() },
+    props = r399(i),
+)
+
+internal fun w410(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementBlock.Icon) {
+    o.string(v.name)
+    o.opt(v.size) { n877 -> o.float(n877) }
+    o.opt(v.color) { n878 -> w395(o, n878) }
+    w399(o, v.props)
+}
+internal fun r410(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementBlock.Icon = dev.ide.ui.backend.UiAnnouncementBlock.Icon(
+    name = i.str(),
+    size = i.opt { i.float() },
+    color = i.opt { r395(i) },
+    props = r399(i),
+)
+
+internal fun w411(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementBlock.Image) {
+    o.string(v.src)
+    o.float(v.aspect)
+    o.opt(v.alt) { n879 -> o.string(n879) }
+    o.opt(v.height) { n880 -> o.float(n880) }
+    o.opt(v.fit) { n881 -> o.int(n881.ordinal) }
+    w399(o, v.props)
+}
+internal fun r411(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementBlock.Image = dev.ide.ui.backend.UiAnnouncementBlock.Image(
+    src = i.str(),
+    aspect = i.float(),
+    alt = i.opt { i.str() },
+    height = i.opt { i.float() },
+    fit = i.opt { dev.ide.ui.backend.UiAnnouncementFit.entries[i.int()] },
+    props = r399(i),
+)
+
+internal fun w412(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementBlock.Row) {
+    o.list(v.children) { e882 -> w393(o, e882) }
+    o.opt(v.gap) { n883 -> o.float(n883) }
+    o.opt(v.valign) { n884 -> o.int(n884.ordinal) }
+    o.opt(v.arrange) { n885 -> o.int(n885.ordinal) }
+    w399(o, v.props)
+}
+internal fun r412(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementBlock.Row = dev.ide.ui.backend.UiAnnouncementBlock.Row(
+    children = i.list { r393(i) },
+    gap = i.opt { i.float() },
+    valign = i.opt { dev.ide.ui.backend.UiAnnouncementVAlign.entries[i.int()] },
+    arrange = i.opt { dev.ide.ui.backend.UiAnnouncementArrange.entries[i.int()] },
+    props = r399(i),
+)
+
+internal fun w413(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementBlock.Spacer) {
+    o.opt(v.size) { n886 -> o.float(n886) }
+    w399(o, v.props)
+}
+internal fun r413(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementBlock.Spacer = dev.ide.ui.backend.UiAnnouncementBlock.Spacer(
+    size = i.opt { i.float() },
+    props = r399(i),
+)
+
+internal fun w414(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementBlock.Stack) {
+    o.list(v.children) { e887 -> w393(o, e887) }
+    w399(o, v.props)
+}
+internal fun r414(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementBlock.Stack = dev.ide.ui.backend.UiAnnouncementBlock.Stack(
+    children = i.list { r393(i) },
+    props = r399(i),
+)
+
+internal fun w415(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementBlock.Text) {
+    o.string(v.text)
+    w416(o, v.style)
+    w399(o, v.props)
+}
+internal fun r415(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementBlock.Text = dev.ide.ui.backend.UiAnnouncementBlock.Text(
+    text = i.str(),
+    style = r416(i),
+    props = r399(i),
+)
+
+internal fun w416(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementTextStyle) {
+    o.opt(v.size) { n888 -> o.float(n888) }
+    o.opt(v.weight) { n889 -> o.int(n889.ordinal) }
+    o.opt(v.color) { n890 -> w395(o, n890) }
+    o.opt(v.textAlign) { n891 -> o.int(n891.ordinal) }
+    o.opt(v.maxLines) { n892 -> o.int(n892) }
+    o.bool(v.italic)
+}
+internal fun r416(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementTextStyle = dev.ide.ui.backend.UiAnnouncementTextStyle(
+    size = i.opt { i.float() },
+    weight = i.opt { dev.ide.ui.backend.UiAnnouncementFontWeight.entries[i.int()] },
+    color = i.opt { r395(i) },
+    textAlign = i.opt { dev.ide.ui.backend.UiAnnouncementAlign.entries[i.int()] },
+    maxLines = i.opt { i.int() },
+    italic = i.bool(),
+)
+
+internal fun w417(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementBlock.Title) {
+    o.string(v.text)
+    w416(o, v.style)
+    w399(o, v.props)
+}
+internal fun r417(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementBlock.Title = dev.ide.ui.backend.UiAnnouncementBlock.Title(
+    text = i.str(),
+    style = r416(i),
+    props = r399(i),
+)
+
+internal fun w418(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementDesign) {
+    o.opt(v.background) { n893 -> w400(o, n893) }
+    o.opt(v.content) { n894 -> w395(o, n894) }
+    o.opt(v.corner) { n895 -> o.float(n895) }
+    o.opt(v.padding) { n896 -> o.float(n896) }
+    o.opt(v.border) { n897 -> w419(o, n897) }
+    o.opt(v.minHeight) { n898 -> o.float(n898) }
+    o.bool(v.fullBleed)
+    o.opt(v.elevation) { n899 -> o.float(n899) }
+}
+internal fun r418(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementDesign = dev.ide.ui.backend.UiAnnouncementDesign(
+    background = i.opt { r400(i) },
+    content = i.opt { r395(i) },
+    corner = i.opt { i.float() },
+    padding = i.opt { i.float() },
+    border = i.opt { r419(i) },
+    minHeight = i.opt { i.float() },
+    fullBleed = i.bool(),
+    elevation = i.opt { i.float() },
+)
+
+internal fun w419(o: RemoteOut, v: dev.ide.ui.backend.UiAnnouncementBorder) {
+    w395(o, v.color)
+    o.float(v.width)
+}
+internal fun r419(i: RemoteIn): dev.ide.ui.backend.UiAnnouncementBorder = dev.ide.ui.backend.UiAnnouncementBorder(
+    color = r395(i),
+    width = i.float(),
+)
+
+internal fun w420(o: RemoteOut, v: dev.ide.ui.backend.UiStoreInstallResult) {
     o.bool(v.success)
     o.string(v.message)
-    o.opt(v.rootPath) { n841 -> o.string(n841) }
+    o.opt(v.rootPath) { n905 -> o.string(n905) }
 }
-internal fun r383(i: RemoteIn): dev.ide.ui.backend.UiStoreInstallResult = dev.ide.ui.backend.UiStoreInstallResult(
+internal fun r420(i: RemoteIn): dev.ide.ui.backend.UiStoreInstallResult = dev.ide.ui.backend.UiStoreInstallResult(
     success = i.bool(),
     message = i.str(),
     rootPath = i.opt { i.str() },
 )
 
-internal fun w384(o: RemoteOut, v: dev.ide.ui.backend.UiInstallProgress) {
+internal fun w421(o: RemoteOut, v: dev.ide.ui.backend.UiInstallProgress) {
     o.string(v.itemId)
     o.int(v.state.ordinal)
     o.float(v.fraction)
-    o.opt(v.message) { n842 -> o.string(n842) }
-    o.opt(v.rootPath) { n843 -> o.string(n843) }
+    o.opt(v.message) { n906 -> o.string(n906) }
+    o.opt(v.rootPath) { n907 -> o.string(n907) }
 }
-internal fun r384(i: RemoteIn): dev.ide.ui.backend.UiInstallProgress = dev.ide.ui.backend.UiInstallProgress(
+internal fun r421(i: RemoteIn): dev.ide.ui.backend.UiInstallProgress = dev.ide.ui.backend.UiInstallProgress(
     itemId = i.str(),
     state = dev.ide.ui.backend.UiInstallState.entries[i.int()],
     fraction = i.float(),
@@ -6708,14 +7221,14 @@ internal fun r384(i: RemoteIn): dev.ide.ui.backend.UiInstallProgress = dev.ide.u
     rootPath = i.opt { i.str() },
 )
 
-internal fun w385(o: RemoteOut, v: dev.ide.ui.backend.UiLocalChanges) {
-    o.list(v.modified) { e844 -> o.string(e844) }
-    o.list(v.deleted) { e845 -> o.string(e845) }
-    o.list(v.added) { e846 -> o.string(e846) }
+internal fun w422(o: RemoteOut, v: dev.ide.ui.backend.UiLocalChanges) {
+    o.list(v.modified) { e908 -> o.string(e908) }
+    o.list(v.deleted) { e909 -> o.string(e909) }
+    o.list(v.added) { e910 -> o.string(e910) }
     o.bool(v.known)
     o.bool(v.canMerge)
 }
-internal fun r385(i: RemoteIn): dev.ide.ui.backend.UiLocalChanges = dev.ide.ui.backend.UiLocalChanges(
+internal fun r422(i: RemoteIn): dev.ide.ui.backend.UiLocalChanges = dev.ide.ui.backend.UiLocalChanges(
     modified = i.list { i.str() },
     deleted = i.list { i.str() },
     added = i.list { i.str() },
@@ -6723,37 +7236,37 @@ internal fun r385(i: RemoteIn): dev.ide.ui.backend.UiLocalChanges = dev.ide.ui.b
     canMerge = i.bool(),
 )
 
-internal fun w386(o: RemoteOut, v: dev.ide.ui.backend.UiStoreMergeResult) {
+internal fun w423(o: RemoteOut, v: dev.ide.ui.backend.UiStoreMergeResult) {
     o.bool(v.success)
     o.string(v.message)
-    o.list(v.conflicts) { e847 -> o.string(e847) }
-    o.opt(v.rootPath) { n848 -> o.string(n848) }
+    o.list(v.conflicts) { e911 -> o.string(e911) }
+    o.opt(v.rootPath) { n912 -> o.string(n912) }
 }
-internal fun r386(i: RemoteIn): dev.ide.ui.backend.UiStoreMergeResult = dev.ide.ui.backend.UiStoreMergeResult(
+internal fun r423(i: RemoteIn): dev.ide.ui.backend.UiStoreMergeResult = dev.ide.ui.backend.UiStoreMergeResult(
     success = i.bool(),
     message = i.str(),
     conflicts = i.list { i.str() },
     rootPath = i.opt { i.str() },
 )
 
-internal fun w387(o: RemoteOut, v: dev.ide.ui.backend.UiMyProfile) {
+internal fun w424(o: RemoteOut, v: dev.ide.ui.backend.UiMyProfile) {
     o.string(v.handle)
     o.string(v.displayName)
-    o.opt(v.bio) { n849 -> o.string(n849) }
-    o.opt(v.location) { n850 -> o.string(n850) }
-    o.opt(v.linkUrl) { n851 -> o.string(n851) }
-    o.opt(v.avatarUrl) { n852 -> o.string(n852) }
+    o.opt(v.bio) { n913 -> o.string(n913) }
+    o.opt(v.location) { n914 -> o.string(n914) }
+    o.opt(v.linkUrl) { n915 -> o.string(n915) }
+    o.opt(v.avatarUrl) { n916 -> o.string(n916) }
     o.bool(v.verified)
     o.int(v.followers)
     o.int(v.publishedCount)
     o.int(v.pendingCount)
     o.int(v.totalInstalls)
     o.int(v.totalLikes)
-    o.opt(v.averageRating) { n853 -> o.float(n853) }
+    o.opt(v.averageRating) { n917 -> o.float(n917) }
     o.bool(v.isModerator)
     o.int(v.moderationQueue)
 }
-internal fun r387(i: RemoteIn): dev.ide.ui.backend.UiMyProfile = dev.ide.ui.backend.UiMyProfile(
+internal fun r424(i: RemoteIn): dev.ide.ui.backend.UiMyProfile = dev.ide.ui.backend.UiMyProfile(
     handle = i.str(),
     displayName = i.str(),
     bio = i.opt { i.str() },
@@ -6771,20 +7284,20 @@ internal fun r387(i: RemoteIn): dev.ide.ui.backend.UiMyProfile = dev.ide.ui.back
     moderationQueue = i.int(),
 )
 
-internal fun w388(o: RemoteOut, v: dev.ide.ui.backend.UiPublishedItem) {
+internal fun w425(o: RemoteOut, v: dev.ide.ui.backend.UiPublishedItem) {
     o.string(v.slug)
     o.string(v.title)
     o.string(v.status)
-    o.opt(v.publishedVersion) { n854 -> o.string(n854) }
+    o.opt(v.publishedVersion) { n918 -> o.string(n918) }
     o.string(v.suggestedVersion)
-    o.opt(v.iconPath) { n855 -> o.string(n855) }
+    o.opt(v.iconPath) { n919 -> o.string(n919) }
     o.string(v.summary)
     o.string(v.description)
     o.string(v.category)
-    o.list(v.tags) { e856 -> o.string(e856) }
-    o.list(v.screenshots) { e857 -> o.string(e857) }
+    o.list(v.tags) { e920 -> o.string(e920) }
+    o.list(v.screenshots) { e921 -> o.string(e921) }
 }
-internal fun r388(i: RemoteIn): dev.ide.ui.backend.UiPublishedItem = dev.ide.ui.backend.UiPublishedItem(
+internal fun r425(i: RemoteIn): dev.ide.ui.backend.UiPublishedItem = dev.ide.ui.backend.UiPublishedItem(
     slug = i.str(),
     title = i.str(),
     status = i.str(),
@@ -6798,14 +7311,14 @@ internal fun r388(i: RemoteIn): dev.ide.ui.backend.UiPublishedItem = dev.ide.ui.
     screenshots = i.list { i.str() },
 )
 
-internal fun w389(o: RemoteOut, v: dev.ide.ui.backend.UiStoreSubmission) {
+internal fun w426(o: RemoteOut, v: dev.ide.ui.backend.UiStoreSubmission) {
     o.string(v.itemId)
     o.string(v.projectName)
     o.string(v.version)
     o.int(v.status.ordinal)
-    o.opt(v.note) { n858 -> o.string(n858) }
+    o.opt(v.note) { n922 -> o.string(n922) }
 }
-internal fun r389(i: RemoteIn): dev.ide.ui.backend.UiStoreSubmission = dev.ide.ui.backend.UiStoreSubmission(
+internal fun r426(i: RemoteIn): dev.ide.ui.backend.UiStoreSubmission = dev.ide.ui.backend.UiStoreSubmission(
     itemId = i.str(),
     projectName = i.str(),
     version = i.str(),
@@ -6813,19 +7326,19 @@ internal fun r389(i: RemoteIn): dev.ide.ui.backend.UiStoreSubmission = dev.ide.u
     note = i.opt { i.str() },
 )
 
-internal fun w390(o: RemoteOut, v: dev.ide.ui.backend.UiReportedContent) {
+internal fun w427(o: RemoteOut, v: dev.ide.ui.backend.UiReportedContent) {
     o.string(v.reportId)
     o.string(v.reason)
-    o.opt(v.detail) { n859 -> o.string(n859) }
-    o.opt(v.itemSlug) { n860 -> o.string(n860) }
-    o.opt(v.itemTitle) { n861 -> o.string(n861) }
+    o.opt(v.detail) { n923 -> o.string(n923) }
+    o.opt(v.itemSlug) { n924 -> o.string(n924) }
+    o.opt(v.itemTitle) { n925 -> o.string(n925) }
     o.bool(v.isItemReport)
-    o.opt(v.reviewAuthorId) { n862 -> o.string(n862) }
+    o.opt(v.reviewAuthorId) { n926 -> o.string(n926) }
     o.int(v.reviewStars)
-    o.opt(v.reviewText) { n863 -> o.string(n863) }
+    o.opt(v.reviewText) { n927 -> o.string(n927) }
     o.bool(v.reviewHidden)
 }
-internal fun r390(i: RemoteIn): dev.ide.ui.backend.UiReportedContent = dev.ide.ui.backend.UiReportedContent(
+internal fun r427(i: RemoteIn): dev.ide.ui.backend.UiReportedContent = dev.ide.ui.backend.UiReportedContent(
     reportId = i.str(),
     reason = i.str(),
     detail = i.opt { i.str() },
@@ -6838,15 +7351,15 @@ internal fun r390(i: RemoteIn): dev.ide.ui.backend.UiReportedContent = dev.ide.u
     reviewHidden = i.bool(),
 )
 
-internal fun w391(o: RemoteOut, v: dev.ide.ui.backend.UiPackagedProject) {
+internal fun w428(o: RemoteOut, v: dev.ide.ui.backend.UiPackagedProject) {
     o.string(v.rootPath)
     o.int(v.fileCount)
     o.long(v.totalBytes)
     o.string(v.sha256)
-    o.list(v.excluded) { e864 -> o.string(e864) }
+    o.list(v.excluded) { e928 -> o.string(e928) }
     o.string(v.archivePath)
 }
-internal fun r391(i: RemoteIn): dev.ide.ui.backend.UiPackagedProject = dev.ide.ui.backend.UiPackagedProject(
+internal fun r428(i: RemoteIn): dev.ide.ui.backend.UiPackagedProject = dev.ide.ui.backend.UiPackagedProject(
     rootPath = i.str(),
     fileCount = i.int(),
     totalBytes = i.long(),
@@ -6855,26 +7368,26 @@ internal fun r391(i: RemoteIn): dev.ide.ui.backend.UiPackagedProject = dev.ide.u
     archivePath = i.str(),
 )
 
-internal fun w392(o: RemoteOut, v: dev.ide.ui.backend.UiPublisherProfile) {
+internal fun w429(o: RemoteOut, v: dev.ide.ui.backend.UiPublisherProfile) {
     o.string(v.handle)
     o.string(v.displayName)
-    o.opt(v.bio) { n865 -> o.string(n865) }
-    o.opt(v.avatarUrl) { n866 -> o.string(n866) }
-    o.opt(v.location) { n867 -> o.string(n867) }
-    o.opt(v.linkUrl) { n868 -> o.string(n868) }
+    o.opt(v.bio) { n929 -> o.string(n929) }
+    o.opt(v.avatarUrl) { n930 -> o.string(n930) }
+    o.opt(v.location) { n931 -> o.string(n931) }
+    o.opt(v.linkUrl) { n932 -> o.string(n932) }
     o.bool(v.verified)
     o.int(v.followers)
     o.bool(v.following)
-    o.opt(v.joinedAt) { n869 -> o.string(n869) }
+    o.opt(v.joinedAt) { n933 -> o.string(n933) }
     o.int(v.projectCount)
     o.int(v.totalInstalls)
     o.int(v.totalLikes)
-    o.opt(v.averageRating) { n870 -> o.float(n870) }
-    o.list(v.items) { e871 -> w358(o, e871) }
+    o.opt(v.averageRating) { n934 -> o.float(n934) }
+    o.list(v.items) { e935 -> w360(o, e935) }
     o.bool(v.loading)
-    o.opt(v.error) { n872 -> o.string(n872) }
+    o.opt(v.error) { n936 -> o.string(n936) }
 }
-internal fun r392(i: RemoteIn): dev.ide.ui.backend.UiPublisherProfile = dev.ide.ui.backend.UiPublisherProfile(
+internal fun r429(i: RemoteIn): dev.ide.ui.backend.UiPublisherProfile = dev.ide.ui.backend.UiPublisherProfile(
     handle = i.str(),
     displayName = i.str(),
     bio = i.opt { i.str() },
@@ -6889,89 +7402,89 @@ internal fun r392(i: RemoteIn): dev.ide.ui.backend.UiPublisherProfile = dev.ide.
     totalInstalls = i.int(),
     totalLikes = i.int(),
     averageRating = i.opt { i.float() },
-    items = i.list { r358(i) },
+    items = i.list { r360(i) },
     loading = i.bool(),
     error = i.opt { i.str() },
 )
 
-internal fun w393(o: RemoteOut, v: dev.ide.ui.backend.UiModerationQueue) {
-    o.list(v.pending) { e887 -> w394(o, e887) }
-    o.list(v.recent) { e888 -> w394(o, e888) }
+internal fun w430(o: RemoteOut, v: dev.ide.ui.backend.UiModerationQueue) {
+    o.list(v.pending) { e951 -> w431(o, e951) }
+    o.list(v.recent) { e952 -> w431(o, e952) }
     o.int(v.pendingCount)
     o.bool(v.loading)
-    o.opt(v.error) { n889 -> o.string(n889) }
+    o.opt(v.error) { n953 -> o.string(n953) }
 }
-internal fun r393(i: RemoteIn): dev.ide.ui.backend.UiModerationQueue = dev.ide.ui.backend.UiModerationQueue(
-    pending = i.list { r394(i) },
-    recent = i.list { r394(i) },
+internal fun r430(i: RemoteIn): dev.ide.ui.backend.UiModerationQueue = dev.ide.ui.backend.UiModerationQueue(
+    pending = i.list { r431(i) },
+    recent = i.list { r431(i) },
     pendingCount = i.int(),
     loading = i.bool(),
     error = i.opt { i.str() },
 )
 
-internal fun w394(o: RemoteOut, v: dev.ide.ui.backend.UiPendingSubmission) {
+internal fun w431(o: RemoteOut, v: dev.ide.ui.backend.UiPendingSubmission) {
     o.string(v.versionId)
     o.string(v.version)
     o.string(v.status)
     o.long(v.sizeBytes)
-    o.opt(v.sha256) { n879 -> o.string(n879) }
+    o.opt(v.sha256) { n943 -> o.string(n943) }
     o.int(v.fileCount)
-    o.list(v.files) { e880 -> w395(o, e880) }
-    o.opt(v.changelog) { n881 -> o.string(n881) }
+    o.list(v.files) { e944 -> w432(o, e944) }
+    o.opt(v.changelog) { n945 -> o.string(n945) }
     o.long(v.submittedAtMs)
-    o.opt(v.reviewNote) { n882 -> o.string(n882) }
-    o.list(v.screenshotPaths) { e883 -> o.string(e883) }
-    o.opt(v.iconPath) { n884 -> o.string(n884) }
-    o.list(v.edits) { e885 -> w396(o, e885) }
-    o.opt(v.submitter) { n886 -> w397(o, n886) }
-    w398(o, v.listing)
+    o.opt(v.reviewNote) { n946 -> o.string(n946) }
+    o.list(v.screenshotPaths) { e947 -> o.string(e947) }
+    o.opt(v.iconPath) { n948 -> o.string(n948) }
+    o.list(v.edits) { e949 -> w433(o, e949) }
+    o.opt(v.submitter) { n950 -> w434(o, n950) }
+    w435(o, v.listing)
 }
-internal fun r394(i: RemoteIn): dev.ide.ui.backend.UiPendingSubmission = dev.ide.ui.backend.UiPendingSubmission(
+internal fun r431(i: RemoteIn): dev.ide.ui.backend.UiPendingSubmission = dev.ide.ui.backend.UiPendingSubmission(
     versionId = i.str(),
     version = i.str(),
     status = i.str(),
     sizeBytes = i.long(),
     sha256 = i.opt { i.str() },
     fileCount = i.int(),
-    files = i.list { r395(i) },
+    files = i.list { r432(i) },
     changelog = i.opt { i.str() },
     submittedAtMs = i.long(),
     reviewNote = i.opt { i.str() },
     screenshotPaths = i.list { i.str() },
     iconPath = i.opt { i.str() },
-    edits = i.list { r396(i) },
-    submitter = i.opt { r397(i) },
-    listing = r398(i),
+    edits = i.list { r433(i) },
+    submitter = i.opt { r434(i) },
+    listing = r435(i),
 )
 
-internal fun w395(o: RemoteOut, v: dev.ide.ui.backend.UiSubmissionFile) {
+internal fun w432(o: RemoteOut, v: dev.ide.ui.backend.UiSubmissionFile) {
     o.string(v.path)
     o.long(v.sizeBytes)
 }
-internal fun r395(i: RemoteIn): dev.ide.ui.backend.UiSubmissionFile = dev.ide.ui.backend.UiSubmissionFile(
+internal fun r432(i: RemoteIn): dev.ide.ui.backend.UiSubmissionFile = dev.ide.ui.backend.UiSubmissionFile(
     path = i.str(),
     sizeBytes = i.long(),
 )
 
-internal fun w396(o: RemoteOut, v: dev.ide.ui.backend.UiListingEdit) {
+internal fun w433(o: RemoteOut, v: dev.ide.ui.backend.UiListingEdit) {
     o.string(v.field)
     o.string(v.current)
     o.string(v.proposed)
 }
-internal fun r396(i: RemoteIn): dev.ide.ui.backend.UiListingEdit = dev.ide.ui.backend.UiListingEdit(
+internal fun r433(i: RemoteIn): dev.ide.ui.backend.UiListingEdit = dev.ide.ui.backend.UiListingEdit(
     field = i.str(),
     current = i.str(),
     proposed = i.str(),
 )
 
-internal fun w397(o: RemoteOut, v: dev.ide.ui.backend.UiSubmissionSubmitter) {
+internal fun w434(o: RemoteOut, v: dev.ide.ui.backend.UiSubmissionSubmitter) {
     o.string(v.userId)
-    o.opt(v.handle) { n873 -> o.string(n873) }
-    o.opt(v.displayName) { n874 -> o.string(n874) }
+    o.opt(v.handle) { n937 -> o.string(n937) }
+    o.opt(v.displayName) { n938 -> o.string(n938) }
     o.bool(v.verified)
     o.bool(v.banned)
 }
-internal fun r397(i: RemoteIn): dev.ide.ui.backend.UiSubmissionSubmitter = dev.ide.ui.backend.UiSubmissionSubmitter(
+internal fun r434(i: RemoteIn): dev.ide.ui.backend.UiSubmissionSubmitter = dev.ide.ui.backend.UiSubmissionSubmitter(
     userId = i.str(),
     handle = i.opt { i.str() },
     displayName = i.opt { i.str() },
@@ -6979,20 +7492,20 @@ internal fun r397(i: RemoteIn): dev.ide.ui.backend.UiSubmissionSubmitter = dev.i
     banned = i.bool(),
 )
 
-internal fun w398(o: RemoteOut, v: dev.ide.ui.backend.UiSubmissionListing) {
+internal fun w435(o: RemoteOut, v: dev.ide.ui.backend.UiSubmissionListing) {
     o.string(v.slug)
     o.string(v.title)
     o.string(v.summary)
     o.string(v.description)
     o.string(v.category)
-    o.opt(v.language) { n875 -> o.string(n875) }
-    o.list(v.tags) { e876 -> o.string(e876) }
+    o.opt(v.language) { n939 -> o.string(n939) }
+    o.list(v.tags) { e940 -> o.string(e940) }
     o.string(v.status)
-    o.opt(v.iconPath) { n877 -> o.string(n877) }
-    o.list(v.screenshots) { e878 -> o.string(e878) }
+    o.opt(v.iconPath) { n941 -> o.string(n941) }
+    o.list(v.screenshots) { e942 -> o.string(e942) }
     o.int(v.installs)
 }
-internal fun r398(i: RemoteIn): dev.ide.ui.backend.UiSubmissionListing = dev.ide.ui.backend.UiSubmissionListing(
+internal fun r435(i: RemoteIn): dev.ide.ui.backend.UiSubmissionListing = dev.ide.ui.backend.UiSubmissionListing(
     slug = i.str(),
     title = i.str(),
     summary = i.str(),
@@ -7006,24 +7519,24 @@ internal fun r398(i: RemoteIn): dev.ide.ui.backend.UiSubmissionListing = dev.ide
     installs = i.int(),
 )
 
-internal fun w399(o: RemoteOut, v: dev.ide.ui.backend.UiReviewPage) {
+internal fun w436(o: RemoteOut, v: dev.ide.ui.backend.UiReviewPage) {
     o.float(v.average)
     o.int(v.count)
-    o.map(v.distribution, { k896 -> o.int(k896) }, { v897 -> o.int(v897) })
-    o.opt(v.mine) { n898 -> w400(o, n898) }
-    o.list(v.reviews) { e899 -> w400(o, e899) }
+    o.map(v.distribution, { k960 -> o.int(k960) }, { v961 -> o.int(v961) })
+    o.opt(v.mine) { n962 -> w437(o, n962) }
+    o.list(v.reviews) { e963 -> w437(o, e963) }
     o.bool(v.hasMore)
     o.bool(v.loading)
-    o.opt(v.error) { n900 -> o.string(n900) }
+    o.opt(v.error) { n964 -> o.string(n964) }
     o.bool(v.canReply)
     o.bool(v.canModerate)
 }
-internal fun r399(i: RemoteIn): dev.ide.ui.backend.UiReviewPage = dev.ide.ui.backend.UiReviewPage(
+internal fun r436(i: RemoteIn): dev.ide.ui.backend.UiReviewPage = dev.ide.ui.backend.UiReviewPage(
     average = i.float(),
     count = i.int(),
     distribution = i.map({ i.int() }, { i.int() }),
-    mine = i.opt { r400(i) },
-    reviews = i.list { r400(i) },
+    mine = i.opt { r437(i) },
+    reviews = i.list { r437(i) },
     hasMore = i.bool(),
     loading = i.bool(),
     error = i.opt { i.str() },
@@ -7031,22 +7544,22 @@ internal fun r399(i: RemoteIn): dev.ide.ui.backend.UiReviewPage = dev.ide.ui.bac
     canModerate = i.bool(),
 )
 
-internal fun w400(o: RemoteOut, v: dev.ide.ui.backend.UiStoreReview) {
+internal fun w437(o: RemoteOut, v: dev.ide.ui.backend.UiStoreReview) {
     o.string(v.authorId)
-    o.opt(v.authorName) { n890 -> o.string(n890) }
-    o.opt(v.authorHandle) { n891 -> o.string(n891) }
+    o.opt(v.authorName) { n954 -> o.string(n954) }
+    o.opt(v.authorHandle) { n955 -> o.string(n955) }
     o.bool(v.verified)
     o.int(v.stars)
-    o.opt(v.review) { n892 -> o.string(n892) }
+    o.opt(v.review) { n956 -> o.string(n956) }
     o.int(v.helpful)
     o.bool(v.votedByMe)
-    o.opt(v.appVersion) { n893 -> o.string(n893) }
-    o.opt(v.itemVersion) { n894 -> o.string(n894) }
+    o.opt(v.appVersion) { n957 -> o.string(n957) }
+    o.opt(v.itemVersion) { n958 -> o.string(n958) }
     o.long(v.postedAtMs)
-    o.opt(v.reply) { n895 -> o.string(n895) }
+    o.opt(v.reply) { n959 -> o.string(n959) }
     o.bool(v.mine)
 }
-internal fun r400(i: RemoteIn): dev.ide.ui.backend.UiStoreReview = dev.ide.ui.backend.UiStoreReview(
+internal fun r437(i: RemoteIn): dev.ide.ui.backend.UiStoreReview = dev.ide.ui.backend.UiStoreReview(
     authorId = i.str(),
     authorName = i.opt { i.str() },
     authorHandle = i.opt { i.str() },
@@ -7062,32 +7575,32 @@ internal fun r400(i: RemoteIn): dev.ide.ui.backend.UiStoreReview = dev.ide.ui.ba
     mine = i.bool(),
 )
 
-internal fun w401(o: RemoteOut, v: dev.ide.ui.backend.UiStoreSearchPage) {
-    o.list(v.items) { e901 -> w358(o, e901) }
+internal fun w438(o: RemoteOut, v: dev.ide.ui.backend.UiStoreSearchPage) {
+    o.list(v.items) { e965 -> w360(o, e965) }
     o.bool(v.hasMore)
-    o.opt(v.error) { n902 -> o.string(n902) }
+    o.opt(v.error) { n966 -> o.string(n966) }
 }
-internal fun r401(i: RemoteIn): dev.ide.ui.backend.UiStoreSearchPage = dev.ide.ui.backend.UiStoreSearchPage(
-    items = i.list { r358(i) },
+internal fun r438(i: RemoteIn): dev.ide.ui.backend.UiStoreSearchPage = dev.ide.ui.backend.UiStoreSearchPage(
+    items = i.list { r360(i) },
     hasMore = i.bool(),
     error = i.opt { i.str() },
 )
 
-internal fun w402(o: RemoteOut, v: dev.ide.ui.backend.UiSubmissionDraft) {
+internal fun w439(o: RemoteOut, v: dev.ide.ui.backend.UiSubmissionDraft) {
     o.string(v.title)
     o.string(v.summary)
     o.string(v.description)
     o.string(v.category)
-    o.opt(v.language) { n903 -> o.string(n903) }
-    o.list(v.tags) { e904 -> o.string(e904) }
+    o.opt(v.language) { n967 -> o.string(n967) }
+    o.list(v.tags) { e968 -> o.string(e968) }
     o.string(v.version)
-    o.list(v.screenshotPaths) { e905 -> o.string(e905) }
-    o.opt(v.itemSlug) { n906 -> o.string(n906) }
-    o.opt(v.changelog) { n907 -> o.string(n907) }
-    o.opt(v.iconBytes) { n908 -> o.bytes(n908) }
+    o.list(v.screenshotPaths) { e969 -> o.string(e969) }
+    o.opt(v.itemSlug) { n970 -> o.string(n970) }
+    o.opt(v.changelog) { n971 -> o.string(n971) }
+    o.opt(v.iconBytes) { n972 -> o.bytes(n972) }
     o.bool(v.listingEdits)
 }
-internal fun r402(i: RemoteIn): dev.ide.ui.backend.UiSubmissionDraft = dev.ide.ui.backend.UiSubmissionDraft(
+internal fun r439(i: RemoteIn): dev.ide.ui.backend.UiSubmissionDraft = dev.ide.ui.backend.UiSubmissionDraft(
     title = i.str(),
     summary = i.str(),
     description = i.str(),
@@ -7102,70 +7615,70 @@ internal fun r402(i: RemoteIn): dev.ide.ui.backend.UiSubmissionDraft = dev.ide.u
     listingEdits = i.bool(),
 )
 
-internal fun w403(o: RemoteOut, v: dev.ide.ui.backend.UiSubmitResult) {
+internal fun w440(o: RemoteOut, v: dev.ide.ui.backend.UiSubmitResult) {
     o.bool(v.success)
     o.string(v.message)
-    o.opt(v.submission) { n909 -> w389(o, n909) }
+    o.opt(v.submission) { n973 -> w426(o, n973) }
 }
-internal fun r403(i: RemoteIn): dev.ide.ui.backend.UiSubmitResult = dev.ide.ui.backend.UiSubmitResult(
+internal fun r440(i: RemoteIn): dev.ide.ui.backend.UiSubmitResult = dev.ide.ui.backend.UiSubmitResult(
     success = i.bool(),
     message = i.str(),
-    submission = i.opt { r389(i) },
+    submission = i.opt { r426(i) },
 )
 
-internal fun w404(o: RemoteOut, v: dev.ide.ui.backend.UiTranslation) {
-    o.map(v.fields, { k910 -> o.string(k910) }, { v911 -> o.string(v911) })
-    o.opt(v.error) { n912 -> o.string(n912) }
+internal fun w441(o: RemoteOut, v: dev.ide.ui.backend.UiTranslation) {
+    o.map(v.fields, { k974 -> o.string(k974) }, { v975 -> o.string(v975) })
+    o.opt(v.error) { n976 -> o.string(n976) }
 }
-internal fun r404(i: RemoteIn): dev.ide.ui.backend.UiTranslation = dev.ide.ui.backend.UiTranslation(
+internal fun r441(i: RemoteIn): dev.ide.ui.backend.UiTranslation = dev.ide.ui.backend.UiTranslation(
     fields = i.map({ i.str() }, { i.str() }),
     error = i.opt { i.str() },
 )
 
-internal fun w405(o: RemoteOut, v: dev.ide.ui.backend.UiVersionNote) {
+internal fun w442(o: RemoteOut, v: dev.ide.ui.backend.UiVersionNote) {
     o.string(v.version)
     o.int(v.versionCode)
-    o.opt(v.changelog) { n913 -> o.string(n913) }
-    o.opt(v.publishedAt) { n914 -> o.string(n914) }
+    o.opt(v.changelog) { n977 -> o.string(n977) }
+    o.opt(v.publishedAt) { n978 -> o.string(n978) }
 }
-internal fun r405(i: RemoteIn): dev.ide.ui.backend.UiVersionNote = dev.ide.ui.backend.UiVersionNote(
+internal fun r442(i: RemoteIn): dev.ide.ui.backend.UiVersionNote = dev.ide.ui.backend.UiVersionNote(
     version = i.str(),
     versionCode = i.int(),
     changelog = i.opt { i.str() },
     publishedAt = i.opt { i.str() },
 )
 
-internal fun w406(o: RemoteOut, v: dev.ide.ui.backend.UiVcsResult) {
+internal fun w443(o: RemoteOut, v: dev.ide.ui.backend.UiVcsResult) {
     o.bool(v.ok)
     o.string(v.message)
     o.bool(v.authRequired)
-    o.opt(v.path) { n916 -> o.string(n916) }
-    o.list(v.conflicts) { e917 -> o.string(e917) }
-    o.opt(v.projectKind) { n918 -> o.int(n918.ordinal) }
-    o.opt(v.text) { n919 -> w407(o, n919) }
+    o.opt(v.path) { n980 -> o.string(n980) }
+    o.list(v.conflicts) { e981 -> o.string(e981) }
+    o.opt(v.projectKind) { n982 -> o.int(n982.ordinal) }
+    o.opt(v.text) { n983 -> w444(o, n983) }
 }
-internal fun r406(i: RemoteIn): dev.ide.ui.backend.UiVcsResult = dev.ide.ui.backend.UiVcsResult(
+internal fun r443(i: RemoteIn): dev.ide.ui.backend.UiVcsResult = dev.ide.ui.backend.UiVcsResult(
     ok = i.bool(),
     message = i.str(),
     authRequired = i.bool(),
     path = i.opt { i.str() },
     conflicts = i.list { i.str() },
     projectKind = i.opt { dev.ide.ui.backend.UiProjectFolderKind.entries[i.int()] },
-    text = i.opt { r407(i) },
+    text = i.opt { r444(i) },
 )
 
-internal fun w407(o: RemoteOut, v: dev.ide.ui.backend.UiVcsText) {
+internal fun w444(o: RemoteOut, v: dev.ide.ui.backend.UiVcsText) {
     o.string(v.key)
-    o.list(v.args) { e915 -> w407(o, e915) }
+    o.list(v.args) { e979 -> w444(o, e979) }
     o.string(v.text)
 }
-internal fun r407(i: RemoteIn): dev.ide.ui.backend.UiVcsText = dev.ide.ui.backend.UiVcsText(
+internal fun r444(i: RemoteIn): dev.ide.ui.backend.UiVcsText = dev.ide.ui.backend.UiVcsText(
     key = i.str(),
-    args = i.list { r407(i) },
+    args = i.list { r444(i) },
     text = i.str(),
 )
 
-internal fun w408(o: RemoteOut, v: dev.ide.ui.backend.UiVcsAccount) {
+internal fun w445(o: RemoteOut, v: dev.ide.ui.backend.UiVcsAccount) {
     o.string(v.id)
     o.string(v.forgeId)
     o.string(v.host)
@@ -7175,7 +7688,7 @@ internal fun w408(o: RemoteOut, v: dev.ide.ui.backend.UiVcsAccount) {
     o.bool(v.active)
     o.bool(v.needsSignIn)
 }
-internal fun r408(i: RemoteIn): dev.ide.ui.backend.UiVcsAccount = dev.ide.ui.backend.UiVcsAccount(
+internal fun r445(i: RemoteIn): dev.ide.ui.backend.UiVcsAccount = dev.ide.ui.backend.UiVcsAccount(
     id = i.str(),
     forgeId = i.str(),
     host = i.str(),
@@ -7186,40 +7699,40 @@ internal fun r408(i: RemoteIn): dev.ide.ui.backend.UiVcsAccount = dev.ide.ui.bac
     needsSignIn = i.bool(),
 )
 
-internal fun w409(o: RemoteOut, v: dev.ide.ui.backend.UiVcsActivity) {
+internal fun w446(o: RemoteOut, v: dev.ide.ui.backend.UiVcsActivity) {
     o.bool(v.busy)
     o.string(v.task)
     o.float(v.fraction)
-    o.opt(v.taskText) { n920 -> w407(o, n920) }
+    o.opt(v.taskText) { n984 -> w444(o, n984) }
 }
-internal fun r409(i: RemoteIn): dev.ide.ui.backend.UiVcsActivity = dev.ide.ui.backend.UiVcsActivity(
+internal fun r446(i: RemoteIn): dev.ide.ui.backend.UiVcsActivity = dev.ide.ui.backend.UiVcsActivity(
     busy = i.bool(),
     task = i.str(),
     fraction = i.float(),
-    taskText = i.opt { r407(i) },
+    taskText = i.opt { r444(i) },
 )
 
-internal fun w410(o: RemoteOut, v: dev.ide.ui.backend.UiBlameLine) {
+internal fun w447(o: RemoteOut, v: dev.ide.ui.backend.UiBlameLine) {
     o.string(v.author)
     o.string(v.age)
     o.string(v.summary)
     o.string(v.shortId)
 }
-internal fun r410(i: RemoteIn): dev.ide.ui.backend.UiBlameLine = dev.ide.ui.backend.UiBlameLine(
+internal fun r447(i: RemoteIn): dev.ide.ui.backend.UiBlameLine = dev.ide.ui.backend.UiBlameLine(
     author = i.str(),
     age = i.str(),
     summary = i.str(),
     shortId = i.str(),
 )
 
-internal fun w411(o: RemoteOut, v: dev.ide.ui.backend.UiVcsBranch) {
+internal fun w448(o: RemoteOut, v: dev.ide.ui.backend.UiVcsBranch) {
     o.string(v.name)
     o.bool(v.remote)
     o.bool(v.current)
     o.string(v.upstream)
     o.string(v.shortId)
 }
-internal fun r411(i: RemoteIn): dev.ide.ui.backend.UiVcsBranch = dev.ide.ui.backend.UiVcsBranch(
+internal fun r448(i: RemoteIn): dev.ide.ui.backend.UiVcsBranch = dev.ide.ui.backend.UiVcsBranch(
     name = i.str(),
     remote = i.bool(),
     current = i.bool(),
@@ -7227,20 +7740,20 @@ internal fun r411(i: RemoteIn): dev.ide.ui.backend.UiVcsBranch = dev.ide.ui.back
     shortId = i.str(),
 )
 
-internal fun w412(o: RemoteOut, v: dev.ide.ui.backend.UiVcsCommitDetail) {
-    w413(o, v.commit)
-    o.list(v.files) { e923 -> w414(o, e923) }
+internal fun w449(o: RemoteOut, v: dev.ide.ui.backend.UiVcsCommitDetail) {
+    w450(o, v.commit)
+    o.list(v.files) { e987 -> w451(o, e987) }
     o.int(v.insertions)
     o.int(v.deletions)
 }
-internal fun r412(i: RemoteIn): dev.ide.ui.backend.UiVcsCommitDetail = dev.ide.ui.backend.UiVcsCommitDetail(
-    commit = r413(i),
-    files = i.list { r414(i) },
+internal fun r449(i: RemoteIn): dev.ide.ui.backend.UiVcsCommitDetail = dev.ide.ui.backend.UiVcsCommitDetail(
+    commit = r450(i),
+    files = i.list { r451(i) },
     insertions = i.int(),
     deletions = i.int(),
 )
 
-internal fun w413(o: RemoteOut, v: dev.ide.ui.backend.UiVcsCommit) {
+internal fun w450(o: RemoteOut, v: dev.ide.ui.backend.UiVcsCommit) {
     o.string(v.id)
     o.string(v.shortId)
     o.string(v.summary)
@@ -7249,10 +7762,10 @@ internal fun w413(o: RemoteOut, v: dev.ide.ui.backend.UiVcsCommit) {
     o.string(v.authorEmail)
     o.long(v.timeMs)
     o.string(v.timeLabel)
-    o.list(v.refs) { e921 -> o.string(e921) }
+    o.list(v.refs) { e985 -> o.string(e985) }
     o.bool(v.merge)
 }
-internal fun r413(i: RemoteIn): dev.ide.ui.backend.UiVcsCommit = dev.ide.ui.backend.UiVcsCommit(
+internal fun r450(i: RemoteIn): dev.ide.ui.backend.UiVcsCommit = dev.ide.ui.backend.UiVcsCommit(
     id = i.str(),
     shortId = i.str(),
     summary = i.str(),
@@ -7265,16 +7778,16 @@ internal fun r413(i: RemoteIn): dev.ide.ui.backend.UiVcsCommit = dev.ide.ui.back
     merge = i.bool(),
 )
 
-internal fun w414(o: RemoteOut, v: dev.ide.ui.backend.UiVcsChange) {
+internal fun w451(o: RemoteOut, v: dev.ide.ui.backend.UiVcsChange) {
     o.string(v.path)
     o.string(v.name)
     o.string(v.directory)
     o.string(v.status)
     o.bool(v.staged)
     o.bool(v.conflicted)
-    o.opt(v.oldPath) { n922 -> o.string(n922) }
+    o.opt(v.oldPath) { n986 -> o.string(n986) }
 }
-internal fun r414(i: RemoteIn): dev.ide.ui.backend.UiVcsChange = dev.ide.ui.backend.UiVcsChange(
+internal fun r451(i: RemoteIn): dev.ide.ui.backend.UiVcsChange = dev.ide.ui.backend.UiVcsChange(
     path = i.str(),
     name = i.str(),
     directory = i.str(),
@@ -7284,14 +7797,14 @@ internal fun r414(i: RemoteIn): dev.ide.ui.backend.UiVcsChange = dev.ide.ui.back
     oldPath = i.opt { i.str() },
 )
 
-internal fun w415(o: RemoteOut, v: dev.ide.ui.backend.UiVcsDiff) {
+internal fun w452(o: RemoteOut, v: dev.ide.ui.backend.UiVcsDiff) {
     o.string(v.path)
     o.string(v.text)
     o.bool(v.binary)
     o.int(v.insertions)
     o.int(v.deletions)
 }
-internal fun r415(i: RemoteIn): dev.ide.ui.backend.UiVcsDiff = dev.ide.ui.backend.UiVcsDiff(
+internal fun r452(i: RemoteIn): dev.ide.ui.backend.UiVcsDiff = dev.ide.ui.backend.UiVcsDiff(
     path = i.str(),
     text = i.str(),
     binary = i.bool(),
@@ -7299,7 +7812,7 @@ internal fun r415(i: RemoteIn): dev.ide.ui.backend.UiVcsDiff = dev.ide.ui.backen
     deletions = i.int(),
 )
 
-internal fun w416(o: RemoteOut, v: dev.ide.ui.backend.UiForgeRepo) {
+internal fun w453(o: RemoteOut, v: dev.ide.ui.backend.UiForgeRepo) {
     o.string(v.owner)
     o.string(v.name)
     o.string(v.fullName)
@@ -7314,7 +7827,7 @@ internal fun w416(o: RemoteOut, v: dev.ide.ui.backend.UiForgeRepo) {
     o.long(v.updatedMs)
     o.string(v.updatedLabel)
 }
-internal fun r416(i: RemoteIn): dev.ide.ui.backend.UiForgeRepo = dev.ide.ui.backend.UiForgeRepo(
+internal fun r453(i: RemoteIn): dev.ide.ui.backend.UiForgeRepo = dev.ide.ui.backend.UiForgeRepo(
     owner = i.str(),
     name = i.str(),
     fullName = i.str(),
@@ -7330,16 +7843,16 @@ internal fun r416(i: RemoteIn): dev.ide.ui.backend.UiForgeRepo = dev.ide.ui.back
     updatedLabel = i.str(),
 )
 
-internal fun w417(o: RemoteOut, v: dev.ide.ui.backend.UiVcsIdentity) {
+internal fun w454(o: RemoteOut, v: dev.ide.ui.backend.UiVcsIdentity) {
     o.string(v.name)
     o.string(v.email)
 }
-internal fun r417(i: RemoteIn): dev.ide.ui.backend.UiVcsIdentity = dev.ide.ui.backend.UiVcsIdentity(
+internal fun r454(i: RemoteIn): dev.ide.ui.backend.UiVcsIdentity = dev.ide.ui.backend.UiVcsIdentity(
     name = i.str(),
     email = i.str(),
 )
 
-internal fun w418(o: RemoteOut, v: dev.ide.ui.backend.UiForgePullRequest) {
+internal fun w455(o: RemoteOut, v: dev.ide.ui.backend.UiForgePullRequest) {
     o.int(v.number)
     o.string(v.title)
     o.string(v.author)
@@ -7350,7 +7863,7 @@ internal fun w418(o: RemoteOut, v: dev.ide.ui.backend.UiForgePullRequest) {
     o.long(v.updatedMs)
     o.string(v.updatedLabel)
 }
-internal fun r418(i: RemoteIn): dev.ide.ui.backend.UiForgePullRequest = dev.ide.ui.backend.UiForgePullRequest(
+internal fun r455(i: RemoteIn): dev.ide.ui.backend.UiForgePullRequest = dev.ide.ui.backend.UiForgePullRequest(
     number = i.int(),
     title = i.str(),
     author = i.str(),
@@ -7362,80 +7875,80 @@ internal fun r418(i: RemoteIn): dev.ide.ui.backend.UiForgePullRequest = dev.ide.
     updatedLabel = i.str(),
 )
 
-internal fun w419(o: RemoteOut, v: dev.ide.ui.backend.UiVcsRemote) {
+internal fun w456(o: RemoteOut, v: dev.ide.ui.backend.UiVcsRemote) {
     o.string(v.name)
     o.string(v.url)
 }
-internal fun r419(i: RemoteIn): dev.ide.ui.backend.UiVcsRemote = dev.ide.ui.backend.UiVcsRemote(
+internal fun r456(i: RemoteIn): dev.ide.ui.backend.UiVcsRemote = dev.ide.ui.backend.UiVcsRemote(
     name = i.str(),
     url = i.str(),
 )
 
-internal fun w420(o: RemoteOut, v: dev.ide.ui.backend.UiVcsSignIn) {
+internal fun w457(o: RemoteOut, v: dev.ide.ui.backend.UiVcsSignIn) {
     when (v) {
-        is dev.ide.ui.backend.UiVcsSignIn.AwaitingUser -> { o.int(0); w421(o, v) }
-        is dev.ide.ui.backend.UiVcsSignIn.Done -> { o.int(1); w422(o, v) }
-        is dev.ide.ui.backend.UiVcsSignIn.Failed -> { o.int(2); w423(o, v) }
-        is dev.ide.ui.backend.UiVcsSignIn.Idle -> { o.int(3); w424(o, v) }
-        is dev.ide.ui.backend.UiVcsSignIn.Starting -> { o.int(4); w425(o, v) }
+        is dev.ide.ui.backend.UiVcsSignIn.AwaitingUser -> { o.int(0); w458(o, v) }
+        is dev.ide.ui.backend.UiVcsSignIn.Done -> { o.int(1); w459(o, v) }
+        is dev.ide.ui.backend.UiVcsSignIn.Failed -> { o.int(2); w460(o, v) }
+        is dev.ide.ui.backend.UiVcsSignIn.Idle -> { o.int(3); w461(o, v) }
+        is dev.ide.ui.backend.UiVcsSignIn.Starting -> { o.int(4); w462(o, v) }
     }
 }
-internal fun r420(i: RemoteIn): dev.ide.ui.backend.UiVcsSignIn = when (val tag = i.int()) {
-    0 -> r421(i)
-    1 -> r422(i)
-    2 -> r423(i)
-    3 -> r424(i)
-    4 -> r425(i)
+internal fun r457(i: RemoteIn): dev.ide.ui.backend.UiVcsSignIn = when (val tag = i.int()) {
+    0 -> r458(i)
+    1 -> r459(i)
+    2 -> r460(i)
+    3 -> r461(i)
+    4 -> r462(i)
     else -> error("unknown UiVcsSignIn $tag")
 }
 
-internal fun w421(o: RemoteOut, v: dev.ide.ui.backend.UiVcsSignIn.AwaitingUser) {
+internal fun w458(o: RemoteOut, v: dev.ide.ui.backend.UiVcsSignIn.AwaitingUser) {
     o.string(v.userCode)
     o.string(v.verificationUri)
     o.int(v.expiresInSeconds)
 }
-internal fun r421(i: RemoteIn): dev.ide.ui.backend.UiVcsSignIn.AwaitingUser = dev.ide.ui.backend.UiVcsSignIn.AwaitingUser(
+internal fun r458(i: RemoteIn): dev.ide.ui.backend.UiVcsSignIn.AwaitingUser = dev.ide.ui.backend.UiVcsSignIn.AwaitingUser(
     userCode = i.str(),
     verificationUri = i.str(),
     expiresInSeconds = i.int(),
 )
 
-internal fun w422(o: RemoteOut, v: dev.ide.ui.backend.UiVcsSignIn.Done) {
-    w408(o, v.account)
+internal fun w459(o: RemoteOut, v: dev.ide.ui.backend.UiVcsSignIn.Done) {
+    w445(o, v.account)
 }
-internal fun r422(i: RemoteIn): dev.ide.ui.backend.UiVcsSignIn.Done = dev.ide.ui.backend.UiVcsSignIn.Done(
-    account = r408(i),
+internal fun r459(i: RemoteIn): dev.ide.ui.backend.UiVcsSignIn.Done = dev.ide.ui.backend.UiVcsSignIn.Done(
+    account = r445(i),
 )
 
-internal fun w423(o: RemoteOut, v: dev.ide.ui.backend.UiVcsSignIn.Failed) {
+internal fun w460(o: RemoteOut, v: dev.ide.ui.backend.UiVcsSignIn.Failed) {
     o.string(v.message)
-    o.opt(v.text) { n924 -> w407(o, n924) }
+    o.opt(v.text) { n988 -> w444(o, n988) }
 }
-internal fun r423(i: RemoteIn): dev.ide.ui.backend.UiVcsSignIn.Failed = dev.ide.ui.backend.UiVcsSignIn.Failed(
+internal fun r460(i: RemoteIn): dev.ide.ui.backend.UiVcsSignIn.Failed = dev.ide.ui.backend.UiVcsSignIn.Failed(
     message = i.str(),
-    text = i.opt { r407(i) },
+    text = i.opt { r444(i) },
 )
 
-internal fun w424(o: RemoteOut, v: dev.ide.ui.backend.UiVcsSignIn.Idle) {}
-internal fun r424(i: RemoteIn): dev.ide.ui.backend.UiVcsSignIn.Idle = dev.ide.ui.backend.UiVcsSignIn.Idle
+internal fun w461(o: RemoteOut, v: dev.ide.ui.backend.UiVcsSignIn.Idle) {}
+internal fun r461(i: RemoteIn): dev.ide.ui.backend.UiVcsSignIn.Idle = dev.ide.ui.backend.UiVcsSignIn.Idle
 
-internal fun w425(o: RemoteOut, v: dev.ide.ui.backend.UiVcsSignIn.Starting) {}
-internal fun r425(i: RemoteIn): dev.ide.ui.backend.UiVcsSignIn.Starting = dev.ide.ui.backend.UiVcsSignIn.Starting
+internal fun w462(o: RemoteOut, v: dev.ide.ui.backend.UiVcsSignIn.Starting) {}
+internal fun r462(i: RemoteIn): dev.ide.ui.backend.UiVcsSignIn.Starting = dev.ide.ui.backend.UiVcsSignIn.Starting
 
-internal fun w426(o: RemoteOut, v: dev.ide.ui.backend.UiVcsStash) {
+internal fun w463(o: RemoteOut, v: dev.ide.ui.backend.UiVcsStash) {
     o.int(v.index)
     o.string(v.message)
     o.long(v.timeMs)
     o.string(v.timeLabel)
 }
-internal fun r426(i: RemoteIn): dev.ide.ui.backend.UiVcsStash = dev.ide.ui.backend.UiVcsStash(
+internal fun r463(i: RemoteIn): dev.ide.ui.backend.UiVcsStash = dev.ide.ui.backend.UiVcsStash(
     index = i.int(),
     message = i.str(),
     timeMs = i.long(),
     timeLabel = i.str(),
 )
 
-internal fun w427(o: RemoteOut, v: dev.ide.ui.backend.UiVcsStatus) {
+internal fun w464(o: RemoteOut, v: dev.ide.ui.backend.UiVcsStatus) {
     o.bool(v.present)
     o.string(v.root)
     o.string(v.branch)
@@ -7445,16 +7958,16 @@ internal fun w427(o: RemoteOut, v: dev.ide.ui.backend.UiVcsStatus) {
     o.int(v.ahead)
     o.int(v.behind)
     o.string(v.operation)
-    o.list(v.staged) { e925 -> w414(o, e925) }
-    o.list(v.unstaged) { e926 -> w414(o, e926) }
-    o.list(v.conflicted) { e927 -> w414(o, e927) }
+    o.list(v.staged) { e989 -> w451(o, e989) }
+    o.list(v.unstaged) { e990 -> w451(o, e990) }
+    o.list(v.conflicted) { e991 -> w451(o, e991) }
     o.string(v.headSummary)
     o.string(v.headShortId)
     o.string(v.error)
-    o.opt(v.errorText) { n928 -> w407(o, n928) }
-    o.list(v.remotes) { e929 -> o.string(e929) }
+    o.opt(v.errorText) { n992 -> w444(o, n992) }
+    o.list(v.remotes) { e993 -> o.string(e993) }
 }
-internal fun r427(i: RemoteIn): dev.ide.ui.backend.UiVcsStatus = dev.ide.ui.backend.UiVcsStatus(
+internal fun r464(i: RemoteIn): dev.ide.ui.backend.UiVcsStatus = dev.ide.ui.backend.UiVcsStatus(
     present = i.bool(),
     root = i.str(),
     branch = i.str(),
@@ -7464,13 +7977,13 @@ internal fun r427(i: RemoteIn): dev.ide.ui.backend.UiVcsStatus = dev.ide.ui.back
     ahead = i.int(),
     behind = i.int(),
     operation = i.str(),
-    staged = i.list { r414(i) },
-    unstaged = i.list { r414(i) },
-    conflicted = i.list { r414(i) },
+    staged = i.list { r451(i) },
+    unstaged = i.list { r451(i) },
+    conflicted = i.list { r451(i) },
     headSummary = i.str(),
     headShortId = i.str(),
     error = i.str(),
-    errorText = i.opt { r407(i) },
+    errorText = i.opt { r444(i) },
     remotes = i.list { i.str() },
 )
 

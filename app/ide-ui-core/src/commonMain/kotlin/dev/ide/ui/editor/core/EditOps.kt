@@ -2,6 +2,7 @@ package dev.ide.ui.editor.core
 
 import dev.ide.ui.editor.CodeLanguage
 import dev.ide.ui.editor.XmlEditing
+import dev.ide.ui.ext.SyntaxFamily
 
 /**
  * Smart-editing rules as **range edits** — the same behaviors `applySmartEdit` (EditorEdits.kt)
@@ -125,6 +126,10 @@ fun smartInsert(
             }
         }
     }
+    // 1c. An indentation language's `else:` / `except E:` snaps back to its header's level as its `:` is typed.
+    if (language.profile.syntax == SyntaxFamily.INDENT_BLOCK) {
+        indentBlockDedentOnType(text, pos, ch, language.profile)?.let { return it }
+    }
     // 2. Auto-close brackets — but only when a matching closer doesn't already exist further on.
     if (ch in OPEN_TO_CLOSE && shouldAutoClose(nextChar)) {
         return if (shouldInsertClosingBracket(text, ch)) {
@@ -140,7 +145,10 @@ fun smartInsert(
     if (ch in QUOTES && text.charOrNull(pos - 1) == ch && text.charOrNull(pos - 2) == ch) {
         val opensRawString = ch == '"' && (language == CodeLanguage.Kotlin || language == CodeLanguage.Java) &&
             text.charOrNull(pos - 3) != '"' && shouldAutoClose(nextChar) && !insideRawString(text, pos)
-        return RangeEdit(pos, pos, if (opensRawString) "\"\"\"\"" else ch.toString(), pos + 1)
+        // Python's `"""` and `'''` alike, judged by the indentation family's own scanner.
+        val opensTriple = language.profile.syntax == SyntaxFamily.INDENT_BLOCK && shouldAutoClose(nextChar) &&
+            indentBlockOpensTripleQuote(text, pos, ch, language.profile)
+        return RangeEdit(pos, pos, if (opensRawString || opensTriple) "$ch$ch$ch$ch" else ch.toString(), pos + 1)
     }
     // 3. Auto-close quotes (not when finishing an identifier, not in plain text files).
     if (ch in QUOTES && language != CodeLanguage.Plain && shouldAutoClose(nextChar) && !isIdentChar(

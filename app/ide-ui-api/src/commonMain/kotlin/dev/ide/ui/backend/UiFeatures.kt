@@ -30,6 +30,12 @@ object UiFeatures {
     /** A screen opened, by the app's screen name (`IconManager` -> `screen_icon_manager`). */
     fun screen(name: String): String = "screen_" + snake(name)
 
+    /**
+     * A Home announcement tapped, by its id (`claude-launch` -> `announce_claude_launch`). Cut to the 48
+     * characters a feature id may have.
+     */
+    fun announcement(id: String): String = ("announce_" + snake(id)).take(48).trimEnd('_')
+
     /** A tool window shown, by its built-in id. */
     fun toolWindow(id: String): String = "tool_" + snake(id)
 

@@ -530,14 +530,15 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         return dirs to files
     }
 
-    /** Sort key so a module's roots list sources first, then resources, android-res, assets. */
+    /** Sort key so a module's roots list sources first, then resources, android-res, assets, jniLibs. */
     private fun Set<ContentRole>.rootRank(): Int = when {
         ContentRole.SOURCE in this || ContentRole.GENERATED in this -> 0
         ContentRole.AIDL in this -> 1
         ContentRole.RESOURCE in this -> 2
         ContentRole.ANDROID_RES in this -> 3
         ContentRole.ASSETS in this -> 4
-        else -> 5
+        ContentRole.JNI_LIBS in this -> 5
+        else -> 6
     }
 
     override fun createFile(dirPath: String, fileName: String, content: String): String? =

@@ -173,6 +173,67 @@ class AnalyticsTest {
         assertTrue(dev.ide.analytics.Signers.mayReport("", emptyList()), "no list = no restriction")
     }
 
+    /** A long tick so only explicit flush() calls send; the clock is the test's. */
+    private fun spaced(sink: FakeSink, clock: () -> Long) = DefaultAnalyticsService(
+        "i", "s", device, sink, initialConsent = true,
+        batchSize = 3, flushIntervalMs = 60_000, minSendGapMs = 600_000, maxBackoffMs = 3_600_000, clock = clock,
+    )
+
+    @Test
+    fun aPartialBatchWaitsForTheGapCountedFromStart() {
+        var now = 1_000_000L
+        val sink = FakeSink()
+        val svc = spaced(sink) { now }
+        svc.track(ev("a"))
+        svc.flush()
+        assertTrue(sink.received.isEmpty(), "a partial batch right after start waits")
+        now += 600_000
+        svc.flush()
+        assertEquals(listOf("a"), sink.received.map { it.name })
+        svc.track(ev("b"))
+        now += 599_999
+        svc.flush()
+        assertEquals(1, sink.received.size, "the next partial batch waits a full gap after the last send")
+        now += 1
+        svc.flush()
+        assertEquals(listOf("a", "b"), sink.received.map { it.name })
+        svc.close()
+    }
+
+    @Test
+    fun aFullBatchGoesAtOnceButTheRemainderWaits() {
+        val now = 1_000_000L
+        val sink = FakeSink()
+        val svc = spaced(sink) { now }
+        listOf("a", "b", "c", "d").forEach { svc.track(ev(it)) }
+        svc.flush()
+        assertEquals(listOf("a", "b", "c"), sink.received.map { it.name }, "one full batch, the rest waits")
+        svc.close()
+    }
+
+    @Test
+    fun failuresBackOffAndASuccessResetsTheGap() {
+        var now = 1_000_000L
+        val sink = FakeSink(accept = false)
+        val svc = spaced(sink) { now }
+        listOf("a", "b", "c").forEach { svc.track(ev(it)) }
+        svc.flush() // full batch, fails: 1 failure → gap 600s
+        now += 600_000
+        svc.flush() // due, fails again: 2 failures → gap 1200s
+        sink.accept = true
+        now += 600_000
+        svc.flush()
+        assertTrue(sink.received.isEmpty(), "still backing off after two failures, even with a full batch")
+        now += 600_000
+        svc.flush()
+        assertEquals(listOf("a", "b", "c"), sink.received.map { it.name })
+        svc.track(ev("d"))
+        now += 600_000
+        svc.flush()
+        assertEquals(4, sink.received.size, "a success puts the gap back to the configured one")
+        svc.close()
+    }
+
     @Test
     fun theInsertBodyCarriesTheOriginAndNullWhenUnknown() {
         val event = AnalyticsEvent(Events.COLD_START, EventCategory.PERFORMANCE, mapOf("duration_ms" to "5"))
