@@ -3334,9 +3334,21 @@ internal class KotlinSemanticChecks(
         val recvType = resolver.inferType(qualified.receiverExpression) ?: return null
         if (recvType.isTypeParameter || !service.isJavaType(recvType.qualifiedName)) return null
         // Only when the synthetic property actually resolves — so applying the suggestion can't break the code.
+        var propType: KotlinType? = null
         val prop = candidates.firstOrNull { cand ->
-            service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, cand).any { it.kind == SymbolKind.FIELD }
+            val field = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, cand)
+                .firstOrNull { it.kind == SymbolKind.FIELD }
+            propType = field?.type as? KotlinType
+            field != null
         } ?: return null
+        // A setter only when the value fits the PROPERTY's type, which is the most-derived getter's: `EditText.text`
+        // is `Editable` (EditText narrows `getText()`), so `et.setText("x")` must stay a call, `et.text = "x"` does
+        // not compile. A value whose type is unknown backs off too.
+        if (isSetter) {
+            val arg = call.valueArguments.firstOrNull()?.getArgumentExpression() ?: return null
+            val argType = resolver.inferType(arg) ?: return null
+            if (isMismatch(propType ?: return null, argType)) return null
+        }
         val suggestion = if (isSetter) {
             "$prop = ${call.valueArguments.firstOrNull()?.getArgumentExpression()?.text ?: "value"}"
         } else prop
