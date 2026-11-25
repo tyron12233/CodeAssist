@@ -760,18 +760,19 @@ private fun CodeEditorContent(
         // Soft-keyboard Tab (the touch symbol bar) accepts the highlighted completion when the popup is up,
         // mirroring the hardware-Tab path (onPreviewKey); the caller falls back to indent when this returns false.
         editorSession.acceptCompletionIfShowing = { if (showPopup) { accept(); true } else false }
-        // Soft-keyboard Enter in a live template steps to the next field instead of inserting a newline — the IME
-        // path (commitText "\n" / performEditorAction) bypasses onPreviewKey, so it consults this. Mirrors the
-        // hardware-Enter template handling: accept a showing completion first (accept() then advances the
-        // template), else step to the next stop. Returns false with no active template → the IME newlines as usual.
+        // Soft-keyboard Enter: the IME path (commitText "\n" / performEditorAction) bypasses onPreviewKey, so it
+        // consults this, and does what the hardware key does there, in the same order: an in-place rename is
+        // confirmed, a showing completion is accepted (in a live template, accept() then advances it), a live
+        // template steps to its next field. Before, a completion was accepted only inside a template, so on a phone
+        // Enter split the line under an open completion list. With none of those it returns false and the IME
+        // newlines as usual.
         editorSession.advanceTemplateOnEnter = {
             val sn = snippet
-            // Soft-keyboard Enter confirms an in-place rename, as the hardware key does (onPreviewKey).
-            if (popups.inlineRename != null) { commitInlineRename(); true }
-            else if (sn == null) false
-            else {
-                if (showPopup) accept() else if (!sn.next()) snippet = null
-                true
+            when {
+                popups.inlineRename != null -> { commitInlineRename(); true }
+                showPopup -> { accept(); true }
+                sn != null -> { if (!sn.next()) snippet = null; true }
+                else -> false
             }
         }
     }
