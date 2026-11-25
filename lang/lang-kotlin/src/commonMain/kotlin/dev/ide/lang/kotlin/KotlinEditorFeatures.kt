@@ -590,7 +590,8 @@ class KotlinEditorFeatures(
         refreshOverlay(); syncFocal(parsed)
         val ktFile = parsed.ktFile
         val cls = classCovering(ktFile, offset) ?: return null
-        val missing = KotlinResolver(ktFile, parsed, service).unimplementedAbstractMembers(cls)
+        val resolver = KotlinResolver(ktFile, parsed, service)
+        val missing = resolver.unimplementedAbstractMembers(cls).let { resolver.asSeenFromSupertypes(cls, it) }
         if (missing.isEmpty()) return null
         val text = ktFile.text
         val baseIndent = lineIndentOf(text, cls.textRange.startOffset)

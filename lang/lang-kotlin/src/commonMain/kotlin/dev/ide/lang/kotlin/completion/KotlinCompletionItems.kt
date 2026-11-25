@@ -149,11 +149,25 @@ internal object KotlinCompletionItems {
         val ret = (m.type as? KotlinType)?.toString()?.takeIf { it.isNotBlank() && it != "Unit" }
         val tail = ret?.let { ": $it" } ?: ""
         // A mutable property stays mutable: a `val` cannot override a `var` (VAR_OVERRIDDEN_BY_VAL).
-        if (m.kind != SymbolKind.METHOD) return (if (isVar) "override var " else "override val ") + m.name + tail
+        // A member EXTENSION keeps its receiver (`fun StyleScope.applyStyle()`): without it the stub declares a
+        // different member that overrides nothing.
+        val name = receiverPrefixOf(m) + m.name
+        if (m.kind != SymbolKind.METHOD) return (if (isVar) "override var " else "override val ") + name + tail
         val annotations = if (m.isComposable) "@Composable " else ""
         val suspend = if (m.isSuspend) "suspend " else ""
-        return annotations + "override ${suspend}fun${typeParameterListOf(m)} ${m.name}" +
+        return annotations + "override ${suspend}fun${typeParameterListOf(m)} $name" +
             paramListOf(m.signature, m.varargParamIndex) + tail
+    }
+
+    /** `Receiver.` for a member extension, `""` otherwise. A receiver still naming a type parameter (the
+     *  member's own `<T> T.x()`, or a class parameter the subtype left unbound) is written as that parameter;
+     *  a function-type receiver is parenthesized, as Kotlin requires. */
+    private fun receiverPrefixOf(m: KotlinSymbol): String {
+        val fqn = m.receiverTypeFqn ?: return ""
+        val text = m.receiverTypeParam
+            ?: KotlinType(fqn, m.receiverTypeArgs, nullable = m.receiverNullable).toString()
+        val nullable = if (m.receiverTypeParam != null && m.receiverNullable) "?" else ""
+        return if ("->" in text) "($text)$nullable." else "$text$nullable."
     }
 
     /** ` <T, R : Number>` for a generic member (note the leading space), or `""`. A `kotlin.Any` bound is
