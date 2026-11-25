@@ -57,6 +57,17 @@ object SwiftPackages {
         }
     }
 
+    /** The package's SwiftUI app targets: directories under `Sources/` without a `main.swift` whose code has an `@main` App. */
+    fun apps(pkg: Path): List<String> {
+        val sources = pkg.resolve(SOURCES)
+        if (!Files.isDirectory(sources)) return emptyList()
+        return Files.list(sources).use { dirs ->
+            dirs.filter { Files.isDirectory(it) && !Files.exists(it.resolve("main.swift")) }.collect(Collectors.toList())
+        }.filter { dir ->
+            SwiftPreviewSource.swiftFiles(dir).any { f -> runCatching { SwiftPreviewSource.appType(String(Files.readAllBytes(f))) }.getOrNull() != null }
+        }.map { it.fileName.toString() }.sorted()
+    }
+
     /** Every `.swift` file of [target], sorted so a Run compiles them in the same order each time. */
     fun sources(pkg: Path, target: String): List<Path> {
         val dir = pkg.resolve(SOURCES).resolve(target)

@@ -138,7 +138,7 @@ internal fun SwiftPreviewPane(ctx: EditorPreviewContext) {
  * 55 points), or bare for a size-that-fits preview.
  */
 @Composable
-private fun Device(frame: SwiftPreviewFrame, painter: SwiftPreviewPainter, stale: Boolean, onHit: (SwiftPreviewFrame.Op) -> Unit) {
+internal fun Device(frame: SwiftPreviewFrame, painter: SwiftPreviewPainter, stale: Boolean, onHit: (SwiftPreviewFrame.Op) -> Unit) {
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         val density = LocalDensity.current
         val availW = with(density) { maxWidth.toPx() }
@@ -229,7 +229,7 @@ private fun DrawScope.drawTransition(tr: SwiftPreviewFrame.Transition, old: Imag
 }
 
 @Composable
-private fun Notice(text: String) {
+internal fun Notice(text: String) {
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
     }

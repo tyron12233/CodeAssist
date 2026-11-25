@@ -13,6 +13,7 @@ capabilities = [
     "lang.server",
     "ui.editorLanguage",
     "ui.editorPreview",
+    "ui.overlay",
     "fs.read",
     "fs.write",
 ]

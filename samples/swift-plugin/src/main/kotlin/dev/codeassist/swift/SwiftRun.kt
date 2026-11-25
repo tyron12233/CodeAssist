@@ -38,7 +38,7 @@ class SwiftRunTaskProvider(private val toolchain: SwiftToolchain) : RunTaskProvi
     override fun tasksFor(module: Module): List<RunTaskSpec> {
         if (module.type.id != SwiftModuleType.ID) return emptyList()
         val pkg = Paths.get(module.dir.path)
-        return SwiftPackages.executables(pkg).map { target ->
+        return (SwiftPackages.executables(pkg) + SwiftPackages.apps(pkg)).map { target ->
             RunTaskSpec("$RUN_PREFIX${module.name}:$target", "Run $target", "run")
         }
     }
@@ -48,6 +48,10 @@ class SwiftRunTaskProvider(private val toolchain: SwiftToolchain) : RunTaskProvi
         if (!spec.id.startsWith(prefix)) return null
         val target = spec.id.removePrefix(prefix)
         val pkg = Paths.get(module.dir.path)
+        if (target in SwiftPackages.apps(pkg)) {
+            val task = OpenSwiftAppTask(TaskName(":${module.name}:run${target.replaceFirstChar(Char::uppercaseChar)}"), pkg, target, toolchain)
+            return RunAction("> Run $target", SingleTaskGraph(task))
+        }
         if (target !in SwiftPackages.executables(pkg)) return null
         val console = RunConsole(target)
         val task = RunSwiftTask(TaskName(":${module.name}:run${target.replaceFirstChar(Char::uppercaseChar)}"), pkg, target, toolchain, console)
@@ -175,3 +179,43 @@ internal class RunSwiftTask(
 
 /** `import SwiftUI` (also `@preconcurrency import SwiftUI`, `import struct SwiftUI.Color`) at the start of a line. */
 private val SWIFTUI_IMPORT = Regex("""(?m)^\s*(?:@\w+\s+)*import\s+(?:\w+\s+)?SwiftUI\b""")
+
+/**
+ * Run of a SwiftUI app target: asks the IDE's UI to show the app full screen ([SwiftAppRunner]), which runs it as the
+ * preview pane runs previews. A request file rather than a call, because a Run may execute in the IDE's build process
+ * while the UI lives in the main one; both see the plugin's data directory.
+ */
+internal class OpenSwiftAppTask(
+    override val name: TaskName,
+    private val pkg: Path,
+    private val target: String,
+    private val toolchain: SwiftToolchain,
+) : Task, AlwaysRun {
+    override val inputs: TaskInputs get() = TaskInputsImpl()
+    override val outputs: TaskOutputs get() = TaskOutputsImpl()
+
+    override suspend fun execute(ctx: TaskContext): TaskResult {
+        SwiftAppRequests.post(toolchain.home, pkg.resolve(SwiftPackages.SOURCES).resolve(target))
+        ctx.logger()("Opening $target full screen")
+        return TaskResult.Success
+    }
+}
+
+/** The file through which a Run asks the UI to open an app: the target's directory, and a stamp per request. */
+object SwiftAppRequests {
+    fun file(home: Path): Path = home.resolve("app-run").resolve("request")
+
+    fun post(home: Path, target: Path) {
+        val f = file(home)
+        Files.createDirectories(f.parent)
+        val tmp = f.resolveSibling("request.tmp")
+        Files.write(tmp, "$target\n${System.nanoTime()}\n".toByteArray())
+        Files.move(tmp, f, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+    }
+
+    /** The latest request: (target directory, stamp), or null. */
+    fun read(home: Path): Pair<Path, String>? = runCatching {
+        val lines = String(Files.readAllBytes(file(home))).lines()
+        Paths.get(lines[0]) to lines[1]
+    }.getOrNull()
+}
