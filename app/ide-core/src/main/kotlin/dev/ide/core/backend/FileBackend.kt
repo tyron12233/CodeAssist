@@ -93,6 +93,11 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         // sit one directory down. Show the real tree instead, which is what the user came for.
         if (ctx.services.modules().isEmpty()) return allFilesTree()
         val moduleDirs = ctx.services.modules().mapNotNull { ctx.services.moduleRoot(it)?.normalize() }.toSet()
+        // Directories the view draws as something else (a module, a content root): never listed as plain folders.
+        val claimed = HashSet<Path>().apply {
+            moduleDirs.forEach { add(pathKey(it)) }
+            ctx.services.modules().forEach { m -> ctx.services.treeRootsDetailed(m).forEach { add(pathKey(it.path)) } }
+        }
         val moduleNodes = ctx.services.modules().sortedBy { it.name }.map { module ->
             val moduleDir = ctx.services.moduleRoot(module)
             val moduleDirKey = moduleDir?.let(::pathKey)
@@ -118,7 +123,7 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
             if (moduleDirKey != null && moduleAsRoot != null) {
                 // The roots inside this one get the folders that lead to them; the rest of the directory is the
                 // root's own listing, minus those folders and `build/`, which the build outputs cover.
-                val toRoots = rootPathDirs(moduleDirKey, nested, module, buildDir, excluded = false, walked)
+                val toRoots = rootPathDirs(moduleDirKey, nested, module, buildDir, excluded = false, walked, claimed)
                 val drawn = toRoots.mapNotNullTo(HashSet()) { n -> n.dirPath?.let { pathKey(Paths.get(it)) } }
                 buildDir?.let { drawn.add(it) }
                 val listing = rootChildren(moduleAsRoot, module).filterNot { n ->
@@ -130,13 +135,18 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
                 // Real nested folders, as in IntelliJ's Project view: `src ▸ main ▸ kotlin`, with `test ▸ java`
                 // beside `main`. Only the folders that lead to a root are drawn; the module's own files (module.toml,
                 // build scripts, README) follow, and `module.toml` opens the Module Settings editor.
-                val toRoots = rootPathDirs(moduleDirKey, nested, module, buildDir, excluded = false, walked)
+                val toRoots = rootPathDirs(moduleDirKey, nested, module, buildDir, excluded = false, walked, claimed)
                 // The output folders the module declares (`bin/`, `obj/`) that no root above already draws.
                 val drawn = toRoots.mapNotNullTo(HashSet()) { n -> n.dirPath?.let { pathKey(Paths.get(it)) } }
                 val outputs = declaredOutputDirs(module)
                     .filter { dir -> pathKey(dir) !in drawn && roots.none { pathKey(dir).startsWith(pathKey(it.path)) } }
                     .map { excludedDirNode(it) }
-                children.addAll((toRoots + outputs).sortedBy { it.name })
+                // Every other folder in the module (`libs/`, one the user just made), as IntelliJ lists it. `build/`
+                // is left to the build-outputs node below.
+                outputs.forEach { n -> n.dirPath?.let { drawn.add(pathKey(Paths.get(it))) } }
+                buildDir?.let { drawn.add(it) }
+                val plain = plainDirs(moduleDirKey, module, claimed, skip = drawn)
+                children.addAll((toRoots + outputs + plain).sortedBy { it.name })
                 children.addAll(moduleRootFiles(moduleDirKey, module))
             }
             // An Android manifest in a folder the tree does not draw (a custom location) is still surfaced.
@@ -162,15 +172,18 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         // Files directly at the workspace root (README, LICENSE, top-level config) that aren't already shown
         // as a module's own root files — so a top-level README/doc is visible in the curated view, not only
         // under All Files. Skipped when a module IS the workspace root (its `moduleRootFiles` covers them).
-        val rootFiles = if (root.normalize() in moduleDirs) emptyList()
+        val rootIsModule = root.normalize() in moduleDirs
+        val rootFiles = if (rootIsModule) emptyList()
         else childPartition(root).second.map { fileNode(it, ctx.services.moduleForFile(it)) }
+        // Likewise the workspace root's own folders that are not modules (`docs/`, one the user just made).
+        val rootDirs = if (rootIsModule) emptyList() else plainDirs(pathKey(root), null, claimed)
         return TreeNode(
             id = "workspace",
             name = root.fileName?.toString() ?: "workspace",
             kind = NodeKind.Workspace,
             filePath = null,
             iconId = "workspace",
-            children = moduleNodes + rootFiles,
+            children = moduleNodes + rootDirs + rootFiles,
             dirPath = root.toString(),
         )
     }
@@ -189,6 +202,7 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         buildDir: Path?,
         excluded: Boolean,
         walked: MutableSet<Path>,
+        claimed: Set<Path>,
     ): List<TreeNode> {
         val byChild = LinkedHashMap<Path, MutableList<TreeRootInfo>>()
         for (info in roots) {
@@ -203,6 +217,11 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
             val (_, files) = childPartition(child)
             val fileNodes = files.map { f -> fileNode(f, module).let { if (derived) it.copy(styleHint = "excluded") else it } }
             val outputs = if (child == buildDir) buildOutputChildren(module) else emptyList()
+            // The folders here that lead to no root (`src/shared`, a new one), drawn as plain folders. Not inside
+            // output, whose bulk the build-outputs listing already summarizes.
+            val plain = if (derived) emptyList() else childPartition(child).first
+                .filter { d -> under.none { pathKey(it.path).startsWith(pathKey(d)) } }
+                .mapNotNull { plainDirNode(it, module, claimed) }
             TreeNode(
                 id = "dir:$child",
                 name = child.fileName.toString(),
@@ -210,7 +229,8 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
                 filePath = null,
                 iconId = if (derived) "build-output"
                 else ctx.services.iconFor(IconTarget.Directory(child.fileName.toString(), emptySet())) ?: "folder",
-                children = (rootPathDirs(child, under, module, buildDir, derived, walked) + outputs).sortedBy { it.name } + fileNodes,
+                children = (rootPathDirs(child, under, module, buildDir, derived, walked, claimed) + outputs + plain)
+                    .sortedBy { it.name } + fileNodes,
                 dirPath = child.toString(),
                 styleHint = if (derived) "excluded" else null,
             )
@@ -285,6 +305,35 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
     private fun excludedChildren(dir: Path): List<TreeNode> {
         val (dirs, files) = childPartition(dir)
         return dirs.map { excludedDirNode(it) } + files.map { fileNode(it, ctx.services.moduleForFile(it)).copy(styleHint = "excluded") }
+    }
+
+    /** The plain folders directly in [dir] (see [plainDirNode]), minus the paths in [skip]. */
+    private fun plainDirs(dir: Path, module: Module?, claimed: Set<Path>, skip: Set<Path> = emptySet()): List<TreeNode> =
+        childPartition(dir).first.filter { pathKey(it) !in skip }.mapNotNull { plainDirNode(it, module, claimed) }
+
+    /**
+     * A folder outside every content root, drawn as itself with all it holds, so a folder the user creates (or
+     * copies in) anywhere shows up. Null for one the view draws as something else ([claimed]: a module or a
+     * root), and for one that only leads to those, which would otherwise be an empty-looking duplicate. `build/`
+     * and declared output folders are dimmed as output. [module] owns the files; null looks each one up.
+     */
+    private fun plainDirNode(dir: Path, module: Module?, claimed: Set<Path>): TreeNode? {
+        val key = pathKey(dir)
+        if (key in claimed) return null
+        if (dir.fileName?.toString() == "build" || isOutputDir(dir)) return excludedDirNode(dir)
+        val (_, files) = childPartition(dir)
+        val dirs = plainDirs(dir, module, claimed)
+        if (dirs.isEmpty() && files.isEmpty() && claimed.any { it.startsWith(key) }) return null
+        val name = dir.fileName.toString()
+        return TreeNode(
+            id = "dir:$dir",
+            name = name,
+            kind = NodeKind.Folder,
+            filePath = null,
+            iconId = ctx.services.iconFor(IconTarget.Directory(name, emptySet())) ?: "folder",
+            children = dirs + files.map { fileNode(it, module ?: ctx.services.moduleForFile(it)) },
+            dirPath = dir.toString(),
+        )
     }
 
     /** The directory [dir] and everything under it as derived output: real folders, dimmed, never compacted. */

@@ -1695,6 +1695,10 @@ class KotlinSymbolService(
      *  extensions [membersOf] adds for the receiver. What a subclass can override or must implement. */
     fun ownAndInheritedMembers(typeFqn: String): List<KotlinSymbol> = ownAndInheritedCached(typeFqn, emptyList())
 
+    /** [ownAndInheritedMembers] as a supertype written with [typeArgs] sees them (`CustomStyle<StyleScope>`). */
+    fun ownAndInheritedMembers(typeFqn: String, typeArgs: List<TypeRef>): List<KotlinSymbol> =
+        ownAndInheritedCached(typeFqn, typeArgs)
+
     /**
      * Members of [typeFqn] whose name starts with [namePrefix] — the completion path. Pushing the prefix down
      * matters with large classpaths (Compose): a type's extension set (esp. the `kotlin.Any` bucket, which
@@ -2468,6 +2472,13 @@ class KotlinSymbolService(
 
     /** The name of the callable's own type parameter its extension receiver IS (`fun <T> T.twice()` -> `T`),
      *  or null when the receiver is a concrete type. */
+    /** The upper bound of [ownerFqn]'s type parameter [name] as an FQN, `kotlin.Any` when it has none. */
+    private fun classTypeParamBoundFqn(ownerFqn: String?, name: String): String {
+        val cls = ownerFqn?.let { model().classByFqn[it] } ?: return "kotlin.Any"
+        val bound = cls.typeParameterBounds.getOrNull(cls.typeParameterNames.indexOf(name))?.takeIf { it.isNotBlank() }
+        return bound?.let { resolveTypeName(it, cls.ctx, headerScopeOwner(cls.fqn)) } ?: "kotlin.Any"
+    }
+
     private fun sourceReceiverTypeParam(rc: RawCallable): String? {
         val text = rc.receiverText ?: return null
         val bare = text.substringBefore('<').removeSuffix("?").trim()
@@ -3498,6 +3509,13 @@ class KotlinSymbolService(
         resultBindings: Map<String, TypeRef> = bindings,
     ): KotlinSymbol {
         if (bindings.isEmpty()) return s
+        // A member extension whose receiver is the declaring CLASS's type parameter (`fun S.applyStyle()` in
+        // `fun interface CustomStyle<S>`) takes the receiver the subtype binds it to (`Style : CustomStyle<StyleScope>`
+        // → `StyleScope.applyStyle()`). The callable's OWN receiver parameter (`fun <T> T.also()`) stays as it is:
+        // the call site binds that one from the actual receiver. Only a MEMBER can be on a class's parameter, and a
+        // property does not list its own type parameters, so the owner check keeps `val <T> T.javaClass` out.
+        val boundReceiver = s.receiverTypeParam?.takeIf { s.owner != null && it !in s.typeParameters }
+            ?.let { bindings[it] as? KotlinType }?.takeIf { !it.isTypeParameter }
         return KotlinSymbol(
             name = s.name,
             kind = s.kind,
@@ -3505,7 +3523,7 @@ class KotlinSymbolService(
             owner = s.owner,
             modifiers = s.modifiers,
             origin = s.origin,
-            receiverTypeFqn = s.receiverTypeFqn,
+            receiverTypeFqn = boundReceiver?.qualifiedName ?: s.receiverTypeFqn,
             signature = s.signature,
             typeParameters = s.typeParameters,
             typeParameterBounds = s.typeParameterBounds,
@@ -3518,8 +3536,8 @@ class KotlinSymbolService(
             },
             paramTypes = s.paramTypes.map { it?.let { p -> substitute(p, bindings) } },
             paramNames = s.paramNames,
-            receiverTypeArgs = s.receiverTypeArgs.map { substitute(it, bindings) },
-            receiverTypeParam = s.receiverTypeParam,
+            receiverTypeArgs = boundReceiver?.typeArguments ?: s.receiverTypeArgs.map { substitute(it, bindings) },
+            receiverTypeParam = if (boundReceiver != null) null else s.receiverTypeParam,
             packageName = s.packageName,
             declaringClassFqn = s.declaringClassFqn,
             isInternal = s.isInternal,
@@ -5304,8 +5322,14 @@ class KotlinSymbolService(
                 ?: inferReturnFromBody(rc, ownerFqn),
             tps,
         )
-        val receiverFqn = sourceReceiverFqn(rc, ownerFqn)
-        val receiverTypeParam = sourceReceiverTypeParam(rc)
+        // A member extension on the declaring class's own type parameter (`fun interface CustomStyle<S : Scope> {
+        // fun S.applyStyle() }`) is keyed under that parameter's bound and remembers its name, the way @Metadata
+        // decodes it, so a subtype's binding (`Style : CustomStyle<StyleScope>`) reaches the receiver.
+        val classReceiverParam = rc.receiverText?.substringBefore('<')?.removeSuffix("?")?.trim()
+            ?.takeIf { it in ownerTypeParams && it !in rc.typeParameterNames }
+        val receiverFqn = if (classReceiverParam != null) classTypeParamBoundFqn(ownerFqn, classReceiverParam)
+            else sourceReceiverFqn(rc, ownerFqn)
+        val receiverTypeParam = classReceiverParam ?: sourceReceiverTypeParam(rc)
         // The receiver's own type arguments (`List<T>` in `fun <T> List<T>.second(): T`), so the actual
         // receiver's arguments bind them ([bindExtensionReceiver]); without them `l.second()` typed as a bare `T`.
         val receiverTypeArgs = if (receiverTypeParam == null && rc.receiverText?.contains('<') == true)

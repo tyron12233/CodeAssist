@@ -46,9 +46,11 @@ fun KotlinResolver.overridableMembersAt(offset: Int): List<KotlinSymbol> {
     val seen = HashSet<String>()
     val out = ArrayList<KotlinSymbol>()
     for (fqn in superFqns) {
-        service.membersOf(fqn, typeArgs[fqn].orEmpty(), null).filterIsInstance<KotlinSymbol>().forEach { m ->
+        // Declared and inherited members only, MEMBER extensions included (`fun S.applyStyle()`): the receiver's
+        // top-level extensions are not members, and there is nothing to override in them.
+        service.ownAndInheritedMembers(fqn, typeArgs[fqn].orEmpty()).forEach { m ->
             if (isOverridable(m) && m.name !in declared && seen.add(
-                    m.name + "#" + (m.signature ?: "")
+                    (m.receiverTypeFqn?.let { "$it." } ?: "") + m.name + "#" + (m.signature ?: "")
                 )
             ) out += m
         }
@@ -58,7 +60,6 @@ fun KotlinResolver.overridableMembersAt(offset: Int): List<KotlinSymbol> {
 
 internal fun KotlinResolver.isOverridable(m: KotlinSymbol): Boolean {
     if (m.kind != SymbolKind.METHOD && m.kind != SymbolKind.FIELD) return false
-    if (m.isExtension) return false
     if (Modifier.STATIC in m.modifiers || Modifier.PRIVATE in m.modifiers || Modifier.FINAL in m.modifiers) return false
     return true
 }
@@ -251,6 +252,22 @@ internal fun KotlinResolver.isFinalMember(m: KotlinSymbol): Boolean {
  */
 fun KotlinResolver.unimplementedAbstractMembers(cls: KtClassOrObject): List<KotlinSymbol> =
     unimplementedFrom(cls, resolvedSupertypeMembers(cls) ?: return emptyList())
+
+/** [members] of [cls]'s supertype closure as the class's supertype list instantiates them: `: CustomStyle<StyleScope>`
+ *  turns `fun S.applyStyle()` into `fun StyleScope.applyStyle()` and `: Comparable<Foo>` types `compareTo`'s
+ *  parameter as `Foo`. For generating override stubs; a member no written supertype reaches is kept as given. */
+fun KotlinResolver.asSeenFromSupertypes(cls: KtClassOrObject, members: List<KotlinSymbol>): List<KotlinSymbol> {
+    val seen = HashMap<String, KotlinSymbol>()
+    for (e in cls.superTypeListEntries) {
+        val text = e.typeReference?.text ?: continue
+        if ('<' !in text) continue
+        val type = runCatching { service.typeFromText(text, fileContext) }.getOrNull() ?: continue
+        if (type.typeArguments.isEmpty()) continue
+        service.ownAndInheritedMembers(type.qualifiedName, type.typeArguments).forEach { seen.putIfAbsent(memberKey(it), it) }
+    }
+    if (seen.isEmpty()) return members
+    return members.map { m -> seen[memberKey(m)]?.takeIf { it.name == m.name } ?: m }
+}
 
 internal fun KotlinResolver.unimplementedFrom(
     cls: KtClassOrObject,

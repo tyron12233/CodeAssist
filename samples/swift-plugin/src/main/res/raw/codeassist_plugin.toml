@@ -1,0 +1,20 @@
+[plugin]
+id = "dev.codeassist.swift"
+name = "Swift"
+version = "0.3.0"
+apiVersion = 4
+description = "Swift on the device, with a bundled Swift 6.4.3 toolchain for Android (one plugin APK per ABI). Run compiles and runs a Swift package's executable in the Run console, through the compiler's JIT, with the standard library and Foundation. A Swift Console App template starts one. Files with #Preview show their SwiftUI views live in the editor's preview pane, drawn by CodeAssist's own SwiftUI engine to look as they do on an iPhone (with an open font in place of Apple's). Completion, errors as you type, hover and go to definition come from Apple's sourcekit-lsp, run on the device."
+entryPoints = ["dev.codeassist.swift.SwiftPlugin"]
+uiEntryPoints = ["dev.codeassist.swift.SwiftUiPlugin"]
+capabilities = [
+    "model.moduleType",
+    "build.runTask",
+    "build.task",
+    "lang.server",
+    "ui.editorLanguage",
+    "ui.editorPreview",
+    "fs.read",
+    "fs.write",
+]
+# 3.49.0: the UI facet's EditorLanguage is SPI 3.8.0's constructor, which older IDEs lack.
+minHostVersion = "3.49.0"

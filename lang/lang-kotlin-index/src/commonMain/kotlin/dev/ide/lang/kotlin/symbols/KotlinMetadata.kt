@@ -224,12 +224,12 @@ object KotlinMetadata {
         // constructors, which is the order the members were appended in before and which the consumers see.
         for (declaration in info.declarations) {
             if (declaration.kind != KotlinDeclaration.Kind.FUNCTION) continue
-            funcSymbol(declaration, ctx, owner, classTp, classFqn, composable)
+            funcSymbol(declaration, ctx, owner, classTp, classFqn, composable, info.typeParameters)
                 .let { if (it.isExtension) ext += it else own += it }
         }
         for (declaration in info.declarations) {
             if (declaration.kind != KotlinDeclaration.Kind.PROPERTY) continue
-            propSymbol(declaration, ctx, owner, classTp, classFqn)
+            propSymbol(declaration, ctx, owner, classTp, classFqn, info.typeParameters)
                 .let { if (it.isExtension) ext += it else own += it }
         }
         for (declaration in info.declarations) {
@@ -342,10 +342,13 @@ object KotlinMetadata {
         classTp: Map<Int, String>,
         declaringFqn: String?,
         composable: Set<String>,
+        /** The declaring class's type parameters: a member extension's receiver may be one of them
+         *  (`fun interface CustomStyle<S> { fun S.applyStyle() }`). */
+        classParams: List<KotlinTypeParameter> = emptyList(),
     ): KotlinSymbol {
         val tp = classTp + declaration.typeParameters.associate { it.id to it.name }
         val receiver = declaration.receiverType
-        val (recvFqn, recvParam) = receiver?.let { receiverInfo(it, declaration.typeParameters) }
+        val (recvFqn, recvParam) = receiver?.let { receiverInfo(it, declaration.typeParameters + classParams) }
             ?: (null to null)
         val params = declaration.parameters.joinToString(", ") { vp ->
             "${vp.name}: ${typeText(vp.varargElementType ?: vp.type, tp)}"
@@ -386,10 +389,11 @@ object KotlinMetadata {
         owner: KotlinSymbol?,
         classTp: Map<Int, String>,
         declaringFqn: String?,
+        classParams: List<KotlinTypeParameter> = emptyList(),
     ): KotlinSymbol {
         val tp = classTp + declaration.typeParameters.associate { it.id to it.name }
         val receiver = declaration.receiverType
-        val (recvFqn, recvParam) = receiver?.let { receiverInfo(it, declaration.typeParameters) }
+        val (recvFqn, recvParam) = receiver?.let { receiverInfo(it, declaration.typeParameters + classParams) }
             ?: (null to null)
         return KotlinSymbol(
             name = declaration.name,

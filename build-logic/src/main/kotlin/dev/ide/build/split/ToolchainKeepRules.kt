@@ -78,6 +78,9 @@ class ToolchainKeepRules(private val program: Map<String, ProgramClass>) {
     /** Keeps the field [name]:[desc] on the program class in [owner]'s hierarchy that declares it. */
     private fun keepField(owner: String, name: String, desc: String) {
         keepClass(owner)
+        // The toolchain's reference spells the field's TYPE by name too, and R8 never rewrites it: a renamed type
+        // leaves no field with that descriptor (NoSuchFieldError).
+        keepDescriptor(desc)
         val declaring = findDeclaring(owner) { "$name:$desc" in it.fields } ?: return
         member(declaring, "${javaType(Type.getType(desc))} $name")
     }
@@ -85,6 +88,11 @@ class ToolchainKeepRules(private val program: Map<String, ProgramClass>) {
     /** Keeps the method [name][desc] on the program class in [owner]'s hierarchy that declares it. */
     private fun keepMethod(owner: String, name: String, desc: String) {
         keepClass(owner)
+        // Likewise every class in the signature. Keeping only the member let R8 rename its return type: the kept
+        // `PersistentSet.builder()` came out as `()Lq09;` while the toolchain's call still said
+        // `()Lkotlinx/collections/immutable/PersistentSet$Builder;`, and kotlinc died with NoSuchMethodError on
+        // the first `a || b` condition it analyzed (FIR's LogicSystem.toMutable).
+        keepDescriptor(desc)
         val declaring = findDeclaring(owner) { "$name$desc" in it.methods } ?: return
         member(declaring, methodRule(name, desc))
     }

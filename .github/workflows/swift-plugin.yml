@@ -1,0 +1,201 @@
+name: Swift plugin release
+
+# Builds the Swift plugin (samples/swift-plugin) as one release-signed APK per ABI and attaches them to a CodeAssist
+# release as CodeAssist-Swift-Plugin-<version>-<abi>.apk.
+#
+# The plugin carries a Swift toolchain that runs ON the device and CodeAssist's SwiftUI engine built for it; neither is
+# in the repository, so per ABI:
+#   1. toolchain (in the swift:6.4.3 image, the device compiler's own release): tools/swift-sdk/stage_swift.py stages
+#      Termux's Swift from the packages pinned in packages.lock (our swift-sdk-<version> mirror first), then
+#      build_swiftui.sh builds libSwiftUI.so and the SwiftUI module against it
+#   2. plugin: assembleRelease -Pswift.abi=<abi> packages them
+#
+# Runs when a release is published (tags v*), and by hand: with a tag it attaches to that release, without one it only
+# builds, and the APKs are this run's artifacts. By hand it builds the branch it was started on.
+#
+# Signing uses the IDE's upload key, from the repository secrets RELEASE_KEYSTORE_BASE64, RELEASE_STORE_PASSWORD,
+# RELEASE_KEY_ALIAS and RELEASE_KEY_PASSWORD. This workflow never runs for a pull request.
+
+on:
+  release:
+    types: [ published ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach the APKs to (e.g. v3.50.0); empty to only build
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+env:
+  JAVA_VERSION: "25"
+  REF: ${{ github.event.release.tag_name || github.ref }}
+
+concurrency:
+  group: swift-plugin-${{ github.event.release.tag_name || inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  toolchain:
+    name: Toolchain ${{ matrix.abi }}
+    # An app release only: tool mirrors (swift-sdk-*, dart-sdk-*, ...) are prereleases too.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
+    runs-on: ubuntu-latest
+    container: swift:6.4.3
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [ arm64-v8a, armeabi-v7a, x86_64 ]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF }}
+
+      # The image has the compiler and ld.lld; the stager needs Python.
+      - name: Install Python
+        run: apt-get update -qq && apt-get install -y -qq python3 >/dev/null
+
+      - name: Stage the ${{ matrix.abi }} toolchain
+        run: python3 -I tools/swift-sdk/stage_swift.py ${{ matrix.abi }}
+
+      - name: Build the SwiftUI engine for ${{ matrix.abi }}
+        env:
+          SWIFTUI_IN_CONTAINER: "1"
+        run: bash tools/swift-sdk/build_swiftui.sh ${{ matrix.abi }}
+
+      - name: Pack
+        run: tar -C tools/swift-sdk/build/out -cf swift-${{ matrix.abi }}.tar ${{ matrix.abi }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: swift-${{ matrix.abi }}
+          path: swift-${{ matrix.abi }}.tar
+          if-no-files-found: error
+          retention-days: 7
+
+  plugin:
+    name: Release APKs
+    needs: [ toolchain ]
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')) }}
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: swift-*
+          path: dl
+          merge-multiple: true
+
+      - name: Unpack the toolchains
+        run: |
+          mkdir -p tools/swift-sdk/build/out
+          for t in dl/swift-*.tar; do tar -C tools/swift-sdk/build/out -xf "$t"; done
+          ls tools/swift-sdk/build/out
+          test -f tools/swift-sdk/build/out/arm64-v8a/jniLibs/arm64-v8a/libSwiftUI.so
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 platforms;android-36.1 build-tools;36.0.0"
+
+      - name: Disable Kotlin incremental compilation (CI)
+        run: |
+          mkdir -p ~/.gradle
+          echo "kotlin.incremental=false" >> ~/.gradle/gradle.properties
+
+      - name: Run the plugin's unit tests
+        run: ./gradlew :samples:swift-plugin:testDebugUnitTest --console=plain --stacktrace
+
+      # The keystore is written outside the checkout and only for the build step's lifetime. One build per ABI: each
+      # carries its own toolchain assets, which an ABI split cannot separate.
+      - name: Build the release APKs
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          [[ -n "$RELEASE_KEYSTORE_BASE64" ]] || { echo "RELEASE_KEYSTORE_BASE64 is not set: the APKs would be unsigned" >&2; exit 1; }
+          export RELEASE_STORE_FILE="$RUNNER_TEMP/upload.jks"
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RELEASE_STORE_FILE"
+          trap 'rm -f "$RELEASE_STORE_FILE"' EXIT
+          for abi in $(ls tools/swift-sdk/build/out); do
+            ./gradlew :samples:swift-plugin:assembleRelease -Pswift.abi="$abi" --console=plain --stacktrace
+            mkdir -p built && cp samples/swift-plugin/build/outputs/apk/release/swift-plugin-"$abi"-release.apk built/
+          done
+
+      - name: Check and name the APKs
+        id: apks
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' samples/swift-plugin/src/main/res/raw/codeassist_plugin.toml | head -1)"
+          [[ -n "$version" ]] || { echo "no version in codeassist_plugin.toml" >&2; exit 1; }
+          mkdir -p dist
+          abis=""
+          for apk in built/swift-plugin-*-release.apk; do
+            abi="$(basename "$apk")"; abi="${abi#swift-plugin-}"; abi="${abi%-release.apk}"
+            "$apksigner" verify "$apk"
+            unzip -l "$apk" "lib/$abi/libswiftfrontend.so" "lib/$abi/libSwiftUI.so" >/dev/null \
+              || { echo "$apk lacks the compiler or the SwiftUI engine for $abi" >&2; exit 1; }
+            cp "$apk" "dist/CodeAssist-Swift-Plugin-$version-$abi.apk"
+            abis="$abis $abi"
+          done
+          ls -la dist
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "abis=${abis# }" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: swift-plugin-release
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach to ${{ env.TAG }}
+        if: env.TAG != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.apks.outputs.version }}
+          ABIS: ${{ steps.apks.outputs.abis }}
+        run: |
+          gh release upload "$TAG" dist/*.apk --clobber
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG"
+          json="{"
+          for abi in $ABIS; do
+            f="dist/CodeAssist-Swift-Plugin-$VERSION-$abi.apk"
+            json="$json\"$abi\": {\"url\": \"$base/$(basename "$f")\", \"size\": $(stat -c %s "$f")},"
+          done
+          json="${json%,}}"
+          arm64="dist/CodeAssist-Swift-Plugin-$VERSION-arm64-v8a.apk"
+          {
+            echo "Attached to [$TAG](https://github.com/${GITHUB_REPOSITORY}/releases/tag/$TAG)."
+            echo
+            echo "Catalog row (Supabase SQL editor; insert the first time, update after):"
+            echo
+            echo '```sql'
+            echo "update public.plugin_catalog set"
+            echo "  version = '$VERSION',"
+            echo "  download_url = '$base/$(basename "$arm64")',"
+            echo "  size_bytes = $(stat -c %s "$arm64"),"
+            echo "  page_url = 'https://github.com/${GITHUB_REPOSITORY}/releases/tag/$TAG',"
+            echo "  abi_downloads = '$json'::jsonb,"
+            echo "  updated_at = now()"
+            echo "where id = 'dev.codeassist.swift';"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

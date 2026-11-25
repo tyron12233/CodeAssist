@@ -1,0 +1,62 @@
+# The Termux packages the Swift plugin's toolchain is staged from, pinned: <arch> <package> <version> <pool path> <sha256>
+#
+# Termux serves only the latest version of a package, so these disappear from packages.termux.dev when Termux moves
+# on. Every one is mirrored, under its pool file name with ':' made '.', on the swift-sdk-<swift version> prerelease
+# of this repository, and fetch-swift-android.sh tries the mirror first. The checksum decides either way.
+#
+# `any` is a package whose staged part is the same for every ABI (clang: only its builtin headers are used).
+aarch64 swift 6.4.3 pool/main/s/swift/swift_6.4.3_aarch64.deb 1cde0ab563952b1fefc63b74191050353be7c922bf0e5dc9b54c422ff9e348b0
+aarch64 swift-sdk-aarch64 6.4.3 pool/main/s/swift-sdk-aarch64/swift-sdk-aarch64_6.4.3_all.deb 67985f33cab80a254ffeb15d0211c4eb297a014e3c0b1a4056d26e284f8fb9d3
+aarch64 swift-runtime-aarch64 6.4.3 pool/main/s/swift-runtime-aarch64/swift-runtime-aarch64_6.4.3_all.deb 016976ae3bf59c823fb605cb249315bef33c1631d7cddaca6dac825e2df4d1dc
+aarch64 libc++ 30 pool/main/libc/libc++/libc++_30_aarch64.deb 53d0b84a7ba7459024257cb94d5b136fe13ef858567f65a8064b35950799f2ca
+aarch64 libuuid 2.42.4 pool/main/libu/libuuid/libuuid_2.42.4_aarch64.deb ecbaab0afd7f4c2c84d687c8e4ba46794d71001866efc261a7015f663eec4e85
+aarch64 libandroid-execinfo 0.1-3 pool/main/liba/libandroid-execinfo/libandroid-execinfo_0.1-3_aarch64.deb 725dd2c6da7fc96e860fcc928e18aa9fb0e85e0bdcaf4f8ce0f0654ca6860fc2
+aarch64 zstd 1.6.0 pool/main/z/zstd/zstd_1.6.0_aarch64.deb c487af7d68664585cc5187330acc7a7a054614cb742fcbb1d8a62e214bb3368a
+aarch64 libdispatch 1:6.4.2 pool/main/libd/libdispatch/libdispatch_1:6.4.2_aarch64.deb ebaf4a1ae7558a5813c9beecc42e5a23bd7086952c379c03696a462f2b6208ee
+aarch64 libblocksruntime 1:6.4.2 pool/main/libb/libblocksruntime/libblocksruntime_1:6.4.2_aarch64.deb 53700bec5950c33a2b13572ab0afdb1dc6cc893e98c4019563764e52596d8554
+aarch64 libandroid-spawn 0.3 pool/main/liba/libandroid-spawn/libandroid-spawn_0.3_aarch64.deb 7988fa788ef48ab5da9660443905a2e4099ac36221739d72f5c39acc644b4d1c
+aarch64 libandroid-posix-semaphore 0.1-4 pool/main/liba/libandroid-posix-semaphore/libandroid-posix-semaphore_0.1-4_aarch64.deb 0efa8677a0166315ba4e685863712eba0ca0a1732827492f38226e2723730c7a
+aarch64 ndk-sysroot 30 pool/main/n/ndk-sysroot/ndk-sysroot_30_aarch64.deb 73502f9b04fce210c430c83bf9ae2b8e332ba5c319f3eb94a61ba5cef090f787
+aarch64 libandroid-glob 0.6-3 pool/main/liba/libandroid-glob/libandroid-glob_0.6-3_aarch64.deb 2276ae8adedf0db76c2f4ffc94cc4cceb2f4f5d78e021b54e2e046d1233e7826
+aarch64 libiconv 1.19.1 pool/main/libi/libiconv/libiconv_1.19.1_aarch64.deb a1c6323eff4f660e16ae6f5832356444b3269c19a4f61146355a49e7c4be5ed1
+aarch64 libandroid-sysv-semaphore 0.1-1 pool/main/liba/libandroid-sysv-semaphore/libandroid-sysv-semaphore_0.1-1_aarch64.deb c3369a92814690d56278d0455ae6df7bf2ad7678ae9543e86d1e3aa433937c69
+aarch64 libandroid-shmem 0.7 pool/main/liba/libandroid-shmem/libandroid-shmem_0.7_aarch64.deb 0da3a24d558b93c92bcf8d611e0826a99ff96e396b148e6cdf33b47c47c57ff6
+aarch64 zlib 1.4 pool/main/z/zlib/zlib_1.4_aarch64.deb e3027565ae50bcd8ba5113c988b589754ae192c9cc3e6afbe3e4ed7c06b2598e
+any clang 21.1.8-3 pool/main/c/clang/clang_21.1.8-3_aarch64.deb 9fb565013b96ce10abd8f8f217aaebb48f72873f53acbf8886329bcea841a21c
+arm swift 6.4.3 pool/main/s/swift/swift_6.4.3_arm.deb ba926fecb156b4d45499e4dc9b6ddc043b799176bf8be93c8d0e493f881ca9a2
+arm swift-sdk-arm 6.4.3 pool/main/s/swift-sdk-arm/swift-sdk-arm_6.4.3_all.deb 4efcaee3ecc9cf8341b17a19acea7a225b99ca3f0b96b605822ede70c542a5a7
+arm swift-runtime-arm 6.4.3 pool/main/s/swift-runtime-arm/swift-runtime-arm_6.4.3_all.deb 7cd47efe5a14f659416c75b706d74d27271e8380d684238dc17fdd2650c53393
+arm libc++ 30 pool/main/libc/libc++/libc++_30_arm.deb 5d4e4dfea77402c0b3ee05b6cb4c73108bb69cc149e2d3a73d4ec6ee6919fd16
+arm libuuid 2.42.4 pool/main/libu/libuuid/libuuid_2.42.4_arm.deb d1e5aa6560b7887620dda4ea6addc22e568f960e2ed66e5aabdb4a5ad8075a81
+arm libandroid-execinfo 0.1-3 pool/main/liba/libandroid-execinfo/libandroid-execinfo_0.1-3_arm.deb 9d78f90e7e8f9e02edb176b40acd288c00e4d4c25f22c068656a2e0da71fdd38
+arm zstd 1.6.0 pool/main/z/zstd/zstd_1.6.0_arm.deb e74a53b61dadc85844112b401c6999f79aa3d42b970f16dcdc1085c430076251
+arm libdispatch 1:6.4.2 pool/main/libd/libdispatch/libdispatch_1:6.4.2_arm.deb 57fd0734c673389229dc8d3c6cb9c374fe2222edcc7866c676e93d065bd9dda1
+arm libblocksruntime 1:6.4.2 pool/main/libb/libblocksruntime/libblocksruntime_1:6.4.2_arm.deb a492879624745efe8a1c85e1eab278f0ea3169fd55999be53d75d40bcdc252e6
+arm libandroid-spawn 0.3 pool/main/liba/libandroid-spawn/libandroid-spawn_0.3_arm.deb 76b340753822f4ebf45855a3d40481ed5690feda920cd99aed029e3c1c1957c8
+arm libandroid-posix-semaphore 0.1-4 pool/main/liba/libandroid-posix-semaphore/libandroid-posix-semaphore_0.1-4_arm.deb 317f87d9a3e127bc9d694a558dccac7ff8080f36cbcc33d9c478819f029b6055
+arm ndk-sysroot 30 pool/main/n/ndk-sysroot/ndk-sysroot_30_arm.deb b4ecafce23af5bc1092e17b059c8eab0fff302eacf68366739294fca5a1414a6
+arm libandroid-glob 0.6-3 pool/main/liba/libandroid-glob/libandroid-glob_0.6-3_arm.deb a499b313eac0cd712d6196947649cd4390c5c5a0ac5f4b6f52d95b49367faf96
+arm libiconv 1.19.1 pool/main/libi/libiconv/libiconv_1.19.1_arm.deb d0c21741ba47c89d8a86c23cf434376b116d4c0c27834cf35cbe4e35f7523132
+arm libandroid-sysv-semaphore 0.1-1 pool/main/liba/libandroid-sysv-semaphore/libandroid-sysv-semaphore_0.1-1_arm.deb 37df180bde1e687c45e82412e42324aabcb8485ea03a1e73c5a32111f627dc13
+arm libandroid-shmem 0.7 pool/main/liba/libandroid-shmem/libandroid-shmem_0.7_arm.deb 5832fd11dca9be2a288dd8fbc2b2799b289c812c7a8764f1f8234c425aa64ce5
+arm zlib 1.4 pool/main/z/zlib/zlib_1.4_arm.deb a04f6ce4f36749b49a7ee0432e6fe3f235bdde95ed53f6b9f86138d58fbdc816
+x86_64 swift 6.4.3 pool/main/s/swift/swift_6.4.3_x86_64.deb f9b8cb1f300b4a826df22f6b093e83760c20735da6bb216b2d50d53ef6a8e7bb
+x86_64 swift-sdk-x86-64 6.4.3 pool/main/s/swift-sdk-x86-64/swift-sdk-x86-64_6.4.3_all.deb 1f5bdc585820604d0d1af3cc7cd58b6b91d63e90896e43559fc31047c78c2e5d
+x86_64 swift-runtime-x86-64 6.4.3 pool/main/s/swift-runtime-x86-64/swift-runtime-x86-64_6.4.3_all.deb a4793d7869f022b71f2ff376aedee3ed629b942e7300ddd6eb0495ad00bf75f8
+x86_64 libc++ 30 pool/main/libc/libc++/libc++_30_x86_64.deb c9bcd9a8067a19c9c0e4893a72d314a2e37d6b67ce8dd05c67b9bbacad044b4f
+x86_64 libuuid 2.42.4 pool/main/libu/libuuid/libuuid_2.42.4_x86_64.deb 0eed64e2cb1cb22e214e29e25c73e278a48b216042884253dc29896027a7c3d8
+x86_64 libandroid-execinfo 0.1-3 pool/main/liba/libandroid-execinfo/libandroid-execinfo_0.1-3_x86_64.deb 348582b47b4b6dec8c13147437d8bd93d029239bc95f30635074cad08efb6220
+x86_64 zstd 1.6.0 pool/main/z/zstd/zstd_1.6.0_x86_64.deb ca9b36002f306ce1f442867f778276eb9c3b7ce81e5f9ef61c6e03efbaf6b041
+x86_64 libdispatch 1:6.4.2 pool/main/libd/libdispatch/libdispatch_1:6.4.2_x86_64.deb 9a5c71054dcf02986bdd7fd7b0ae14d7c2dfc503ffec8d8c32ca1e670e7ba90f
+x86_64 libblocksruntime 1:6.4.2 pool/main/libb/libblocksruntime/libblocksruntime_1:6.4.2_x86_64.deb 7b696c93ee4bdc931124fe66e5f0605e02faf295b71049033f2d3d4b0dad916b
+x86_64 libandroid-spawn 0.3 pool/main/liba/libandroid-spawn/libandroid-spawn_0.3_x86_64.deb 778b109cb78719faaae0643eee943146a5ab1056bf607036c5ea258636d11868
+x86_64 libandroid-posix-semaphore 0.1-4 pool/main/liba/libandroid-posix-semaphore/libandroid-posix-semaphore_0.1-4_x86_64.deb 4bde3f8bc00fa59761544593f0606a05e4b449801f1c79038c42ce66988d0eb0
+x86_64 ndk-sysroot 30 pool/main/n/ndk-sysroot/ndk-sysroot_30_x86_64.deb a6e21596cf15b35e87d1238b8b81dc3676ec065b9cac98ffbf8e987f5e3c7e50
+x86_64 libandroid-glob 0.6-3 pool/main/liba/libandroid-glob/libandroid-glob_0.6-3_x86_64.deb 33b5d2ce934e89d50363e7ea267cea697da937d14de9fcea78cc7271956ef86e
+x86_64 libiconv 1.19.1 pool/main/libi/libiconv/libiconv_1.19.1_x86_64.deb 3eb0c454676ad24d26c79601721b2eb3f9485c611ad0179fb86b17229344f46d
+x86_64 libandroid-sysv-semaphore 0.1-1 pool/main/liba/libandroid-sysv-semaphore/libandroid-sysv-semaphore_0.1-1_x86_64.deb bb13235269380e93d07dc350bdcd9cbd0e0634c46a6085764c8101e2c1ecb723
+x86_64 libandroid-shmem 0.7 pool/main/liba/libandroid-shmem/libandroid-shmem_0.7_x86_64.deb ffa9e4c87467b158b148d0ff92dda796aa038276c2075af3269cdcdb06f25797
+x86_64 zlib 1.4 pool/main/z/zlib/zlib_1.4_x86_64.deb 55ab8f16e492d6ed03c2e2bf701af52cf54a313442dd7adedd3d6f3e3eba2e4f
+aarch64 sourcekit-lsp 6.4.3 pool/main/s/sourcekit-lsp/sourcekit-lsp_6.4.3_aarch64.deb 88640193e7c4ee41b7c8de34c18b50ad36f7d5f60abbe2f5fd26665191f89b14
+arm sourcekit-lsp 6.4.3 pool/main/s/sourcekit-lsp/sourcekit-lsp_6.4.3_arm.deb 7c85f14991d77313484bd3882cb69e3f409eb64236fab094f40987c3ad01e3d0
+x86_64 sourcekit-lsp 6.4.3 pool/main/s/sourcekit-lsp/sourcekit-lsp_6.4.3_x86_64.deb a534e65a5b8c062797e2f2c1b0fdb651b5b896cde0c9db381214beef6ecd9ed8

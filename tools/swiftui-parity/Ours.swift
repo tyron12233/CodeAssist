@@ -1,0 +1,592 @@
+// Our side of the parity harness, run on the Mac: Cases.swift through CodeAssist's engine, text measured with CoreText,
+// the display list painted with CoreGraphics at @3x, and each result compared with the Simulator's screenshot.
+//
+//   Ours <reference dir> <output dir> [case]
+//
+// Writes <output>/<case>.png (reference | ours | difference) and prints one line per case with the share of pixels
+// that differ. Uses the system font (SF) for text: on the Mac that isolates layout and styling from font differences.
+
+import AppKit
+import CoreText
+import ImageIO
+import UniformTypeIdentifiers
+
+// MARK: - CoreText measuring, shared by layout and painting
+
+final class CoreTextMeasurer: _TextMeasurer {
+    static func font(_ span: _ResolvedSpan) -> CTFont {
+        let weights: [Int: NSFont.Weight] = [100: .ultraLight, 200: .thin, 300: .light, 400: .regular, 500: .medium,
+                                             600: .semibold, 700: .bold, 800: .heavy, 900: .black]
+        var font = NSFont.systemFont(ofSize: span.size, weight: weights[span.weight] ?? .regular)
+        let design: NSFontDescriptor.SystemDesign? = switch span.design {
+        case .rounded: .rounded
+        case .serif: .serif
+        case .monospaced: .monospaced
+        case .default: nil
+        }
+        if let design, let d = font.fontDescriptor.withDesign(design) { font = NSFont(descriptor: d, size: span.size) ?? font }
+        if span.italic { font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask) }
+        return font as CTFont
+    }
+
+    static func attributed(_ spans: [_ResolvedSpan]) -> NSAttributedString {
+        let out = NSMutableAttributedString()
+        for s in spans {
+            var attrs: [NSAttributedString.Key: Any] = [
+                .font: font(s),
+                .foregroundColor: NSColor(srgbRed: s.color.r, green: s.color.g, blue: s.color.b, alpha: s.color.a),
+            ]
+            if s.kerning != 0 { attrs[.kern] = s.kerning }
+            if let sym = s.symbol {
+                // An inline symbol: a run as wide as the symbol's frame, sitting on the baseline as iOS sets it.
+                let m = _SymbolMetrics.shared.frame(sym, size: s.size, large: false)
+                let box = SymbolRun(name: sym, span: s, width: m?.size.width ?? s.size, ascent: m.map { $0.size.height - $0.baseline } ?? s.size,
+                                    descent: m?.baseline ?? 0)
+                var callbacks = CTRunDelegateCallbacks(version: kCTRunDelegateVersion1, dealloc: { Unmanaged<SymbolRun>.fromOpaque($0).release() },
+                    getAscent: { Unmanaged<SymbolRun>.fromOpaque($0).takeUnretainedValue().ascent },
+                    getDescent: { Unmanaged<SymbolRun>.fromOpaque($0).takeUnretainedValue().descent },
+                    getWidth: { Unmanaged<SymbolRun>.fromOpaque($0).takeUnretainedValue().width })
+                attrs[NSAttributedString.Key(kCTRunDelegateAttributeName as String)] = CTRunDelegateCreate(&callbacks, Unmanaged.passRetained(box).toOpaque())
+                attrs[SymbolRun.key] = box
+                out.append(NSAttributedString(string: "\u{FFFC}", attributes: attrs))
+                continue
+            }
+            out.append(NSAttributedString(string: s.text, attributes: attrs))
+        }
+        return out
+    }
+
+    struct Layout {
+        var lines: [CTLine]
+        var lineHeight: CGFloat
+        var ascent: CGFloat
+        var width: CGFloat
+    }
+
+    static func layout(_ spans: [_ResolvedSpan], width: CGFloat?, maxLines: Int?) -> Layout {
+        let string = attributed(spans)
+        let typesetter = CTTypesetterCreateWithAttributedString(string)
+        let fonts = spans.map(font)
+        // iOS's SF line metrics (the Mac's SF reports a shorter line): the same constants the device's text engine
+        // uses (SwiftTextEngine.LINE_HEIGHT / ASCENT), measured against the Simulator.
+        let size = spans.map(\.size).max() ?? 17
+        let ascent = 0.9521 * size
+        let lineHeight = 1.1934 * size
+        var lines: [CTLine] = []
+        var start = 0
+        let length = string.length
+        var widest: CGFloat = 0
+        while start < length {
+            let limit = width ?? .greatestFiniteMagnitude
+            var count = CTTypesetterSuggestLineBreak(typesetter, start, Double(max(limit, 0.1)))
+            if count <= 0 { count = 1 }
+            let last = maxLines.map { lines.count == $0 - 1 } ?? false
+            var line = CTTypesetterCreateLine(typesetter, CFRange(location: start, length: last ? length - start : count))
+            if last && start + count < length, let width {
+                let ellipsis = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: string.attributes(at: start, effectiveRange: nil)))
+                line = CTLineCreateTruncatedLine(line, Double(width), .end, ellipsis) ?? line
+            }
+            // SwiftUI's text width counts a wrapped line's trailing space (capped by the offered width below).
+            let w = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+            widest = max(widest, w)
+            lines.append(line)
+            if last { break }
+            start += count
+        }
+        if lines.isEmpty { lines = [CTLineCreateWithAttributedString(string)] }
+        return Layout(lines: lines, lineHeight: lineHeight, ascent: ascent, width: width.map { min(widest, $0) } ?? widest)
+    }
+
+    func measure(_ spans: [_ResolvedSpan], width: CGFloat?, maxLines: Int?, alignment: TextAlignment, lineAdvance: CGFloat?) -> _TextMetrics {
+        let l = Self.layout(spans, width: width, maxLines: maxLines)
+        let advance = lineAdvance ?? l.lineHeight
+        let height = l.lineHeight + CGFloat(l.lines.count - 1) * advance
+        return _TextMetrics(size: CGSize(width: l.width, height: height), firstBaseline: l.ascent,
+                            lastBaseline: CGFloat(l.lines.count - 1) * advance + l.ascent)
+    }
+}
+
+final class SymbolRun: NSObject {
+    static let key = NSAttributedString.Key("codeassist.symbol")
+    let name: String
+    let span: _ResolvedSpan
+    let width: CGFloat, ascent: CGFloat, descent: CGFloat
+    init(name: String, span: _ResolvedSpan, width: CGFloat, ascent: CGFloat, descent: CGFloat) {
+        self.name = name
+        self.span = span
+        self.width = width
+        self.ascent = ascent
+        self.descent = descent
+    }
+}
+
+// MARK: - Painting the display list
+
+final class Painter {
+    let ctx: CGContext
+    let scale: CGFloat = 3
+    var depth: [Int] = []
+
+    init(width: Int, height: Int) {
+        ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        // Top-left origin, in points.
+        ctx.translateBy(x: 0, y: CGFloat(height))
+        ctx.scaleBy(x: scale, y: -scale)
+    }
+
+    static func color(_ hex: String) -> CGColor {
+        var v: UInt64 = 0
+        Scanner(string: String(hex.dropFirst())).scanHexInt64(&v)
+        return CGColor(srgbRed: CGFloat((v >> 24) & 0xFF) / 255, green: CGFloat((v >> 16) & 0xFF) / 255,
+                       blue: CGFloat((v >> 8) & 0xFF) / 255, alpha: CGFloat(v & 0xFF) / 255)
+    }
+
+    /// Apple's continuous ("squircle") corner, as reconstructed from UIBezierPath(roundedRect:cornerRadius:).
+    static func continuousRect(_ r: CGRect, radius: CGFloat) -> CGPath {
+        let p = CGMutablePath()
+        let limit = min(r.width, r.height) / 2 / 1.52866483
+        let c = min(radius, limit)
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: y) }
+        let (minX, minY, maxX, maxY) = (r.minX, r.minY, r.maxX, r.maxY)
+        p.move(to: pt(minX + 1.52866483 * c, minY))
+        p.addLine(to: pt(maxX - 1.52866483 * c, minY))
+        p.addCurve(to: pt(maxX - 0.63149399 * c, minY + 0.07491100 * c), control1: pt(maxX - 1.08849299 * c, minY), control2: pt(maxX - 0.86840701 * c, minY))
+        p.addCurve(to: pt(maxX - 0.07491100 * c, minY + 0.63149399 * c), control1: pt(maxX - 0.37282401 * c, minY + 0.16905900 * c), control2: pt(maxX - 0.16905900 * c, minY + 0.37282401 * c))
+        p.addCurve(to: pt(maxX, minY + 1.52866483 * c), control1: pt(maxX, minY + 0.86840701 * c), control2: pt(maxX, minY + 1.08849299 * c))
+        p.addLine(to: pt(maxX, maxY - 1.52866483 * c))
+        p.addCurve(to: pt(maxX - 0.07491100 * c, maxY - 0.63149399 * c), control1: pt(maxX, maxY - 1.08849299 * c), control2: pt(maxX, maxY - 0.86840701 * c))
+        p.addCurve(to: pt(maxX - 0.63149399 * c, maxY - 0.07491100 * c), control1: pt(maxX - 0.16905900 * c, maxY - 0.37282401 * c), control2: pt(maxX - 0.37282401 * c, maxY - 0.16905900 * c))
+        p.addCurve(to: pt(maxX - 1.52866483 * c, maxY), control1: pt(maxX - 0.86840701 * c, maxY), control2: pt(maxX - 1.08849299 * c, maxY))
+        p.addLine(to: pt(minX + 1.52866483 * c, maxY))
+        p.addCurve(to: pt(minX + 0.63149399 * c, maxY - 0.07491100 * c), control1: pt(minX + 1.08849299 * c, maxY), control2: pt(minX + 0.86840701 * c, maxY))
+        p.addCurve(to: pt(minX + 0.07491100 * c, maxY - 0.63149399 * c), control1: pt(minX + 0.37282401 * c, maxY - 0.16905900 * c), control2: pt(minX + 0.16905900 * c, maxY - 0.37282401 * c))
+        p.addCurve(to: pt(minX, maxY - 1.52866483 * c), control1: pt(minX, maxY - 0.86840701 * c), control2: pt(minX, maxY - 1.08849299 * c))
+        p.addLine(to: pt(minX, minY + 1.52866483 * c))
+        p.addCurve(to: pt(minX + 0.07491100 * c, minY + 0.63149399 * c), control1: pt(minX, minY + 1.08849299 * c), control2: pt(minX, minY + 0.86840701 * c))
+        p.addCurve(to: pt(minX + 0.63149399 * c, minY + 0.07491100 * c), control1: pt(minX + 0.16905900 * c, minY + 0.37282401 * c), control2: pt(minX + 0.37282401 * c, minY + 0.16905900 * c))
+        p.addCurve(to: pt(minX + 1.52866483 * c, minY), control1: pt(minX + 0.86840701 * c, minY), control2: pt(minX + 1.08849299 * c, minY))
+        p.closeSubpath()
+        return p
+    }
+
+    static func path(_ elements: [[Any]]) -> CGPath {
+        let p = CGMutablePath()
+        for e in elements {
+            let k = e[0] as! String
+            let n = e.dropFirst().map { CGFloat(($0 as! NSNumber).doubleValue) }
+            switch k {
+            case "M": p.move(to: CGPoint(x: n[0], y: n[1]))
+            case "L": p.addLine(to: CGPoint(x: n[0], y: n[1]))
+            case "Q": p.addQuadCurve(to: CGPoint(x: n[0], y: n[1]), control: CGPoint(x: n[2], y: n[3]))
+            case "C": p.addCurve(to: CGPoint(x: n[0], y: n[1]), control1: CGPoint(x: n[2], y: n[3]), control2: CGPoint(x: n[4], y: n[5]))
+            case "Z": p.closeSubpath()
+            case "R": p.addRect(CGRect(x: n[0], y: n[1], width: n[2], height: n[3]))
+            case "E": p.addEllipse(in: CGRect(x: n[0], y: n[1], width: n[2], height: n[3]))
+            case "RR":
+                let r = CGRect(x: n[0], y: n[1], width: n[2], height: n[3])
+                if n[6] == 1 {
+                    p.addPath(continuousRect(r, radius: n[4]))
+                } else {
+                    let rx = min(n[4], r.width / 2), ry = min(n[5], r.height / 2)
+                    p.addRoundedRect(in: r, cornerWidth: rx, cornerHeight: ry)
+                }
+            default: break
+            }
+        }
+        return p
+    }
+
+    func paint(_ ops: [[String: Any]]) {
+        for op in ops {
+            switch op["o"] as! String {
+            case "path":
+                let p = Self.path(op["d"] as! [[Any]])
+                ctx.addPath(p)
+                if let sw = op["sw"] as? NSNumber {
+                    ctx.setStrokeColor(Self.color(op["c"] as? String ?? "#000000FF"))
+                    ctx.setLineWidth(CGFloat(sw.doubleValue))
+                    ctx.strokePath()
+                } else if let c = op["c"] as? String {
+                    ctx.setFillColor(Self.color(c))
+                    ctx.fillPath()
+                } else if let g = op["g"] as? [String: Any] {
+                    ctx.saveGState()
+                    ctx.clip()
+                    let stops = g["s"] as! [[Any]]
+                    let colors = stops.map { Self.color($0[0] as! String) } as CFArray
+                    let locations = stops.map { CGFloat(($0[1] as! NSNumber).doubleValue) }
+                    let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: colors, locations: locations)!
+                    let pts = (g["p"] as! [NSNumber]).map { CGFloat($0.doubleValue) }
+                    switch g["k"] as! String {
+                    case "radial":
+                        ctx.drawRadialGradient(gradient, startCenter: CGPoint(x: pts[0], y: pts[1]), startRadius: pts[2],
+                                               endCenter: CGPoint(x: pts[0], y: pts[1]), endRadius: pts[3], options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+                    default:
+                        ctx.drawLinearGradient(gradient, start: CGPoint(x: pts[0], y: pts[1]), end: CGPoint(x: pts[2], y: pts[3]),
+                                               options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+                    }
+                    ctx.restoreGState()
+                } else {
+                    ctx.beginPath()
+                }
+            case "text":
+                drawText(op)
+            case "symbol":
+                drawSymbol(op)
+            case "glass":
+                drawGlass(op)
+            case "clip":
+                ctx.saveGState()
+                ctx.addPath(Self.path(op["d"] as! [[Any]]))
+                ctx.clip()
+            case "alpha":
+                ctx.saveGState()
+                ctx.setAlpha(CGFloat((op["a"] as! NSNumber).doubleValue))
+                ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+                depth.append(1)
+                continue
+            case "shadow":
+                ctx.saveGState()
+                ctx.setShadow(offset: CGSize(width: CGFloat((op["x"] as! NSNumber).doubleValue) * scale, height: -CGFloat((op["y"] as! NSNumber).doubleValue) * scale),
+                              blur: CGFloat((op["r"] as! NSNumber).doubleValue) * scale, color: Self.color(op["c"] as! String))
+            case "pop":
+                if depth.last == 1 { ctx.endTransparencyLayer() }
+                if !depth.isEmpty { depth.removeLast() }
+                ctx.restoreGState()
+                continue
+            default:
+                break
+            }
+            if ["clip", "shadow"].contains(op["o"] as! String) { depth.append(0) }
+        }
+    }
+
+    func drawText(_ op: [String: Any]) {
+        let r = op["r"] as! [NSNumber]
+        let frame = CGRect(x: r[0].doubleValue, y: r[1].doubleValue, width: r[2].doubleValue, height: r[3].doubleValue)
+        let spans: [_ResolvedSpan] = (op["sp"] as! [[String: Any]]).map { s in
+            let c = Self.color(s["c"] as! String).components!
+            return _ResolvedSpan(text: s["t"] as! String, symbol: s["sym"] as? String, size: CGFloat((s["s"] as! NSNumber).doubleValue),
+                                 weight: (s["w"] as! NSNumber).intValue,
+                                 design: ["rounded": .rounded, "serif": .serif, "monospaced": .monospaced][s["d"] as! String] ?? .default,
+                                 italic: s["i"] != nil, color: _RGBA(Double(c[0]), Double(c[1]), Double(c[2]), Double(c[3])),
+                                 strikethrough: nil, underline: nil, kerning: CGFloat((s["k"] as? NSNumber)?.doubleValue ?? 0), baselineOffset: 0)
+        }
+        let layout = CoreTextMeasurer.layout(spans, width: frame.width + 0.01, maxLines: (op["n"] as? NSNumber)?.intValue)
+        let align = op["a"] as! String
+        ctx.saveGState()
+        for (i, line) in layout.lines.enumerated() {
+            let w = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil) - CTLineGetTrailingWhitespaceWidth(line))
+            let x = align == "center" ? frame.minX + (frame.width - w) / 2 : align == "trailing" ? frame.maxX - w : frame.minX
+            let advance = (op["lh"] as? NSNumber).map { CGFloat($0.doubleValue) } ?? layout.lineHeight
+            let baseline = frame.minY + layout.ascent + CGFloat(i) * advance
+            ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+            ctx.textPosition = CGPoint(x: x, y: baseline)
+            CTLineDraw(line, ctx)
+            for run in CTLineGetGlyphRuns(line) as! [CTRun] {
+                let attrs = CTRunGetAttributes(run) as NSDictionary
+                guard let sym = attrs[SymbolRun.key] as? SymbolRun else { continue }
+                let at = x + CTLineGetOffsetForStringIndex(line, CTRunGetStringRange(run).location, nil)
+                let c = sym.span.color
+                drawSymbol(["r": [at, baseline - sym.ascent, sym.width, sym.ascent + sym.descent].map { NSNumber(value: Double($0)) },
+                            "n": sym.name, "s": NSNumber(value: Double(sym.span.size)), "w": NSNumber(value: sym.span.weight),
+                            "c": String(format: "#%02X%02X%02X%02X", Int(c.r * 255), Int(c.g * 255), Int(c.b * 255), Int(c.a * 255))])
+            }
+        }
+        ctx.restoreGState()
+    }
+
+    static var glassParams = GlassParams()
+
+    /// Liquid Glass over what is painted so far: the shape's coverage, then GlassModel on the bitmap.
+    func drawGlass(_ op: [String: Any]) {
+        let w = ctx.width, h = ctx.height
+        let maskCtx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceGray(),
+                                bitmapInfo: CGImageAlphaInfo.none.rawValue)!
+        maskCtx.translateBy(x: 0, y: CGFloat(h))
+        maskCtx.scaleBy(x: scale, y: -scale)
+        maskCtx.setFillColor(gray: 1, alpha: 1)
+        maskCtx.addPath(Self.path(op["d"] as! [[Any]]))
+        maskCtx.fillPath()
+        let mp = maskCtx.data!.assumingMemoryBound(to: UInt8.self)
+        var mask = [Float](repeating: 0, count: w * h)
+        let mstride = maskCtx.bytesPerRow
+        for y in 0..<h { for x in 0..<w { mask[y * w + x] = Float(mp[y * mstride + x]) / 255 } }
+        let r = op["r"] as! [NSNumber]
+        let bounds = CGRect(x: r[0].doubleValue * scale, y: r[1].doubleValue * scale, width: r[2].doubleValue * scale, height: r[3].doubleValue * scale)
+        let tint = (op["tint"] as? String).map { hex -> RGB in
+            let c = Self.color(hex).components!
+            return RGB(Double(c[0]), Double(c[1]), Double(c[2]))
+        }
+        let bmp = Bitmap(w: w, h: h, px: ctx.data!.assumingMemoryBound(to: UInt8.self), scale: Double(scale), stride: ctx.bytesPerRow)
+        GlassModel.apply(bmp, mask: mask, bounds: bounds, variant: op["k"] as? String ?? "regular", tint: tint, dark: op["dark"] != nil, p: Self.glassParams)
+    }
+
+    func drawSymbol(_ op: [String: Any]) {
+        let r = op["r"] as! [NSNumber]
+        let frame = CGRect(x: r[0].doubleValue, y: r[1].doubleValue, width: r[2].doubleValue, height: r[3].doubleValue)
+        let size = CGFloat((op["s"] as! NSNumber).doubleValue)
+        let symbolWeights: [Int: NSFont.Weight] = [100: .ultraLight, 200: .thin, 300: .light, 400: .regular, 500: .medium,
+                                                    600: .semibold, 700: .bold, 800: .heavy, 900: .black]
+        let config = NSImage.SymbolConfiguration(pointSize: size, weight: symbolWeights[(op["w"] as? NSNumber)?.intValue ?? 400] ?? .regular, scale: op["sc"] as? String == "l" ? .large : .medium)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [NSColor(cgColor: Self.color(op["c"] as! String))!]))
+        guard let image = NSImage(systemSymbolName: op["n"] as! String, accessibilityDescription: nil)?.withSymbolConfiguration(config),
+              let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+        let s = image.size
+        let rect = CGRect(x: frame.midX - s.width / 2, y: frame.midY - s.height / 2, width: s.width, height: s.height)
+        ctx.saveGState()
+        ctx.translateBy(x: rect.minX, y: rect.maxY)
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.draw(cg, in: CGRect(origin: .zero, size: rect.size))
+        ctx.restoreGState()
+    }
+}
+
+// MARK: - Images and comparison
+
+func loadImage(_ url: URL) -> CGImage? {
+    guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+    return CGImageSourceCreateImageAtIndex(src, 0, nil)
+}
+
+func rgba(_ image: CGImage) -> [UInt8] {
+    var data = [UInt8](repeating: 0, count: image.width * image.height * 4)
+    let ctx = CGContext(data: &data, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    return data
+}
+
+func savePNG(_ image: CGImage, _ url: URL) {
+    let dest = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)!
+    CGImageDestinationAddImage(dest, image, nil)
+    CGImageDestinationFinalize(dest)
+}
+
+/// Share of pixels that differ by more than a small tolerance (antialiasing), and a composite: reference, ours, and
+/// the difference (red where they disagree, over a faded reference).
+func compare(_ ref: CGImage, _ ours: CGImage) -> (Double, CGImage) {
+    let w = ref.width, h = ref.height
+    let a = rgba(ref), b = rgba(ours)
+    var diff = [UInt8](repeating: 255, count: w * h * 4)
+    var bad = 0
+    for i in stride(from: 0, to: w * h * 4, by: 4) {
+        let d = abs(Int(a[i]) - Int(b[i])) + abs(Int(a[i + 1]) - Int(b[i + 1])) + abs(Int(a[i + 2]) - Int(b[i + 2]))
+        if d > 60 {
+            bad += 1
+            diff[i] = 255; diff[i + 1] = 0; diff[i + 2] = 0
+        } else {
+            let grey = UInt8(200 + Int(a[i]) * 55 / 255)
+            diff[i] = grey; diff[i + 1] = grey; diff[i + 2] = grey
+        }
+    }
+    let out = CGContext(data: nil, width: w * 3, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    out.draw(ref, in: CGRect(x: 0, y: 0, width: w, height: h))
+    out.draw(ours, in: CGRect(x: w, y: 0, width: w, height: h))
+    let diffCtx = CGContext(data: &diff, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    out.draw(diffCtx.makeImage()!, in: CGRect(x: 2 * w, y: 0, width: w, height: h))
+    return (Double(bad) / Double(w * h), out.makeImage()!)
+}
+
+// MARK: - Main
+
+/// Fits GlassParams to the Simulator: each glass case's backdrop is painted once (glass ops skipped), then the model
+/// is applied with candidate parameters and scored by the mean colour error (0...1) inside the glass shapes and a
+/// margin around them, against the reference. Coordinate descent with shrinking steps.
+/// Per-channel summed-area tables of a 1206 x 2622 RGBA bitmap (rows of [stride] bytes): [channel][(y+1)*1207 + x+1].
+func integral(_ px: UnsafePointer<UInt8>, stride: Int) -> [[Double]] {
+    let w = 1206, h = 2622
+    var t = [[Double]](repeating: [Double](repeating: 0, count: (w + 1) * (h + 1)), count: 3)
+    for ch in 0..<3 {
+        t[ch].withUnsafeMutableBufferPointer { s in
+            for y in 0..<h {
+                var row = 0.0
+                for x in 0..<w {
+                    row += Double(px[y * stride + x * 4 + ch])
+                    s[(y + 1) * (w + 1) + x + 1] = s[y * (w + 1) + x + 1] + row
+                }
+            }
+        }
+    }
+    return t
+}
+let blurK = Int((Double(ProcessInfo.processInfo.environment["FIT_BLUR"] ?? "0") ?? 0) * 3)
+func windowMean(_ t: [[Double]], _ x: Int, _ y: Int, _ ch: Int) -> Double {
+    let w = 1207, x0 = max(0, x - blurK), x1 = min(1206, x + blurK + 1), y0 = max(0, y - blurK), y1 = min(2622, y + blurK + 1)
+    let s = t[ch]
+    return (s[y1 * w + x1] - s[y0 * w + x1] - s[y1 * w + x0] + s[y0 * w + x0]) / Double((x1 - x0) * (y1 - y0))
+}
+
+@MainActor
+func fitGlass(refDir: URL, out: String) {
+    struct Case { let ref: [UInt8]; let backdrop: [UInt8]; let stride: Int; let ops: [[String: Any]]; let region: [Int]; var refIntegral: [[Double]]? = nil }
+    var cases: [Case] = []
+    let only = ProcessInfo.processInfo.environment["FIT_CASES"]?.split(separator: ",").map(String.init)
+    for (name, view) in glassCases() where only == nil || only!.contains(name) {
+        guard let refImage = loadImage(refDir.appendingPathComponent("\(name).png")) else { continue }
+        let preview = _Preview(name) { view }
+        _Graph.shared.beginRender()
+        let json = _render(preview, index: 0, scheme: .light)
+        _Graph.shared.endRender()
+        let frame = try! JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any]
+        let ops = frame["ops"] as! [[String: Any]]
+        // Backdrop: everything up to each glass op is drawn; for the fit, the glass and what follows it are replayed.
+        let painter = Painter(width: 1206, height: 2622)
+        painter.ctx.setFillColor(Painter.color(frame["bg"] as! String))
+        painter.ctx.fill(CGRect(x: 0, y: 0, width: 402, height: 874))
+        let firstGlass = ops.firstIndex { $0["o"] as? String == "glass" } ?? ops.count
+        painter.paint(Array(ops[..<firstGlass]))
+        let rowBytes = painter.ctx.bytesPerRow
+        let backdrop = Array(UnsafeBufferPointer(start: painter.ctx.data!.assumingMemoryBound(to: UInt8.self), count: rowBytes * 2622))
+        // Region scored: the glass ops' frames grown by 40 points.
+        var region: [Int] = []
+        for op in ops where op["o"] as? String == "glass" {
+            let r = (op["r"] as! [NSNumber]).map { $0.doubleValue }
+            let x0 = max(0, Int((r[0] - 40) * 3)), x1 = min(1206, Int((r[0] + r[2] + 40) * 3))
+            let y0 = max(0, Int((r[1] - 40) * 3)), y1 = min(2622, Int((r[1] + r[3] + 40) * 3))
+            for y in stride(from: y0, to: y1, by: 2) { for x in stride(from: x0, to: x1, by: 2) { region.append(y * 1206 + x) } }
+        }
+        let ref = rgba(refImage)
+        var c = Case(ref: ref, backdrop: backdrop, stride: rowBytes, ops: Array(ops[firstGlass...]), region: region)
+        if blurK > 0 { c.refIntegral = ref.withUnsafeBufferPointer { integral($0.baseAddress!, stride: 1206 * 4) } }
+        cases.append(c)
+        print("fit: \(name) (\(region.count) samples)")
+    }
+    func score(_ p: GlassParams) -> Double {
+        Painter.glassParams = p
+        var total = 0.0
+        for c in cases {
+            let painter = Painter(width: 1206, height: 2622)
+            let dst = painter.ctx.data!.assumingMemoryBound(to: UInt8.self)
+            c.backdrop.withUnsafeBufferPointer { dst.update(from: $0.baseAddress!, count: c.backdrop.count) }
+            painter.paint(c.ops)
+            var err = 0.0
+            if blurK > 0 {
+                // FIT_BLUR: compare colours averaged over a (2k+1)-pixel square, so a band frosted in about the right
+                // place scores better than sharp stripes that happen to line up.
+                let ours = integral(dst, stride: c.stride)
+                for i in c.region {
+                    let y = i / 1206, x = i % 1206
+                    for ch in 0..<3 { err += abs(windowMean(ours, x, y, ch) - windowMean(c.refIntegral!, x, y, ch)) }
+                }
+                total += err / Double(max(1, c.region.count)) / (3 * 255)
+                continue
+            }
+            for i in c.region {
+                let y = i / 1206, x = i % 1206
+                let o = y * c.stride + x * 4, r = i * 4
+                err += abs(Double(dst[o]) - Double(c.ref[r])) + abs(Double(dst[o + 1]) - Double(c.ref[r + 1])) + abs(Double(dst[o + 2]) - Double(c.ref[r + 2]))
+            }
+            total += err / Double(max(1, c.region.count)) / (3 * 255)
+        }
+        return total / Double(max(1, cases.count))
+    }
+    var best = Painter.glassParams
+    var bestScore = score(best)
+    print(String(format: "start %.5f", bestScore))
+    if ProcessInfo.processInfo.environment["GLASSFIT"] == "tables" {
+        // Regular glass's lens and blur profiles: knots (every `spacing` points), linear between, by coordinate descent.
+        func knots(_ t: [Double], _ n: Int, _ sp: Double) -> [Double] { (0..<n).map { GlassModel.lens(t, Double($0) * sp) } }
+        func expand(_ k: [Double], _ sp: Double) -> [Double] { (0...Int(Double(k.count - 1) * sp)).map { d in
+            let f = Double(d) / sp; let i = min(Int(f), k.count - 2); let t = f - Double(i); return k[i] * (1 - t) + k[i + 1] * t } }
+        let lsp = 3.0, bsp = 5.0
+        var lens = knots(best.regularLensTable ?? best.lensTable, 17, lsp)
+        var blur = knots(best.regularBlurTable ?? [best.regularBlur ?? best.blur], 13, bsp)
+        func make(_ l: [Double], _ b: [Double]) -> GlassParams { var p = best; p.regularLensTable = expand(l, lsp); p.regularBlurTable = expand(b, bsp); return p }
+        bestScore = score(make(lens, blur))
+        print(String(format: "tables start %.5f", bestScore))
+        var step = 4.0
+        for round in 0..<Int(ProcessInfo.processInfo.environment["ROUNDS"] ?? "4")! {
+            for which in 0..<2 {
+                for k in 0..<(which == 0 ? lens.count : blur.count) {
+                    for dir in [1.0, -1.0] {
+                        while true {
+                            var l = lens, b = blur
+                            if which == 0 { l[k] += dir * step } else { b[k] = max(0, b[k] + dir * step / 2) }
+                            let sc = score(make(l, b))
+                            if sc < bestScore - 1e-6 { bestScore = sc; lens = l; blur = b } else { break }
+                        }
+                    }
+                }
+            }
+            print(String(format: "round %d step %.2f: %.5f", round, step, bestScore))
+            print("lens " + lens.map { String(format: "%.1f", $0) }.joined(separator: " "))
+            print("blur " + blur.map { String(format: "%.2f", $0) }.joined(separator: " "))
+            step /= 2
+        }
+        best = make(lens, blur)
+        best.regularLensTable = best.regularLensTable!.map { ($0 * 100).rounded() / 100 }
+        best.regularBlurTable = best.regularBlurTable!.map { ($0 * 100).rounded() / 100 }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try! encoder.encode(best).write(to: URL(fileURLWithPath: out))
+        print("wrote \(out)")
+        return
+    }
+    let keys: [WritableKeyPath<GlassParams, Double>] = [\.tintAmount, \.blur, \.rimWidth, \.rimAmount, \.shadowAlpha, \.shadowRadius, \.shadowY]
+    var steps: [Double] = [0.1, 1.0, 0.5, 0.1, 0.03, 4, 2]
+    for round in 0..<5 {
+        for (k, key) in keys.enumerated() {
+            for dir in [1.0, -1.0] {
+                var improved = true
+                while improved {
+                    improved = false
+                    var cand = best
+                    // The lens may sample outward (negative depth); everything else is a size or an amount.
+                    cand[keyPath: key] = key == \GlassParams.lensDepth ? cand[keyPath: key] + dir * steps[k] : max(0, cand[keyPath: key] + dir * steps[k])
+                    let sc = score(cand)
+                    if sc < bestScore - 1e-5 { best = cand; bestScore = sc; improved = true }
+                }
+            }
+        }
+        steps = steps.map { $0 / 2 }
+        print(String(format: "round %d: %.5f", round, bestScore))
+    }
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try! encoder.encode(best).write(to: URL(fileURLWithPath: out))
+    print("wrote \(out)")
+}
+
+@main
+struct Ours {
+    @MainActor static func main() {
+        let args = CommandLine.arguments
+        if args.contains("--fit-glass") {
+            _Graph.shared.measurer = CoreTextMeasurer()
+            Painter.glassParams = GlassParams.load(args[2])
+            fitGlass(refDir: URL(fileURLWithPath: args[1]), out: args[2])
+            return
+        }
+        let refDir = URL(fileURLWithPath: args[1]), outDir = URL(fileURLWithPath: args[2])
+        let only = args.count > 3 ? args[3] : nil
+        try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+        _Graph.shared.measurer = CoreTextMeasurer()
+        Painter.glassParams = GlassParams.load(URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("glass-params.json").path)
+        var total = 0.0, count = 0
+        for (name, view) in (parityCases() + glassCases() + chromeCases() + darkCases()) where only == nil || name == only {
+            let preview = _Preview(name) { view }
+            _Graph.shared.beginRender()
+            let json = _render(preview, index: 0, scheme: name.hasSuffix("-dark") ? .dark : .light)
+            _Graph.shared.endRender()
+            if args.contains("--json") { print(json) }
+            let frame = try! JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any]
+            let painter = Painter(width: 1206, height: 2622)
+            painter.ctx.setFillColor(Painter.color(frame["bg"] as! String))
+            painter.ctx.fill(CGRect(x: 0, y: 0, width: 402, height: 874))
+            painter.paint(frame["ops"] as! [[String: Any]])
+            let ours = painter.ctx.makeImage()!
+            savePNG(ours, outDir.appendingPathComponent("\(name)-ours.png"))
+            guard let ref = loadImage(refDir.appendingPathComponent("\(name).png")) else { print("\(name): no reference"); continue }
+            let (score, composite) = compare(ref, ours)
+            savePNG(composite, outDir.appendingPathComponent("\(name).png"))
+            print(String(format: "%-26@ %6.2f%% of pixels differ", name as NSString, score * 100))
+            total += score
+            count += 1
+        }
+        if count > 0 { print(String(format: "MEAN %6.2f%%", total / Double(count) * 100)) }
+    }
+}

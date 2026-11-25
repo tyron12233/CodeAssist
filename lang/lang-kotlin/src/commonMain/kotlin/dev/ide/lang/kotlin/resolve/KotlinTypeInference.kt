@@ -504,11 +504,14 @@ internal fun KotlinResolver.inferBranchUnion(branches: List<KtExpression?>): Kot
             nullable = true; continue
         }
         val lambda = unwrapParens(e) as? dev.ide.kotlin.syntax.psi.KtLambdaExpression
-        val t = (if (lambda != null && lambdaOwnType && lambda.valueParameters.all { it.typeReference != null })
+        val raw = (if (lambda != null && lambdaOwnType && lambda.valueParameters.all { it.typeReference != null })
             lambdaFunctionType(lambda).let { shape ->
                 if (lambda.valueParameters.isEmpty()) shape
                 else (inferLambdaResult(lambda) as? KotlinType)?.let { r -> service.typeByFqn(shape.qualifiedName, shape.typeArguments.dropLast(1) + r) } ?: shape
             } else inferType(e)) ?: return null // an unknown branch → can't confidently unify
+        // A Java method's `java.lang.String` and a Kotlin `String` are one class: compare under one spelling, or
+        // `if (c) "ua" else WebSettings.getDefaultUserAgent(ctx)` joined them to their supertype `CharSequence`.
+        val t = if (raw.isTypeParameter) raw else canonicalTypeForCheck(raw)
         // So is one typed by a class nothing declares, or by a type variable of some callee that inference left
         // open (`pending[j]` on an unresolved `ArrayList<E>`): joining it would make `Any` of what is not known.
         // (A function type is known by its shape: `kotlin.FunctionN` is synthetic, not declared.)
@@ -1197,12 +1200,14 @@ internal fun KotlinResolver.invokeReturnType(call: KtCallExpression): KotlinType
     return operatorResultType(invoke, call.valueArguments.map { it.getArgumentExpression() })
 }
 
-internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
-    narrowedType(name)?.let { return it } // the lowerer's explicit flow-narrowing stack
+/** The type a read of [name] at [offset] has. [smartCasts] false gives the DECLARED type, which is what a write
+ *  must conform to: a smart cast narrows reads only (`if (v === web) v = null` assigns to the `View?`). */
+internal fun KotlinResolver.typeOfName(name: String, offset: Int, smartCasts: Boolean = true): KotlinType? {
+    if (smartCasts) narrowedType(name)?.let { return it } // the lowerer's explicit flow-narrowing stack
     // Editor smart cast: an `if (x is T)` guard narrows `x` to `T` here (completion + diagnostics both
     // resolve a receiver through inferType -> typeOfName). Off while the lowerer drives the stack above,
     // so the interpreter keeps its own authoritative flow-narrowing.
-    if (narrowings.isEmpty()) smartCastTypeAt(name, offset)?.let { return it }
+    if (smartCasts && narrowings.isEmpty()) smartCastTypeAt(name, offset)?.let { return it }
     localsAt(offset, name).firstOrNull()?.let { return it.type as? KotlinType }
     // Members of any implicit `this` (apply/with/run block, extension fn, enclosing class).
     val receivers = implicitReceiversAt(offset)

@@ -375,7 +375,9 @@ class Main {
 
         try {
             System.setOut(quiet);
-            if ("probe".equals(mode)) probe(payload, out, args.length > 3 ? Integer.parseInt(args[3]) : -1); else check(payload, out);
+            if ("probe".equals(mode)) probe(payload, out, args.length > 3 ? Integer.parseInt(args[3]) : -1);
+            else if ("count".equals(mode)) count(payload, out);
+            else check(payload, out);
         } catch (Throwable t) {
             out.setLength(0);
             out.append("{\"fatal\":").append(CaJson.encStr(CaRun.describe(t))).append("}");
@@ -400,6 +402,8 @@ class Main {
 
     @SuppressWarnings("unchecked")
     private static void check(Map<String, Object> payload, StringBuilder out) {
+        // Progress for the judge's live display: this JVM is up and has read its payload.
+        System.err.println("###STARTED " + ((List<Object>) payload.get("cases")).size());
         List<Object> cases = (List<Object>) payload.get("cases");
         out.append("{\"results\":[");
         for (int idx = 0; idx < cases.size(); idx++) {
@@ -418,6 +422,80 @@ class Main {
             CaRun.completed = idx + 1;
         }
         out.append("]}");
+    }
+
+    /**
+     * Measures every size in ONE JVM by counting the bytecode instructions the solution executes, instead of
+     * timing it. The judge runs this under its counting agent (judge/agent) in the interpreter, where the
+     * count for the same input is always the same, so one call per size is the whole measurement. The counter
+     * is reached by name because it only exists under the agent.
+     */
+    @SuppressWarnings("unchecked")
+    private static void count(Map<String, Object> payload, StringBuilder out) throws Exception {
+        List<Object> all = (List<Object>) payload.get("probe");
+        long cap = payload.containsKey("opsCap") ? CaJson.asLong(payload.get("opsCap")) : 400000000L;
+        Class<?> counter = Class.forName("cacount.CaCount");
+        java.lang.reflect.Method reset = counter.getMethod("reset", long.class);
+        java.lang.reflect.Method start = counter.getMethod("start");
+        java.lang.reflect.Method stop = counter.getMethod("stop");
+        java.lang.reflect.Field ops = counter.getField("ops");
+        java.lang.reflect.Field exceeded = counter.getField("exceeded");
+        java.lang.reflect.Field forbidden = counter.getField("forbidden");
+        java.lang.reflect.Field forbiddenWhat = counter.getField("forbiddenWhat");
+        // The harness's own helpers initialize (with reflection) before counting starts, never inside it.
+        CaRun.alloc();
+        System.err.println("###STARTED " + all.size());
+
+        // One call that is not reported, so the first size does not also pay for loading the classes the
+        // solution uses. It runs under the cap like any other.
+        if (!all.isEmpty()) {
+            List<Object> first = (List<Object>) ((Map<String, Object>) all.get(0)).get("args");
+            try {
+                Object[] prepared = CaCall.prepare(first);
+                reset.invoke(null, cap);
+                start.invoke(null);
+                try { CaRun.sink += java.util.Objects.hashCode(CaCall.invoke(prepared)); } finally { stop.invoke(null); }
+            } catch (Throwable t) {
+                // Reported below, by the first size, if it happens again.
+            }
+        }
+
+        out.append("{\"probe\":[");
+        int written = 0;
+        for (Object raw : all) {
+            Map<String, Object> p = (Map<String, Object>) raw;
+            int n = (int) CaJson.asLong(p.get("n"));
+            List<Object> a = (List<Object>) p.get("args");
+            if (written > 0) out.append(",");
+            out.append("{\"n\":").append(n);
+            try {
+                Object[] prepared = CaCall.prepare(a);
+                long a0 = CaRun.alloc();
+                reset.invoke(null, cap);
+                start.invoke(null);
+                Object r;
+                try { r = CaCall.invoke(prepared); } finally { stop.invoke(null); }
+                long a1 = CaRun.alloc();
+                CaRun.sink += java.util.Objects.hashCode(r);
+                long counted = ops.getLong(null);
+                System.err.println("###SIZE " + n + " " + counted);
+                out.append(",\"ns\":").append(counted).append(",\"ops\":").append(counted)
+                   .append(",\"bytes\":").append(a0 >= 0 ? a1 - a0 : -1).append(",\"samples\":1}");
+                written++;
+                CaRun.completed = written;
+            } catch (Throwable t) {
+                boolean over = exceeded.getBoolean(null);
+                out.append(",\"err\":").append(CaJson.encStr(over ? "operation budget exceeded" : CaRun.describe(t)));
+                if (over) out.append(",\"exceeded\":true");
+                out.append("}");
+                written++;
+                break;
+            }
+        }
+        out.append("],\"truncated\":false,\"unit\":\"ops\",\"forbidden\":").append(forbidden.getBoolean(null));
+        Object what = forbiddenWhat.get(null);
+        if (what != null) out.append(",\"forbiddenWhat\":").append(CaJson.encStr((String) what));
+        out.append("}");
     }
 
     @SuppressWarnings("unchecked")

@@ -20,7 +20,9 @@ capabilities = [
 ]
 # Language servers arrived with SPI 3.3.0, first released in CodeAssist 3.40.0. An older IDE refuses the plugin
 # with "requires CodeAssist 3.40.0 or newer" instead of failing on a missing class.
-minHostVersion = "3.40.0"
+# 3.49.0: EditorLanguage grew parameters (SPI 3.8.0), so the UI facet, compiled against it, calls a constructor
+# older IDEs lack. (Language servers needed only 3.40.0.)
+minHostVersion = "3.49.0"
 # Building a Flutter APK packages a build directory's assets, which SPI 3.8.0 added; on an older IDE that build
 # fails and says to update, and everything else works.
 

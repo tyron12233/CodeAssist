@@ -46,11 +46,13 @@ object KotlinTypeShapeIndex : IndexExtension<String, TypeShape> {
     // class named in a generic SIGNATURE is dot-form, `RecyclerView.Adapter` not `RecyclerView$Adapter`; v21: a
     // binary constructor records which parameters have defaults, `SpanStyle(...)`; v22: a Kotlin binary
     // constructor carries its visibility, so a `private constructor` class doesn't complete as `Foo()`; v23: Java
-    // parameter names off the LocalVariableTable when there is no MethodParameters) + the shared-codec
+    // parameter names off the LocalVariableTable when there is no MethodParameters; v24: a member extension whose
+    // receiver is the CLASS's type parameter, `fun S.applyStyle()` in `CustomStyle<S>`, names it in
+    // receiverTypeParam, so a subtype's binding reaches it) + the shared-codec
     // FORMAT, so a TypeShapeExternalizer format change invalidates this index and kotlin.builtins together (see
     // TypeShapeExternalizer.FORMAT). Both base bumps changed the stored shapes' CONTENT with no wire-format
     // change, and only a bump forces the rebuild that lets already-indexed artifacts pick the correction up.
-    override val version = 23 + TypeShapeExternalizer.FORMAT
+    override val version = 24 + TypeShapeExternalizer.FORMAT
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = TypeShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried only by exact owner FQN

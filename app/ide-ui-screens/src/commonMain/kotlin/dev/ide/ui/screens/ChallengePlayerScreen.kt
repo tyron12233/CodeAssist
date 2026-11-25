@@ -560,6 +560,9 @@ private fun LocalRunStrip(run: UiLocalRun) {
             Text(
                 when {
                     !run.compiled -> stringResource(Res.string.challenge_did_not_compile)
+                    // It compiled but no example came back (no output, or the watchdog stopped it): there is
+                    // no "N of M" to report, and the reason is in the diagnostics.
+                    run.outcomes.isEmpty() -> stringResource(Res.string.challenge_run_failed)
                     run.passed -> pluralStringResource(
                         Res.plurals.challenge_examples_all_pass,
                         run.outcomes.size,
@@ -578,7 +581,7 @@ private fun LocalRunStrip(run: UiLocalRun) {
                 color = pair.onContainer.copy(alpha = 0.7f),
             )
         }
-        if (!run.compiled) {
+        if (!run.compiled || run.outcomes.isEmpty()) {
             run.diagnostics.take(3).forEach {
                 Text(
                     it,

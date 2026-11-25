@@ -13,6 +13,7 @@ import dev.ide.lang.kotlin.resolve.KotlinResolver
 import dev.ide.lang.kotlin.resolve.callTargets
 import dev.ide.lang.kotlin.resolve.inferType
 import dev.ide.lang.kotlin.resolve.nearerValueInvokeTargets
+import dev.ide.lang.kotlin.resolve.samConstructorShape
 import dev.ide.lang.kotlin.resolve.typeOfName
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.TypeRendering
@@ -50,6 +51,10 @@ internal object KotlinArgumentMappingChecks {
         // A member call on a receiver whose type is unknown has candidates nobody can list.
         val q = call.parent as? KtQualifiedExpression
         if (q != null && q.selectorExpression === call && resolver.inferType(q.receiverExpression) == null) return emptyList()
+        // `Style { … }` where `Style` is a `fun interface` that ALSO has same-named factories (Compose's
+        // `fun Style(vararg styles: Style)`): the SAM constructor is a candidate [callTargets] does not list, and
+        // it takes the lambda, so no mapping error can be common to every candidate.
+        if (q == null && inParens.isEmpty() && lambda != null && with(resolver) { samConstructorShape(call) } != null) return emptyList()
         val targets = resolver.callTargets(call)
         if (targets.isEmpty() || targets.any { !mappable(it) }) return emptyList()
         var common: Set<Problem>? = null
