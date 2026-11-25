@@ -28,6 +28,27 @@ fun interface DexPackSource {
     fun fetch(wanted: List<Wanted>, tagDir: Path, log: (String) -> Unit): Int
 
     companion object {
+        private val background = ThreadLocal<Boolean>()
+
+        /**
+         * Runs [block] as background work: a [fetch] made inside it steps aside while one of this app's builds is
+         * compiling ([dev.ide.platform.BuildActivity]). Only the prefetch ahead of a build is; a build's own fetch
+         * never waits, or an in-process build (the one an app without notification permission runs) waited on
+         * itself until [dev.ide.platform.BuildActivity.MAX_WAIT_MS] ran out.
+         */
+        fun <T> asBackground(block: () -> T): T {
+            val was = background.get()
+            background.set(true)
+            try {
+                return block()
+            } finally {
+                if (was == null) background.remove() else background.set(was)
+            }
+        }
+
+        /** Whether the calling thread is inside [asBackground]. */
+        fun isBackground(): Boolean = background.get() == true
+
         /** Ask each of [sources] in turn for what the ones before it didn't provide. */
         fun chain(vararg sources: DexPackSource?): DexPackSource {
             val list = sources.filterNotNull()
@@ -135,10 +156,12 @@ class DexRepository(
         if (byArtifact.isEmpty()) return 0
         Files.createDirectories(tagDir)
         val t0 = System.nanoTime()
+        // Read on the caller's thread: the downloads below run on the pool's.
+        val yieldToBuilds = DexPackSource.isBackground()
         val pool = Executors.newFixedThreadPool(parallel.coerceIn(1, byArtifact.size))
         val installed = try {
             pool.invokeAll(byArtifact.map { (coordinate, jars) ->
-                Callable { runCatching { installArtifact(coordinate, jars, tagDir) }.getOrDefault(0) }
+                Callable { runCatching { installArtifact(coordinate, jars, tagDir, yieldToBuilds) }.getOrDefault(0) }
             }).sumOf { it.get() }
         } finally {
             pool.shutdownNow()
@@ -149,11 +172,11 @@ class DexRepository(
         installed
     }.getOrDefault(0)
 
-    private fun installArtifact(coordinate: LibraryCoordinate, jars: List<DexPackSource.Wanted>, tagDir: Path): Int {
-        // A download started ahead of a build (the prefetch) steps aside between libraries while one compiles in
-        // this app; the build fetches what it still needs itself. Never set inside the build process, so a build's
-        // own fetch doesn't wait.
-        kotlinx.coroutines.runBlocking { dev.ide.platform.BuildActivity.awaitIdle() }
+    private fun installArtifact(coordinate: LibraryCoordinate, jars: List<DexPackSource.Wanted>, tagDir: Path, yieldToBuilds: Boolean): Int {
+        // A download started ahead of a build (the prefetch, run [DexPackSource.asBackground]) steps aside between
+        // libraries while one compiles in this app; the build fetches what it still needs itself. A build's own
+        // fetch never waits: in-process, BuildActivity is that very build, so it would wait on itself.
+        if (yieldToBuilds) kotlinx.coroutines.runBlocking { dev.ide.platform.BuildActivity.awaitIdle() }
         val url = "${baseUrl.trimEnd('/')}/${pathOf(coordinate)}"
         missing[url]?.let { at -> if (clock() - at < retryAfterMs) return 0 }
         val opened = net.get(url)?.let { SignedArchive.open(it, publicKey) }
