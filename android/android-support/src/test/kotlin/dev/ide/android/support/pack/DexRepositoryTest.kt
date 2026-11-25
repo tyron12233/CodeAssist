@@ -105,6 +105,40 @@ class DexRepositoryTest {
         assertEquals(setOf("a/A.class", "a/B.class"), DexClasses.namesOf(Files.readAllBytes(bucket.resolve("classes.dex"))))
     }
 
+    /**
+     * While a build compiles, only the background prefetch steps aside. The build's own fetch must not wait: an
+     * in-process build (an app without notification permission) IS the build BuildActivity reports, so it waited
+     * on itself for the full two minutes before dexing locally.
+     */
+    @Test
+    fun aBuildsOwnFetchDoesNotWaitForTheBuildButThePrefetchDoes() {
+        val jar = resolvedJar(tmp(), "com/example/lib/1.0/lib-1.0-exploded/classes.jar", "a/A.class")
+        val files = publish(jar)
+        dev.ide.platform.BuildActivity.set(true)
+        try {
+            val t0 = System.nanoTime()
+            assertEquals(1, repository(MapNet(files)).fetch(listOf(wanted(jar)), tmp().resolve("minApi28-debug")) {})
+            val ms = (System.nanoTime() - t0) / 1_000_000
+            assertTrue(ms < 10_000, "the build's own fetch waited ${ms}ms for the build")
+
+            val done = java.util.concurrent.CountDownLatch(1)
+            val installed = AtomicInteger(-1)
+            Thread {
+                installed.set(DexPackSource.asBackground {
+                    repository(MapNet(files)).fetch(listOf(wanted(jar)), tmp().resolve("minApi28-debug")) {}
+                })
+                done.countDown()
+            }.start()
+            assertFalse(done.await(500, java.util.concurrent.TimeUnit.MILLISECONDS), "the prefetch ran during a build")
+            dev.ide.platform.BuildActivity.set(false)
+            assertTrue(done.await(10, java.util.concurrent.TimeUnit.SECONDS), "the prefetch never resumed after the build")
+            assertEquals(1, installed.get())
+        } finally {
+            dev.ide.platform.BuildActivity.set(false)
+        }
+        assertFalse(DexPackSource.isBackground())
+    }
+
     /** A published dex that lacks one of the jar's classes would make that class vanish from the app. */
     @Test
     fun aMergedDexMissingAClassOfTheJarIsNotInstalled() {

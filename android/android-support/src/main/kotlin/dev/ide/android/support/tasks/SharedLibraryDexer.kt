@@ -189,7 +189,7 @@ class SharedLibraryDexer(
         }.distinctBy { it.hash }
         if (wanted.isEmpty()) return 0
         checkCanceled()
-        return pack.fetch(wanted, tagDir, log)
+        return dev.ide.android.support.pack.DexPackSource.asBackground { pack.fetch(wanted, tagDir, log) }
     }
 
     /**
