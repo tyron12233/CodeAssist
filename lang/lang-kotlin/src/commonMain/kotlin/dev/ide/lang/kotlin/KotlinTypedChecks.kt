@@ -1042,6 +1042,19 @@ private fun deferredMemberVal(psi: KtElement?): Boolean =
 private fun declaringClass(psi: KtElement?): KtClassOrObject? = (psi?.parent as? KtClassBody)?.parent as? KtClassOrObject
 
 /**
+ * Whether [a] and [b] declare the same class, when they may come from two parses of one file. The symbol model
+ * can hold a member's declaration from another tree than the one the checks walk (it is re-synced per pass, by
+ * text), and then PSI identity never matches: every `vertical = …` in an `init` block read as an assignment
+ * from outside the class, "Val cannot be reassigned". A named class is the same class by its FQN in the same
+ * file; a local or anonymous one has no FQN and still needs identity.
+ */
+private fun sameClassDeclaration(a: KtClassOrObject, b: KtClassOrObject): Boolean {
+    if (a === b) return true
+    val fqn = a.fqName ?: return false
+    return fqn == b.fqName && a.containingKtFile.name == b.containingKtFile.name
+}
+
+/**
  * Whether [e] runs as part of constructing an instance of [cls]: in one of its `init` blocks, its secondary
  * constructors or its property initializers, and not inside a function, an accessor or another class there.
  */
@@ -1051,8 +1064,8 @@ private fun insideInitializationOf(e: KtElement, cls: KtClassOrObject?): Boolean
     while (node != null) {
         when (node) {
             is KtNamedFunction, is KtPropertyAccessor -> return false
-            is KtSecondaryConstructor -> return node.getStrictParentOfType<KtClassOrObject>() == cls
-            is KtClassOrObject -> return node == cls
+            is KtSecondaryConstructor -> return node.getStrictParentOfType<KtClassOrObject>()?.let { sameClassDeclaration(it, cls) } == true
+            is KtClassOrObject -> return sameClassDeclaration(node, cls)
             is KtFile -> return false
             else -> {}
         }
