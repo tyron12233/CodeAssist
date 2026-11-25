@@ -65,16 +65,13 @@ val stageHelloPlugin = tasks.register<Copy>("stageHelloPluginApk") {
     into(layout.buildDirectory.dir("plugin-asset"))
 }
 
-// CsPluginTest installs the C# plugin the same way. Its .NET toolchain is built outside Gradle
-// (tools/dotnet-toolchain), so without one there is nothing worth installing and the test skips itself.
-val dotnetToolchainBuilt = rootProject.file("tools/dotnet-toolchain/build/out/arm64-v8a/assets/dotnet-sdk.zip").isFile
+// CsPluginTest installs the C# plugin the same way. The plugin lives in tyron12233/codeassist-dotnet-plugin, so
+// pass the debug APK built there (with its .NET toolchain) as -Pe2e.dotnetPluginApk=<path>; without one there is
+// nothing worth installing and the test skips itself.
+val dotnetPluginApk: File? = providers.gradleProperty("e2e.dotnetPluginApk").orNull?.let(::File)?.takeIf { it.isFile }
 val stageDotnetPlugin = tasks.register<Copy>("stageDotnetPluginApk") {
-    onlyIf { dotnetToolchainBuilt }
-    if (dotnetToolchainBuilt) dependsOn(":samples:dotnet-plugin:assembleDebug")
-    from(project(":samples:dotnet-plugin").layout.buildDirectory.dir("outputs/apk/debug")) {
-        include("*.apk")
-        rename { "dotnet-plugin.apk" }
-    }
+    onlyIf { dotnetPluginApk != null }
+    if (dotnetPluginApk != null) from(dotnetPluginApk) { rename { "dotnet-plugin.apk" } }
     into(layout.buildDirectory.dir("plugin-asset"))
 }
 android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("plugin-asset").get().asFile)

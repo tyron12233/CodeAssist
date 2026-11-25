@@ -10,7 +10,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The C# plugin (:samples:dotnet-plugin, bundled into this test APK when its .NET toolchain has been built)
+ * The C# plugin (tyron12233/codeassist-dotnet-plugin, bundled into this test APK when -Pe2e.dotnetPluginApk names its APK)
  * compiles and runs a program inside the IDE: the plugin's process launches, the runtime unpacked into the
  * IDE's storage, Roslyn, and the Run console, none of which a unit test or a shell on the device reaches.
  */
@@ -38,7 +38,7 @@ class CsPluginTest : E2eTest() {
 
     @Test
     fun consoleAppCompilesAndRuns() {
-        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        assumeTrue("needs -Pe2e.dotnetPluginApk=<codeassist-dotnet-plugin debug APK built with its .NET toolchain>", bundled)
         val name = uniqueName("CsCon")
         createProject("C# Console App", name)
 
@@ -62,7 +62,7 @@ class CsPluginTest : E2eTest() {
      */
     @Test
     fun editorCompletesAndReportsErrors() {
-        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        assumeTrue("needs -Pe2e.dotnetPluginApk=<codeassist-dotnet-plugin debug APK built with its .NET toolchain>", bundled)
         val name = uniqueName("CsEdit")
         createProject("C# Console App", name)
         val program = "${projectDir(name)}/Program.cs"
@@ -90,7 +90,7 @@ class CsPluginTest : E2eTest() {
     /** A package named in the project file is fetched from nuget.org, compiled against, and found at run time. */
     @Test
     fun nugetPackageIsRestoredAndUsed() {
-        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        assumeTrue("needs -Pe2e.dotnetPluginApk=<codeassist-dotnet-plugin debug APK built with its .NET toolchain>", bundled)
         val name = uniqueName("CsPkg")
         createProject("C# Console App", name)
         val dir = projectDir(name)
@@ -114,7 +114,7 @@ class CsPluginTest : E2eTest() {
      */
     @Test
     fun referencedProjectIsBuiltAndUsed() {
-        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        assumeTrue("needs -Pe2e.dotnetPluginApk=<codeassist-dotnet-plugin debug APK built with its .NET toolchain>", bundled)
         val name = uniqueName("CsRef")
         createProject("C# Console App", name)
         val dir = projectDir(name)
@@ -142,7 +142,7 @@ class CsPluginTest : E2eTest() {
      */
     @Test
     fun xunitTestsRunAndReport() {
-        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        assumeTrue("needs -Pe2e.dotnetPluginApk=<codeassist-dotnet-plugin debug APK built with its .NET toolchain>", bundled)
         val name = uniqueName("CsTest")
         createProject("C# Console App", name)
         val dir = projectDir(name)
@@ -166,7 +166,7 @@ class CsPluginTest : E2eTest() {
     /** The editor marks a test class in the gutter, and the mark runs the class's tests. */
     @Test
     fun gutterMarkRunsATestClass() {
-        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        assumeTrue("needs -Pe2e.dotnetPluginApk=<codeassist-dotnet-plugin debug APK built with its .NET toolchain>", bundled)
         val name = uniqueName("CsMark")
         createProject("C# Console App", name)
         val dir = projectDir(name)
@@ -193,7 +193,7 @@ class CsPluginTest : E2eTest() {
      */
     @Test
     fun editorReformatsAndGoesToDeclaration() {
-        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        assumeTrue("needs -Pe2e.dotnetPluginApk=<codeassist-dotnet-plugin debug APK built with its .NET toolchain>", bundled)
         val name = uniqueName("CsNav")
         createProject("C# Console App", name)
         val dir = projectDir(name)
@@ -236,7 +236,7 @@ class CsPluginTest : E2eTest() {
      */
     @Test
     fun secondProgramInAModuleHasItsOwnRunRow() {
-        assumeTrue("needs tools/dotnet-toolchain/build-dotnet-android.sh to have been run", bundled)
+        assumeTrue("needs -Pe2e.dotnetPluginApk=<codeassist-dotnet-plugin debug APK built with its .NET toolchain>", bundled)
         val name = uniqueName("CsTwo")
         createProject("C# Console App", name)
         val dir = projectDir(name)

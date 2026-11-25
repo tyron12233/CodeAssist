@@ -995,7 +995,7 @@ it is unavailable), and the project model if your language has one (a module typ
 it look like your language's project: declare its directories as content roots under a `ContentRole` of your
 own and the Project view shows them (a plugin's roles are surfaced there like the built-in code roots), and
 a module type no build system builds offers its own Run rows rather than a Build row that cannot work. The
-Dart plugin (`samples/dart-plugin`) is a complete example.
+Dart plugin ([codeassist-dart-plugin](https://github.com/tyron12233/codeassist-dart-plugin)) is a complete example.
 
 How it behaves, so you can plan around it:
 
@@ -1098,7 +1098,7 @@ your provider), then `queued` / `started` / `passed` / `failed` / `skipped` per 
 end, to the console's `ProgramIo.stdout`. Everything else the run prints stays in the console as output. A
 re-run hands `run` the targets as `suite#test` (or a bare suite), in the names your records used. The Calc
 sample (`samples/lsp-plugin`, `CalcTestProvider`) is a complete one; the Dart plugin's `DartTestProvider`
-(`samples/dart-plugin`) is one for a real test framework.
+([codeassist-dart-plugin](https://github.com/tyron12233/codeassist-dart-plugin)) is one for a real test framework.
 
 ### Language servers without a plugin
 

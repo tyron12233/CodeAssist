@@ -77,11 +77,6 @@ dependencyResolutionManagement {
         maven("https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea") {
             content { includeGroupByRegex("com\\.mbridge\\..*") }
         }
-        // The Flutter engine's Java embedding (:samples:dart-plugin's Flutter player only). Published by
-        // Google to its own bucket, not Maven Central or Google Maven; scoped by group.
-        maven("https://storage.googleapis.com/download.flutter.io") {
-            content { includeGroup("io.flutter") }
-        }
     }
 }
 
@@ -238,13 +233,11 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         // Black-box feature tests against the shipping (R8) build of :ide-android, driven from their own
         // process through UI Automator: they link nothing of the app's, so they need no keep rules.
         ":ide-android-e2e",
-        // A plugin packaged as its own app, built here so it cannot drift from the SPI it compiles against.
+        // Example plugins packaged as their own apps, built here so the SPI cannot drift from what they compile
+        // against. The NDK, Dart, Swift and C# plugins live in their own repositories
+        // (tyron12233/codeassist-<name>-plugin) and compile against the SPI JitPack builds from a release tag.
         ":samples:hello-plugin",
-        ":samples:ndk-plugin",
         ":samples:lsp-plugin",
-        ":samples:dart-plugin",
-        ":samples:dotnet-plugin",
-        ":samples:swift-plugin",
     )
 }
 
