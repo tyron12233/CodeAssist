@@ -263,7 +263,7 @@ fun KotlinResolver.asSeenFromSupertypes(cls: KtClassOrObject, members: List<Kotl
         if ('<' !in text) continue
         val type = runCatching { service.typeFromText(text, fileContext) }.getOrNull() ?: continue
         if (type.typeArguments.isEmpty()) continue
-        service.ownAndInheritedMembers(type.qualifiedName, type.typeArguments).forEach { seen.putIfAbsent(memberKey(it), it) }
+        service.ownAndInheritedMembers(type.qualifiedName, type.typeArguments).forEach { seen.getOrPut(memberKey(it)) { it } }
     }
     if (seen.isEmpty()) return members
     return members.map { m -> seen[memberKey(m)]?.takeIf { it.name == m.name } ?: m }
