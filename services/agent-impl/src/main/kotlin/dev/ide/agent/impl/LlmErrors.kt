@@ -83,6 +83,7 @@ internal object LlmErrors {
         val code = errObj?.get("code").asStr().orEmpty().lowercase()
         val retryAfterMs = retryAfterHeaderMs
             ?: geminiRetryDelayMs(errObj)
+            ?: openRouterResetMs(errObj)
             ?: retryDelayFromMessage(providerMsg)
         val quota = quotaInfo(errObj, providerMsg)
         var kind = classify(statusCode, type, code, providerMsg)
@@ -110,10 +111,23 @@ internal object LlmErrors {
      * nothing about a quota.
      */
     internal fun quotaInfo(errObj: JsonObject?, message: String?): QuotaInfo? {
-        val violation = errObj?.get("details").asArr()
+        openRouterQuota(errObj, message)?.let { return it }
+        val violations = errObj?.get("details").asArr()
             ?.mapNotNull { it.asObj() }
             ?.firstOrNull { it["@type"].asStr()?.endsWith("QuotaFailure") == true }
-            ?.get("violations").asArr()?.firstOrNull().asObj()
+            ?.get("violations").asArr()?.mapNotNull { it.asObj() }.orEmpty()
+        if (violations.isEmpty()) return violationInfo(null, message)
+        // Google lists every quota the request broke, a per-minute one often first and a spent daily one after
+        // it. Reading only the first made a spent day look like "wait a minute": the agent waited and resent
+        // until it gave up, while nothing short of tomorrow could help. The worst one decides.
+        val infos = violations.mapNotNull { violationInfo(it, message) }
+        return infos.firstOrNull { it.limit == 0L }
+            ?: infos.firstOrNull { it.window == QuotaInfo.Window.DAY }
+            ?: infos.firstOrNull()
+    }
+
+    /** One `QuotaFailure` violation (or, with none, what the message says) as a [QuotaInfo]. */
+    private fun violationInfo(violation: JsonObject?, message: String?): QuotaInfo? {
         val quotaId = violation?.get("quotaId").asStr().orEmpty()
         val metric = violation?.get("quotaMetric").asStr().orEmpty()
         val model = violation?.get("quotaDimensions").asObj()?.get("model").asStr()
@@ -245,9 +259,10 @@ internal object LlmErrors {
                 else -> "Rate limit reached: too many requests.$wait$tail"
             }
             LlmErrorKind.DAILY_LIMIT ->
-                "Daily limit reached for $modelName${quota?.limit?.let { " ($it per day)" }.orEmpty()}. It resets on " +
-                    "the provider's daily boundary (midnight Pacific time for Gemini). Switch to another model or " +
-                    "enable billing to keep going.$tail"
+                "Daily limit reached for $modelName${quota?.limit?.let { " ($it per day)" }.orEmpty()}. " +
+                    (retryAfterMs?.let { "It resets in ${humanDelay(it)}. " }
+                        ?: "It resets on the provider's daily boundary (midnight Pacific time for Gemini). ") +
+                    "Switch to another model or add credit with the provider to keep going.$tail"
             LlmErrorKind.MODEL_NOT_ON_PLAN ->
                 "$modelName has no quota on your plan (its limit is 0), so every request to it is refused. Pick a " +
                     "different model, or enable billing for this API key's project.$tail"
@@ -278,6 +293,34 @@ internal object LlmErrors {
         "No API was found at ${url.substringBefore('?')} (HTTP 404). Check the base URL: it is the API server's " +
             "address and port, not a web dashboard's, and /v1/chat/completions is added to it (for Ollama, " +
             "http://127.0.0.1:11434)."
+
+    /**
+     * OpenRouter's own limits on free models: `Rate limit exceeded: free-models-per-day` (or `-per-min`), with the
+     * limit and its reset in `error.metadata.headers`. It answers both with a plain 429, and treating the daily one
+     * as "retry in 30 seconds" sent the agent round a wait loop until it gave up. Null for anything else,
+     * including an upstream provider's own rate limit, which is per-minute and passes through as one.
+     */
+    private fun openRouterQuota(errObj: JsonObject?, message: String?): QuotaInfo? {
+        val m = message.orEmpty().lowercase()
+        val window = when {
+            "free-models-per-day" in m -> QuotaInfo.Window.DAY
+            "free-models-per-min" in m -> QuotaInfo.Window.MINUTE
+            else -> return null
+        }
+        val headers = errObj?.get("metadata").asObj()?.get("headers").asObj()
+        val limit = headers?.entries?.firstOrNull { it.key.equals("x-ratelimit-limit", true) }?.value.asStr()?.toLongOrNull()
+        return QuotaInfo(window, QuotaInfo.Metric.REQUESTS, limit, model = null)
+    }
+
+    /** OpenRouter puts the window's reset (epoch milliseconds) in `error.metadata.headers.X-RateLimit-Reset`. */
+    private fun openRouterResetMs(errObj: JsonObject?): Long? {
+        val headers = errObj?.get("metadata").asObj()?.get("headers").asObj() ?: return null
+        val reset = headers.entries.firstOrNull { it.key.equals("x-ratelimit-reset", true) }?.value.asStr()
+            ?.toLongOrNull() ?: return null
+        // Seconds or milliseconds since the epoch, depending on the deployment.
+        val resetMs = if (reset < 100_000_000_000L) reset * 1000 else reset
+        return (resetMs - System.currentTimeMillis()).takeIf { it > 0 }
+    }
 
     /** Google's `error.details[]` carries a `RetryInfo` with a `retryDelay` like "5s" or "1.5s". */
     private fun geminiRetryDelayMs(errObj: JsonObject?): Long? {

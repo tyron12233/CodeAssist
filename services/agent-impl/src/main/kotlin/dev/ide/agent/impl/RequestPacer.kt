@@ -29,12 +29,26 @@ class RequestPacer(
     private val window = ArrayDeque<Sent>()
     private var learnedRpm: Int? = null
     private var learnedTpm: Long? = null
+    /** When the learned ceilings were last set: they are forgotten [LEARNED_TTL_MS] later (see [forgetStale]). */
+    private var learnedAt = 0L
 
     /** The requests-per-minute ceiling in force, or null when none is known. */
-    val rpm: Int? @Synchronized get() = configuredRpm?.takeIf { it > 0 } ?: learnedRpm
+    val rpm: Int? @Synchronized get() = configuredRpm?.takeIf { it > 0 } ?: forgetStale().let { learnedRpm }
 
     /** The input-tokens-per-minute ceiling in force, or null when none is known. */
-    val tpm: Long? @Synchronized get() = configuredTpm?.takeIf { it > 0 } ?: learnedTpm
+    val tpm: Long? @Synchronized get() = configuredTpm?.takeIf { it > 0 } ?: forgetStale().let { learnedTpm }
+
+    /**
+     * A ceiling learned from an error is a guess, and one that only ever came down: a daily limit or a token limit
+     * read as a request rate pushed it lower on every 429 until each request waited most of a minute, for the rest
+     * of the session. It now lapses after a while, and is learned again if the provider still objects.
+     */
+    private fun forgetStale() {
+        if ((learnedRpm != null || learnedTpm != null) && clock() - learnedAt >= LEARNED_TTL_MS) {
+            learnedRpm = null
+            learnedTpm = null
+        }
+    }
 
     /**
      * How long to wait before sending a request of about [estimatedTokens] input tokens, in milliseconds; 0 to
@@ -83,12 +97,15 @@ class RequestPacer(
         val stated = quota?.limit?.takeIf { it > 0 }
         when (quota?.metric) {
             QuotaInfo.Metric.INPUT_TOKENS -> {
-                learnedTpm = stated ?: window.sumOf { it.tokens }.takeIf { it > 0 }?.let { it * 9 / 10 }
+                (stated ?: window.sumOf { it.tokens }.takeIf { it > 0 }?.let { it * 9 / 10 })?.let { learnedTpm = it }
             }
             else -> {
-                learnedRpm = stated?.toInt() ?: (window.size - 1).takeIf { it > 0 }
+                // A request-rate limit that names no number is only taken as one when enough went out for a rate
+                // to have been the cause: refused after one or two requests, the cause is something else.
+                (stated?.toInt() ?: (window.size - 1).takeIf { window.size >= MIN_OBSERVED_FOR_RPM })?.let { learnedRpm = it }
             }
         }
+        learnedAt = clock()
     }
 
     private fun prune(now: Long) {
@@ -97,6 +114,12 @@ class RequestPacer(
 
     companion object {
         const val WINDOW_MS = 60_000L
+
+        /** How long a ceiling learned from an error holds before it is forgotten. */
+        const val LEARNED_TTL_MS = 15 * 60_000L
+
+        /** The fewest requests in the last minute from which an unstated per-minute limit is read as a rate. */
+        const val MIN_OBSERVED_FOR_RPM = 3
 
         /** A rough input-token estimate for a request: ~4 characters per token, images at their usual price. */
         fun estimateTokens(request: dev.ide.agent.LlmRequest): Long {

@@ -305,9 +305,21 @@ internal class OpenAiStreamDecoder {
     var completed: Boolean = false
         private set
 
+    /** Set once the stream reported an error: what follows (a closing `[DONE]`) must not read as a finish. */
+    private var failed = false
+
     fun decode(data: String): List<LlmStreamEvent> {
+        if (failed) return emptyList()
         if (data.trim() == "[DONE]") return finish()
         val json = runCatching { AgentJson.parseToJsonElement(data).asObj() }.getOrNull() ?: return emptyList()
+        // A gateway that already answered 200 reports a later failure in the stream itself: OpenRouter sends
+        // `{"error": {"code": 429, "message": ...}}` (an upstream provider's rate limit, a model that dropped out)
+        // with `finish_reason: "error"`. Read as nothing, it ended the turn empty or cut off with no word of why,
+        // which is how a model that "worked a minute ago" seemed to stop answering.
+        json["error"].asObj()?.let { err ->
+            failed = true
+            return listOf(streamFailure(err))
+        }
         val out = ArrayList<LlmStreamEvent>(2)
 
         json["usage"].asObj()?.let { usage ->
@@ -323,6 +335,13 @@ internal class OpenAiStreamDecoder {
         }
 
         val choice = json["choices"].asArr()?.firstOrNull().asObj() ?: return out
+        if (choice["finish_reason"].asStr() == "error") {
+            failed = true
+            return out + LlmStreamEvent.Failed(
+                "The provider stopped the reply with an error and gave no reason. Try again, or pick another model.",
+                LlmHttpException("The provider stopped the reply with an error.", retryable = false, kind = LlmErrorKind.SERVER),
+            )
+        }
         choice["finish_reason"].asStr()?.let { stopReason = mapStop(it) }
 
         val delta = choice["delta"].asObj() ?: return out
@@ -360,6 +379,17 @@ internal class OpenAiStreamDecoder {
         )
         out += LlmStreamEvent.Completed(stopReason)
         return out
+    }
+
+    /** An in-stream `error` object as a failure, classified like an HTTP error with the status it names. */
+    private fun streamFailure(err: kotlinx.serialization.json.JsonObject): LlmStreamEvent.Failed {
+        val status = err["code"].asInt()
+        val parsed = LlmErrors.parseErrorObj(status, err, null)
+        val e = LlmHttpException(
+            parsed.message, status, parsed.retryAfterMs, parsed.retryable, kind = parsed.kind, quota = parsed.quota,
+            affordableMaxTokens = parsed.affordableMaxTokens,
+        )
+        return LlmStreamEvent.Failed(parsed.message, e)
     }
 
     private fun mapStop(s: String): StopReason = when (s) {

@@ -74,8 +74,15 @@ class AgentLoop(
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private companion object {
-        /** How many rate-limit waits one turn may sit through before it gives up and reports the error. */
+        /** How many rate-limit waits in a row one step may sit through before it gives up and reports the error. */
         const val MAX_RATE_LIMIT_WAITS = 6
+
+        /**
+         * How many rate-limit waits a whole turn may sit through. The per-step count starts again after every step
+         * that goes through, so on its own a long agent run could wait, step, wait again without end, which is the
+         * "stuck in a rate-limit loop" users saw; this bounds the turn.
+         */
+        const val MAX_TURN_RATE_LIMIT_WAITS = 12
 
         /** Characters per token for what a step adds (mostly code and tool output), erring on the high side. */
         const val CHARS_PER_TOKEN = 3
@@ -198,6 +205,7 @@ class AgentLoop(
         pairHistory()
         var iteration = 0
         var rateLimitWaits = 0
+        var turnRateLimitWaits = 0
         var creditRetries = 0
         var truncationRetries = 0
         var compacted = false
@@ -226,11 +234,25 @@ class AgentLoop(
 
             val failure = turn.failure
             if (failure != null) {
+                val tooBig = tokenAllowanceExceeded(turn, request)
+                if (tooBig != null) {
+                    // The request alone is more than the model may take in a minute, so no wait lets it through.
+                    // A summary of the conversation can be small enough; failing that, say what would help.
+                    if (!compacted && history.size > 2) {
+                        compacted = true
+                        iteration--
+                        autoCompact(sink)
+                        continue
+                    }
+                    sink.emit(AgentEvent.Error(tooBig, LlmErrorKind.RATE_LIMIT.name))
+                    return
+                }
                 val wait = rateLimitWait(turn)
-                if (wait != null && rateLimitWaits < MAX_RATE_LIMIT_WAITS) {
+                if (wait != null && rateLimitWaits < MAX_RATE_LIMIT_WAITS && turnRateLimitWaits < MAX_TURN_RATE_LIMIT_WAITS) {
                     // Nothing reached the user, so the same request can simply be sent again once the window
                     // has moved on. The attempt does not count against the iteration cap.
                     rateLimitWaits++
+                    turnRateLimitWaits++
                     iteration--
                     sink.emit(AgentEvent.Waiting(clock() + wait, "Rate limited by the provider. Retrying when the limit resets."))
                     delay(wait)
@@ -436,6 +458,24 @@ class AgentLoop(
         val wait = cause.retryAfterMs ?: DEFAULT_RATE_LIMIT_WAIT_MS
         if (wait > MAX_RATE_LIMIT_WAIT_MS) return null
         return wait.coerceAtLeast(1_000)
+    }
+
+    /**
+     * What to tell the user when [turn] failed on a tokens-per-minute limit that [request] alone does not fit in, or
+     * null when it did not: such a request is refused however long the loop waits, and was resent until the waits
+     * ran out. Judged from the limit the provider stated, against a rough estimate of the request's size.
+     */
+    private fun tokenAllowanceExceeded(turn: Turn, request: LlmRequest): String? {
+        val cause = turn.failureCause as? LlmHttpException ?: return null
+        if (cause.kind != LlmErrorKind.RATE_LIMIT || turn.producedOutput) return null
+        val quota = cause.quota ?: return null
+        val limit = quota.limit?.takeIf { it > 0 } ?: return null
+        if (quota.metric != QuotaInfo.Metric.INPUT_TOKENS) return null
+        val estimate = RequestPacer.estimateTokens(request)
+        if (estimate < limit * 9 / 10) return null
+        return "This conversation is about $estimate tokens, more than the ${quota.model?.let { "'$it'" } ?: "model"}'s " +
+            "limit of $limit input tokens per minute, so it is refused however long CodeAssist waits. Start a new " +
+            "chat, or pick a model with a higher limit."
     }
 
     /**
