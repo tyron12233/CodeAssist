@@ -1662,6 +1662,10 @@
     <string name="storage_cat_other_desc">密钥库、备份和应用数据</string>
     <string name="plugins_restart_hint">重启后将应用插件更改。</string>
     <string name="plugins_restart_now">立即重启</string>
+    <string name="plugins_arrival_on_title">%1$s 已启用</string>
+    <string name="plugins_arrival_on_body">现在即可使用。已打开的项目会在下次打开时获得它新增的功能。</string>
+    <string name="plugins_arrival_restart_title">%1$s 将在重启后启动</string>
+    <string name="plugins_arrival_restart_body">CodeAssist 运行期间无法启动它：%1$s</string>
     <string name="plugins_restarting">正在重启…</string>
     <string name="plugins_change_installed">已安装</string>
     <string name="plugins_change_updated">已更新</string>

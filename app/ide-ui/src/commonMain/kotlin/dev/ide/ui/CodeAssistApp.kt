@@ -99,7 +99,7 @@ fun CodeAssistApp(
     // straight from ToolWindowRegistry.
     // noinspection RememberReturnType
     remember(Unit) {
-        backend.uiPlugins().forEach { UiPluginHost.register(it) }
+        UiPluginHost.syncPlugins(backend.uiPlugins())
         // The shell's own tool window: the notification center, readable from inside a project.
         UiPluginHost.register(dev.ide.ui.screens.NotificationsUiPlugin)
         UiPluginHost.ensureLoaded()
@@ -286,6 +286,19 @@ fun CodeAssistApp(
                             onConvert = { app.importGradleProject(convert = true) },
                             onDismiss = app::dismissImportModeChoice,
                         )
+                        // A plugin just installed (from Get plugins) is asked about the moment the user is back,
+                        // and runs once allowed, with no restart. Not over the first-run sheets.
+                        if (!app.showOnboarding && !app.showMigration && !app.showAnalytics) {
+                            dev.ide.ui.screens.PluginArrivalReview(
+                                backend = backend,
+                                onRestart = if (backend.settings.canRestartApplication()) {
+                                    {
+                                        state.saveAllNow()
+                                        backend.settings.restartApplication()
+                                    }
+                                } else null,
+                            )
+                        }
                     }
                 }
             }

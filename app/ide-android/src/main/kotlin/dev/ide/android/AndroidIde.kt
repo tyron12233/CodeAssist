@@ -269,15 +269,14 @@ object AndroidIde {
             ).start()
         }
         AndroidMemory.registerTrimHandler(appContext, backend)
-        // Plugins load once per process, so applying an installed plugin's change means starting again. Both
-        // halves of that are wired here, and only in the UI process: the restart itself, and the watch that
-        // notices a plugin app being installed, updated or uninstalled while the IDE is running (the `:build`
-        // and `:preview` processes stand up their own managers and have no screen to report it on).
+        // An installed plugin app's install, update and uninstall are taken up while the IDE runs, and the
+        // restart is what is left for a change that cannot be. Both are wired here, and only in the UI process
+        // (the `:build` and `:preview` processes stand up their own managers and have no screen to report it on).
         // Not in the sandbox: a restart there would take the real IDE down too (it kills every process of the
         // app), and the sandbox loads a plugin build, not installed plugin apps.
         if (!sandbox) {
             manager.applicationContainer.registerServiceIfAbsent(APP_RESTARTER) { AppRestart(appContext) }
-            PluginPackageWatcher(appContext, ApkPluginSource(appContext), manager.pluginChanges) { id ->
+            PluginPackageWatcher(appContext, ApkPluginSource(appContext), manager) { id ->
                 // A plugin turned off for crashing that its developer just reinstalled is a new build: let the
                 // restart the Plugins screen now offers load it again, even at the same manifest version.
                 if (id in manager.pluginCrashGuard.crashSuspended()) manager.setDisabledPlugins(manager.disabledPlugins() - id)

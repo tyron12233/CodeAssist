@@ -1819,6 +1819,10 @@
     <string name="storage_cat_other_desc">ملفات المفاتيح والنسخ الاحتياطية وبيانات التطبيق</string>
     <string name="plugins_restart_hint">أعد التشغيل لتطبيق تغييرات الإضافات.</string>
     <string name="plugins_restart_now">إعادة التشغيل الآن</string>
+    <string name="plugins_arrival_on_title">%1$s مُفعّلة</string>
+    <string name="plugins_arrival_on_body">أصبحت جاهزة للاستخدام. المشروع المفتوح مسبقًا يحصل على ما تضيفه عند فتحه في المرة القادمة.</string>
+    <string name="plugins_arrival_restart_title">تبدأ %1$s بعد إعادة التشغيل</string>
+    <string name="plugins_arrival_restart_body">تعذّر تشغيلها أثناء عمل CodeAssist: %1$s</string>
     <string name="plugins_restarting">جاري إعادة التشغيل…</string>
     <string name="plugins_change_installed">مثبّتة</string>
     <string name="plugins_change_updated">محدّثة</string>

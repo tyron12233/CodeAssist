@@ -1695,6 +1695,10 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="storage_cat_other_desc">Keystores, backups, and app data</string>
     <string name="plugins_restart_hint">Restart to apply your plugin changes.</string>
     <string name="plugins_restart_now">Restart now</string>
+    <string name="plugins_arrival_on_title">%1$s is on</string>
+    <string name="plugins_arrival_on_body">It is ready to use. A project that was already open picks up what it adds the next time it opens.</string>
+    <string name="plugins_arrival_restart_title">%1$s starts after a restart</string>
+    <string name="plugins_arrival_restart_body">It could not be started while CodeAssist is running: %1$s</string>
     <string name="plugins_restarting">Restarting…</string>
     <string name="plugins_change_installed">installed</string>
     <string name="plugins_change_updated">updated</string>

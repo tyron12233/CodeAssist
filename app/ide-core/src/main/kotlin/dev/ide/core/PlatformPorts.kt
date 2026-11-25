@@ -179,4 +179,11 @@ interface AppRestarter {
     /** Take the app down, every process of it, and bring its UI back up. Does not return on a host that
      *  really restarts, so the caller must have finished whatever has to survive (saving open files). */
     fun restart()
+
+    /**
+     * An installed plugin was loaded, reloaded or unloaded in the UI process while the app runs: bring the
+     * app's other processes that load plugins for themselves up to date without restarting the UI. A host with
+     * no such processes does nothing.
+     */
+    fun refreshPluginProcesses() {}
 }

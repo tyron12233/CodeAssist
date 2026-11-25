@@ -136,4 +136,32 @@ class PluginChangesTest {
         c.choicesChanged(disabled = setOf("some-plugin"), consented = setOf(hello.id))
         assertEquals(listOf("some-plugin"), c.pending().map { it.name })
     }
+
+    @Test
+    fun `an install taken up while the app runs waits for nothing`() {
+        val c = changes(installed = emptyList(), consented = emptySet())
+        c.packageInstalled("com.example.other", "Other Plugin")
+        c.settled("com.example.other", "com.example.other")
+        assertTrue(c.pending().isEmpty())
+    }
+
+    @Test
+    fun `a consent loaded live waits for nothing, and turning it off again is a change again`() {
+        val c = changes(consented = emptySet())
+        c.choicesChanged(disabled = emptySet(), consented = setOf(hello.id))
+        assertEquals(PluginChangeKind.ENABLED, c.pending().single().kind)
+        c.settled(hello.id)
+        assertTrue(c.pending().isEmpty())
+        c.choicesChanged(disabled = setOf(hello.id), consented = setOf(hello.id))
+        assertEquals(PluginChangeKind.DISABLED, c.pending().single().kind)
+    }
+
+    @Test
+    fun `settling one plugin leaves another's change waiting`() {
+        val other = KnownPlugin("com.example.other", "com.example.other", "Other Plugin")
+        val c = changes(installed = listOf(hello, other), consented = emptySet())
+        c.choicesChanged(disabled = emptySet(), consented = setOf(hello.id, other.id))
+        c.settled(hello.id)
+        assertEquals(listOf(other.id), c.pending().map { it.id })
+    }
 }

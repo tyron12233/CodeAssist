@@ -2157,6 +2157,10 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="storage_cat_other_title">Lainnya</string>
     <string name="storage_cat_other_desc">Keystore, cadangan, dan data aplikasi</string>
     <string name="plugins_restart_now">Mulai ulang sekarang</string>
+    <string name="plugins_arrival_on_title">%1$s aktif</string>
+    <string name="plugins_arrival_on_body">Sudah siap digunakan. Proyek yang sudah terbuka akan mendapatkan tambahannya saat dibuka lagi.</string>
+    <string name="plugins_arrival_restart_title">%1$s dimulai setelah dimulai ulang</string>
+    <string name="plugins_arrival_restart_body">Tidak dapat dijalankan saat CodeAssist berjalan: %1$s</string>
     <string name="plugins_restarting">Memulai ulang…</string>
     <string name="plugins_change_installed">dipasang</string>
     <string name="plugins_change_updated">diperbarui</string>
