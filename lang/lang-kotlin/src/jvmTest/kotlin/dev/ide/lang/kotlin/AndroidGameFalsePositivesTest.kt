@@ -121,6 +121,26 @@ class AndroidGameFalsePositivesTest {
         assertEquals(listOf("setText(s)", "setText(e)"), nudges)
     }
 
+    @Test
+    fun builderAndSetOnlySettersAreNotOfferedAsPropertyAccess() {
+        // Kotlin makes `setX` a property setter only when it returns void and a getter exists, and an assignment
+        // only stands as a statement: a builder chain's `.setContentTitle(t)` was told to become `contentTitle = t`.
+        val code = """
+            package demo
+            fun f(b: g.NotificationBuilder, tv: g.TextView, sink: g.Sink, s: String) {
+                b.setSmallIcon(1).setContentTitle(s)
+                b.setSmallIcon(1)
+                sink.setLevel(2)
+                val unit = tv.setText(s)
+                tv.setText(s)
+            }
+        """.trimIndent()
+        val nudges = diagnostics("Builder.kt", code)
+            .filter { it.code == KotlinDiagnosticCodes.USE_PROPERTY_ACCESS }
+            .map { code.substring(it.range.start, it.range.end) to it.range.start }
+        assertEquals(listOf("setText(s)" to code.lastIndexOf("setText(s)")), nudges)
+    }
+
     private fun errors(name: String, code: String): List<String> =
         diagnostics(name, code).filter { it.severity == Severity.ERROR }
             .map { "${it.code} '${code.substring(it.range.start, it.range.end)}' ${it.message}" }
@@ -188,6 +208,13 @@ class AndroidGameFalsePositivesTest {
                     visitEnd(); toByteArray()
                 },
                 "g/EditText" to cls("g/EditText", "g/TextView") { method("getText", "()Lg/Editable;") },
+                // android.app.Notification.Builder: fluent setters that return the builder (one with a getter too).
+                "g/NotificationBuilder" to cls("g/NotificationBuilder") {
+                    method("setSmallIcon", "(I)Lg/NotificationBuilder;"); method("getSmallIcon", "()I")
+                    method("setContentTitle", "(Ljava/lang/CharSequence;)Lg/NotificationBuilder;")
+                },
+                // A set-only accessor: void, with no getter, so Kotlin makes no property of it.
+                "g/Sink" to cls("g/Sink") { method("setLevel", "(I)V") },
                 // android.app.Activity: <T extends View> T findViewById(int), runOnUiThread(Runnable).
                 "g/Activity" to cls("g/Activity") {
                     method("findViewById", "(I)Lg/View;", "<T:Lg/View;>(I)TT;")
