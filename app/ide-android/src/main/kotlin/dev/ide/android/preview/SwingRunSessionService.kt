@@ -56,6 +56,12 @@ class SwingRunSessionService : Service() {
     private val sessions = ConcurrentHashMap<Int, Session>()
     private val nextId = AtomicInteger(0)
 
+    override fun onCreate() {
+        super.onCreate()
+        // Before anything here can load WebView: the main process holds the default data directory.
+        PreviewWebView.isolate()
+    }
+
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onDestroy() {
