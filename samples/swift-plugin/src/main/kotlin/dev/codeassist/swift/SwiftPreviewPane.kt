@@ -37,8 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -139,6 +138,8 @@ private fun Device(frame: SwiftPreviewFrame, painter: SwiftPreviewPainter, stale
         val h = with(density) { (frame.height * scale).toDp() }
         val isDevice = frame.width == 402f && frame.height == 874f
         val corner = with(density) { (if (isDevice) 55f * scale else 0f).toDp() }
+        // Painted into memory at the canvas's own pixel scale (glass needs the pixels behind it), once per frame.
+        val image = remember(frame, scale) { painter.render(frame, scale).asImageBitmap() }
         Canvas(
             Modifier.size(w, h)
                 .shadow(if (isDevice) 8.dp else 0.dp, RoundedCornerShape(corner))
@@ -148,13 +149,7 @@ private fun Device(frame: SwiftPreviewFrame, painter: SwiftPreviewPainter, stale
                     detectTapGestures { offset -> frame.hitAt(offset.x / scale, offset.y / scale)?.let(onHit) }
                 },
         ) {
-            drawIntoCanvas { canvas ->
-                val native = canvas.nativeCanvas
-                native.save()
-                native.scale(scale, scale)
-                painter.paint(native, frame)
-                native.restore()
-            }
+            drawImage(image)
         }
     }
 }

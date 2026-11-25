@@ -116,6 +116,11 @@ struct ProbeView: View {
                     Text("Bordered").report("btn.label")
                     Button("Small") {}.buttonStyle(.bordered).controlSize(.small).report("btn.bordered.small")
                     Button("Large") {}.buttonStyle(.borderedProminent).controlSize(.large).report("btn.prominent.large")
+                    Button("Glass") {}.buttonStyle(.glass).report("btn.glass")
+                    Text("Glass").report("btn.glass.label")
+                    Button("Prominent") {}.buttonStyle(.glassProminent).report("btn.glassProminent")
+                    Button { } label: { Image(systemName: "heart.fill") }.buttonStyle(.glass).report("btn.glass.icon")
+                    Image(systemName: "heart.fill").report("btn.glass.icon.label")
                 }
                 VStack {
                     Toggle("Wi-Fi", isOn: .constant(true)).report("toggle.row")

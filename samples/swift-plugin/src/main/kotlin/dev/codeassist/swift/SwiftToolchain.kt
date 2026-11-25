@@ -156,7 +156,13 @@ class SwiftToolchain(
 
     private fun unpackIfNeeded() {
         val stamp = root.resolve(".unpacked")
-        if (Files.isRegularFile(stamp) && runCatching { String(Files.readAllBytes(stamp)).trim() }.getOrNull() == STAMP) return
+        // Version, layout and the archive's digest (written by the build): a plugin update that changes anything in
+        // the toolchain, the SwiftUI engine included, unpacks afresh.
+        val digest = runCatching {
+            javaClass.classLoader?.getResourceAsStream(DIGEST_ASSET)?.use { String(it.readBytes()).trim() }
+        }.getOrNull().orEmpty()
+        val expected = "$STAMP/$digest"
+        if (Files.isRegularFile(stamp) && runCatching { String(Files.readAllBytes(stamp)).trim() }.getOrNull() == expected) return
         val stream = javaClass.classLoader?.getResourceAsStream(ASSET)
             ?: throw IllegalStateException("$ASSET is not packaged in this plugin")
         val progress = messages?.startProgress("Preparing the Swift toolchain")
@@ -184,7 +190,7 @@ class SwiftToolchain(
                     zip.closeEntry()
                 }
             }
-            Files.write(stamp, STAMP.toByteArray())
+            Files.write(stamp, expected.toByteArray())
             log.info("unpacked $files toolchain files in ${(System.nanoTime() - started) / 1_000_000} ms")
         } finally {
             progress?.finish()
@@ -205,6 +211,7 @@ class SwiftToolchain(
         /** The plugin's minSdk: what a program may assume of the device. */
         private const val API_LEVEL = "26"
         private const val ASSET = "assets/swift-toolchain.zip"
+        private const val DIGEST_ASSET = "assets/swift-toolchain.sha256"
         const val NO_TOOLCHAIN = "This build of the Swift plugin has no Swift toolchain for this device's ABI. Install the plugin build made for it (arm64-v8a, armeabi-v7a or x86_64)."
     }
 }

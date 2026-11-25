@@ -29,7 +29,11 @@ class SwiftPlugin : Plugin {
         reg.register(FileIconExtensionPoint, SwiftFileIconProvider)
         reg.register(RUN_TASK_PROVIDER_EP, SwiftRunTaskProvider(toolchain))
         val text = SwiftTextEngine(toolchain.home.resolve("fonts"))
-        tools = Tools(toolchain, text, SwiftPreviewPainter(text, SwiftSymbols(toolchain.home.resolve("symbols"))), reg.logger("SwiftUIPreview"))
+        val glassParams = runCatching {
+            javaClass.classLoader?.getResourceAsStream("assets/glass-params.json")?.use { org.json.JSONObject(it.reader().readText()) }
+        }.getOrNull()
+        val painter = SwiftPreviewPainter(text, SwiftSymbols(toolchain.home.resolve("symbols")), SwiftGlass(glassParams))
+        tools = Tools(toolchain, text, painter, reg.logger("SwiftUIPreview"))
         log.info("registered; the Swift toolchain is prepared on first use")
     }
 

@@ -83,6 +83,8 @@ extension View {
         case is BorderedButtonStyle: kind = .bordered
         case is BorderedProminentButtonStyle: kind = .borderedProminent
         case is DefaultButtonStyle: kind = .automatic
+        case is GlassButtonStyle: kind = .glass
+        case is GlassProminentButtonStyle: kind = .glassProminent
         default: kind = .customPrimitive { AnyView(style.makeBody(configuration: $0)) }
         }
         return _modified(_EnvironmentModifier { $0._buttonStyle = kind })
@@ -133,7 +135,17 @@ public struct Button<Label: View>: View, _PrimitiveView {
         case .automatic, .borderless:
             let disabled = !env.isEnabled
             styled = _resolveView(label, labelCtx.with { $0._foreground = AnyShapeStyle(disabled ? Color.gray : tint) })
-        case .bordered, .glass:
+        case .glass, .glassProminent:
+            // iOS 26's glass buttons, measured: the label (primary, or white on prominent) padded 12 x 7 on a capsule of
+            // regular glass, tinted with the accent colour when prominent.
+            let prominent: Bool
+            if case .glassProminent = style { prominent = true } else { prominent = false }
+            let inner = _resolveView(label, labelCtx.with { $0._foreground = AnyShapeStyle(prominent ? Color.white : Color.primary) })
+            styled = inner.map { node in
+                let padded = _PaddingNode(child: node, insets: EdgeInsets(top: 7, leading: 12, bottom: 7, trailing: 12))
+                return _GlassNode(child: padded, glass: prominent ? Glass.regular.tint(tint) : .regular, shape: _AnyShape(Capsule()))
+            }
+        case .bordered:
             // A tinted label on a translucent fill of the tint, in a capsule.
             let inner = _resolveView(label, labelCtx.with { $0._foreground = AnyShapeStyle(tint) })
             styled = inner.map { node in
@@ -141,7 +153,7 @@ public struct Button<Label: View>: View, _PrimitiveView {
                 let fill = _ShapeNode(path: ctx.path + "/fill", env: env, shape: _AnyShape(Capsule()), fill: AnyShapeStyle(Color.tertiarySystemFill), stroke: nil)
                 return _LayeredNode(child: padded, secondary: [fill], alignment: .center, isOverlay: false)
             }
-        case .borderedProminent, .glassProminent:
+        case .borderedProminent:
             let inner = _resolveView(label, labelCtx.with { $0._foreground = AnyShapeStyle(Color.white) })
             styled = inner.map { node in
                 let padded = _PaddingNode(child: node, insets: EdgeInsets(top: 7, leading: 12, bottom: 7, trailing: 12))

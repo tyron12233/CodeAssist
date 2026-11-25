@@ -130,8 +130,10 @@ extension View {
     public func accessibilityHint(_ hint: Text) -> some View { self }
     public func accessibilityHidden(_ hidden: Bool) -> some View { self }
     public func accessibilityIdentifier(_ identifier: String) -> some View { self }
-    public func ignoresSafeArea(_ regions: SafeAreaRegions = .all, edges: Edge.Set = .all) -> some View { self }
-    public func edgesIgnoringSafeArea(_ edges: Edge.Set) -> some View { self }
+    public func ignoresSafeArea(_ regions: SafeAreaRegions = .all, edges: Edge.Set = .all) -> some View {
+        _modified(_WrapModifier { node, _ in _IgnoresSafeAreaNode(child: node, edges: edges) })
+    }
+    public func edgesIgnoringSafeArea(_ edges: Edge.Set) -> some View { ignoresSafeArea(.all, edges: edges) }
     public func safeAreaInset<V: View>(edge: VerticalEdge, alignment: HorizontalAlignment = .center, spacing: CGFloat? = nil, @ViewBuilder content: () -> V) -> some View { self }
     public func statusBarHidden(_ hidden: Bool = true) -> some View { self }
     public func preferredColorScheme(_ scheme: ColorScheme) -> some View { environment(\.colorScheme, scheme) }
@@ -251,6 +253,30 @@ public struct FocusState<Value: Hashable>: DynamicProperty {
     public var projectedValue: Binding {
         let box = self.box
         return Binding(get: { box.value }, set: { box.value = $0 })
+    }
+}
+
+/// Stretches a view that reaches the safe area's edge out to the screen's edge on that side, as iOS does.
+@MainActor
+final class _IgnoresSafeAreaNode: _WrapperNode {
+    let edges: Edge.Set
+    init(child: _Node, edges: Edge.Set) {
+        self.edges = edges
+        super.init(child: child)
+    }
+    override func place(_ rect: CGRect) {
+        var r = rect
+        let safe = _Device.safeRect
+        let device = CGRect(origin: .zero, size: _Device.size)
+        // An edge at or past the safe area's goes out to the screen's (content taller than the safe area, centred in
+        // it, reaches past both).
+        if edges.contains(.top), r.minY <= safe.minY + 0.5 { r.size.height += r.minY - device.minY; r.origin.y = device.minY }
+        if edges.contains(.bottom), r.maxY >= safe.maxY - 0.5 { r.size.height = device.maxY - r.minY }
+        if edges.contains(.leading), r.minX <= safe.minX + 0.5 { r.size.width += r.minX - device.minX; r.origin.x = device.minX }
+        if edges.contains(.trailing), r.maxX >= safe.maxX - 0.5 { r.size.width = device.maxX - r.minX }
+        frame = r
+        // The content is offered the stretched frame: a Color or a shape fills it.
+        child.place(_align(child, child.sizeThatFits(ProposedViewSize(r.size)), in: r, .center))
     }
 }
 

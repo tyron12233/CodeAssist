@@ -272,8 +272,53 @@ public struct Gradient: Hashable, Sendable {
             Stop(color: c, location: colors.count > 1 ? CGFloat(i) / CGFloat(colors.count - 1) : 0)
         }
     }
+    /// The stops a painter interpolates between in sRGB. iOS 26 blends a gradient's colours perceptually (in Oklab:
+    /// black to white is 0.388 grey halfway, measured), so each segment is expanded into 16 steps computed in Oklab.
     func resolved(_ env: EnvironmentValues) -> [(color: _RGBA, location: Double)] {
-        stops.map { ($0.color.resolve(env.colorScheme), Double($0.location)) }
+        let base = stops.map { ($0.color.resolve(env.colorScheme), Double($0.location)) }.sorted { $0.1 < $1.1 }
+        guard base.count > 1 else { return base }
+        var out: [(color: _RGBA, location: Double)] = []
+        for i in 0..<(base.count - 1) {
+            let (a, la) = base[i], (b, lb) = base[i + 1]
+            let steps = 16
+            for k in 0..<steps {
+                let t = Double(k) / Double(steps)
+                out.append((_Oklab.mix(a, b, t), la + (lb - la) * t))
+            }
+        }
+        out.append(base[base.count - 1])
+        return out
+    }
+}
+
+/// Colour mixing in Oklab (Björn Ottosson's perceptual space), as iOS 26 blends gradients.
+enum _Oklab {
+    static func toLinear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
+    static func toSRGB(_ c: Double) -> Double { c <= 0.0031308 ? 12.92 * c : 1.055 * pow(c, 1 / 2.4) - 0.055 }
+
+    static func lab(_ c: _RGBA) -> (Double, Double, Double) {
+        let r = toLinear(c.r), g = toLinear(c.g), b = toLinear(c.b)
+        let l = cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+        let m = cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+        let s = cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+        return (0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+                1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+                0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s)
+    }
+
+    static func rgb(_ L: Double, _ A: Double, _ B: Double, alpha: Double) -> _RGBA {
+        let l = pow(L + 0.3963377774 * A + 0.2158037573 * B, 3)
+        let m = pow(L - 0.1055613458 * A - 0.0638541728 * B, 3)
+        let s = pow(L - 0.0894841775 * A - 1.2914855480 * B, 3)
+        func c(_ v: Double) -> Double { min(1, max(0, toSRGB(v))) }
+        return _RGBA(c(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+                     c(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+                     c(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s), alpha)
+    }
+
+    static func mix(_ a: _RGBA, _ b: _RGBA, _ t: Double) -> _RGBA {
+        let x = lab(a), y = lab(b)
+        return rgb(x.0 + (y.0 - x.0) * t, x.1 + (y.1 - x.1) * t, x.2 + (y.2 - x.2) * t, alpha: a.a + (b.a - a.a) * t)
     }
 }
 

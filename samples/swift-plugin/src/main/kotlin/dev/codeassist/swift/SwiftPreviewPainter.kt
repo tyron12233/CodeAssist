@@ -31,6 +31,7 @@ class SwiftPreviewFrame(
     class Alpha(val alpha: Float) : Op
     class Shadow(val color: Int, val radius: Float, val dx: Float, val dy: Float) : Op
     object Pop : Op
+    class Glass(val path: Path, val bounds: RectF, val variant: String, val tint: Int?, val dark: Boolean) : Op
     class Hit(val rect: RectF, val id: Int) : Op
     class Field(val rect: RectF, val id: Int, val text: String, val secure: Boolean) : Op
 
@@ -80,6 +81,8 @@ class SwiftPreviewFrame(
             "alpha" -> Alpha(o.getDouble("a").toFloat())
             "shadow" -> Shadow(color(o.getString("c")), o.getDouble("r").toFloat(), o.getDouble("x").toFloat(), o.getDouble("y").toFloat())
             "pop" -> Pop
+            "glass" -> Glass(path(o.getJSONArray("d")), rect(o.getJSONArray("r")), o.optString("k", "regular"),
+                o.optString("tint").takeIf { it.isNotEmpty() }?.let(::color), o.optInt("dark") == 1)
             "hit" -> Hit(rect(o.getJSONArray("r")), o.getInt("id"))
             "field" -> Field(rect(o.getJSONArray("r")), o.getInt("id"), o.optString("text"), o.optInt("secure") == 1)
             else -> null
@@ -165,11 +168,25 @@ class SwiftPreviewFrame(
 }
 
 /** Paints a [SwiftPreviewFrame] on an Android canvas that is already scaled to points. */
-class SwiftPreviewPainter(private val text: SwiftTextEngine, private val symbols: SwiftSymbols) {
+class SwiftPreviewPainter(private val text: SwiftTextEngine, private val symbols: SwiftSymbols, private val glass: SwiftGlass) {
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
 
-    fun paint(canvas: Canvas, frame: SwiftPreviewFrame) {
+    /**
+     * The frame rendered into a bitmap at [scale] pixels per point. Glass is computed from the pixels behind it, so a
+     * frame with glass has to be painted into memory first (and is, always, for one code path).
+     */
+    fun render(frame: SwiftPreviewFrame, scale: Float): android.graphics.Bitmap {
+        val bitmap = android.graphics.Bitmap.createBitmap(
+            maxOf(1, (frame.width * scale).toInt()), maxOf(1, (frame.height * scale).toInt()), android.graphics.Bitmap.Config.ARGB_8888,
+        )
+        val canvas = Canvas(bitmap)
+        canvas.scale(scale, scale)
+        paint(canvas, frame, bitmap, scale)
+        return bitmap
+    }
+
+    fun paint(canvas: Canvas, frame: SwiftPreviewFrame, bitmap: android.graphics.Bitmap? = null, scale: Float = 1f) {
         canvas.drawColor(frame.background)
         // Each push (clip, alpha, shadow) pops to the matching restore; shadows apply to what is drawn while pushed.
         val stack = ArrayList<SwiftPreviewFrame.Op>()
@@ -187,6 +204,7 @@ class SwiftPreviewPainter(private val text: SwiftTextEngine, private val symbols
                     null -> Unit
                     else -> canvas.restore()
                 }
+                is SwiftPreviewFrame.Glass -> if (bitmap != null) glass.apply(bitmap, scale, op.path, op.bounds, op.variant, op.tint, op.dark)
                 is SwiftPreviewFrame.Hit, is SwiftPreviewFrame.Field -> Unit
             }
         }

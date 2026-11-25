@@ -182,6 +182,23 @@ final class Painter {
                 } else if let c = op["c"] as? String {
                     ctx.setFillColor(Self.color(c))
                     ctx.fillPath()
+                } else if let g = op["g"] as? [String: Any] {
+                    ctx.saveGState()
+                    ctx.clip()
+                    let stops = g["s"] as! [[Any]]
+                    let colors = stops.map { Self.color($0[0] as! String) } as CFArray
+                    let locations = stops.map { CGFloat(($0[1] as! NSNumber).doubleValue) }
+                    let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: colors, locations: locations)!
+                    let pts = (g["p"] as! [NSNumber]).map { CGFloat($0.doubleValue) }
+                    switch g["k"] as! String {
+                    case "radial":
+                        ctx.drawRadialGradient(gradient, startCenter: CGPoint(x: pts[0], y: pts[1]), startRadius: pts[2],
+                                               endCenter: CGPoint(x: pts[0], y: pts[1]), endRadius: pts[3], options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+                    default:
+                        ctx.drawLinearGradient(gradient, start: CGPoint(x: pts[0], y: pts[1]), end: CGPoint(x: pts[2], y: pts[3]),
+                                               options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+                    }
+                    ctx.restoreGState()
                 } else {
                     ctx.beginPath()
                 }
@@ -189,6 +206,8 @@ final class Painter {
                 drawText(op)
             case "symbol":
                 drawSymbol(op)
+            case "glass":
+                drawGlass(op)
             case "clip":
                 ctx.saveGState()
                 ctx.addPath(Self.path(op["d"] as! [[Any]]))
@@ -239,6 +258,32 @@ final class Painter {
             CTLineDraw(line, ctx)
         }
         ctx.restoreGState()
+    }
+
+    static var glassParams = GlassParams()
+
+    /// Liquid Glass over what is painted so far: the shape's coverage, then GlassModel on the bitmap.
+    func drawGlass(_ op: [String: Any]) {
+        let w = ctx.width, h = ctx.height
+        let maskCtx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceGray(),
+                                bitmapInfo: CGImageAlphaInfo.none.rawValue)!
+        maskCtx.translateBy(x: 0, y: CGFloat(h))
+        maskCtx.scaleBy(x: scale, y: -scale)
+        maskCtx.setFillColor(gray: 1, alpha: 1)
+        maskCtx.addPath(Self.path(op["d"] as! [[Any]]))
+        maskCtx.fillPath()
+        let mp = maskCtx.data!.assumingMemoryBound(to: UInt8.self)
+        var mask = [Float](repeating: 0, count: w * h)
+        let mstride = maskCtx.bytesPerRow
+        for y in 0..<h { for x in 0..<w { mask[y * w + x] = Float(mp[y * mstride + x]) / 255 } }
+        let r = op["r"] as! [NSNumber]
+        let bounds = CGRect(x: r[0].doubleValue * scale, y: r[1].doubleValue * scale, width: r[2].doubleValue * scale, height: r[3].doubleValue * scale)
+        let tint = (op["tint"] as? String).map { hex -> RGB in
+            let c = Self.color(hex).components!
+            return RGB(Double(c[0]), Double(c[1]), Double(c[2]))
+        }
+        let bmp = Bitmap(w: w, h: h, px: ctx.data!.assumingMemoryBound(to: UInt8.self), scale: Double(scale), stride: ctx.bytesPerRow)
+        GlassModel.apply(bmp, mask: mask, bounds: bounds, variant: op["k"] as? String ?? "regular", tint: tint, dark: op["dark"] != nil, p: Self.glassParams)
     }
 
     func drawSymbol(_ op: [String: Any]) {
@@ -309,16 +354,143 @@ func compare(_ ref: CGImage, _ ours: CGImage) -> (Double, CGImage) {
 
 // MARK: - Main
 
+/// Fits GlassParams to the Simulator: each glass case's backdrop is painted once (glass ops skipped), then the model
+/// is applied with candidate parameters and scored by the mean colour error (0...1) inside the glass shapes and a
+/// margin around them, against the reference. Coordinate descent with shrinking steps.
+@MainActor
+func fitGlass(refDir: URL, out: String) {
+    struct Case { let ref: [UInt8]; let backdrop: [UInt8]; let stride: Int; let ops: [[String: Any]]; let region: [Int] }
+    var cases: [Case] = []
+    let only = ProcessInfo.processInfo.environment["FIT_CASES"]?.split(separator: ",").map(String.init)
+    for (name, view) in glassCases() where only == nil || only!.contains(name) {
+        guard let refImage = loadImage(refDir.appendingPathComponent("\(name).png")) else { continue }
+        let preview = _Preview(name) { view }
+        _Graph.shared.beginRender()
+        let json = _render(preview, index: 0, scheme: .light)
+        _Graph.shared.endRender()
+        let frame = try! JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any]
+        let ops = frame["ops"] as! [[String: Any]]
+        // Backdrop: everything up to each glass op is drawn; for the fit, the glass and what follows it are replayed.
+        let painter = Painter(width: 1206, height: 2622)
+        painter.ctx.setFillColor(Painter.color(frame["bg"] as! String))
+        painter.ctx.fill(CGRect(x: 0, y: 0, width: 402, height: 874))
+        let firstGlass = ops.firstIndex { $0["o"] as? String == "glass" } ?? ops.count
+        painter.paint(Array(ops[..<firstGlass]))
+        let rowBytes = painter.ctx.bytesPerRow
+        let backdrop = Array(UnsafeBufferPointer(start: painter.ctx.data!.assumingMemoryBound(to: UInt8.self), count: rowBytes * 2622))
+        // Region scored: the glass ops' frames grown by 40 points.
+        var region: [Int] = []
+        for op in ops where op["o"] as? String == "glass" {
+            let r = (op["r"] as! [NSNumber]).map { $0.doubleValue }
+            let x0 = max(0, Int((r[0] - 40) * 3)), x1 = min(1206, Int((r[0] + r[2] + 40) * 3))
+            let y0 = max(0, Int((r[1] - 40) * 3)), y1 = min(2622, Int((r[1] + r[3] + 40) * 3))
+            for y in stride(from: y0, to: y1, by: 2) { for x in stride(from: x0, to: x1, by: 2) { region.append(y * 1206 + x) } }
+        }
+        cases.append(Case(ref: rgba(refImage), backdrop: backdrop, stride: rowBytes, ops: Array(ops[firstGlass...]), region: region))
+        print("fit: \(name) (\(region.count) samples)")
+    }
+    func score(_ p: GlassParams) -> Double {
+        Painter.glassParams = p
+        var total = 0.0
+        for c in cases {
+            let painter = Painter(width: 1206, height: 2622)
+            let dst = painter.ctx.data!.assumingMemoryBound(to: UInt8.self)
+            c.backdrop.withUnsafeBufferPointer { dst.update(from: $0.baseAddress!, count: c.backdrop.count) }
+            painter.paint(c.ops)
+            var err = 0.0
+            for i in c.region {
+                let y = i / 1206, x = i % 1206
+                let o = y * c.stride + x * 4, r = i * 4
+                err += abs(Double(dst[o]) - Double(c.ref[r])) + abs(Double(dst[o + 1]) - Double(c.ref[r + 1])) + abs(Double(dst[o + 2]) - Double(c.ref[r + 2]))
+            }
+            total += err / Double(max(1, c.region.count)) / (3 * 255)
+        }
+        return total / Double(max(1, cases.count))
+    }
+    var best = Painter.glassParams
+    var bestScore = score(best)
+    print(String(format: "start %.5f", bestScore))
+    if ProcessInfo.processInfo.environment["GLASSFIT"] == "tables" {
+        // Regular glass's lens and blur profiles: knots (every `spacing` points), linear between, by coordinate descent.
+        func knots(_ t: [Double], _ n: Int, _ sp: Double) -> [Double] { (0..<n).map { GlassModel.lens(t, Double($0) * sp) } }
+        func expand(_ k: [Double], _ sp: Double) -> [Double] { (0...Int(Double(k.count - 1) * sp)).map { d in
+            let f = Double(d) / sp; let i = min(Int(f), k.count - 2); let t = f - Double(i); return k[i] * (1 - t) + k[i + 1] * t } }
+        let lsp = 3.0, bsp = 5.0
+        var lens = knots(best.regularLensTable ?? best.lensTable, 17, lsp)
+        var blur = knots(best.regularBlurTable ?? [best.regularBlur ?? best.blur], 13, bsp)
+        func make(_ l: [Double], _ b: [Double]) -> GlassParams { var p = best; p.regularLensTable = expand(l, lsp); p.regularBlurTable = expand(b, bsp); return p }
+        bestScore = score(make(lens, blur))
+        print(String(format: "tables start %.5f", bestScore))
+        var step = 4.0
+        for round in 0..<Int(ProcessInfo.processInfo.environment["ROUNDS"] ?? "4")! {
+            for which in 0..<2 {
+                for k in 0..<(which == 0 ? lens.count : blur.count) {
+                    for dir in [1.0, -1.0] {
+                        while true {
+                            var l = lens, b = blur
+                            if which == 0 { l[k] += dir * step } else { b[k] = max(0, b[k] + dir * step / 2) }
+                            let sc = score(make(l, b))
+                            if sc < bestScore - 1e-6 { bestScore = sc; lens = l; blur = b } else { break }
+                        }
+                    }
+                }
+            }
+            print(String(format: "round %d step %.2f: %.5f", round, step, bestScore))
+            print("lens " + lens.map { String(format: "%.1f", $0) }.joined(separator: " "))
+            print("blur " + blur.map { String(format: "%.2f", $0) }.joined(separator: " "))
+            step /= 2
+        }
+        best = make(lens, blur)
+        best.regularLensTable = best.regularLensTable!.map { ($0 * 100).rounded() / 100 }
+        best.regularBlurTable = best.regularBlurTable!.map { ($0 * 100).rounded() / 100 }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try! encoder.encode(best).write(to: URL(fileURLWithPath: out))
+        print("wrote \(out)")
+        return
+    }
+    let keys: [WritableKeyPath<GlassParams, Double>] = [\.tintAmount, \.blur, \.rimWidth, \.rimAmount, \.shadowAlpha, \.shadowRadius, \.shadowY]
+    var steps: [Double] = [0.1, 1.0, 0.5, 0.1, 0.03, 4, 2]
+    for round in 0..<5 {
+        for (k, key) in keys.enumerated() {
+            for dir in [1.0, -1.0] {
+                var improved = true
+                while improved {
+                    improved = false
+                    var cand = best
+                    // The lens may sample outward (negative depth); everything else is a size or an amount.
+                    cand[keyPath: key] = key == \GlassParams.lensDepth ? cand[keyPath: key] + dir * steps[k] : max(0, cand[keyPath: key] + dir * steps[k])
+                    let sc = score(cand)
+                    if sc < bestScore - 1e-5 { best = cand; bestScore = sc; improved = true }
+                }
+            }
+        }
+        steps = steps.map { $0 / 2 }
+        print(String(format: "round %d: %.5f", round, bestScore))
+    }
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try! encoder.encode(best).write(to: URL(fileURLWithPath: out))
+    print("wrote \(out)")
+}
+
 @main
 struct Ours {
     @MainActor static func main() {
         let args = CommandLine.arguments
+        if args.contains("--fit-glass") {
+            _Graph.shared.measurer = CoreTextMeasurer()
+            Painter.glassParams = GlassParams.load(args[2])
+            fitGlass(refDir: URL(fileURLWithPath: args[1]), out: args[2])
+            return
+        }
         let refDir = URL(fileURLWithPath: args[1]), outDir = URL(fileURLWithPath: args[2])
         let only = args.count > 3 ? args[3] : nil
         try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
         _Graph.shared.measurer = CoreTextMeasurer()
+        Painter.glassParams = GlassParams.load(URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("glass-params.json").path)
         var total = 0.0, count = 0
-        for (name, view) in parityCases() where only == nil || name == only {
+        for (name, view) in (parityCases() + glassCases()) where only == nil || name == only {
             let preview = _Preview(name) { view }
             _Graph.shared.beginRender()
             let json = _render(preview, index: 0, scheme: .light)

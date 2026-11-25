@@ -134,6 +134,15 @@ final class _DisplayList {
         ops.append("{\"o\":\"pop\"}")
     }
 
+    /// Liquid Glass over what is already painted: [path] is the glass shape, [bounds] its frame. The painter computes
+    /// the glass from the pixels behind it (see Glass.swift).
+    func glass(_ path: Path, bounds: CGRect, variant: String, tint: _RGBA?, dark: Bool) {
+        var op = "{\"o\":\"glass\",\"d\":\(Self.path(path)),\"r\":\(Self.rect(bounds)),\"k\":\(Self.string(variant))"
+        if let tint { op += ",\"tint\":\(Self.string(tint.hex))" }
+        if dark { op += ",\"dark\":1" }
+        ops.append(op + "}")
+    }
+
     func hit(_ frame: CGRect, action: Int) {
         ops.append("{\"o\":\"hit\",\"r\":\(Self.rect(frame)),\"id\":\(action)}")
     }

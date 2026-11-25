@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 // The Swift plugin: Swift on the device, shipped as its own Android app.
 //
 // It carries a Swift toolchain that RUNS on Android (tools/swift-sdk): the compiler, the Swift runtime and Foundation,
@@ -34,6 +36,17 @@ val packToolchain by tasks.registering(Zip::class) {
     archiveFileName.set("swift-toolchain.zip")
     destinationDirectory.set(generatedAssetsDir)
     entryCompression = ZipEntryCompression.STORED
+    // The archive's digest beside it: the device unpacks again whenever it changes (a new SwiftUI engine in the same
+    // Swift version), not only when the Swift version or the layout does.
+    doLast {
+        val zip = archiveFile.get().asFile
+        val digest = MessageDigest.getInstance("SHA-256")
+        zip.inputStream().buffered().use { input ->
+            val buffer = ByteArray(1 shl 16)
+            while (true) { val n = input.read(buffer); if (n < 0) break; digest.update(buffer, 0, n) }
+        }
+        File(zip.parentFile, "swift-toolchain.sha256").writeText(digest.digest().joinToString("") { "%02x".format(it) })
+    }
     onlyIf {
         File(staged, "assets/swift").isDirectory.also {
             if (!it) logger.warn("No Swift toolchain staged at $staged: the plugin builds without one. Run tools/swift-sdk/stage_swift.py $swiftAbi first.")

@@ -83,6 +83,9 @@ public struct InterfaceOrientation: Sendable {
 enum _Device {
     static let size = CGSize(width: 402, height: 874)
     static let safeArea = EdgeInsets(top: 62, leading: 0, bottom: 34, trailing: 0)
+    static var safeRect: CGRect {
+        CGRect(x: safeArea.leading, y: safeArea.top, width: size.width - safeArea.horizontal, height: size.height - safeArea.vertical)
+    }
 }
 
 // MARK: - Rendering
