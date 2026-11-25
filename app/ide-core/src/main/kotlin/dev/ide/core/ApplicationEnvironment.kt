@@ -167,6 +167,15 @@ class ApplicationEnvironment(
     /** Every installed plugin known now, by id: what [loadPluginNow] loads from. */
     private val discoveredById = java.util.concurrent.ConcurrentHashMap<String, DiscoveredPlugin>()
 
+    /**
+     * The user's disabled and consented sets as saved, unfiltered. [PluginCatalog] keeps only the ids of plugins
+     * present when it is built, so the catalog of a launch without a plugin has forgotten that the user allowed
+     * it. A plugin installed while the app runs ([pluginAppeared]) is judged against these instead: one allowed
+     * before it was uninstalled loads again, as it would on a launch, rather than waiting with no question asked.
+     */
+    private var savedDisabled: Set<String>
+    private var savedConsented: Set<String>
+
     /** The built-ins' ids, lowercased: an installed plugin that appears later may not claim one. */
     private lateinit var builtInIdsLower: Set<String>
 
@@ -264,6 +273,8 @@ class ApplicationEnvironment(
             failures[d.manifest.id] = "it was turned off after it crashed CodeAssist (version $crashedVersion). " +
                 "It turns back on when a new version is installed, or turn it on here to try again."
         }
+        savedDisabled = disabledPluginIds - liftedCrashSuspensions
+        savedConsented = consentedPluginIds
         pluginCatalog = PluginCatalog(
             all = builtIns.map { it.engine.manifest } + discovered.map { it.manifest },
             disabledIds = disabledPluginIds - liftedCrashSuspensions,
@@ -492,6 +503,8 @@ class ApplicationEnvironment(
     /** Apply the user's current disabled and consented sets to [pluginCatalog]. Loads and unloads nothing. */
     @Synchronized
     fun setPluginChoices(disabled: Set<String>, consented: Set<String>) {
+        savedDisabled = disabled
+        savedConsented = consented
         val c = pluginCatalog
         pluginCatalog = PluginCatalog(c.all, disabled, c.externalIds, consented)
     }
@@ -560,9 +573,9 @@ class ApplicationEnvironment(
         val c = pluginCatalog
         return PluginCatalog(
             all = c.all.filter { it.id != manifest.id } + manifest,
-            disabledIds = c.disabledIds,
+            disabledIds = savedDisabled,
             externalIds = c.externalIds + manifest.id,
-            consentedIds = c.consentedIds,
+            consentedIds = savedConsented,
         )
     }
 
