@@ -2,6 +2,7 @@ package dev.codeassist.swift
 
 import dev.ide.plugin.ui.EditorLanguage
 import dev.ide.plugin.ui.EditorPreview
+import dev.ide.plugin.ui.Overlay
 import dev.ide.plugin.ui.FileIcon
 import dev.ide.plugin.ui.SyntaxStyle
 import dev.ide.plugin.ui.UiPlugin
@@ -37,6 +38,8 @@ class SwiftUiPlugin : UiPlugin {
                 appliesTo = SwiftPreviewFiles::appliesTo,
             ) { ctx -> SwiftPreviewPane(ctx) },
         )
+        // Run of a SwiftUI app target: the app full screen over the IDE (SwiftAppRunner).
+        ui.overlay(Overlay(id = "dev.codeassist.swift.appRunner") { SwiftAppRunner() })
     }
 
     private companion object {

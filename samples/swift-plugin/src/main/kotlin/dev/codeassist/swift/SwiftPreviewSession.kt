@@ -23,6 +23,8 @@ class SwiftPreviewSession(
     private val toolchain: SwiftToolchain,
     private val textEngine: SwiftTextEngine,
     private val log: Logger,
+    /** Run the `@main` App of the target at [file] (a directory) full screen, instead of a file's previews. */
+    private val app: Boolean = false,
 ) {
     data class State(
         val frames: List<SwiftPreviewFrame> = emptyList(),
@@ -88,7 +90,7 @@ class SwiftPreviewSession(
     private fun restart(text: String) {
         stop()
         val gen = ++generation
-        if (!SwiftPreviewSource.hasPreviews(text)) {
+        if (!app && !SwiftPreviewSource.hasPreviews(text)) {
             _state.value = State(message = "Add a #Preview to see it here:\n\n#Preview {\n    ContentView()\n}")
             return
         }
@@ -109,11 +111,12 @@ class SwiftPreviewSession(
         if (status is SwiftToolchain.Status.Unavailable) return publish(gen) { State(message = status.reason) }
         if (!toolchain.hasSwiftUI) return publish(gen) { State(message = "This build of the Swift plugin carries no SwiftUI engine.") }
 
-        val outDir = SwiftPreviewSource.packageDir(file)?.resolve(SwiftPackages.BUILD_DIR)?.resolve("preview")
+        val outDir = if (app) file.parent.parent.resolve(SwiftPackages.BUILD_DIR).resolve("app").resolve(file.fileName.toString()) else SwiftPreviewSource.packageDir(file)?.resolve(SwiftPackages.BUILD_DIR)?.resolve("preview")
             ?.resolve(SwiftPreviewSource.targetDir(file)?.fileName?.toString() ?: "file")
             ?: toolchain.home.resolve("preview").resolve(Integer.toHexString(file.toString().hashCode()))
         val build = try {
-            SwiftPreviewSource.prepare(file, text, outDir)
+            if (app) SwiftPreviewSource.prepareApp(file, outDir) ?: return publish(gen) { State(message = "${file.fileName} has no @main App.") }
+            else SwiftPreviewSource.prepare(file, text, outDir)
         } catch (e: IOException) {
             return publish(gen) { State(message = "Could not prepare the preview: ${e.message}") }
         }

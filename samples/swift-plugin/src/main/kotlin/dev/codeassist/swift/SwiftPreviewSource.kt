@@ -107,6 +107,37 @@ object SwiftPreviewSource {
         return Build(files, origins, all.size)
     }
 
+    /** The `@main` App of [text], by name: `@main struct MyApp: App`. */
+    fun appType(text: String): String? = APP_MAIN.find(text)?.groupValues?.get(1)
+
+    private val APP_MAIN = Regex("""@main\s+(?:(?:public|internal|final)\s+)*struct\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(?:[A-Za-z_.]+\s*,\s*)*(?:SwiftUI\.)?App\b""")
+
+    /**
+     * The target at [target] as an app: every file, rewritten as for a preview (#Preview declares a preview, `@main`
+     * goes), and a main.swift that runs the `@main` App full screen. Null when no file declares one.
+     */
+    fun prepareApp(target: Path, outDir: Path): Build? {
+        val sources = swiftFiles(target).filter { it.fileName.toString() != "main.swift" }
+        Files.createDirectories(outDir)
+        Files.list(outDir).use { old -> old.filter { it.fileName.toString().endsWith(".swift") }.forEach { Files.deleteIfExists(it) } }
+        val files = ArrayList<Path>()
+        val origins = HashMap<Path, Path>()
+        var app: String? = null
+        for ((index, source) in sources.withIndex()) {
+            val text = String(Files.readAllBytes(source))
+            app = app ?: appType(text)
+            val copy = outDir.resolve("${index}_${source.fileName}")
+            Files.write(copy, rewrite(text, "f$index").text.toByteArray())
+            files.add(copy)
+            origins[copy] = source
+        }
+        val type = app ?: return null
+        val main = outDir.resolve("main.swift")
+        Files.write(main, "import SwiftUI\n\nMainActor.assumeIsolated {\n    _runApp($type.self)\n}\n".toByteArray())
+        files.add(main)
+        return Build(files, origins, 1)
+    }
+
     fun mainSource(previews: List<String>): String = buildString {
         append("import SwiftUI\n\n")
         append("MainActor.assumeIsolated {\n")
@@ -130,7 +161,7 @@ object SwiftPreviewSource {
     /** The package directory (where `Package.swift` is) above [file], if any. */
     fun packageDir(file: Path): Path? = targetDir(file)?.parent?.parent
 
-    private fun swiftFiles(dir: Path): List<Path> = Files.walk(dir).use { s ->
+    fun swiftFiles(dir: Path): List<Path> = Files.walk(dir).use { s ->
         s.filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".swift") }.sorted().collect(Collectors.toList())
     }
 
