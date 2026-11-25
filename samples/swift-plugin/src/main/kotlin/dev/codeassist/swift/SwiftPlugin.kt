@@ -29,7 +29,7 @@ class SwiftPlugin : Plugin {
         reg.register(FileIconExtensionPoint, SwiftFileIconProvider)
         reg.register(RUN_TASK_PROVIDER_EP, SwiftRunTaskProvider(toolchain))
         val text = SwiftTextEngine(toolchain.home.resolve("fonts"))
-        tools = Tools(toolchain, text, SwiftPreviewPainter(text), reg.logger("SwiftUIPreview"))
+        tools = Tools(toolchain, text, SwiftPreviewPainter(text, SwiftSymbols(toolchain.home.resolve("symbols"))), reg.logger("SwiftUIPreview"))
         log.info("registered; the Swift toolchain is prepared on first use")
     }
 

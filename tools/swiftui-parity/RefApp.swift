@@ -25,7 +25,9 @@ final class ParityApp: UIResponder, UIApplicationDelegate {
     private func capture(_ cases: ArraySlice<(String, AnyView)>, window: UIWindow, into dir: URL) {
         guard let (name, view) = cases.first else {
             print("PARITY DONE \(dir.path)")
-            exit(0)
+            // PARITY_HOLD keeps the last case on screen (for a real screenshot, status bar included).
+            if ProcessInfo.processInfo.environment["PARITY_HOLD"] == nil { exit(0) }
+            return
         }
         window.rootViewController = UIHostingController(rootView: view)
         // Two run-loop turns and a short wait: layout, then the render server.

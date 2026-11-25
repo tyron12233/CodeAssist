@@ -230,14 +230,20 @@ final class _ImageNode: _Node {
 
     private var fontSize: CGFloat { (env.font ?? .body).size }
 
-    /// A symbol's natural box at a point size. iOS symbols are about as tall as the font's cap height plus a margin and
-    /// as wide as their artwork; this square-ish box is refined per symbol by calibration.
+    /// A symbol's frame at the font's point size, as iOS gives it (_SymbolMetrics, measured in the Simulator); a name
+    /// the table does not know gets a box of the font's size.
     private var intrinsic: CGSize {
-        if image.systemName != nil {
+        if let name = image.systemName {
+            if let m = _SymbolMetrics.shared.frame(name, size: fontSize) { return m.size }
             let s = _ceilToPixel(fontSize * 1.2)
             return CGSize(width: s, height: s)
         }
         return CGSize(width: 100, height: 100)
+    }
+
+    override func baselines(for size: CGSize) -> (first: CGFloat?, last: CGFloat?) {
+        guard let name = image.systemName, !image.isResizable, let m = _SymbolMetrics.shared.frame(name, size: fontSize) else { return (nil, nil) }
+        return (size.height - m.baseline, size.height - m.baseline)
     }
 
     override func _sizeThatFits(_ proposal: ProposedViewSize) -> CGSize {
@@ -258,6 +264,63 @@ final class _ImageNode: _Node {
 }
 
 public enum ContentMode: Hashable, CaseIterable, Sendable { case fit, fill }
+
+/// SF Symbol frames by point size, measured from iOS (tools/swiftui-parity/SymbolProbe.swift): the file named by
+/// CODEASSIST_SYMBOL_METRICS, one line per symbol, `w,h,baseline` in thirds of a point at each of the sizes its header
+/// lists. Between two measured sizes a frame interpolates; outside them it scales.
+final class _SymbolMetrics: @unchecked Sendable {
+    static let shared = _SymbolMetrics()
+    private var sizes: [CGFloat] = []
+    private var table: [String: [Int]]?
+
+    struct Frame {
+        let size: CGSize
+        let baseline: CGFloat
+    }
+
+    private func load() -> [String: [Int]] {
+        if let table { return table }
+        var result: [String: [Int]] = [:]
+        if let path = ProcessInfo.processInfo.environment["CODEASSIST_SYMBOL_METRICS"],
+           let text = try? String(contentsOfFile: path, encoding: .utf8) {
+            for line in text.split(separator: "\n") {
+                if line.hasPrefix("#") {
+                    if let open = line.firstIndex(of: "("), let close = line.firstIndex(of: ")") {
+                        sizes = line[line.index(after: open)..<close].split(separator: ",").compactMap { Double($0) }.map { CGFloat($0) }
+                    }
+                    continue
+                }
+                guard let tab = line.firstIndex(of: "\t") else { continue }
+                let values = line[line.index(after: tab)...].split(whereSeparator: { $0 == " " || $0 == "," }).compactMap { Int($0) }
+                result[String(line[..<tab])] = values
+            }
+        }
+        table = result
+        return result
+    }
+
+    func frame(_ name: String, size: CGFloat) -> Frame? {
+        guard let v = load()[name], !sizes.isEmpty, v.count == sizes.count * 3 else { return nil }
+        func at(_ i: Int) -> (CGFloat, CGFloat, CGFloat) { (CGFloat(v[3 * i]) / 3, CGFloat(v[3 * i + 1]) / 3, CGFloat(v[3 * i + 2]) / 3) }
+        let (w, h, b): (CGFloat, CGFloat, CGFloat)
+        if let exact = sizes.firstIndex(of: size) {
+            (w, h, b) = at(exact)
+        } else if size < sizes[0] {
+            let f = size / sizes[0]; let a = at(0); (w, h, b) = (a.0 * f, a.1 * f, a.2 * f)
+        } else if size > sizes[sizes.count - 1] {
+            let f = size / sizes[sizes.count - 1]; let a = at(sizes.count - 1); (w, h, b) = (a.0 * f, a.1 * f, a.2 * f)
+        } else {
+            let hi = sizes.firstIndex { $0 > size }!
+            let lo = hi - 1
+            let t = (size - sizes[lo]) / (sizes[hi] - sizes[lo])
+            let a = at(lo), c = at(hi)
+            (w, h, b) = (a.0 + (c.0 - a.0) * t, a.1 + (c.1 - a.1) * t, a.2 + (c.2 - a.2) * t)
+        }
+        return Frame(size: CGSize(width: _roundToPixel(w), height: _roundToPixel(h)), baseline: b)
+    }
+}
+
+func _roundToPixel(_ v: CGFloat) -> CGFloat { (v * _scale).rounded() / _scale }
 
 @MainActor
 final class _AspectNode: _WrapperNode {
@@ -393,15 +456,15 @@ final class _SwitchNode: _Node {
         super.init(path: path, env: env)
     }
     override func _sizeThatFits(_ proposal: ProposedViewSize) -> CGSize { Self.size }
+    /// iOS 26's switch, measured: a 63 x 28 track drawn 1 point past each side of its 61-point frame, and a 37 x 24
+    /// knob inset 2 points; off, the track is #C5C5C7.
     override func emit(_ list: _DisplayList) {
-        let track = isOn ? (env._tint ?? .green) : Color.switchOff
-        list.shape(Path(roundedRect: frame, cornerRadius: frame.height / 2, style: .circular), style: AnyShapeStyle(track), stroke: nil, env: env)
-        let knobH = frame.height - 4
-        let knobW = knobH * 1.4
-        let x = isOn ? frame.maxX - 2 - knobW : frame.minX + 2
-        let knob = CGRect(x: x, y: frame.minY + 2, width: knobW, height: knobH)
-        list.pushShadow(color: _RGBA(0, 0, 0, 0.15), radius: 4, x: 0, y: 1)
-        list.shape(Path(roundedRect: knob, cornerRadius: knobH / 2, style: .circular), style: AnyShapeStyle(Color.white), stroke: nil, env: env)
+        let track = isOn ? (env._tint ?? .green) : Color(light: _RGBA(hex: 0xC5C5C7), dark: _RGBA(hex: 0x39393D))
+        let rect = frame.insetBy(dx: -1, dy: 0)
+        list.shape(Path(roundedRect: rect, cornerRadius: rect.height / 2, style: .circular), style: AnyShapeStyle(track), stroke: nil, env: env)
+        let knob = CGRect(x: isOn ? rect.maxX - 2 - 37 : rect.minX + 2, y: rect.minY + 2, width: 37, height: 24)
+        list.pushShadow(color: _RGBA(0, 0, 0, 0.12), radius: 2, x: 0, y: 1)
+        list.shape(Path(roundedRect: knob, cornerRadius: 12, style: .circular), style: AnyShapeStyle(Color.white), stroke: nil, env: env)
         list.pop()
     }
 }

@@ -26,7 +26,7 @@ class SwiftPreviewFrame(
     class Shape(val path: Path, val color: Int?, val gradient: Gradient?, val strokeWidth: Float?, val dash: FloatArray?) : Op
     class Text(val left: Float, val top: Float, val width: Float, val height: Float, val spans: List<SwiftTextEngine.Span>,
                val align: String, val maxLines: Int?, val lineAdvance: Float?) : Op
-    class Symbol(val rect: RectF, val name: String, val size: Float, val color: Int) : Op
+    class Symbol(val rect: RectF, val name: String, val size: Float, val weight: Int, val color: Int) : Op
     class Clip(val path: Path) : Op
     class Alpha(val alpha: Float) : Op
     class Shadow(val color: Int, val radius: Float, val dx: Float, val dy: Float) : Op
@@ -75,7 +75,7 @@ class SwiftPreviewFrame(
                 Text(r.f(0), r.f(1), r.f(2), r.f(3), spans(o.getJSONArray("sp")), o.optString("a", "leading"),
                     if (o.has("n")) o.getInt("n") else null, if (o.has("lh")) o.getDouble("lh").toFloat() else null)
             }
-            "symbol" -> Symbol(rect(o.getJSONArray("r")), o.getString("n"), o.getDouble("s").toFloat(), color(o.getString("c")))
+            "symbol" -> Symbol(rect(o.getJSONArray("r")), o.getString("n"), o.getDouble("s").toFloat(), o.optInt("w", 400), color(o.getString("c")))
             "clip" -> Clip(path(o.getJSONArray("d")))
             "alpha" -> Alpha(o.getDouble("a").toFloat())
             "shadow" -> Shadow(color(o.getString("c")), o.getDouble("r").toFloat(), o.getDouble("x").toFloat(), o.getDouble("y").toFloat())
@@ -165,7 +165,7 @@ class SwiftPreviewFrame(
 }
 
 /** Paints a [SwiftPreviewFrame] on an Android canvas that is already scaled to points. */
-class SwiftPreviewPainter(private val text: SwiftTextEngine) {
+class SwiftPreviewPainter(private val text: SwiftTextEngine, private val symbols: SwiftSymbols) {
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
 
@@ -191,6 +191,54 @@ class SwiftPreviewPainter(private val text: SwiftTextEngine) {
             }
         }
         repeat(stack.count { it !is SwiftPreviewFrame.Shadow }) { canvas.restore() }
+        if (frame.width == 402f && frame.height == 874f) drawStatusBar(canvas, frame.background)
+    }
+
+    /**
+     * The device's status bar and Dynamic Island, as Xcode's canvas shows them over a preview: 9:41, full signal,
+     * Wi-Fi and battery, drawn as plain shapes at the places measured on the iPhone 17 Pro Simulator (simctl io
+     * screenshot with the status bar overridden). Dark glyphs on a light background, light on a dark one.
+     */
+    private fun drawStatusBar(canvas: Canvas, background: Int) {
+        val luminance = (0.299 * android.graphics.Color.red(background) + 0.587 * android.graphics.Color.green(background) +
+            0.114 * android.graphics.Color.blue(background)) / 255
+        val ink = if (luminance > 0.5) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+        val faint = (ink and 0x00FFFFFF) or (0x5C shl 24)
+        fill.shader = null
+        fill.clearShadowLayer()
+        // Time: semibold, its ink centred on x 72.67, on baseline 39.
+        val time = listOf(SwiftTextEngine.Span("9:41", 17f, 600, "default", false, ink, null, null, 0f, 0f, null))
+        val m = text.measure(time, null, 1, null, "leading")
+        text.draw(canvas, time, 72.67f - m.width / 2f, 39f - m.firstBaseline, m.width + 1f, 1, null, "leading")
+        // Signal: four bars, 3.33 wide, 2 apart, bottoms at 38.67.
+        fill.color = ink
+        val heights = floatArrayOf(4.67f, 7f, 9.67f, 12.33f)
+        for (i in 0 until 4) {
+            val left = 288.33f + i * 5.33f
+            canvas.drawRoundRect(left, 38.67f - heights[i], left + 3.33f, 38.67f, 1f, 1f, fill)
+        }
+        // Wi-Fi: a wedge and two arcs fanning up from (323.5, 38.6).
+        val cx = 323.5f
+        val cy = 38.6f
+        stroke.color = ink
+        stroke.pathEffect = null
+        stroke.strokeCap = Paint.Cap.ROUND
+        stroke.strokeWidth = 2.3f
+        for (r in floatArrayOf(10.6f, 6.4f)) {
+            canvas.drawArc(cx - r, cy - r, cx + r, cy + r, -135f, 90f, false, stroke)
+        }
+        canvas.drawArc(cx - 3.6f, cy - 3.6f, cx + 3.6f, cy + 3.6f, -135f, 90f, true, fill)
+        stroke.strokeCap = Paint.Cap.BUTT
+        // Battery: an outlined body, full, with its cap.
+        stroke.color = faint
+        stroke.strokeWidth = 1f
+        canvas.drawRoundRect(339.9f, 26.7f, 363.3f, 38.2f, 3.8f, 3.8f, stroke)
+        canvas.drawRoundRect(341.4f, 28.1f, 361.8f, 36.8f, 2.6f, 2.6f, fill)
+        fill.color = faint
+        canvas.drawArc(362.4f, 30.4f, 366.7f, 34.6f, -90f, 180f, true, fill)
+        // The Dynamic Island.
+        fill.color = android.graphics.Color.BLACK
+        canvas.drawRoundRect(138.5f, 11.33f, 263.5f, 48.33f, 18.5f, 18.5f, fill)
     }
 
     private fun drawShape(canvas: Canvas, op: SwiftPreviewFrame.Shape, shadow: SwiftPreviewFrame.Shadow?) {
@@ -212,8 +260,9 @@ class SwiftPreviewPainter(private val text: SwiftTextEngine) {
         else -> LinearGradient(g.points[0], g.points[1], g.points[2], g.points[3], g.colors, g.stops, Shader.TileMode.CLAMP)
     }
 
-    /** SF Symbols are Apple's and cannot be shipped: until the open symbol set arrives, a quiet placeholder. */
+    /** An SF Symbol, drawn with its open stand-in ([SwiftSymbols]); a name nothing stands for gets a quiet outline. */
     private fun drawSymbol(canvas: Canvas, op: SwiftPreviewFrame.Symbol) {
+        if (symbols.draw(canvas, op.name, op.rect, op.size, op.weight, op.color)) return
         stroke.color = op.color
         stroke.strokeWidth = maxOf(1f, op.size / 12f)
         stroke.pathEffect = null

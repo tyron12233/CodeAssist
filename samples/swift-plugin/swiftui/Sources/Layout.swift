@@ -193,6 +193,9 @@ class _Node {
     let env: EnvironmentValues
     var frame: CGRect = .zero
     var layoutPriority: Double = 0
+    /// A colour this view paints across the whole screen, safe areas included, when it is a preview's root (a List's
+    /// grouped background does that on iOS).
+    var edgeBackground: Color?
     /// Explicit alignment guides set with `.alignmentGuide`, in this node's own coordinates.
     var guides: [ObjectIdentifier: (ViewDimensions) -> CGFloat] = [:]
     private var sizeCache: [ProposedViewSize: CGSize] = [:]
@@ -244,6 +247,7 @@ class _WrapperNode: _Node {
         super.init(path: child.path, env: child.env)
         layoutPriority = child.layoutPriority
         guides = child.guides
+        edgeBackground = child.edgeBackground
     }
     override func _sizeThatFits(_ proposal: ProposedViewSize) -> CGSize { child.sizeThatFits(proposal) }
     override func place(_ rect: CGRect) {

@@ -42,5 +42,11 @@ xcrun simctl launch --console-pty --terminate-running-process booted dev.codeass
 container="$(xcrun simctl get_app_container booted dev.codeassist.parity data)"
 rm -rf "$OUT/ref"; cp -R "$container/Documents/parity" "$OUT/ref"
 
-swiftc -parse-as-library -module-name Ours -Onone "$ENGINE"/*.swift "$HERE/Cases.swift" "$HERE/Ours.swift" -o "$OUT/ours" 2>&1 | grep -E 'error:' || true
-"$OUT/ours" "$OUT/ref" "$OUT/out"
+# A case that does not compile against the engine is an API gap: stop, rather than run the previous build.
+rm -f "$OUT/ours"
+if ! swiftc -parse-as-library -module-name Ours -Onone "$ENGINE"/*.swift "$HERE/Cases.swift" "$HERE/Ours.swift" -o "$OUT/ours" 2> "$OUT/ours-build.log"; then
+    grep -E 'error:' "$OUT/ours-build.log" >&2
+    echo "Cases.swift does not compile against the engine (API gap): see above" >&2
+    exit 1
+fi
+CODEASSIST_SYMBOL_METRICS="$HERE/../../samples/swift-plugin/swiftui/symbol-metrics.tsv" "$OUT/ours" "$OUT/ref" "$OUT/out"

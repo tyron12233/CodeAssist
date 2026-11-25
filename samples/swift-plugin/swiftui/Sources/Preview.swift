@@ -106,7 +106,8 @@ func _render(_ preview: _Preview, index: Int, scheme: ColorScheme) -> String {
     let ctx = _ResolveContext(graph: graph, path: "p\(index)", environment: env)
     let nodes = _resolveView(root, ctx)
     let list = _DisplayList()
-    let background = Color.systemBackground.resolve(scheme)
+    let background = (nodes.count == 1 ? nodes[0].edgeBackground : nil ?? nil).map { $0.resolve(scheme) }
+        ?? Color.systemBackground.resolve(scheme)
 
     if preview.traits.contains("sizeThatFits") {
         let node = nodes.count == 1 ? nodes[0] : _StackNode(path: ctx.path, env: env, axis: .vertical, alignment: .center, spacing: nil, children: nodes)

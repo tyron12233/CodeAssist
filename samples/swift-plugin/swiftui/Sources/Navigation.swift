@@ -83,19 +83,33 @@ public struct NavigationStack<Root: View>: View, _PrimitiveView {
 
     func _resolve(_ ctx: _ResolveContext) -> [_Node] {
         let box = _TitleBox()
-        let content = _resolveView(root, ctx.with { $0[_NavigationTitleKey.self] = box; $0._stackAxis = nil })
+        let probe = _TitleBox()
+        // The title is only known once the root has resolved; resolve once to find it, then for real knowing whether
+        // content sits under a large title.
+        _ = _resolveView(root, ctx.child("probe").with { $0[_NavigationTitleKey.self] = probe; $0._stackAxis = nil })
+        let large = probe.title != nil
+        let content = _resolveView(root, ctx.with {
+            $0[_NavigationTitleKey.self] = box
+            $0._stackAxis = nil
+            $0[_UnderLargeTitleKey.self] = large
+        })
         let body = content.count == 1 ? content[0]
             : _StackNode(path: ctx.path + "/root", env: ctx.environment, axis: .vertical, alignment: .center, spacing: nil, children: content)
-        // Content fills the stack, below a large-title bar when there is a title.
+        // Content fills what is left below the bar, centred, as a navigation stack's root view is.
         let filled = _FlexFrameNode(child: body, minWidth: nil, idealWidth: nil, maxWidth: .infinity,
-                                    minHeight: nil, idealHeight: nil, maxHeight: .infinity, alignment: .top)
+                                    minHeight: nil, idealHeight: nil, maxHeight: .infinity, alignment: .center)
         guard let title = box.title else { return [filled] }
+        // iOS 26's large-title bar, measured: 106 points below the safe area's top, the title (34 pt bold) at
+        // (16, 58) in it.
         let titleCtx = ctx.child("title").with { $0.font = Font(size: 34, weight: .bold); $0._stackAxis = .vertical }
         let titleNodes = _resolveView(Text(title), titleCtx).map {
-            _FlexFrameNode(child: _PaddingNode(child: $0, insets: EdgeInsets(top: 3, leading: 16, bottom: 8, trailing: 16)),
-                           minWidth: nil, idealWidth: nil, maxWidth: .infinity, minHeight: nil, idealHeight: nil, maxHeight: nil, alignment: .leading)
+            _FixedFrameNode(child: _FlexFrameNode(child: _PaddingNode(child: $0, insets: EdgeInsets(top: 58, leading: 16, bottom: 0, trailing: 16)),
+                                                  minWidth: nil, idealWidth: nil, maxWidth: .infinity, minHeight: nil, idealHeight: nil, maxHeight: nil, alignment: .topLeading),
+                            width: nil, height: 106, alignment: .topLeading)
         }
-        return [_StackNode(path: ctx.path, env: ctx.environment, axis: .vertical, alignment: .leading, spacing: 0, children: titleNodes + [filled])]
+        let stack = _StackNode(path: ctx.path, env: ctx.environment, axis: .vertical, alignment: .leading, spacing: 0, children: titleNodes + [filled])
+        stack.edgeBackground = body.edgeBackground
+        return [stack]
     }
 }
 
@@ -121,6 +135,12 @@ public struct NavigationLink<Label: View, Destination: View>: View {
 extension NavigationLink where Label == Text {
     public init(_ titleKey: LocalizedStringKey, destination: Destination) { self.init(destination: destination) { Text(titleKey) } }
     public init<S: StringProtocol>(_ title: S, destination: Destination) { self.init(destination: destination) { Text(title) } }
+    public init(_ titleKey: LocalizedStringKey, @ViewBuilder destination: () -> Destination) {
+        self.init(destination: destination) { Text(titleKey) }
+    }
+    public init<S: StringProtocol>(_ title: S, @ViewBuilder destination: () -> Destination) {
+        self.init(destination: destination) { Text(title) }
+    }
 }
 
 extension NavigationLink where Destination == EmptyView {
@@ -149,7 +169,47 @@ extension ListStyle where Self == InsetListStyle { public static var inset: Inse
 extension ListStyle where Self == SidebarListStyle { public static var sidebar: SidebarListStyle { SidebarListStyle() } }
 extension ListStyle where Self == DefaultListStyle { public static var automatic: DefaultListStyle { DefaultListStyle() } }
 
-struct _InSectionKey: EnvironmentKey { static let defaultValue = false }
+struct _InListKey: EnvironmentKey { static let defaultValue = false }
+struct _UnderLargeTitleKey: EnvironmentKey { static let defaultValue = false }
+
+/// iOS 26's inset grouped list, as measured in the Simulator (tools/swiftui-parity, Probe.swift and pixel scans): cards
+/// inset 16 from the screen's edges with continuous corners of radius 26, rows at least 52 tall with their content 16
+/// in from the card's edges, 1-point #E8E8E8 separators inset 16 on both sides; a header (17 pt semibold, secondary)
+/// 10 above its card, a footer (footnote, secondary) 8 below it.
+enum _ListMetrics {
+    static let cardInset: CGFloat = 16
+    static let rowInset: CGFloat = 16
+    static let rowMinHeight: CGFloat = 52
+    static let rowVerticalPadding: CGFloat = 11
+    static let cornerRadius: CGFloat = 26
+    static let separator: CGFloat = 1
+    static let headerToCard: CGFloat = 10
+    static let cardToFooter: CGFloat = 8
+    /// Above the first section: before its header, or before its card when it has none (none under a large title).
+    static let firstHeaderTop: CGFloat = 10
+    static let firstCardTopNoHeader: CGFloat = 35
+    /// Between sections: from a card to the next header (or card), and from a footer to the next header.
+    static let cardToNextHeader: CGFloat = 27 + 2.0 / 3
+    static let cardToNextCard: CGFloat = 35
+    static let footerToNext: CGFloat = 16
+    static let bottom: CGFloat = 35
+    static let separatorColor = Color(light: _RGBA(hex: 0xE8E8E8), dark: _RGBA(hex: 0x38383A))
+}
+
+/// A section, resolved: what a List lays out as one card.
+@MainActor
+final class _SectionMarker: _Node {
+    let header: [_Node]
+    let rows: [_Node]
+    let footer: [_Node]
+    init(path: String, env: EnvironmentValues, header: [_Node], rows: [_Node], footer: [_Node]) {
+        self.header = header
+        self.rows = rows
+        self.footer = footer
+        super.init(path: path, env: env)
+    }
+    // Outside a List a Section is its parts stacked: _resolve does that instead of returning a marker.
+}
 
 public struct Section<Parent: View, Content: View, Footer: View>: View, _PrimitiveView {
     let header: Parent
@@ -163,7 +223,20 @@ public struct Section<Parent: View, Content: View, Footer: View>: View, _Primiti
     public var body: Never { _neverBody() }
 
     func _resolve(_ ctx: _ResolveContext) -> [_Node] {
-        _listSection(ctx, header: AnyView(header), rows: AnyView(content), footer: AnyView(footer))
+        let inList = ctx.environment[_InListKey.self]
+        let headerCtx = ctx.child("header").with {
+            $0.font = Font(size: 17, weight: .semibold)
+            $0._foreground = AnyShapeStyle(Color.secondary)
+            $0._stackAxis = .vertical
+        }
+        let footerCtx = ctx.child("footer").with { $0.font = .footnote; $0._foreground = AnyShapeStyle(Color.secondary); $0._stackAxis = .vertical }
+        let header = _resolveView(self.header, headerCtx)
+        let rows = _resolveView(content, ctx.child("rows").with { $0._stackAxis = .vertical })
+        let footer = _resolveView(self.footer, footerCtx)
+        if inList {
+            return [_SectionMarker(path: ctx.path, env: ctx.environment, header: header, rows: rows, footer: footer)]
+        }
+        return header + rows + footer
     }
 }
 
@@ -185,38 +258,57 @@ extension Section where Parent == EmptyView {
     public init(@ViewBuilder content: () -> Content, @ViewBuilder footer: () -> Footer) { self.init(content: content, header: { EmptyView() }, footer: footer) }
 }
 
-/// An inset grouped section: an uppercase-free footnote header, rows on a rounded card with hairlines between them.
+/// The list's sections, laid out down the screen: each a header, a card of rows and a footer, spaced as iOS spaces them.
 @MainActor
-func _listSection(_ ctx: _ResolveContext, header: AnyView, rows: AnyView, footer: AnyView) -> [_Node] {
+func _listBody(_ ctx: _ResolveContext, sections: [_SectionMarker]) -> _Node {
     let env = ctx.environment
-    let rowCtx = ctx.child("rows").with { $0._stackAxis = .vertical; $0[_InSectionKey.self] = true }
-    let rowNodes = _resolveView(rows, rowCtx)
-    var cardChildren: [_Node] = []
-    for (i, row) in rowNodes.enumerated() {
-        let padded = _FlexFrameNode(
-            child: _PaddingNode(child: row, insets: EdgeInsets(top: 11, leading: 20, bottom: 11, trailing: 20)),
-            minWidth: nil, idealWidth: nil, maxWidth: .infinity, minHeight: 52, idealHeight: nil, maxHeight: nil, alignment: .leading)
-        cardChildren.append(padded)
-        if i < rowNodes.count - 1 {
-            cardChildren.append(_PaddingNode(child: _DividerNode(path: ctx.path + "/sep\(i)", env: env, axis: .horizontal),
-                                             insets: EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0)))
-        }
-    }
-    let card = _StackNode(path: ctx.path + "/card", env: env, axis: .vertical, alignment: .leading, spacing: 0, children: cardChildren)
-    let cardBg = _ShapeNode(path: ctx.path + "/cardbg", env: env, shape: _AnyShape(RoundedRectangle(cornerRadius: 26)),
-                            fill: AnyShapeStyle(Color.secondarySystemGroupedBackground), stroke: nil)
+    typealias M = _ListMetrics
     var children: [_Node] = []
-    let headerCtx = ctx.child("header").with { $0.font = .footnote; $0._foreground = AnyShapeStyle(Color.secondary) }
-    for node in _resolveView(header, headerCtx) {
-        children.append(_PaddingNode(child: node, insets: EdgeInsets(top: 0, leading: 20, bottom: 6, trailing: 20)))
+    var previousHadFooter = false
+    for (index, section) in sections.enumerated() {
+        let hasHeader = !section.header.isEmpty
+        // Space above this section's header (or its card, without one).
+        let gap: CGFloat
+        if index == 0 {
+            gap = hasHeader ? M.firstHeaderTop : (env[_UnderLargeTitleKey.self] ? 0 : M.firstCardTopNoHeader)
+        } else if previousHadFooter {
+            gap = M.footerToNext
+        } else {
+            gap = hasHeader ? M.cardToNextHeader : M.cardToNextCard
+        }
+        var block: [_Node] = []
+        for node in section.header {
+            block.append(_PaddingNode(child: node, insets: EdgeInsets(top: 0, leading: M.cardInset + M.rowInset, bottom: M.headerToCard, trailing: M.cardInset + M.rowInset)))
+        }
+        // The card: rows separated by inset hairlines, on a rounded white (secondary grouped) background.
+        var cardRows: [_Node] = []
+        for (i, row) in section.rows.enumerated() {
+            let padded = _PaddingNode(child: row, insets: EdgeInsets(top: M.rowVerticalPadding, leading: M.rowInset, bottom: M.rowVerticalPadding, trailing: M.rowInset))
+            cardRows.append(_FlexFrameNode(child: padded, minWidth: nil, idealWidth: nil, maxWidth: .infinity,
+                                           minHeight: M.rowMinHeight, idealHeight: nil, maxHeight: nil, alignment: .leading))
+            if i < section.rows.count - 1 {
+                let line = _ShapeNode(path: section.path + "/sep\(i)", env: env, shape: _AnyShape(Rectangle()),
+                                      fill: AnyShapeStyle(M.separatorColor), stroke: nil)
+                let sized = _FixedFrameNode(child: line, width: nil, height: M.separator, alignment: .center)
+                cardRows.append(_PaddingNode(child: sized, insets: EdgeInsets(top: 0, leading: M.rowInset, bottom: 0, trailing: M.rowInset)))
+            }
+        }
+        if !cardRows.isEmpty {
+            let card = _StackNode(path: section.path + "/card", env: env, axis: .vertical, alignment: .leading, spacing: 0, children: cardRows)
+            let bg = _ShapeNode(path: section.path + "/cardbg", env: env, shape: _AnyShape(RoundedRectangle(cornerRadius: M.cornerRadius)),
+                                fill: AnyShapeStyle(Color.secondarySystemGroupedBackground), stroke: nil)
+            block.append(_PaddingNode(child: _LayeredNode(child: card, secondary: [bg], alignment: .center, isOverlay: false),
+                                      insets: EdgeInsets(top: 0, leading: M.cardInset, bottom: 0, trailing: M.cardInset)))
+        }
+        for node in section.footer {
+            block.append(_PaddingNode(child: node, insets: EdgeInsets(top: M.cardToFooter, leading: M.cardInset + M.rowInset, bottom: 0, trailing: M.cardInset + M.rowInset)))
+        }
+        let stacked = _StackNode(path: section.path + "/block", env: env, axis: .vertical, alignment: .leading, spacing: 0, children: block)
+        children.append(_PaddingNode(child: stacked, insets: EdgeInsets(top: gap, leading: 0, bottom: 0, trailing: 0)))
+        previousHadFooter = !section.footer.isEmpty
     }
-    children.append(_PaddingNode(child: _LayeredNode(child: card, secondary: [cardBg], alignment: .center, isOverlay: false),
-                                 insets: EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16)))
-    let footerCtx = ctx.child("footer").with { $0.font = .footnote; $0._foreground = AnyShapeStyle(Color.secondary) }
-    for node in _resolveView(footer, footerCtx) {
-        children.append(_PaddingNode(child: node, insets: EdgeInsets(top: 6, leading: 20, bottom: 0, trailing: 20)))
-    }
-    return [_StackNode(path: ctx.path, env: env, axis: .vertical, alignment: .leading, spacing: 0, children: children)]
+    let all = _StackNode(path: ctx.path + "/sections", env: env, axis: .vertical, alignment: .leading, spacing: 0, children: children)
+    return _PaddingNode(child: all, insets: EdgeInsets(top: 0, leading: 0, bottom: M.bottom, trailing: 0))
 }
 
 public struct List<SelectionValue: Hashable, Content: View>: View, _PrimitiveView {
@@ -225,16 +317,24 @@ public struct List<SelectionValue: Hashable, Content: View>: View, _PrimitiveVie
 
     func _resolve(_ ctx: _ResolveContext) -> [_Node] {
         let env = ctx.environment
-        let inner = ctx.with { $0._stackAxis = .vertical }
-        // Rows that are not in a Section form one section of their own.
-        let probe = _resolveView(content, inner.child("probe"))
-        let sectioned = probe.allSatisfy { $0 is _StackNode && ($0 as! _StackNode).children.contains { $0 is _PaddingNode } && $0.path.contains("Section") }
-        let sections = sectioned ? probe : _listSection(inner, header: AnyView(EmptyView()), rows: AnyView(content), footer: AnyView(EmptyView()))
-        let stack = _StackNode(path: ctx.path + "/sections", env: env, axis: .vertical, alignment: .leading, spacing: 20, children: sections)
-        let padded = _PaddingNode(child: stack, insets: EdgeInsets(top: 0, leading: 0, bottom: 20, trailing: 0))
-        let scroll = _ScrollNode(path: ctx.path, env: env, axes: .vertical, content: padded)
-        let bg = _ShapeNode(path: ctx.path + "/bg", env: env, shape: _AnyShape(Rectangle()), fill: AnyShapeStyle(Color.systemGroupedBackground), stroke: nil)
-        return [_LayeredNode(child: scroll, secondary: [bg], alignment: .center, isOverlay: false)]
+        let inner = ctx.with { $0._stackAxis = .vertical; $0[_InListKey.self] = true }
+        let nodes = _resolveView(content, inner)
+        // Rows outside any Section form sections of their own, between the explicit ones.
+        var sections: [_SectionMarker] = []
+        var loose: [_Node] = []
+        func flush() {
+            guard !loose.isEmpty else { return }
+            sections.append(_SectionMarker(path: ctx.path + "/implicit\(sections.count)", env: env, header: [], rows: loose, footer: []))
+            loose = []
+        }
+        for node in nodes {
+            if let section = node as? _SectionMarker { flush(); sections.append(section) } else { loose.append(node) }
+        }
+        flush()
+        let body = _listBody(inner, sections: sections)
+        let scroll = _ScrollNode(path: ctx.path, env: env, axes: .vertical, content: body)
+        scroll.edgeBackground = .systemGroupedBackground
+        return [scroll]
     }
 }
 

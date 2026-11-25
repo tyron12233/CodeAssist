@@ -150,6 +150,8 @@ class SwiftToolchain(
         "HOME" to home.resolve("home").toString(),
         "TMPDIR" to home.resolve("tmp").toString(),
         "TERM" to "dumb",
+        // The SwiftUI engine's SF Symbol frames (measured from iOS; tools/swiftui-parity/SymbolProbe.swift).
+        "CODEASSIST_SYMBOL_METRICS" to swiftUIModules.resolve("symbol-metrics.tsv").toString(),
     )
 
     private fun unpackIfNeeded() {
@@ -197,7 +199,7 @@ class SwiftToolchain(
         const val VERSION = "6.4.3"
 
         /** Bumped whenever the staged layout changes for the same Swift version, so the device unpacks afresh. */
-        private const val LAYOUT = 2
+        private const val LAYOUT = 3
         private const val STAMP = "$VERSION/$LAYOUT"
 
         /** The plugin's minSdk: what a program may assume of the device. */

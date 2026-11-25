@@ -12,7 +12,7 @@
 # Locally it runs the image with Docker; in CI (already inside swift:6.4.3, SWIFTUI_IN_CONTAINER=1) it runs directly.
 # Output, beside what stage_swift.py staged:
 #   build/out/<abi>/jniLibs/<abi>/libSwiftUI.so
-#   build/out/<abi>/assets/swift/swiftui/SwiftUI.{swiftmodule,swiftinterface,swiftdoc}
+#   build/out/<abi>/assets/swift/swiftui/SwiftUI.{swiftmodule,swiftinterface,swiftdoc}, symbol-metrics.tsv
 set -euo pipefail
 
 ABI="${1:?usage: build_swiftui.sh <arm64-v8a|armeabi-v7a|x86_64>}"
@@ -67,4 +67,6 @@ swiftc -target "$TARGET" -sdk "$SDK" -resource-dir "$SDK/usr/lib/swift" \
 cp libSwiftUI.so "$JNI/"
 mkdir -p "$SDK/swiftui"
 cp SwiftUI.swiftmodule SwiftUI.swiftinterface SwiftUI.swiftdoc "$SDK/swiftui/"
+# SF Symbol frames per point size, measured from iOS (tools/swiftui-parity/SymbolProbe.swift), which the engine reads.
+cp "$REPO/samples/swift-plugin/swiftui/symbol-metrics.tsv" "$SDK/swiftui/"
 echo "==> done: $JNI/libSwiftUI.so ($(du -h libSwiftUI.so | cut -f1)), $SDK/swiftui/"

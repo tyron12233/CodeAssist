@@ -105,5 +105,55 @@ func parityCases() -> [(String, AnyView)] {
         .padding()
         .background(RoundedRectangle(cornerRadius: 16).fill(Color.gray.opacity(0.15)))
         .padding())),
+        ("symbols", AnyView(VStack(spacing: 16) {
+            HStack(spacing: 20) {
+                Image(systemName: "star.fill"); Image(systemName: "heart"); Image(systemName: "gearshape")
+                Image(systemName: "chevron.right"); Image(systemName: "person.crop.circle")
+            }
+            HStack(spacing: 20) {
+                Image(systemName: "star.fill"); Image(systemName: "heart"); Image(systemName: "gearshape")
+            }.font(.largeTitle)
+            Label("Favorites", systemImage: "star")
+            Label("Settings", systemImage: "gearshape").font(.title3)
+        })),
+        ("list-plain-rows", AnyView(List {
+            Text("Apples")
+            Text("Bananas")
+            Text("Cherries")
+        })),
+        ("list-sections", AnyView(List {
+            Section("Fruit") {
+                Text("Apples")
+                Text("Bananas")
+            }
+            Section {
+                Text("Carrots")
+            } header: {
+                Text("Vegetables")
+            } footer: {
+                Text("Fresh every morning.")
+            }
+        })),
+        ("form-toggles", AnyView(Form {
+            Section("Connectivity") {
+                Toggle("Wi-Fi", isOn: .constant(true))
+                Toggle("Bluetooth", isOn: .constant(false))
+            }
+            Section {
+                Text("Version 1.0")
+            }
+        })),
+        ("navigation-title", AnyView(NavigationStack {
+            Text("Content")
+                .navigationTitle("Inbox")
+        })),
+        ("navigation-list", AnyView(NavigationStack {
+            List {
+                NavigationLink("General") { Text("General") }
+                NavigationLink("Privacy") { Text("Privacy") }
+                NavigationLink("About") { Text("About") }
+            }
+            .navigationTitle("Settings")
+        })),
     ]
 }

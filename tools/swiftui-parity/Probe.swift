@@ -27,6 +27,31 @@ let styles: [(String, Font)] = [
     ("caption2", .caption2),
 ]
 
+struct ListProbe: View {
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text("Apples").report("list.row1")
+                    Text("Bananas").report("list.row2")
+                    Toggle("Wi-Fi", isOn: .constant(true)).report("list.toggle")
+                    NavigationLink("General") { Text("x") }.report("list.link")
+                    Label("Favorites", systemImage: "star").report("list.label")
+                } header: {
+                    Text("Fruit").report("list.header")
+                } footer: {
+                    Text("Fresh every morning.").report("list.footer")
+                }
+                Section("Second") {
+                    Text("Carrots").report("list.row3")
+                }
+            }
+            .navigationTitle("Settings")
+            .background(GeometryReader { p in Color.clear.onAppear { let f = p.frame(in: .global); print("PROBE list.frame \(f.minX) \(f.minY) \(f.width) \(f.height)") } })
+        }
+    }
+}
+
 struct ProbeView: View {
     var body: some View {
         ScrollView {
@@ -117,7 +142,8 @@ final class ProbeApp: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         let window = UIWindow(frame: UIScreen.main.bounds)
         self.window = window
-        window.rootViewController = UIHostingController(rootView: ProbeView())
+        let which = ProcessInfo.processInfo.environment["PROBE"] ?? ""
+        window.rootViewController = which == "list" ? UIHostingController(rootView: AnyView(ListProbe())) : UIHostingController(rootView: AnyView(ProbeView()))
         window.makeKeyAndVisible()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             print("PROBE DONE")
