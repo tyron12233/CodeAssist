@@ -113,8 +113,8 @@ object ProjectPlugins {
      *
      * [present] are the plugins on this device (built in or installed) by id; [disabled] and [consented] are the
      * user's choices; [installedExternally] are the ones installed separately (only those ask for permission).
-     * [runningAtOpen] is what was running when [root] was opened, when [root] is the open project: a plugin
-     * running now that was not then has not been taken up by it. [workspace] is the project's model as saved,
+     * [takenUp] says whether the open project has the running plugin, when [root] is the open project (null for
+     * one that is not open): a plugin that arrived, or was loaded again, after it opened has not been taken up. [workspace] is the project's model as saved,
      * for naming module types nothing provides when no record explains them.
      */
     fun check(
@@ -125,12 +125,12 @@ object ProjectPlugins {
         consented: Set<String>,
         installedExternally: Set<String>,
         isRunning: (String) -> Boolean,
-        runningAtOpen: Set<String>?,
+        takenUp: ((String) -> Boolean)?,
         workspace: WorkspaceData?,
     ): Check {
         val missing = read(root).mapNotNull { e ->
             val state = when {
-                isRunning(e.id) -> if (runningAtOpen != null && e.id !in runningAtOpen) State.NOT_LOADED else null
+                isRunning(e.id) -> if (takenUp != null && !takenUp(e.id)) State.NOT_LOADED else null
                 e.id !in present -> State.NOT_INSTALLED
                 e.id in disabled -> State.TURNED_OFF
                 e.id in installedExternally && e.id !in consented -> State.NEEDS_PERMISSION

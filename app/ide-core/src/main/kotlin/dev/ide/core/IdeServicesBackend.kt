@@ -1139,7 +1139,7 @@ class IdeServicesBackend(
         if (prev !== next) runCatching { prev?.close() }
     }
 
-    override var pluginsAtOpen: Set<String> = emptySet()
+    override var pluginsAtOpen: Map<String, Int> = emptyMap()
         private set
 
     /**
@@ -1149,7 +1149,7 @@ class IdeServicesBackend(
     private fun recordProjectPlugins(next: IdeServices) {
         val env = manager?.env ?: return
         val catalog = env.pluginCatalog
-        pluginsAtOpen = catalog.all.mapTo(HashSet()) { it.id }.filterTo(HashSet()) { env.isPluginRunning(it) }
+        pluginsAtOpen = catalog.all.map { it.id }.filter { env.isPluginRunning(it) }.associateWith { env.pluginLoadGeneration(it) }
         runCatching {
             dev.ide.core.plugins.ProjectPlugins.record(
                 root = next.workspaceRoot,

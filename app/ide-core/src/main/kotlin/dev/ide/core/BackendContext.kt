@@ -83,9 +83,10 @@ internal interface BackendContext {
      *  the aggregator). Called by the project service's open/create. */
     fun swapEngine(next: IdeServices)
 
-    /** The plugins that were running when the open project was opened: one running now that is not in here
+    /** The plugins that were running when the open project was opened, each with its load generation
+     *  ([ApplicationEnvironment.pluginLoadGeneration]): one running now that is not in here, or is a later load,
      *  arrived since, and the project takes it up only when it is opened again. */
-    val pluginsAtOpen: Set<String> get() = emptySet()
+    val pluginsAtOpen: Map<String, Int> get() = emptyMap()
 
     /** Close the active engine and leave no project open ([projectEpoch] back to 0). Called before the
      *  loaded project is deleted, so nothing it runs writes into the folder being removed. */

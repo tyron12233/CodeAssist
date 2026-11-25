@@ -89,6 +89,22 @@ class PluginLiveInstallTest {
     }
 
     @Test
+    fun `each load while the app runs is a new generation, so an open project can tell it has not taken it up`() {
+        ApplicationEnvironment(consentedPluginIds = setOf(id)).use { env ->
+            env.pluginAppeared(first())
+            env.loadPluginNow(id)
+            val atOpen = env.pluginLoadGeneration(id)
+
+            env.pluginRemoved(id)
+            env.pluginAppeared(first())
+            env.loadPluginNow(id)
+
+            assertTrue(env.isPluginRunning(id))
+            assertTrue(env.pluginLoadGeneration(id) != atOpen, "running again, but not the load the project opened with")
+        }
+    }
+
+    @Test
     fun `a plugin turned off before it was uninstalled stays off when it is reinstalled`() {
         ApplicationEnvironment(disabledPluginIds = setOf(id), consentedPluginIds = setOf(id)).use { env ->
             env.pluginAppeared(first())

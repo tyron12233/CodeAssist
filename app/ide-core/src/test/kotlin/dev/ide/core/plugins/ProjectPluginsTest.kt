@@ -58,10 +58,10 @@ class ProjectPluginsTest {
             ProjectPlugins.record(root, store.workspace.projects, env.platform.extensions, mapOf(dart.id to dart.name)) { true }
             assertEquals(listOf(dart), ProjectPlugins.read(root))
 
-            fun check(present: Set<String>, disabled: Set<String> = emptySet(), consented: Set<String> = setOf(dart.id), runningAtOpen: Set<String>? = null, running: Boolean = false) =
+            fun check(present: Set<String>, disabled: Set<String> = emptySet(), consented: Set<String> = setOf(dart.id), takenUp: ((String) -> Boolean)? = null, running: Boolean = false) =
                 ProjectPlugins.check(
                     root, env.platform.extensions, present, disabled, consented,
-                    installedExternally = present, isRunning = { running }, runningAtOpen = runningAtOpen,
+                    installedExternally = present, isRunning = { running }, takenUp = takenUp,
                     workspace = ModelPersistence.load(root.toString()),
                 )
 
@@ -69,9 +69,9 @@ class ProjectPluginsTest {
             assertEquals(State.TURNED_OFF, check(present = setOf(dart.id), disabled = setOf(dart.id)).missing.single().state)
             assertEquals(State.NEEDS_PERMISSION, check(present = setOf(dart.id), consented = emptySet()).missing.single().state)
             // Running now, and running when the project opened: nothing is missing.
-            assertTrue(check(present = setOf(dart.id), running = true, runningAtOpen = setOf(dart.id)).ok)
-            // Running now, but it arrived after the open project was opened.
-            assertEquals(State.NOT_LOADED, check(present = setOf(dart.id), running = true, runningAtOpen = emptySet()).missing.single().state)
+            assertTrue(check(present = setOf(dart.id), running = true, takenUp = { true }).ok)
+            // Running now, but it arrived (or was loaded again) after the open project was opened.
+            assertEquals(State.NOT_LOADED, check(present = setOf(dart.id), running = true, takenUp = { false }).missing.single().state)
             assertEquals("Dart", check(present = emptySet()).missing.single().name)
         }
     }
@@ -90,7 +90,7 @@ class ProjectPluginsTest {
 
             val check = ProjectPlugins.check(
                 root, env.platform.extensions, present = emptySet(), disabled = emptySet(), consented = emptySet(),
-                installedExternally = emptySet(), isRunning = { false }, runningAtOpen = null,
+                installedExternally = emptySet(), isRunning = { false }, takenUp = null,
                 workspace = ModelPersistence.load(root.toString()),
             )
             assertEquals(listOf("dart"), check.unknownModuleTypes)

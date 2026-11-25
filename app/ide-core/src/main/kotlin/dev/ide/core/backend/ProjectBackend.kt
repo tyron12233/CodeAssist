@@ -153,7 +153,10 @@ internal class ProjectBackend(
                     consented = mgr.consentedPlugins(),
                     installedExternally = env.installedPlugins.mapTo(HashSet()) { it.manifest.id },
                     isRunning = env::isPluginRunning,
-                    runningAtOpen = if (isOpen) ctx.pluginsAtOpen else null,
+                    takenUp = if (isOpen) {
+                        val atOpen = ctx.pluginsAtOpen
+                        { id -> atOpen[id] == env.pluginLoadGeneration(id) }
+                    } else null,
                     workspace = runCatching { ModelPersistence.load(root.toString()) }.getOrNull(),
                 )
                 UiProjectPluginCheck(
