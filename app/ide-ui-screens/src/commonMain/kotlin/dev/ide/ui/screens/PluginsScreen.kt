@@ -242,6 +242,26 @@ fun PluginsScreen(
     val refresh = {
         plugins = backend.settings.pluginCatalog()
         pending = backend.settings.pendingPluginChanges()
+        // An installed plugin is loaded, reloaded and unloaded while the app runs: bring its UI along.
+        dev.ide.ui.ext.UiPluginHost.syncPlugins(backend.uiPlugins())
+    }
+    val screenScope = rememberCoroutineScope()
+    // Turning an installed plugin on or off, or allowing it, loads or unloads its code: off the main thread.
+    val answer: (suspend () -> Unit) -> Unit = { change ->
+        screenScope.launch {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { change() }
+            refresh()
+        }
+    }
+    // Back from the system installer (or the app info page): the device's plugins may have changed. The app
+    // takes a package up off the main thread, so look again shortly after the window has its focus back.
+    val focused = androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(focused) {
+        if (!focused) return@LaunchedEffect
+        for (wait in longArrayOf(0L, 800L, 2500L)) {
+            kotlinx.coroutines.delay(wait)
+            refresh()
+        }
     }
 
     PlatformBackHandler(enabled = detail != null) { detailId = null }
@@ -273,7 +293,7 @@ fun PluginsScreen(
                         PluginDetail(
                             p = detail,
                             onReview = { asking = detail },
-                            onToggle = { enabled -> backend.settings.setPluginEnabled(detail.id, enabled); refresh() },
+                            onToggle = { enabled -> answer { backend.settings.setPluginEnabled(detail.id, enabled) } },
                             onOpenLogs = onOpenLogs?.takeIf { !detail.builtIn && detail.togglable }?.let { open -> { open(detail.id) } },
                             onOpenApp = detail.app?.takeIf { it.canOpen }?.let { { backend.settings.openPluginApp(detail.id) } },
                             onOpenAppInfo = detail.app?.let { { backend.settings.openPluginAppInfo(detail.id) } },
@@ -325,7 +345,7 @@ fun PluginsScreen(
                                                 published = published,
                                                 onOpen = { detailId = p.id },
                                                 onReview = { asking = p },
-                                                onToggle = { enabled -> backend.settings.setPluginEnabled(p.id, enabled); refresh() },
+                                                onToggle = { enabled -> answer { backend.settings.setPluginEnabled(p.id, enabled) } },
                                             )
                                         }
                                     }
@@ -345,8 +365,7 @@ fun PluginsScreen(
         PluginConsentDialog(
             plugin = plugin,
             onAnswer = { granted ->
-                backend.settings.setPluginConsent(plugin.id, granted)
-                refresh()
+                answer { backend.settings.setPluginConsent(plugin.id, granted) }
                 asking = null
             },
             onDismiss = { asking = null },
@@ -1022,7 +1041,7 @@ private fun DownloadCard(d: UiPluginDownload, onOpenUrl: ((String) -> Unit)?, fo
 /** The consent gate, as a modal the user has to answer before the plugin is allowed to load. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun PluginConsentDialog(plugin: UiPluginInfo, onAnswer: (Boolean) -> Unit, onDismiss: () -> Unit) {
+internal fun PluginConsentDialog(plugin: UiPluginInfo, onAnswer: (Boolean) -> Unit, onDismiss: () -> Unit) {
     // Dismissing without answering (Back, a tap outside) leaves the plugin exactly as it was: still not
     // running, still asked about next time. Only the two explicit buttons record a decision; a dismissal used
     // to count as "Don't allow", which turned the plugin off.

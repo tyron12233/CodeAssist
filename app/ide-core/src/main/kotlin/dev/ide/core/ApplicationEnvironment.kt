@@ -155,12 +155,20 @@ class ApplicationEnvironment(
     private lateinit var pluginManager: PluginManager
 
     /**
-     * The built-in plugin catalog: every built-in plus which are active, given the host's persisted disabled
-     * set (passed into this constructor). Only the enabled subset is loaded; enabling/disabling a plugin is
-     * applied on the next launch (the manager loads once here, it does not hot-swap). The Plugins settings UI
-     * reads this to render toggles.
+     * The plugin catalog: every built-in and installed plugin plus which are active, given the host's persisted
+     * disabled and consented sets. Only the enabled subset is loaded. A built-in's change applies on the next
+     * launch; an installed plugin's is applied while the app runs ([pluginAppeared], [setPluginChoices],
+     * [loadPluginNow], [unloadPluginNow]). The Plugins settings UI reads this to render toggles.
      */
-    val pluginCatalog: PluginCatalog
+    @Volatile
+    var pluginCatalog: PluginCatalog
+        private set
+
+    /** Every installed plugin known now, by id: what [loadPluginNow] loads from. */
+    private val discoveredById = java.util.concurrent.ConcurrentHashMap<String, DiscoveredPlugin>()
+
+    /** The built-ins' ids, lowercased: an installed plugin that appears later may not claim one. */
+    private lateinit var builtInIdsLower: Set<String>
 
     /**
      * Every plugin a [PluginSource] found this launch, whether or not it loaded. The Plugins settings screen
@@ -234,12 +242,14 @@ class ApplicationEnvironment(
         // time: safe to pass `this` mid-construction (it is dereferenced only later, never during register()).
         val builtIns = BuiltInPlugins.assemble(this, codecs)
         val builtInIds = builtIns.mapTo(HashSet()) { it.engine.manifest.id }
+        builtInIdsLower = builtInIds.mapTo(HashSet()) { it.lowercase() }
 
         // Discovery reads manifests only. Nothing a source found runs before the catalog has applied the
         // user's disabled set, so a plugin the user turned off never gets a classloader, let alone a
         // register() call.
         val scan = discover(pluginSources, builtInIds)
         val discovered = scan.usable
+        discovered.forEach { discoveredById[it.manifest.id] = it }
         rejectedPlugins = scan.rejected
         val failures = LinkedHashMap<String, String>()
         // A plugin turned off for crashing gets another chance once it is a different version: an update is the
@@ -412,7 +422,148 @@ class ApplicationEnvironment(
             if (it.manifest.id != id) it else InstalledPlugin(manifest, replacement.origin, error = failure ?: uiFailure)
         }
         enabledUiPlugins = enabledUiPlugins.filter { it.id != id } + listOfNotNull(ui)
+        discoveredById[id] = replacement
+        pluginCatalog = catalogWith(manifest)
         return if (failure != null) PluginReload.Failed(failure, unloaded = true) else PluginReload.Reloaded(manifest, ui)
+    }
+
+    /** What [pluginAppeared] did with a plugin app installed (or installed over) while the app runs. */
+    sealed interface PluginArrival {
+        /** Listed (or its listing updated) without running it: it waits for the user's consent, or is off. */
+        data class Listed(val manifest: PluginManifest) : PluginArrival
+
+        /** It was running, and the new build replaced it in place. [ui] is for the caller to swap in. */
+        data class Reloaded(val manifest: PluginManifest, val ui: UiPlugin?) : PluginArrival
+
+        /** It cannot be taken in while the app runs; [reason] says why. A fresh start reads it as usual. */
+        data class NeedsRestart(val reason: String) : PluginArrival
+    }
+
+    /** Whether installed plugin [id] is loaded and registered in this process right now. */
+    fun isPluginRunning(id: String): Boolean = pluginManager.loadedIds.any { it.value == id }
+
+    /**
+     * A plugin app was installed, or installed over, while the app runs: list it straight away instead of at the
+     * next launch. A plugin that is running gets the new build in place ([reloadInstalledPlugin]). A new one is
+     * only listed: it runs once the user consents ([setPluginChoices] then [loadPluginNow]), never on discovery.
+     */
+    @Synchronized
+    fun pluginAppeared(plugin: DiscoveredPlugin): PluginArrival {
+        val manifest = plugin.manifest
+        val id = manifest.id
+        if (id.lowercase() in builtInIdsLower) return PluginArrival.NeedsRestart("the plugin id '$id' is a built-in's")
+        val known = discoveredById.values.firstOrNull { it.manifest.id.equals(id, ignoreCase = true) }
+        if (known != null && known.manifest.id != id) return PluginArrival.NeedsRestart("the plugin id '$id' is already in use")
+        if (known != null && known.origin.label != plugin.origin.label) {
+            return PluginArrival.NeedsRestart("the plugin id '$id' is already in use by ${known.origin.label}")
+        }
+        if (isPluginRunning(id)) {
+            return when (val r = reloadInstalledPlugin(plugin)) {
+                is PluginReload.Reloaded -> PluginArrival.Reloaded(r.manifest, r.ui)
+                is PluginReload.Failed -> PluginArrival.NeedsRestart(r.reason)
+            }
+        }
+        discoveredById[id] = plugin
+        pluginCatalog = catalogWith(manifest)
+        val row = InstalledPlugin(manifest, plugin.origin)
+        installedPlugins = if (installedPlugins.any { it.manifest.id == id }) {
+            installedPlugins.map { if (it.manifest.id == id) row else it }
+        } else installedPlugins + row
+        return PluginArrival.Listed(manifest)
+    }
+
+    /**
+     * The plugin app [packageLabel] (its origin label: the package name) was uninstalled while the app runs:
+     * unload it if it runs and drop it from the lists. Returns its id, or null when it was not a known plugin.
+     * A plugin others depend on stays loaded until the next launch, which has no package to load it from.
+     */
+    @Synchronized
+    fun pluginRemoved(packageLabel: String): String? {
+        val gone = discoveredById.values.firstOrNull { it.origin.label == packageLabel } ?: return null
+        val id = gone.manifest.id
+        if (isPluginRunning(id) && unloadPluginNow(id) != null) return id
+        discoveredById.remove(id)
+        installedPlugins = installedPlugins.filter { it.manifest.id != id }
+        val c = pluginCatalog
+        pluginCatalog = PluginCatalog(c.all.filter { it.id != id }, c.disabledIds, c.externalIds - id, c.consentedIds)
+        return id
+    }
+
+    /** Apply the user's current disabled and consented sets to [pluginCatalog]. Loads and unloads nothing. */
+    @Synchronized
+    fun setPluginChoices(disabled: Set<String>, consented: Set<String>) {
+        val c = pluginCatalog
+        pluginCatalog = PluginCatalog(c.all, disabled, c.externalIds, consented)
+    }
+
+    /**
+     * Load installed plugin [id] in this running app, after the user consented to it or turned it on: the same
+     * checks and the same registration a launch applies. Its UI facet comes back for the caller to add to the UI
+     * registries on the UI thread. What an open project took from the plugins when it opened (its languages,
+     * its build system) stays as it was until the project is opened again.
+     */
+    @Synchronized
+    fun loadPluginNow(id: String): PluginReload {
+        val d = discoveredById[id] ?: return PluginReload.Failed("'$id' is not installed")
+        if (isPluginRunning(id)) return PluginReload.Reloaded(d.manifest, enabledUiPlugins.firstOrNull { it.id == id })
+        val loadedIds = pluginManager.loadedIds.mapTo(HashSet()) { it.value }
+        d.manifest.dependsOn.firstOrNull { it !in loadedIds }?.let {
+            return PluginReload.Failed("requires plugin '$it', which is not loaded")
+        }
+        val loaded = when (val r = externalLoader.load(d)) {
+            is ExternalPluginLoader.Result.Failed -> {
+                markRow(id, r.reason)
+                return PluginReload.Failed(r.reason)
+            }
+            is ExternalPluginLoader.Result.Loaded -> r
+        }
+        externalPluginLoaders = externalPluginLoaders + (id to loaded.classLoader)
+        val failure = try {
+            pluginManager.load(loaded.plugin, d.nativeLibraryDir)
+            null
+        } catch (t: Throwable) {
+            log.warn("installed plugin '$id' failed to load", t)
+            t.message ?: t.toString()
+        }
+        var uiFailure: String? = null
+        val ui = if (failure != null) null else ExternalUiFacets.load(d.manifest, loaded.instances, uiServices) { reason ->
+            uiFailure = listOfNotNull(uiFailure, reason).joinToString("; ")
+        }
+        markRow(id, failure ?: uiFailure)
+        enabledUiPlugins = enabledUiPlugins.filter { it.id != id } + listOfNotNull(ui)
+        return if (failure != null) PluginReload.Failed(failure, unloaded = true) else PluginReload.Reloaded(d.manifest, ui)
+    }
+
+    /**
+     * Unload installed plugin [id] in this running app, after the user turned it off or uninstalled it: its
+     * contributions are withdrawn and its `dispose` called. Returns null when it is gone (or was not running), or
+     * why it has to wait for the next launch (another running plugin depends on it).
+     */
+    @Synchronized
+    fun unloadPluginNow(id: String): String? {
+        if (!isPluginRunning(id)) return null
+        val dependents = installedPlugins.filter { it.manifest.id != id && id in it.manifest.dependsOn && isPluginRunning(it.manifest.id) }
+        if (dependents.isNotEmpty()) return "${dependents.joinToString { it.manifest.name }} depends on it"
+        pluginManager.unload(PluginId(id))
+        // The loader stays in [externalPluginLoaders]: code the plugin left running is still its to be blamed for.
+        enabledUiPlugins = enabledUiPlugins.filter { it.id != id }
+        markRow(id, null)
+        return null
+    }
+
+    private fun markRow(id: String, error: String?) {
+        installedPlugins = installedPlugins.map { if (it.manifest.id == id) it.copy(error = error) else it }
+    }
+
+    /** [pluginCatalog] with installed plugin [manifest] added or replacing its earlier version. */
+    private fun catalogWith(manifest: PluginManifest): PluginCatalog {
+        val c = pluginCatalog
+        return PluginCatalog(
+            all = c.all.filter { it.id != manifest.id } + manifest,
+            disabledIds = c.disabledIds,
+            externalIds = c.externalIds + manifest.id,
+            consentedIds = c.consentedIds,
+        )
     }
 
     /** Warn, in the plugin's own log, about each contribution to [ep] whose id an earlier registration holds. */

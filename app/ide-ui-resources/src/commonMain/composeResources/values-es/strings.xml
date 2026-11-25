@@ -2385,6 +2385,10 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="storage_cat_other_title">Otros</string>
     <string name="storage_cat_other_desc">Keystores, copias de seguridad y datos de la app</string>
     <string name="plugins_restart_now">Reiniciar ahora</string>
+    <string name="plugins_arrival_on_title">%1$s está activado</string>
+    <string name="plugins_arrival_on_body">Ya puedes usarlo. Un proyecto que ya estaba abierto incorpora lo que añade la próxima vez que se abra.</string>
+    <string name="plugins_arrival_restart_title">%1$s se iniciará tras reiniciar</string>
+    <string name="plugins_arrival_restart_body">No se pudo iniciar mientras CodeAssist está en ejecución: %1$s</string>
     <string name="plugins_restarting">Reiniciando…</string>
     <string name="plugins_change_installed">instalado</string>
     <string name="plugins_change_updated">actualizado</string>

@@ -834,6 +834,84 @@ class ProjectManager private constructor(
         pluginChanges.choicesChanged(disabledPlugins(), ids)
     }
 
+    /** What [applyPluginChoicesLive] did: plugins loaded and unloaded now, and the ones left for a restart, with why. */
+    data class LivePluginChanges(val loaded: List<String>, val unloaded: List<String>, val failed: Map<String, String>)
+
+    /**
+     * Apply the user's current enable and consent decisions for INSTALLED plugins in the running app: load each
+     * one that is now allowed and on, unload each one that is now off, so an answer on the Plugins screen takes
+     * effect at once. A plugin that cannot be taken up live (its load fails, another running plugin depends on
+     * it) stays in [pluginChanges] for a restart. Built-ins still change on the next launch.
+     */
+    @Synchronized
+    fun applyPluginChoicesLive(): LivePluginChanges {
+        env.setPluginChoices(disabledPlugins(), consentedPlugins())
+        val catalog = env.pluginCatalog
+        val loaded = ArrayList<String>()
+        val unloaded = ArrayList<String>()
+        val failed = LinkedHashMap<String, String>()
+        // Off first, then on, each repeated while it makes progress: a dependent has to go before what it needs,
+        // and come up after it.
+        val toUnload = catalog.externalIds.filterTo(ArrayList()) { !catalog.isEnabled(it) && env.isPluginRunning(it) }
+        do {
+            val before = toUnload.size
+            toUnload.removeAll { id -> (env.unloadPluginNow(id) == null).also { if (it) unloaded += id else failed[id] = env.unloadPluginNow(id) ?: "" } }
+        } while (toUnload.isNotEmpty() && toUnload.size < before)
+        val toLoad = catalog.externalIds.filterTo(ArrayList()) { catalog.isEnabled(it) && !env.isPluginRunning(it) }
+        do {
+            val before = toLoad.size
+            toLoad.removeAll { id ->
+                when (val r = env.loadPluginNow(id)) {
+                    is ApplicationEnvironment.PluginReload.Reloaded -> { loaded += id; failed.remove(id); true }
+                    is ApplicationEnvironment.PluginReload.Failed -> { failed[id] = r.reason; r.unloaded }
+                }
+            }
+        } while (toLoad.isNotEmpty() && toLoad.size < before)
+        // What now runs as decided needs no restart, and neither does a plugin that is off and was never running.
+        for (id in loaded + unloaded) pluginChanges.settled(id)
+        for (id in catalog.externalIds) if (id !in failed && !catalog.isEnabled(id) && !env.isPluginRunning(id)) pluginChanges.settled(id)
+        if (loaded.isNotEmpty() || unloaded.isNotEmpty()) runCatching { appRestarter()?.refreshPluginProcesses() }
+        return LivePluginChanges(loaded, unloaded, failed)
+    }
+
+    /**
+     * Plugin app [packageName] was installed or installed over while the app runs. Listed at once; a running
+     * plugin gets its new build in place, and one already allowed and on (installed again) is loaded. A new
+     * plugin is only listed: it waits for consent. [plugin] is null for a package whose manifest could not be
+     * read, which stays listed for a restart.
+     */
+    @Synchronized
+    fun pluginPackageInstalled(packageName: String, plugin: dev.ide.plugin.external.DiscoveredPlugin?, name: String?) {
+        pluginChanges.packageInstalled(packageName, name)
+        if (plugin == null) return
+        val id = plugin.manifest.id
+        when (val r = env.pluginAppeared(plugin)) {
+            is ApplicationEnvironment.PluginArrival.Reloaded -> {
+                pluginChanges.settled(id, packageName)
+                runCatching { appRestarter()?.refreshPluginProcesses() }
+            }
+            is ApplicationEnvironment.PluginArrival.Listed -> {
+                if (!env.pluginCatalog.isEnabled(id)) {
+                    pluginChanges.settled(id, packageName)
+                } else if (env.loadPluginNow(id) is ApplicationEnvironment.PluginReload.Reloaded) {
+                    pluginChanges.settled(id, packageName)
+                    runCatching { appRestarter()?.refreshPluginProcesses() }
+                }
+            }
+            is ApplicationEnvironment.PluginArrival.NeedsRestart -> log.info("plugin '$id' waits for a restart: ${r.reason}")
+        }
+    }
+
+    /** Plugin app [packageName] was uninstalled while the app runs: unloaded and dropped from the lists. */
+    @Synchronized
+    fun pluginPackageRemoved(packageName: String) {
+        pluginChanges.packageRemoved(packageName)
+        val id = env.pluginRemoved(packageName) ?: return
+        if (env.isPluginRunning(id)) return
+        pluginChanges.settled(id, packageName)
+        runCatching { appRestarter()?.refreshPluginProcesses() }
+    }
+
     /** The host's restarter, or null on a host that cannot restart itself (desktop, tests). */
     fun appRestarter(): AppRestarter? = env.container.getServiceOrNull(APP_RESTARTER)
 

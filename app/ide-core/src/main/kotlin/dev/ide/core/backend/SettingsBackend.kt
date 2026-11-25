@@ -249,6 +249,8 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         }
         manager.setConsentedPlugins(consented)
         manager.setDisabledPlugins(disabled)
+        // Taken up at once: an allowed plugin loads now, a refused one that ran unloads now.
+        runCatching { manager.applyPluginChoicesLive() }
     }
 
     override fun setPluginEnabled(id: String, enabled: Boolean) {
@@ -257,6 +259,8 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         val disabled = manager.disabledPlugins().toMutableSet()
         if (enabled) disabled.remove(id) else disabled.add(id)
         manager.setDisabledPlugins(disabled)
+        // An installed plugin is turned on or off at once; a built-in still changes on the next launch.
+        if (manager.env.pluginCatalog.isExternal(id)) runCatching { manager.applyPluginChoicesLive() }
     }
 
     override fun pendingPluginChanges(): List<UiPluginChange> {

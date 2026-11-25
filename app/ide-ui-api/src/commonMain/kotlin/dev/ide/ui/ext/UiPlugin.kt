@@ -103,13 +103,17 @@ object UiPluginHost {
     private val plugins = mutableListOf<UiPlugin>(BuiltInUiPlugin)
     private var loaded = false
 
-    /** Register an additional UI plugin. Call before [ensureLoaded]; a NEW id added after is loaded on the
-     *  next (still-once) load only if nothing has loaded yet, while a new facet for a known id replaces it now. The shell registers `IdeBackend.uiPlugins`, which
-     *  is already filtered to enabled plugins by the engine's `PluginCatalog` — so a disabled plugin never
-     *  reaches here. */
+    /** Register an additional UI plugin. Before [ensureLoaded] it is contributed with the rest; after, a NEW id
+     *  (a plugin loaded while the app runs) is contributed now, and a new facet for a known id replaces it now.
+     *  The shell registers `IdeBackend.uiPlugins`, which is already filtered to enabled plugins by the engine's
+     *  `PluginCatalog`, so a disabled plugin never reaches here. */
     fun register(plugin: UiPlugin) {
         val known = plugins.firstOrNull { it.id == plugin.id }
-        if (known == null) { plugins.add(plugin); return }
+        if (known == null) {
+            plugins.add(plugin)
+            if (loaded) contribute(plugin)
+            return
+        }
         // The same id from a NEW facet takes the old one's place. This host lives as long as the process, and
         // the app's window does not: on Android the activity can be closed and opened again while a foreground
         // service keeps the process, and the backend made for the new window hands out new facets, bound to
@@ -119,6 +123,23 @@ object UiPluginHost {
     }
 
     private val failed = LinkedHashMap<String, Throwable>()
+
+    /** The ids last taken from the backend by [syncPlugins]: the ones a later sync may withdraw. */
+    private val fromBackend = LinkedHashSet<String>()
+
+    /**
+     * Make the registered plugin UI match [current], the backend's `uiPlugins` as they are now: a plugin loaded
+     * while the app runs is contributed, a new build of one replaces it, and one unloaded (turned off,
+     * uninstalled) has its UI withdrawn. Only plugins an earlier sync brought in are ever withdrawn, so the
+     * shell's own UI plugins stay. Call on the UI thread.
+     */
+    fun syncPlugins(current: List<UiPlugin>) {
+        val ids = current.mapTo(LinkedHashSet()) { it.id }
+        for (gone in fromBackend - ids) replace(gone, null)
+        current.forEach { register(it) }
+        fromBackend.clear()
+        fromBackend += ids
+    }
 
     /**
      * Contribute every registered UI plugin's UI, once per process (idempotent).

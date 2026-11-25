@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.os.Process
 import dev.ide.core.AppRestarter
 import dev.ide.platform.log.Log
+import kotlinx.coroutines.launch
 
 /**
  * Restarts the app so that plugin changes take effect: the UI process, the build daemon and the preview
@@ -25,6 +26,29 @@ class AppRestart(context: Context) : AppRestarter {
     private val appContext = context.applicationContext
 
     override fun restart() = RestartActivity.launch(appContext)
+
+    /**
+     * The `:build` daemon loaded the installed plugins when it started, so after a live change it would build
+     * with the old set (a plugin just allowed would have no build tasks there). It is ended once no build runs,
+     * and the next build binds a fresh one, which reads the plugins as they are now. `:preview` is left alone:
+     * its client falls back to rendering in this process when it dies, which is worse than its plugin set
+     * lagging until the next start.
+     */
+    override fun refreshPluginProcesses() {
+        refreshScope.launch {
+            dev.ide.platform.BuildActivity.awaitIdle(Long.MAX_VALUE)
+            val am = appContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return@launch
+            val build = runCatching { am.runningAppProcesses }.getOrNull().orEmpty()
+                .filter { it.processName.endsWith(":build") }
+            for (p in build) runCatching { Process.killProcess(p.pid) }
+            if (build.isNotEmpty()) log.info("ended the build daemon (pid ${build.joinToString { it.pid.toString() }}) so it loads the current plugins")
+        }
+    }
+
+    private companion object {
+        val refreshScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+        val log = Log.logger("AppRestart")
+    }
 }
 
 /**

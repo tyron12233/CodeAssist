@@ -66,8 +66,9 @@ class UiPluginIsolationTest {
     fun aNewFacetForAKnownPluginTakesTheOldOnesPlace() {
         UiPluginHost.ensureLoaded()
         val first = plugin("test.reopened", "test.reopened.first")
+        // Registered after the host loaded (a plugin taken up while the app runs): contributed at once.
         UiPluginHost.register(first)
-        assertTrue(UiPluginHost.contribute(first))
+        assertEquals(1, ids().count { it == "test.reopened.first" }, "a plugin registered after load is contributed")
 
         UiPluginHost.register(first)
         assertEquals(1, ids().count { it == "test.reopened.first" }, "the same facet again changes nothing")
@@ -81,8 +82,7 @@ class UiPluginIsolationTest {
     fun replacingAPluginSwapsItsUiLive() {
         UiPluginHost.ensureLoaded()
         UiPluginHost.register(plugin("test.reload", "test.reload.v1"))
-        assertTrue(UiPluginHost.contribute(plugin("test.reload", "test.reload.v1")))
-        assertTrue("test.reload.v1" in ids())
+        assertEquals(1, ids().count { it == "test.reload.v1" })
 
         assertTrue(UiPluginHost.replace("test.reload", plugin("test.reload", "test.reload.v2")))
         assertFalse("test.reload.v1" in ids(), "the old build's window is withdrawn")
@@ -90,5 +90,23 @@ class UiPluginIsolationTest {
 
         assertTrue(UiPluginHost.replace("test.reload", null))
         assertFalse("test.reload.v2" in ids(), "replacing with nothing leaves nothing")
+    }
+
+    /** What the shell does after a plugin is allowed, turned off or uninstalled while the app runs. */
+    @Test
+    fun syncingWithTheBackendAddsAndWithdrawsPluginUi() {
+        UiPluginHost.ensureLoaded()
+        UiPluginHost.syncPlugins(listOf(plugin("test.sync.a", "test.sync.a.window")))
+        assertTrue("test.sync.a.window" in ids())
+
+        UiPluginHost.syncPlugins(listOf(plugin("test.sync.a", "test.sync.a.window"), plugin("test.sync.b", "test.sync.b.window")))
+        assertEquals(1, ids().count { it == "test.sync.b.window" }, "a plugin allowed now is contributed once")
+
+        UiPluginHost.syncPlugins(listOf(plugin("test.sync.b", "test.sync.b.window")))
+        assertFalse("test.sync.a.window" in ids(), "a plugin gone from the backend has its UI withdrawn")
+        assertTrue("test.sync.b.window" in ids())
+
+        UiPluginHost.syncPlugins(emptyList())
+        assertFalse("test.sync.b.window" in ids())
     }
 }

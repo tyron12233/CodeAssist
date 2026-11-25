@@ -39,15 +39,17 @@ data class KnownPlugin(
  * with no other symptom, since the loaded classloader keeps reading the install path from before the update
  * and the plugin goes on behaving exactly as it did.
  *
- * Nothing here is persisted. It is a within-process delta, and a restart is what empties it.
+ * Nothing here is persisted. It is a within-process delta. A restart empties it, and so does a change the
+ * process takes up while it runs ([settled]): an installed plugin is listed, loaded, reloaded and unloaded live,
+ * and only what could not be applied that way stays here for a restart.
  */
 class PluginChanges(
     /** The plugin apps this process saw at startup, loadable or not. */
     installedAtStart: List<KnownPlugin> = emptyList(),
     /** The disabled ids that gated this process's load. */
-    private val disabledAtStart: Set<String> = emptySet(),
+    disabledAtStart: Set<String> = emptySet(),
     /** The consented ids that gated this process's load. */
-    private val consentedAtStart: Set<String> = emptySet(),
+    consentedAtStart: Set<String> = emptySet(),
 ) {
 
     private val knownByPackage: Map<String, KnownPlugin> = installedAtStart.associateBy { it.packageName }
@@ -56,14 +58,32 @@ class PluginChanges(
         installedAtStart.filter { it.id.isNotBlank() }.associateBy { it.id }
 
     /** Ids of installed (non built-in) plugins: the ones consent applies to. A built-in needs none. */
-    private val externalIds: Set<String> =
+    private val externalIds: MutableSet<String> =
         installedAtStart.mapNotNullTo(HashSet()) { it.id.ifBlank { null } }
+
+    /** The decisions this process is running under: the launch's, moved by each [settled] plugin. */
+    private var disabledRunning: Set<String> = disabledAtStart
+    private var consentedRunning: Set<String> = consentedAtStart
 
     /** Package events by package name, in arrival order. One package's latest event replaces its earlier one. */
     private val packageEvents = LinkedHashMap<String, PluginChange>()
 
     private var disabledNow: Set<String> = disabledAtStart
     private var consentedNow: Set<String> = consentedAtStart
+
+    /**
+     * This process now runs installed plugin [id] exactly as the current decisions say (it was listed, loaded,
+     * reloaded or unloaded live), so nothing about it waits for a restart. [packageName], when known, is the
+     * plugin app whose install or update that took up.
+     */
+    @Synchronized
+    fun settled(id: String, packageName: String? = null) {
+        externalIds += id
+        disabledRunning = if (id in disabledNow) disabledRunning + id else disabledRunning - id
+        consentedRunning = if (id in consentedNow) consentedRunning + id else consentedRunning - id
+        if (packageName != null) packageEvents.remove(packageName)
+        packageEvents.entries.removeAll { it.value.id == id }
+    }
 
     /** A plugin app was installed or installed over. [name] falls back to the name recorded at startup. */
     @Synchronized
@@ -115,7 +135,7 @@ class PluginChanges(
         // A package event already stands for that plugin, so its decision is not listed a second time. Both
         // its id and its package are covered: an id read from a packaged manifest need not be the package name.
         val covered = HashSet(packageEvents.keys).apply { fromPackages.forEach { add(it.id) } }
-        val choices = (disabledAtStart + disabledNow + consentedAtStart + consentedNow)
+        val choices = (disabledRunning + disabledNow + consentedRunning + consentedNow)
             .filter { it !in covered }
             .filter { runsNow(it) != runsAfterRestart(it) }
             .sorted()
@@ -129,7 +149,7 @@ class PluginChanges(
         return fromPackages + choices
     }
 
-    private fun runsNow(id: String) = runs(id, disabledAtStart, consentedAtStart)
+    private fun runsNow(id: String) = runs(id, disabledRunning, consentedRunning)
 
     private fun runsAfterRestart(id: String) = runs(id, disabledNow, consentedNow)
 

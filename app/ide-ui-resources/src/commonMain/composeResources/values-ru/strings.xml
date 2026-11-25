@@ -2294,6 +2294,10 @@
     <string name="storage_cat_other_title">Прочее</string>
     <string name="storage_cat_other_desc">Хранилища ключей, резервные копии и данные приложения</string>
     <string name="plugins_restart_now">Перезапустить сейчас</string>
+    <string name="plugins_arrival_on_title">%1$s включён</string>
+    <string name="plugins_arrival_on_body">Плагин готов к работе. Уже открытый проект получит его возможности при следующем открытии.</string>
+    <string name="plugins_arrival_restart_title">%1$s запустится после перезапуска</string>
+    <string name="plugins_arrival_restart_body">Не удалось запустить, пока работает CodeAssist: %1$s</string>
     <string name="plugins_restarting">Перезапуск…</string>
     <string name="plugins_change_installed">установлен</string>
     <string name="plugins_change_updated">обновлён</string>
