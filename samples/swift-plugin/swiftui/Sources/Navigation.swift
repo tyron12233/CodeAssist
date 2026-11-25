@@ -199,6 +199,8 @@ func _listBody(_ ctx: _ResolveContext, sections: [_SectionMarker]) -> _Node {
                 let inset = _PaddingNode(child: sized, insets: EdgeInsets(top: 0, leading: M.rowInset + (row.separatorLeading ?? 0), bottom: 0, trailing: M.rowInset))
                 cell = _LayeredNode(child: cell, secondary: [inset], alignment: .bottom, isOverlay: true)
             }
+            // A row that is a button (or tap target) is tappable across the whole row, as iOS's list rows are.
+            if let action = _tapAction(row) { cell = _TapNode(child: cell, action: action) }
             cardRows.append(cell)
         }
         if !cardRows.isEmpty {
@@ -272,3 +274,14 @@ public struct Form<Content: View>: View {
     public var body: some View { List { content } }
 }
 
+
+/// The action of a tap target at the top of [node], through the wrappers modifiers add.
+@MainActor
+func _tapAction(_ node: _Node) -> (() -> Void)? {
+    var current: _Node? = node
+    while let n = current {
+        if let tap = n as? _TapNode { return tap.action }
+        current = (n as? _WrapperNode)?.child
+    }
+    return nil
+}

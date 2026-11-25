@@ -21,7 +21,12 @@ class SwiftPreviewFrame(
     val height: Float,
     val background: Int,
     val ops: List<Op>,
+    /** How this frame differs from the last one, for the pane to animate (a push, a pop, a sheet coming or going). */
+    val transition: Transition? = null,
 ) {
+    /** [kind]: push, pop, present or dismiss; [rect]: the sheet's frame (points) for present and dismiss. */
+    class Transition(val kind: String, val rect: RectF?)
+
     sealed interface Op
     class Shape(val path: Path, val color: Int?, val gradient: Gradient?, val strokeWidth: Float?, val dash: FloatArray?) : Op
     class Text(val left: Float, val top: Float, val width: Float, val height: Float, val spans: List<SwiftTextEngine.Span>,
@@ -51,6 +56,12 @@ class SwiftPreviewFrame(
                 height = json.getDouble("h").toFloat(),
                 background = color(json.optString("bg", "#FFFFFFFF")),
                 ops = (0 until ops.length()).mapNotNull { op(ops.getJSONObject(it)) },
+                transition = json.optJSONObject("tr")?.let { t ->
+                    Transition(t.getString("k"), t.optJSONArray("r")?.let { r ->
+                        RectF(r.getDouble(0).toFloat(), r.getDouble(1).toFloat(),
+                              (r.getDouble(0) + r.getDouble(2)).toFloat(), (r.getDouble(1) + r.getDouble(3)).toFloat())
+                    })
+                },
             )
         }
 

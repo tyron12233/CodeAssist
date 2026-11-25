@@ -108,6 +108,7 @@ func _render(_ preview: _Preview, index: Int, scheme: ColorScheme) -> String {
     env.colorScheme = scheme
     let ctx = _ResolveContext(graph: graph, path: "p\(index)", environment: env)
     graph.presentations = []
+    graph.transition = nil
     let nodes = _resolveView(root, ctx)
     let list = _DisplayList()
     let background = (nodes.count == 1 ? nodes[0].edgeBackground : nil ?? nil).map { $0.resolve(scheme) }
@@ -131,11 +132,24 @@ func _render(_ preview: _Preview, index: Int, scheme: ColorScheme) -> String {
     node.emit(list)
     // Sheets go over everything, in the order they were presented (one a sheet presents goes over it).
     var presented = 0
+    var surfaces: [CGRect] = []
     while presented < graph.presentations.count {
-        _present(graph.presentations[presented], index: presented, list: list)
+        surfaces.append(_present(graph.presentations[presented], index: presented, list: list))
         presented += 1
     }
-    return "{\"name\":\(_DisplayList.string(preview.name)),\"w\":\(_DisplayList.num(device.width)),\"h\":\(_DisplayList.num(device.height)),\"bg\":\(_DisplayList.string(background.hex)),\"ops\":\(list.json)}"
+    // A sheet that appeared or went away since the last frame is the change to animate (over any push or pop).
+    let shown = graph.cell("p\(index)/surfaces") { surfaces }
+    if surfaces.count > shown.value.count, let rect = surfaces.last {
+        graph.transition = ("present", rect)
+    } else if surfaces.count < shown.value.count, let rect = shown.value.last {
+        graph.transition = ("dismiss", rect)
+    }
+    shown.value = surfaces
+    var transition = ""
+    if let t = graph.transition {
+        transition = ",\"tr\":{\"k\":\"\(t.kind)\"" + (t.rect.map { ",\"r\":" + _DisplayList.rect($0) } ?? "") + "}"
+    }
+    return "{\"name\":\(_DisplayList.string(preview.name)),\"w\":\(_DisplayList.num(device.width)),\"h\":\(_DisplayList.num(device.height)),\"bg\":\(_DisplayList.string(background.hex))\(transition),\"ops\":\(list.json)}"
 }
 
 @MainActor

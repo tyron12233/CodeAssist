@@ -764,7 +764,8 @@ public struct PresentationDetent: Hashable, Sendable {
 /// the screen's sides and bottom, regular glass, corners 36 and 56.5; medium's top at 415 on an 874-point screen. The
 /// screen behind is dimmed by black at 20%.
 @MainActor
-func _present(_ request: _PresentationRequest, index: Int, list: _DisplayList) {
+@discardableResult
+func _present(_ request: _PresentationRequest, index: Int, list: _DisplayList) -> CGRect {
     let screen = CGRect(origin: .zero, size: _Device.size)
     let env = request.ctx.environment
     let graph = request.ctx.graph
@@ -783,7 +784,7 @@ func _present(_ request: _PresentationRequest, index: Int, list: _DisplayList) {
         list.hit(screen, action: graph.register {})
         node.place(_align(node, node.sizeThatFits(ProposedViewSize(_Device.safeRect.size)), in: _Device.safeRect, .center))
         node.emit(list)
-        return
+        return screen
     }
 
     // Which detent: the content says, through .presentationDetents; the smallest is where a sheet opens.
@@ -845,4 +846,5 @@ func _present(_ request: _PresentationRequest, index: Int, list: _DisplayList) {
         let grabber = CGRect(x: sheet.midX - 17 - 1.0 / 3, y: sheet.minY + 5, width: 34 + 2.0 / 3, height: 5)
         list.shape(Capsule().path(in: grabber), style: AnyShapeStyle(Color(light: _RGBA(hex: 0xAFAFB2), dark: _RGBA(hex: 0x5B5B60))), stroke: nil, env: env)
     }
+    return sheet
 }

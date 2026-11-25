@@ -115,6 +115,11 @@ public struct NavigationStack<Root: View>: View, _PrimitiveView {
             back = p
             depth += 1
         }
+        if !ctx.environment._isProbe {
+            let shown = ctx.graph.cell(ctx.path + "/depth") { depth }
+            if depth != shown.value { ctx.graph.transition = (depth > shown.value ? "push" : "pop", nil) }
+            shown.value = depth
+        }
         let pageCtx = depth == 0 ? base : base.child("page\(depth)")
         return [_navigationPage(pageCtx, resolve: resolve, probe: box, large: large, back: box.backHidden ? nil : back)]
     }

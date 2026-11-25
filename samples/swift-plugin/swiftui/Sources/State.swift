@@ -22,6 +22,9 @@ final class _Graph {
     var setters: [Int: (String) -> Void] = [:]
     /// Sheets and covers the preview being rendered presents, in the order they were found.
     var presentations: [_PresentationRequest] = []
+    /// How the preview being rendered changed from its last frame, for the host to animate: a screen pushed or popped,
+    /// a sheet presented or dismissed (with its frame).
+    var transition: (kind: String, rect: CGRect?)?
     private var nextAction = 0
 
     func beginRender() {
