@@ -17,7 +17,7 @@ final class ParityApp: UIResponder, UIApplicationDelegate {
         try? FileManager.default.removeItem(at: out)
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         let only = ProcessInfo.processInfo.environment["PARITY_CASE"]
-        let cases = (parityCases() + glassCases() + glassMapCases() + chromeCases()).filter { only == nil || $0.0 == only }
+        let cases = (parityCases() + glassCases() + glassMapCases() + chromeCases() + darkCases()).filter { only == nil || $0.0 == only }
         capture(cases[...], window: window, into: out)
         return true
     }
@@ -29,6 +29,7 @@ final class ParityApp: UIResponder, UIApplicationDelegate {
             if ProcessInfo.processInfo.environment["PARITY_HOLD"] == nil { exit(0) }
             return
         }
+        window.overrideUserInterfaceStyle = name.hasSuffix("-dark") ? .dark : .light
         window.rootViewController = UIHostingController(rootView: view)
         // Two run-loop turns and a short wait: layout, then the render server. A sheet animates in first.
         let wait = name.hasPrefix("sheet") ? 1.5 : 0.6

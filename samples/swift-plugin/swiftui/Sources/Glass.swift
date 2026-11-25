@@ -97,7 +97,7 @@ final class _GlassNode: _WrapperNode {
     override func emit(_ list: _DisplayList) {
         let path = shape.path(CGRect(origin: .zero, size: frame.size)).offsetBy(frame.minX, frame.minY)
         list.glass(path, bounds: frame, variant: glass.variant.rawValue,
-                   tint: glass.tintColor?.resolve(env.colorScheme), dark: env.colorScheme == .dark)
+                   tint: glass.tintColor?.resolve(env), dark: env.colorScheme == .dark)
         child.emit(list)
     }
 }

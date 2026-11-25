@@ -62,6 +62,7 @@ struct _ScreenRectKey: EnvironmentKey { static let defaultValue: CGRect? = nil }
 struct _LabelStyleKey: EnvironmentKey { static let defaultValue: _LabelStyleKind = .automatic }
 struct _SymbolVariantKey: EnvironmentKey { static let defaultValue: SymbolVariants = .none }
 struct _ProbeKey: EnvironmentKey { static let defaultValue = false }
+struct _ElevatedKey: EnvironmentKey { static let defaultValue = false }
 /// How far below the top of its space a navigation bar starts: 16 in a sheet, measured.
 struct _BarTopKey: EnvironmentKey { static let defaultValue: CGFloat = 0 }
 
@@ -106,6 +107,8 @@ extension EnvironmentValues {
     var _labelStyle: _LabelStyleKind { get { self[_LabelStyleKey.self] } set { self[_LabelStyleKey.self] = newValue } }
     public var symbolVariants: SymbolVariants { get { self[_SymbolVariantKey.self] } set { self[_SymbolVariantKey.self] = newValue } }
     /// True while a container resolves its content only to learn what it declares (titles, toolbars, detents).
+    /// Inside a sheet: dark mode draws backgrounds in their elevated colours.
+    var _elevated: Bool { get { self[_ElevatedKey.self] } set { self[_ElevatedKey.self] = newValue } }
     var _isProbe: Bool { get { self[_ProbeKey.self] } set { self[_ProbeKey.self] = newValue } }
 }
 

@@ -812,6 +812,7 @@ func _present(_ request: _PresentationRequest, index: Int, list: _DisplayList) {
     let ctx = request.ctx.with {
         $0[_SheetBoxKey.self] = _SheetBox()
         $0[_BarTopKey.self] = 16
+        $0._elevated = true
         $0._safeRect = contentRect
         $0._screenRect = sheet
         $0[_DismissKey.self] = dismiss
@@ -827,13 +828,13 @@ func _present(_ request: _PresentationRequest, index: Int, list: _DisplayList) {
         if let background = node.edgeBackground {
             // A list's background fills the sheet's bottom corners square (measured: a Form in a sheet).
             let square = _continuousPath(sheet, RectangleCornerRadii(topLeading: radii.topLeading, topTrailing: radii.topTrailing))
-            list.shape(square, style: AnyShapeStyle(background), stroke: nil, env: env)
+            list.shape(square, style: AnyShapeStyle(background), stroke: nil, env: ctx.environment)
         } else {
-            list.shape(shape, style: AnyShapeStyle(Color.systemBackground), stroke: nil, env: env)
+            list.shape(shape, style: AnyShapeStyle(Color.systemBackground), stroke: nil, env: ctx.environment)
         }
     } else {
         list.glass(shape, bounds: sheet, variant: "regular", tint: nil, dark: env.colorScheme == .dark)
-        if let background = node.edgeBackground { list.shape(shape, style: AnyShapeStyle(background), stroke: nil, env: env) }
+        if let background = node.edgeBackground { list.shape(shape, style: AnyShapeStyle(background), stroke: nil, env: ctx.environment) }
     }
     list.hit(sheet, action: graph.register {})
     node.place(_align(node, node.sizeThatFits(ProposedViewSize(contentRect.size)), in: contentRect, .center))

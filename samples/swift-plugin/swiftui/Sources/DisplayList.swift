@@ -73,7 +73,7 @@ final class _DisplayList {
         if let g = style._gradient(env) {
             paint = "\"g\":" + Self.gradient(g, in: path.boundingRect)
         } else {
-            let color = style._resolvedColor(env).resolve(env.colorScheme)
+            let color = style._resolvedColor(env).resolve(env)
             if color.a <= 0 { return }
             paint = "\"c\":" + Self.string(color.hex)
         }

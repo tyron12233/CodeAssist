@@ -253,9 +253,9 @@ final class _TextNode: _Node {
                 text: text, symbol: span.symbol, size: font.size, weight: weight,
                 design: span.monospaced == true ? .monospaced : font.design,
                 italic: span.italic ?? (font.isItalic || env._italic),
-                color: color.resolve(env.colorScheme).with(alpha: env.isEnabled ? 1 : 0.5),
-                strikethrough: span.strikethrough.map { ($0 ?? color).resolve(env.colorScheme) },
-                underline: span.underline.map { ($0 ?? color).resolve(env.colorScheme) },
+                color: color.resolve(env).with(alpha: env.isEnabled ? 1 : 0.5),
+                strikethrough: span.strikethrough.map { ($0 ?? color).resolve(env) },
+                underline: span.underline.map { ($0 ?? color).resolve(env) },
                 kerning: span.kerning ?? 0, baselineOffset: span.baselineOffset ?? 0
             )
         }

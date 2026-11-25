@@ -28,15 +28,22 @@ public struct Color: Hashable, CustomStringConvertible, Sendable {
     let light: _RGBA
     let dark: _RGBA
     let name: String?
+    /// Dark mode's colour in an elevated context (sheets, popovers), where iOS lifts backgrounds off black.
+    var elevated: _RGBA?
 
     init(light: _RGBA, dark: _RGBA, name: String? = nil) {
         self.light = light
         self.dark = dark
         self.name = name
     }
+    init(light: _RGBA, dark: _RGBA, elevated: _RGBA) {
+        self.init(light: light, dark: dark)
+        self.elevated = elevated
+    }
     init(_ both: _RGBA) { self.init(light: both, dark: both) }
 
     func resolve(_ scheme: ColorScheme) -> _RGBA { scheme == .dark ? dark : light }
+    func resolve(_ env: EnvironmentValues) -> _RGBA { env.colorScheme == .dark ? (env._elevated ? elevated ?? dark : dark) : light }
 
     public enum RGBColorSpace: Hashable, Sendable { case sRGB, sRGBLinear, displayP3 }
 
@@ -95,11 +102,11 @@ public struct Color: Hashable, CustomStringConvertible, Sendable {
     public static let accentColor = Color.blue
 
     // UIKit's semantic colours, which SwiftUI code reaches through Color(uiColor:) or Color(.systemBackground).
-    static let systemBackground = Color(light: _RGBA(1, 1, 1), dark: _RGBA(0, 0, 0))
-    static let secondarySystemBackground = Color(light: _RGBA(hex: 0xF2F2F7), dark: _RGBA(hex: 0x1C1C1E))
+    static let systemBackground = Color(light: _RGBA(1, 1, 1), dark: _RGBA(0, 0, 0), elevated: _RGBA(hex: 0x1C1C1E))
+    static let secondarySystemBackground = Color(light: _RGBA(hex: 0xF2F2F7), dark: _RGBA(hex: 0x1C1C1E), elevated: _RGBA(hex: 0x2C2C2E))
     static let tertiarySystemBackground = Color(light: _RGBA(1, 1, 1), dark: _RGBA(hex: 0x2C2C2E))
-    static let systemGroupedBackground = Color(light: _RGBA(hex: 0xF2F2F7), dark: _RGBA(0, 0, 0))
-    static let secondarySystemGroupedBackground = Color(light: _RGBA(1, 1, 1), dark: _RGBA(hex: 0x1C1C1E))
+    static let systemGroupedBackground = Color(light: _RGBA(hex: 0xF2F2F7), dark: _RGBA(0, 0, 0), elevated: _RGBA(hex: 0x1C1C1E))
+    static let secondarySystemGroupedBackground = Color(light: _RGBA(1, 1, 1), dark: _RGBA(hex: 0x1C1C1E), elevated: _RGBA(hex: 0x2C2C2E))
     static let tertiaryLabel = Color(light: _RGBA(hex: 0x3C3C43, alpha: 0.3), dark: _RGBA(hex: 0xEBEBF5, alpha: 0.3))
     static let quaternaryLabel = Color(light: _RGBA(hex: 0x3C3C43, alpha: 0.18), dark: _RGBA(hex: 0xEBEBF5, alpha: 0.16))
     static let separator = Color(light: _RGBA(hex: 0x3C3C43, alpha: 0.29), dark: _RGBA(hex: 0x545458, alpha: 0.6))
@@ -275,7 +282,7 @@ public struct Gradient: Hashable, Sendable {
     /// The stops a painter interpolates between in sRGB. iOS 26 blends a gradient's colours perceptually (in Oklab:
     /// black to white is 0.388 grey halfway, measured), so each segment is expanded into 16 steps computed in Oklab.
     func resolved(_ env: EnvironmentValues) -> [(color: _RGBA, location: Double)] {
-        let base = stops.map { ($0.color.resolve(env.colorScheme), Double($0.location)) }.sorted { $0.1 < $1.1 }
+        let base = stops.map { ($0.color.resolve(env), Double($0.location)) }.sorted { $0.1 < $1.1 }
         guard base.count > 1 else { return base }
         var out: [(color: _RGBA, location: Double)] = []
         for i in 0..<(base.count - 1) {

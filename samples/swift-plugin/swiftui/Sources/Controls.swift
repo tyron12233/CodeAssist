@@ -275,14 +275,14 @@ final class _ImageNode: _Node {
     }
 
     override func emit(_ list: _DisplayList) {
-        let color = (env._foreground?._resolvedColor(env) ?? .primary).resolve(env.colorScheme)
+        let color = (env._foreground?._resolvedColor(env) ?? .primary).resolve(env)
         if let name = symbolName {
             let weight = (env._weight ?? (env.font ?? .body).weight).value
             list.symbol(frame, name: name, size: image.isResizable ? min(frame.width, frame.height) / 1.2 : fontSize, weight: weight, color: color,
                         large: env[_ImageScaleKey.self] == .large)
         } else {
             list.shape(Path(roundedRect: frame, cornerRadius: 4), style: AnyShapeStyle(Color.secondarySystemFill), stroke: nil, env: env)
-            list.symbol(frame, name: "photo", size: min(frame.width, frame.height) / 3, weight: 400, color: Color.gray.resolve(env.colorScheme))
+            list.symbol(frame, name: "photo", size: min(frame.width, frame.height) / 3, weight: 400, color: Color.gray.resolve(env))
         }
     }
 }

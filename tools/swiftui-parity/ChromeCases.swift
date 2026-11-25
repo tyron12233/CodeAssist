@@ -191,3 +191,13 @@ func chromeCases() -> [(String, AnyView)] {
             })),
     ]
 }
+
+/// Dark-mode twins of cases: the reference renders them with the window in dark mode, ours with the dark scheme.
+@MainActor
+func darkCases() -> [(String, AnyView)] {
+    let names: Set = ["text-styles", "buttons", "toggle", "card", "symbols", "list-sections", "form-toggles",
+                      "navigation-label-links", "tab-basic", "tab-list", "toolbar-two-icons", "toolbar-text-buttons",
+                      "title-inline-toolbar", "toolbar-bottom", "sheet-large", "sheet-medium", "sheet-nav",
+                      "nav-push-value", "tab-search", "glass-buttons", "glass-stripes-rect"]
+    return (parityCases() + glassCases() + chromeCases()).filter { names.contains($0.0) }.map { ($0.0 + "-dark", $0.1) }
+}
