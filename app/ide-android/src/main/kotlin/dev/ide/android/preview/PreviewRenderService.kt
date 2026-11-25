@@ -119,14 +119,14 @@ class PreviewRenderService : Service() {
                 }
                 idleHandler.removeCallbacks(idleRelease)
                 runtimeBuilt = true
+                // The frame is copied out ON the render thread: the bitmap is reused, and the next render or a
+                // release recycles it there, so a copy made after render() returned could hit a freed bitmap.
                 val result = try {
-                    runtime.render(req)
+                    runtime.render(req) { r -> (r.nativeBitmap as? Bitmap)?.let { writePixels(it, File(outFile!!)) }; r }
                 } finally {
                     idleHandler.postDelayed(idleRelease, IDLE_RELEASE_MS)
                 }
-                val bmp = result.nativeBitmap as? Bitmap
-                    ?: return@runCatching "err\t${result.error ?: "no image"}"
-                writePixels(bmp, File(outFile!!))
+                if (result.nativeBitmap !is Bitmap) return@runCatching "err\t${result.error ?: "no image"}"
 
                 result.viewTree?.let { tree ->
                     runCatching { File("$outFile.tree").writeText(PreviewViewTreeCodec.encode(tree)) }
@@ -135,7 +135,7 @@ class PreviewRenderService : Service() {
                 if (result.problems.isNotEmpty()) runCatching {
                     File("$outFile.problems").writeText(result.problems.joinToString("\n") { it.replace('\n', ' ') })
                 }
-                "ok\t${bmp.width}\t${bmp.height}"
+                "ok\t${result.width}\t${result.height}"
             }.getOrElse { "err\t${it.javaClass.simpleName}: ${it.message ?: ""}".trim() }
         }
     }

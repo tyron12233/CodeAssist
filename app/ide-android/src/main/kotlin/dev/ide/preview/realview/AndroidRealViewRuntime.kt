@@ -85,7 +85,23 @@ class AndroidRealViewRuntime(
     private val renderThread by lazy { HandlerThread("realview-render").apply { start() } }
     private val renderHandler by lazy { Handler(renderThread.looper) }
 
-    override fun render(request: RealViewRequest): RealViewResult = onLooperThread {
+    override fun render(request: RealViewRequest): RealViewResult = onLooperThread { renderGuarded(request) }
+
+    /**
+     * [render], then [consume] the result on the render thread before anything else runs there. With [reuseBitmap]
+     * the returned bitmap is only valid until the next render or [release], both of which run on that thread and
+     * recycle it (a new frame size, or dropping the caches). A caller that copies the pixels after [render]
+     * returns races them: a second render or an idle/trim release recycled the bitmap mid-copy, and hwui aborted
+     * the whole `:preview` process in `Bitmap_copyPixelsToBuffer` ("cannot access an invalid/free'd bitmap").
+     */
+    fun <T> render(request: RealViewRequest, consume: (RealViewResult) -> T): T {
+        var consumed: Result<T>? = null
+        val result = onLooperThread { renderGuarded(request).also { consumed = runCatching { consume(it) } } }
+        // The render itself threw past its guard (onLooperThread made an error result): no frame to race over.
+        return (consumed ?: runCatching { consume(result) }).getOrThrow()
+    }
+
+    private fun renderGuarded(request: RealViewRequest): RealViewResult = run {
         val resourcesAp = request.resourcesAp?.toFile()
         if (resourcesAp == null || !resourcesAp.exists()) RealViewResult(
             null, error = "resources.ap_ missing — build the project first"
