@@ -507,22 +507,27 @@ private fun ProblemsBadge(problems: List<String>) {
 
 /**
  * The design surface's bottom row, docked below the canvas: the panels. On a phone each opens as a sheet;
- * docked, each toggles its pane.
+ * docked, each toggles its pane. The attributes pane docks only where [attributesDock] says it fits, and is a
+ * sheet otherwise.
  */
 @Composable
-internal fun DesignBottomRow(state: DesignerState, docked: Boolean, modifier: Modifier) {
+internal fun DesignBottomRow(state: DesignerState, docked: Boolean, attributesDock: Boolean, modifier: Modifier) {
     Surface(modifier, color = MaterialTheme.colorScheme.surfaceContainer) {
         Row(Modifier.height(44.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             @Composable
-            fun panel(p: DesignPanel, glyph: Char, label: String, on: Boolean, toggleDocked: () -> Unit) = PanelTab(glyph, label, on, Modifier.weight(1f)) {
-                if (docked) toggleDocked() else state.sheet = if (state.sheet == p) null else p
+            fun panel(p: DesignPanel, glyph: Char, label: String, dock: Boolean, on: Boolean, toggleDocked: () -> Unit) =
+                PanelTab(glyph, label, if (dock) on else state.sheet == p, Modifier.weight(1f)) {
+                    if (dock) toggleDocked() else state.sheet = if (state.sheet == p) null else p
+                }
+            panel(DesignPanel.Palette, Sym.widgets, stringResource(Res.string.le_panel_palette), docked, state.paletteDocked) {
+                state.paletteDocked = !state.paletteDocked
             }
-            panel(DesignPanel.Palette, Sym.widgets, stringResource(Res.string.le_panel_palette),
-                if (docked) state.paletteDocked else state.sheet == DesignPanel.Palette) { state.paletteDocked = !state.paletteDocked }
-            panel(DesignPanel.Tree, Sym.accountTree, stringResource(Res.string.le_panel_tree_short),
-                if (docked) state.treeDocked else state.sheet == DesignPanel.Tree) { state.treeDocked = !state.treeDocked }
-            panel(DesignPanel.Attributes, Sym.tune, stringResource(Res.string.le_panel_attributes),
-                if (docked) state.attributesDocked else state.sheet == DesignPanel.Attributes) { state.attributesDocked = !state.attributesDocked }
+            panel(DesignPanel.Tree, Sym.accountTree, stringResource(Res.string.le_panel_tree_short), docked, state.treeDocked) {
+                state.treeDocked = !state.treeDocked
+            }
+            panel(DesignPanel.Attributes, Sym.tune, stringResource(Res.string.le_panel_attributes), attributesDock, state.attributesDocked) {
+                state.attributesDocked = !state.attributesDocked
+            }
         }
     }
 }

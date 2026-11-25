@@ -92,6 +92,16 @@ private const val SERVICE_RETRIES_BEFORE_MESSAGE = 10
 /** Width from which the panels dock beside the canvas instead of sliding up as sheets. */
 private val DOCKED_MIN_WIDTH = 720.dp
 
+/** The docked palette-and-tree column, and the docked attributes pane. */
+private val LEFT_PANE_WIDTH = 284.dp
+private val ATTRIBUTES_PANE_WIDTH = 332.dp
+
+/**
+ * The narrowest canvas the attributes pane docks beside. Both panes at [DOCKED_MIN_WIDTH] left the canvas about
+ * 100dp: on an unfolded foldable the layout was a sliver between them and the panel tabs read "..".
+ */
+private val MIN_CANVAS_WIDTH = 360.dp
+
 /**
  * The design editor for one layout file: the rendered layout on a canvas you can select from, the component
  * tree, and the selected view's attributes, all editing the shared buffer through [ctx].
@@ -511,7 +521,15 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         val compact = ctx.isSplit && !docked
         val paneHeight = maxHeight
         val density = LocalDensity.current
-        val showStrip = !docked && !compact && selected != null && state.sheet == null && !stripClosed
+        // The attributes pane docks only where the canvas keeps a usable width beside it. Narrower (an unfolded
+        // foldable, a tablet held upright) the palette and tree stay docked and attributes work as on a phone: the
+        // strip on a selection, a sheet when expanded.
+        val leftShown = docked && (state.treeDocked || state.paletteDocked)
+        val attributesFit = docked &&
+            maxWidth - (if (leftShown) LEFT_PANE_WIDTH else 0.dp) - ATTRIBUTES_PANE_WIDTH >= MIN_CANVAS_WIDTH
+        // Sheets: every panel's on a phone, only the attributes' beside docked palette and tree.
+        val sheets = !docked || !attributesFit
+        val showStrip = !attributesFit && !compact && selected != null && state.sheet == null && !stripClosed
         var compactDialog by remember { mutableStateOf<CompactDialog?>(null) }
         val tree: @Composable (Modifier, (() -> Unit)?) -> Unit = { mod, onClose ->
             ComponentTreePanel(
@@ -558,8 +576,8 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
         }
 
         Row(Modifier.fillMaxSize()) {
-            if (docked && (state.treeDocked || state.paletteDocked)) {
-                Column(Modifier.width(284.dp).fillMaxHeight().padding(start = 12.dp, top = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (leftShown) {
+                Column(Modifier.width(LEFT_PANE_WIDTH).fillMaxHeight().padding(start = 12.dp, top = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (state.paletteDocked) PanelFrame(Modifier.fillMaxWidth().weight(if (state.treeDocked) 0.48f else 1f)) {
                         palette(Modifier.fillMaxSize(), null)
                     }
@@ -578,7 +596,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                         selected = selected,
                         onSelect = { select(it) },
                         actions = actions,
-                        onOpenAttributes = { if (compact) Unit else if (!docked) stripClosed = false else state.attributesDocked = true },
+                        onOpenAttributes = { if (compact) Unit else if (!attributesFit) stripClosed = false else state.attributesDocked = true },
                         chipShown = false,
                         // The selection's tab; a compact Split selects for the code and shows no actions.
                         showActionBar = !compact,
@@ -624,7 +642,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                         // to the space left would shrink the whole layout on every selection); the canvas keeps the
                         // selection above them.
                         val sheetCover = when {
-                            !docked && state.sheet != null -> (paneHeight * state.sheetFraction - 44.dp).coerceAtLeast(0.dp)
+                            sheets && state.sheet != null -> (paneHeight * state.sheetFraction - 44.dp).coerceAtLeast(0.dp)
                             showStrip -> with(density) { stripHeight.toDp() }
                             else -> 0.dp
                         }
@@ -678,11 +696,11 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                             }
                         }
                     }
-                    DesignBottomRow(state, docked, Modifier.fillMaxWidth())
+                    DesignBottomRow(state, docked, attributesFit, Modifier.fillMaxWidth())
                 }
             }
-            if (docked && state.attributesDocked) {
-                PanelFrame(Modifier.width(332.dp).fillMaxHeight().padding(end = 12.dp, top = 12.dp, bottom = 12.dp)) {
+            if (attributesFit && state.attributesDocked) {
+                PanelFrame(Modifier.width(ATTRIBUTES_PANE_WIDTH).fillMaxHeight().padding(end = 12.dp, top = 12.dp, bottom = 12.dp)) {
                     attributes(Modifier.fillMaxSize(), null)
                 }
             }
@@ -699,7 +717,7 @@ private fun DesignerSurface(ctx: EditorPreviewContext, renderer: LayoutRenderer,
                     }
                 }
             }
-        } else if (!docked) {
+        } else if (sheets) {
             val sheet = state.sheet
             // Behind an open sheet, a tap anywhere else closes it (and does not also select the view under it).
             // A drag that starts in the sheet (a palette view onto the canvas) is the sheet's, so it still works.

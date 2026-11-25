@@ -148,6 +148,12 @@ class PreviewRenderService : Service() {
         bmp.copyPixelsToBuffer(f.buffer(bmp.width * bmp.height * 4))
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        // Before anything here can load WebView: the main process holds the default data directory.
+        PreviewWebView.isolate()
+    }
+
     override fun onBind(intent: Intent?): IBinder = binder
 
     private companion object {
