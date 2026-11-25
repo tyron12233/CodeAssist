@@ -45,11 +45,12 @@ JNI="$STAGED/jniLibs/$ABI"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# lld, not the host's default linker: on an x86_64 runner that is ld.gold, which cannot link ARM objects.
 # Bionic's libraries, as empty stand-ins that only carry their names: the device provides the real ones, and Termux's
 # sysroot has no link stubs (Termux links against the device's own).
 mkdir -p "$WORK/stubs"
 for lib in c m dl log; do
-    clang --target="$CLANG_TARGET" -shared -nostdlib -Wl,-soname,"lib$lib.so" -o "$WORK/stubs/lib$lib.so" -x c /dev/null
+    clang --target="$CLANG_TARGET" -fuse-ld=lld -shared -nostdlib -Wl,-soname,"lib$lib.so" -o "$WORK/stubs/lib$lib.so" -x c /dev/null
 done
 cp "$EXTRACT/lib/crtbegin_so.o" "$EXTRACT/lib/crtend_so.o" "$WORK/stubs/"
 
@@ -57,7 +58,7 @@ cp "$EXTRACT/lib/crtbegin_so.o" "$EXTRACT/lib/crtend_so.o" "$WORK/stubs/"
 for src in "$STAGED"/stubs/*.c; do
     [[ -f "$src" ]] || continue
     name="$(basename "$src" .c).so"
-    clang --target="$CLANG_TARGET" -shared -nostdlib -fPIC -Wl,-soname,"$name" -o "$JNI/$name" "$src"
+    clang --target="$CLANG_TARGET" -fuse-ld=lld -shared -nostdlib -fPIC -Wl,-soname,"$name" -o "$JNI/$name" "$src"
     echo "==> stub $name ($(grep -c . "$src") symbols)"
 done
 
