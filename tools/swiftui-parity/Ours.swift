@@ -492,22 +492,33 @@ func fitGlass(refDir: URL, out: String) {
         func knots(_ t: [Double], _ n: Int, _ sp: Double) -> [Double] { (0..<n).map { GlassModel.lens(t, Double($0) * sp) } }
         func expand(_ k: [Double], _ sp: Double) -> [Double] { (0...Int(Double(k.count - 1) * sp)).map { d in
             let f = Double(d) / sp; let i = min(Int(f), k.count - 2); let t = f - Double(i); return k[i] * (1 - t) + k[i + 1] * t } }
-        let lsp = 3.0, bsp = 5.0
+        let lsp = 3.0, bsp = 5.0, nsp = 4.0
         var lens = knots(best.regularLensTable ?? best.lensTable, 17, lsp)
         var blur = knots(best.regularBlurTable ?? [best.regularBlur ?? best.blur], 13, bsp)
-        func make(_ l: [Double], _ b: [Double]) -> GlassParams { var p = best; p.regularLensTable = expand(l, lsp); p.regularBlurTable = expand(b, bsp); return p }
-        bestScore = score(make(lens, blur))
+        // The smear along the normal, 13 knots 4 points apart (0...48).
+        var smear = knots(best.regularNormalBlurTable ?? [0], 13, nsp)
+        func make(_ l: [Double], _ b: [Double], _ n: [Double]) -> GlassParams {
+            var p = best; p.regularLensTable = expand(l, lsp); p.regularBlurTable = expand(b, bsp)
+            p.regularNormalBlurTable = n.allSatisfy { $0 == 0 } ? nil : expand(n, nsp)
+            return p
+        }
+        bestScore = score(make(lens, blur, smear))
         print(String(format: "tables start %.5f", bestScore))
-        var step = 4.0
+        var step = Double(ProcessInfo.processInfo.environment["STEP"] ?? "4")!
+        let groups = (ProcessInfo.processInfo.environment["GROUPS"] ?? "0,1,2").split(separator: ",").map { Int($0)! }
         for round in 0..<Int(ProcessInfo.processInfo.environment["ROUNDS"] ?? "4")! {
-            for which in 0..<2 {
-                for k in 0..<(which == 0 ? lens.count : blur.count) {
+            for which in groups {
+                for k in 0..<[lens.count, blur.count, smear.count][which] {
                     for dir in [1.0, -1.0] {
                         while true {
-                            var l = lens, b = blur
-                            if which == 0 { l[k] += dir * step } else { b[k] = max(0, b[k] + dir * step / 2) }
-                            let sc = score(make(l, b))
-                            if sc < bestScore - 1e-6 { bestScore = sc; lens = l; blur = b } else { break }
+                            var l = lens, b = blur, n = smear
+                            switch which {
+                            case 0: l[k] += dir * step
+                            case 1: b[k] = max(0, b[k] + dir * step / 2)
+                            default: n[k] = max(0, n[k] + dir * step)
+                            }
+                            let sc = score(make(l, b, n))
+                            if sc < bestScore - 1e-6 { bestScore = sc; lens = l; blur = b; smear = n } else { break }
                         }
                     }
                 }
@@ -515,11 +526,14 @@ func fitGlass(refDir: URL, out: String) {
             print(String(format: "round %d step %.2f: %.5f", round, step, bestScore))
             print("lens " + lens.map { String(format: "%.1f", $0) }.joined(separator: " "))
             print("blur " + blur.map { String(format: "%.2f", $0) }.joined(separator: " "))
+            print("smear " + smear.map { String(format: "%.1f", $0) }.joined(separator: " "))
+            fflush(stdout)
             step /= 2
         }
-        best = make(lens, blur)
+        best = make(lens, blur, smear)
         best.regularLensTable = best.regularLensTable!.map { ($0 * 100).rounded() / 100 }
         best.regularBlurTable = best.regularBlurTable!.map { ($0 * 100).rounded() / 100 }
+        best.regularNormalBlurTable = best.regularNormalBlurTable?.map { ($0 * 100).rounded() / 100 }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try! encoder.encode(best).write(to: URL(fileURLWithPath: out))
