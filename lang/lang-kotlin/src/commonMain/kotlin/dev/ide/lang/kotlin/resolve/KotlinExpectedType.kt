@@ -158,6 +158,8 @@ internal fun KotlinResolver.assignmentTargetDeclaredType(left: KtExpression): Ko
         val name = left.getReferencedName()
         localsAt(left.textRange.startOffset, name).firstOrNull()
             ?.let { return it.type as? KotlinType }
+        // A property: its declared type, not what a smart cast narrowed reads of it to.
+        return typeOfName(name, left.textRange.startOffset, smartCasts = false)
     }
     return inferType(left)
 }
