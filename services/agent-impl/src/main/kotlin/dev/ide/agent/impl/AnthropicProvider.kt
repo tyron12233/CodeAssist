@@ -611,9 +611,15 @@ internal class AnthropicStreamDecoder {
                 out += LlmStreamEvent.Completed(stopReason)
             }
 
-            "error" -> out += LlmStreamEvent.Failed(
-                LlmErrors.parseErrorObj(null, json["error"].asObj(), null).message,
-            )
+            "error" -> {
+                // Anthropic reports an overload or rate limit mid-stream as an `error` event; the classified cause
+                // lets the loop wait out a rate limit instead of ending the turn.
+                val parsed = LlmErrors.parseErrorObj(null, json["error"].asObj(), null)
+                out += LlmStreamEvent.Failed(
+                    parsed.message,
+                    LlmHttpException(parsed.message, null, parsed.retryAfterMs, parsed.retryable, kind = parsed.kind, quota = parsed.quota),
+                )
+            }
         }
         return out
     }

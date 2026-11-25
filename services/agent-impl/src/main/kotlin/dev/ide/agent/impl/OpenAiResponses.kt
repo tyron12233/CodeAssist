@@ -243,8 +243,16 @@ internal class OpenAiResponsesDecoder {
 
     private fun failed(error: JsonObject?): List<LlmStreamEvent> {
         completed = true
-        val message = error?.get("message").asStr() ?: "OpenAI request failed"
-        return listOf(LlmStreamEvent.Failed(message))
+        // Classified like an HTTP error, so an in-stream rate limit is waited out and an overload is named, rather
+        // than every in-stream failure ending the turn as the same bare message.
+        val parsed = LlmErrors.parseErrorObj(null, error, null)
+        val message = error?.get("message").asStr()?.let { parsed.message } ?: "OpenAI request failed"
+        return listOf(
+            LlmStreamEvent.Failed(
+                message,
+                LlmHttpException(message, null, parsed.retryAfterMs, parsed.retryable, kind = parsed.kind, quota = parsed.quota),
+            ),
+        )
     }
 
     /** Usage and completion, once: from the final response object when there is one. */

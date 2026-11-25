@@ -309,9 +309,25 @@ internal class GeminiStreamDecoder {
     var completed: Boolean = false
         private set
 
+    /** Set once the stream reported a failure, so the end of the stream does not also read as a finish. */
+    private var failed = false
+
     fun decode(data: String): List<LlmStreamEvent> {
         val json = runCatching { AgentJson.parseToJsonElement(data).asObj() }.getOrNull() ?: return emptyList()
         val out = ArrayList<LlmStreamEvent>()
+        // A failure after the 200 (an overloaded model, a quota tripped mid-stream) arrives as an `error` object in
+        // the stream; read as nothing, the turn just ended empty.
+        json["error"].asObj()?.let { err ->
+            failed = true
+            val status = err["code"].asInt()
+            val parsed = LlmErrors.parseErrorObj(status, err, null)
+            return listOf(
+                LlmStreamEvent.Failed(
+                    parsed.message,
+                    LlmHttpException(parsed.message, status, parsed.retryAfterMs, parsed.retryable, kind = parsed.kind, quota = parsed.quota),
+                ),
+            )
+        }
 
         json["usageMetadata"].asObj()?.let { usage ->
             usage["promptTokenCount"].asInt()?.let { inputTokens = it }
@@ -338,6 +354,16 @@ internal class GeminiStreamDecoder {
         }
 
         candidate?.get("finishReason").asStr()?.let {
+            // The model wrote a tool call it could not encode. Taken as an ordinary stop, the agent ended its turn
+            // mid-task with nothing said, which happens most with the small Flash models on a long tool call.
+            if (it == "MALFORMED_FUNCTION_CALL" || it == "UNEXPECTED_TOOL_CALL") {
+                failed = true
+                out += LlmStreamEvent.Failed(
+                    MALFORMED_CALL,
+                    LlmHttpException(MALFORMED_CALL, retryable = false, kind = LlmErrorKind.INVALID_REQUEST),
+                )
+                return out
+            }
             stopReason = mapStop(it)
             sawCompletion = true
         }
@@ -348,12 +374,11 @@ internal class GeminiStreamDecoder {
     fun finish(): List<LlmStreamEvent> {
         if (completed) return emptyList()
         completed = true
-        return listOf(
-            LlmStreamEvent.Usage(
-                TokenUsage((inputTokens - cacheReadTokens).coerceAtLeast(0), outputTokens, cacheReadTokens),
-            ),
-            LlmStreamEvent.Completed(if (sawCompletion) stopReason else StopReason.END_TURN),
+        val usage = LlmStreamEvent.Usage(
+            TokenUsage((inputTokens - cacheReadTokens).coerceAtLeast(0), outputTokens, cacheReadTokens),
         )
+        if (failed) return listOf(usage)
+        return listOf(usage, LlmStreamEvent.Completed(if (sawCompletion) stopReason else StopReason.END_TURN))
     }
 
     /** Gemini has no per-call id; disambiguate repeated tool names within a turn with a suffix. */
@@ -361,6 +386,11 @@ internal class GeminiStreamDecoder {
         val count = usedIds.getOrDefault(name, 0)
         usedIds[name] = count + 1
         return if (count == 0) name else "$name#$count"
+    }
+
+    private companion object {
+        const val MALFORMED_CALL = "Gemini wrote a tool call it could not finish (MALFORMED_FUNCTION_CALL). Send the " +
+            "message again, ask for the change in smaller steps, or pick a larger model."
     }
 
     private fun mapStop(s: String): StopReason = when (s) {

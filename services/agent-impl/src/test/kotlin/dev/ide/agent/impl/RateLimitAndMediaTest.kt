@@ -293,4 +293,138 @@ class RateLimitAndMediaTest {
         assertTrue(old.content.contains("image(s) elided"), old.content)
         assertEquals(1, new.images.size)
     }
+
+    @Test
+    fun aSpentDayListedAfterAPerMinuteViolationIsStillDaily() {
+        // Google lists every quota a request broke; the per-minute one first must not hide a spent day.
+        val body = """
+            {"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"You exceeded your current quota.",
+             "details":[
+               {"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[
+                 {"quotaMetric":"generativelanguage.googleapis.com/generate_content_free_tier_requests",
+                  "quotaId":"GenerateRequestsPerMinutePerProjectPerModel-FreeTier","quotaDimensions":{"model":"gemini-3.8-flash"},"quotaValue":"10"},
+                 {"quotaMetric":"generativelanguage.googleapis.com/generate_content_free_tier_requests",
+                  "quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier","quotaDimensions":{"model":"gemini-3.8-flash"},"quotaValue":"250"}]},
+               {"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"12s"}]}}
+        """.trimIndent()
+        val parsed = LlmErrors.parseHttp(429, body, null)
+        assertEquals(LlmErrorKind.DAILY_LIMIT, parsed.kind)
+        assertFalse(parsed.retryable)
+        assertEquals(250L, parsed.quota?.limit)
+    }
+
+    private fun openRouterLimitBody(which: String, resetMs: Long) =
+        """{"error":{"message":"Rate limit exceeded: $which. Add 10 credits to unlock 1000 free model requests per day","code":429,"metadata":{"headers":{"X-RateLimit-Limit":"50","X-RateLimit-Remaining":"0","X-RateLimit-Reset":"$resetMs"}}}}"""
+
+    @Test
+    fun openRoutersFreeModelDailyLimitIsDailyAndSaysWhenItResets() {
+        val reset = System.currentTimeMillis() + 3 * 3_600_000L
+        val parsed = LlmErrors.parseHttp(429, openRouterLimitBody("free-models-per-day", reset), null, "https://openrouter.ai/api/v1/chat/completions")
+        assertEquals(LlmErrorKind.DAILY_LIMIT, parsed.kind)
+        assertFalse(parsed.retryable)
+        assertEquals(50L, parsed.quota?.limit)
+        assertTrue(parsed.message.contains("It resets in 2h") || parsed.message.contains("It resets in 3h") || parsed.message.contains("resets in 1"), parsed.message)
+    }
+
+    @Test
+    fun openRoutersFreeModelMinuteLimitWaitsUntilItsReset() {
+        val reset = System.currentTimeMillis() + 20_000L
+        val parsed = LlmErrors.parseHttp(429, openRouterLimitBody("free-models-per-min", reset), null, "https://openrouter.ai/api/v1/chat/completions")
+        assertEquals(LlmErrorKind.RATE_LIMIT, parsed.kind)
+        assertTrue(parsed.retryAfterMs!! in 15_000L..20_000L, "${parsed.retryAfterMs}")
+    }
+
+    @Test
+    fun anUpstreamRateLimitThroughOpenRouterStaysAShortRetry() {
+        val body = """{"error":{"message":"google/gemini-3.8-flash:free is temporarily rate-limited upstream. Please retry shortly.","code":429,"metadata":{"raw":"...","provider_name":"Google AI Studio"}}}"""
+        assertEquals(LlmErrorKind.RATE_LIMIT, LlmErrors.parseHttp(429, body, null, "https://openrouter.ai/api/v1/chat/completions").kind)
+    }
+
+    @Test
+    fun anErrorInsideAnOpenAiDialectStreamIsAFailureNotASilentEnd() {
+        val decoder = OpenAiStreamDecoder()
+        val first = decoder.decode("""{"choices":[{"delta":{"content":"Let me"}}]}""")
+        assertTrue(first.single() is LlmStreamEvent.TextDelta)
+        val failed = decoder.decode("""{"error":{"code":429,"message":"Provider returned error: rate limited upstream"},"choices":[{"delta":{},"finish_reason":"error"}]}""")
+        val f = failed.single() as LlmStreamEvent.Failed
+        assertEquals(LlmErrorKind.RATE_LIMIT, (f.cause as LlmHttpException).kind)
+        assertTrue(decoder.decode("[DONE]").isEmpty(), "a failed stream does not also complete")
+    }
+
+    @Test
+    fun anErrorFinishWithNoErrorObjectIsStillAFailure() {
+        val decoder = OpenAiStreamDecoder()
+        val events = decoder.decode("""{"choices":[{"delta":{},"finish_reason":"error"}]}""")
+        assertTrue(events.single() is LlmStreamEvent.Failed)
+    }
+
+    @Test
+    fun geminiStreamErrorsAndMalformedCallsAreFailures() {
+        val errored = GeminiStreamDecoder()
+        val e = errored.decode("""{"error":{"code":503,"message":"The model is overloaded.","status":"UNAVAILABLE"}}""").single() as LlmStreamEvent.Failed
+        assertEquals(LlmErrorKind.OVERLOADED, (e.cause as LlmHttpException).kind)
+        assertTrue(errored.finish().none { it is LlmStreamEvent.Completed })
+
+        val malformed = GeminiStreamDecoder()
+        val m = malformed.decode("""{"candidates":[{"content":{"parts":[]},"finishReason":"MALFORMED_FUNCTION_CALL"}]}""")
+        assertTrue(m.single() is LlmStreamEvent.Failed)
+        assertTrue(malformed.finish().none { it is LlmStreamEvent.Completed })
+    }
+
+    @Test
+    fun aRequestLargerThanTheTokenAllowanceIsReportedNotRetried() {
+        val tooBig = LlmHttpException(
+            "Rate limit reached: too many tokens per minute.", 429, retryAfterMs = 1_000, retryable = true,
+            kind = LlmErrorKind.RATE_LIMIT,
+            quota = QuotaInfo(QuotaInfo.Window.MINUTE, QuotaInfo.Metric.INPUT_TOKENS, limit = 10, model = "m"),
+        )
+        var calls = 0
+        val client = LlmClient { calls++; flowOf(LlmStreamEvent.Failed(tooBig.message!!, tooBig)) }
+        val loop = AgentLoop(client, "m", SimpleToolRegistry(emptyList()), AllowAllGate, { "a system prompt long enough to be over ten tokens" })
+        val events = mutableListOf<AgentEvent>()
+        runBlocking { loop.send("hi", AgentEventSink { events += it }) }
+        assertEquals(1, calls, "no wait can let it through")
+        assertTrue(events.none { it is AgentEvent.Waiting })
+        val error = events.last() as AgentEvent.Error
+        assertTrue(error.message.contains("input tokens per minute"), error.message)
+    }
+
+    @Test
+    fun aTurnStopsWaitingOnRateLimitsEvenWhenStepsInBetweenGoThrough() = kotlinx.coroutines.test.runTest {
+        // Every other request is refused: each step needs one wait, which used to start the count again.
+        val limited = LlmHttpException("Rate limit reached", 429, retryAfterMs = 1_000, retryable = true, kind = LlmErrorKind.RATE_LIMIT)
+        var calls = 0
+        val client = LlmClient {
+            calls++
+            if (calls % 2 == 1) flowOf(LlmStreamEvent.Failed(limited.message!!, limited))
+            else flowOf(
+                LlmStreamEvent.ToolCallStarted("c$calls", "noop"),
+                LlmStreamEvent.ToolCallCompleted("c$calls", "noop", "{}"),
+                LlmStreamEvent.Completed(StopReason.TOOL_USE),
+            )
+        }
+        val noop = object : dev.ide.agent.AgentTool {
+            override val spec = ToolSpec("noop", "does nothing", """{"type":"object","properties":{}}""")
+            override suspend fun execute(args: dev.ide.agent.ToolArgs) = dev.ide.agent.ToolExecutionResult.ok("ok")
+        }
+        val loop = AgentLoop(client, "m", SimpleToolRegistry(listOf(noop)), AllowAllGate, { "sys" }, maxIterations = 100)
+        val events = mutableListOf<AgentEvent>()
+        loop.send("hi", AgentEventSink { events += it })
+        assertEquals(12, events.count { it is AgentEvent.Waiting })
+        assertTrue(events.last() is AgentEvent.Error)
+    }
+
+    @Test
+    fun pacerDoesNotTakeOneOrTwoRefusedRequestsForARateAndForgetsWhatItLearned() {
+        var now = 0L
+        val pacer = RequestPacer(clock = { now })
+        pacer.record(100)
+        pacer.learn(QuotaInfo(QuotaInfo.Window.MINUTE, QuotaInfo.Metric.REQUESTS, limit = null, model = null))
+        assertNull(pacer.rpm, "one refused request says nothing about a rate")
+        repeat(4) { pacer.record(100); now += 1_000 }
+        pacer.learn(QuotaInfo(QuotaInfo.Window.MINUTE, QuotaInfo.Metric.REQUESTS, limit = null, model = null))
+        assertEquals(4, pacer.rpm)
+        now += RequestPacer.LEARNED_TTL_MS
+        assertNull(pacer.rpm, "a learned ceiling lapses")
+    }
 }
