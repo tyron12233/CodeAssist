@@ -44,6 +44,8 @@ class SwiftGlass(params: JSONObject?) {
         ?: doubleArrayOf(30.0, 30.0, 32.0, 26.0, 22.8, 19.2, 16.2, 13.55, 11.3, 9.3, 7.55, 6.0, 4.65, 3.55, 2.55, 1.75, 1.08, 0.65, 0.27, 0.05, 0.0)
     private val regularLensTable = table("regularLensTable")
     private val regularBlurTable = table("regularBlurTable")
+    /** Regular glass smears along the edge's normal: half-length in points by distance from the edge (GlassModel.swift). */
+    private val regularNormalBlurTable = table("regularNormalBlurTable")
 
     /** Apply glass in [path] (points) with frame [bounds] (points) to [bitmap], drawn at [scale] pixels per point. */
     fun apply(bitmap: Bitmap, scale: Float, path: Path, bounds: RectF, variant: String, tint: Int?, dark: Boolean) {
@@ -147,10 +149,28 @@ class SwiftGlass(params: JSONObject?) {
                         while (k < radii.size - 2 && radii[k + 1] < want) k++
                         val k1 = min(k + 1, radii.size - 1)
                         val t = if (radii[k1] > radii[k]) ((want - radii[k]) / (radii[k1] - radii[k])).coerceIn(0.0, 1.0) else 0.0
-                        sample(levels[k], rw, rh, qx, qy, rgb)
-                        if (t > 0) {
-                            sample(levels[k1], rw, rh, qx, qy, other)
-                            for (c in 0..2) rgb[c] = rgb[c] * (1 - t) + other[c] * t
+                        fun at(px: Double, py: Double, out: DoubleArray) {
+                            sample(levels[k], rw, rh, px, py, out)
+                            if (t > 0) {
+                                sample(levels[k1], rw, rh, px, py, other)
+                                for (c in 0..2) out[c] = out[c] * (1 - t) + other[c] * t
+                            }
+                        }
+                        val along = if (regular && regularNormalBlurTable != null) lens(regularNormalBlurTable, dPt) * s else 0.0
+                        if (along > 0.5) {
+                            // The smear along the normal: an average of samples across [-along, along].
+                            val nx = dxp / len
+                            val ny = dyp / len
+                            val n = (along / 1.5).toInt().coerceIn(2, 24)
+                            var ar = 0.0; var ag = 0.0; var ab = 0.0
+                            for (j in 0..n) {
+                                val u = (j.toDouble() / n * 2 - 1) * along
+                                at(qx + nx * u, qy + ny * u, rgb)
+                                ar += rgb[0]; ag += rgb[1]; ab += rgb[2]
+                            }
+                            rgb[0] = ar / (n + 1); rgb[1] = ag / (n + 1); rgb[2] = ab / (n + 1)
+                        } else {
+                            at(qx, qy, rgb)
                         }
                     } else {
                         sample(levels[0], rw, rh, qx, qy, rgb)

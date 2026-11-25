@@ -33,6 +33,9 @@ struct GlassParams: Codable {
     /// Regular glass's blur radius (points) by distance from the edge (points), linear between entries, the last entry
     /// beyond: it frosts a band along the rim (wide, strongest a few points in) and is nearly sharp inside it.
     var regularBlurTable: [Double]? = nil
+    /// Regular glass smears what it shows ALONG the edge's normal (red and blue rows of a checker average to lavender
+    /// while its columns stay sharp): half-length of that smear in points, by distance from the edge (1-point steps).
+    var regularNormalBlurTable: [Double]? = nil
     var shadowAlpha = 0.07
     var shadowRadius = 14.0                   // points
     var shadowY = 4.0                         // points
@@ -145,8 +148,25 @@ enum GlassModel {
                         while k < levels.count - 2 && levels[k + 1].0 < want { k += 1 }
                         let (r0, s0) = levels[k], (r1, s1) = levels[min(k + 1, levels.count - 1)]
                         let t = r1 > r0 ? min(1, max(0, (want - r0) / (r1 - r0))) : 0
-                        let a = Bitmap.sample(s0, rw, rh, qx, qy)
-                        c = t > 0 ? a.mix(Bitmap.sample(s1, rw, rh, qx, qy), t) : a
+                        func at(_ x: Double, _ y: Double) -> RGB {
+                            let a = Bitmap.sample(s0, rw, rh, x, y)
+                            return t > 0 ? a.mix(Bitmap.sample(s1, rw, rh, x, y), t) : a
+                        }
+                        let along = regular ? (p.regularNormalBlurTable.map { GlassModel.lens($0, d) } ?? 0) * s : 0
+                        if along > 0.5 {
+                            // The smear along the normal: an average of samples across [-along, along].
+                            let nx = dxp / len, ny = dyp / len
+                            let n = max(2, min(24, Int(along / 1.5)))
+                            var acc = RGB(0, 0, 0)
+                            for i in 0...n {
+                                let u = (Double(i) / Double(n) * 2 - 1) * along
+                                let v = at(qx + nx * u, qy + ny * u)
+                                acc = RGB(acc.r + v.r, acc.g + v.g, acc.b + v.b)
+                            }
+                            c = RGB(acc.r / Double(n + 1), acc.g / Double(n + 1), acc.b / Double(n + 1))
+                        } else {
+                            c = at(qx, qy)
+                        }
                     } else {
                         c = Bitmap.sample(levels[0].1, rw, rh, qx, qy)
                     }
