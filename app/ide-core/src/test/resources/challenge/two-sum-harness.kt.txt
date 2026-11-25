@@ -237,7 +237,11 @@ fun main(args: Array<String>) {
 
     try {
         System.setOut(quiet)
-        if (mode == "probe") probe(payload, out, if (args.size > 3) args[3].toInt() else -1) else check(payload, out)
+        when (mode) {
+            "probe" -> probe(payload, out, if (args.size > 3) args[3].toInt() else -1)
+            "count" -> count(payload, out)
+            else -> check(payload, out)
+        }
     } catch (t: Throwable) {
         out.setLength(0)
         out.append("{\"fatal\":").append(CaJson.encStr(CaRun.describe(t))).append("}")
@@ -253,6 +257,9 @@ fun main(args: Array<String>) {
 }
 
 private fun check(payload: Map<*, *>, out: StringBuilder) {
+    // Progress for the judge's live display: this JVM is up and has read its payload. Standard error, which the
+    // solution's output never reaches in a way that matters (verdicts come from the nonce-marked report).
+    System.err.println("###STARTED " + (payload["cases"] as List<*>).size)
     val cases = payload["cases"] as List<*>
     out.append("{\"results\":[")
     for ((idx, raw) in cases.withIndex()) {
@@ -273,6 +280,80 @@ private fun check(payload: Map<*, *>, out: StringBuilder) {
         CaRun.completed = idx + 1
     }
     out.append("]}")
+}
+
+/**
+ * Measures every size in ONE JVM by counting the bytecode instructions the solution executes, instead of
+ * timing it. The judge runs this under its counting agent (judge/agent) in the interpreter, where the count
+ * for the same input is always the same, so one call per size is the whole measurement: no warm-up loop, no
+ * sampling. The counter is reached by name because it only exists under the agent.
+ */
+private fun count(payload: Map<*, *>, out: StringBuilder) {
+    val all = payload["probe"] as List<*>
+    val cap = (payload["opsCap"] as? CaNum)?.let { CaJson.asLong(it) } ?: 400000000L
+    val counter = Class.forName("cacount.CaCount")
+    val reset = counter.getMethod("reset", java.lang.Long.TYPE)
+    val start = counter.getMethod("start")
+    val stop = counter.getMethod("stop")
+    val ops = counter.getField("ops")
+    val exceeded = counter.getField("exceeded")
+    val forbidden = counter.getField("forbidden")
+    val forbiddenWhat = counter.getField("forbiddenWhat")
+    // The harness's own helpers initialize (with reflection) before counting starts, never inside it.
+    CaRun.alloc()
+    System.err.println("###STARTED " + all.size)
+
+    // One call that is not reported, so the first size does not also pay for loading the classes the
+    // solution uses. It runs under the cap like any other.
+    if (all.isNotEmpty()) {
+        @Suppress("UNCHECKED_CAST")
+        val first = (all[0] as Map<*, *>)["args"] as List<Any?>
+        try {
+            val prepared = caPrepare(first)
+            reset.invoke(null, cap)
+            start.invoke(null)
+            try { CaRun.sink += java.util.Objects.hashCode(caInvoke(prepared)) } finally { stop.invoke(null) }
+        } catch (t: Throwable) {
+            // Reported below, by the first size, if it happens again.
+        }
+    }
+
+    out.append("{\"probe\":[")
+    var written = 0
+    for (raw in all) {
+        val p = raw as Map<*, *>
+        val n = CaJson.asLong(p["n"]).toInt()
+        @Suppress("UNCHECKED_CAST")
+        val a = p["args"] as List<Any?>
+        if (written > 0) out.append(",")
+        out.append("{\"n\":").append(n)
+        try {
+            val prepared = caPrepare(a)
+            val a0 = CaRun.alloc()
+            reset.invoke(null, cap)
+            start.invoke(null)
+            val r = try { caInvoke(prepared) } finally { stop.invoke(null) }
+            val a1 = CaRun.alloc()
+            CaRun.sink += java.util.Objects.hashCode(r)
+            val counted = ops.getLong(null)
+            System.err.println("###SIZE " + n + " " + counted)
+            out.append(",\"ns\":").append(counted).append(",\"ops\":").append(counted)
+                .append(",\"bytes\":").append(if (a0 >= 0) a1 - a0 else -1).append(",\"samples\":1}")
+            written++
+            CaRun.completed = written
+        } catch (t: Throwable) {
+            val over = exceeded.getBoolean(null)
+            out.append(",\"err\":").append(CaJson.encStr(if (over) "operation budget exceeded" else CaRun.describe(t)))
+            if (over) out.append(",\"exceeded\":true")
+            out.append("}")
+            written++
+            break
+        }
+    }
+    out.append("],\"truncated\":false,\"unit\":\"ops\",\"forbidden\":").append(forbidden.getBoolean(null))
+    val what = forbiddenWhat.get(null) as String?
+    if (what != null) out.append(",\"forbiddenWhat\":").append(CaJson.encStr(what))
+    out.append("}")
 }
 
 private fun probe(payload: Map<*, *>, out: StringBuilder, only: Int) {
