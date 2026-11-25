@@ -4,6 +4,7 @@ import dev.ide.build.RUN_TASK_PROVIDER_EP
 import dev.ide.lang.FILE_TYPE_EP
 import dev.ide.lang.FileTypeMapping
 import dev.ide.lang.LanguageId
+import dev.ide.lsp.LANGUAGE_SERVER_EP
 import dev.ide.model.FileIconExtensionPoint
 import dev.ide.model.ModuleTypeExtensionPoint
 import dev.ide.model.template.ProjectTemplateExtensionPoint
@@ -28,6 +29,7 @@ class SwiftPlugin : Plugin {
         reg.register(ProjectTemplateExtensionPoint, SwiftConsoleTemplate())
         reg.register(FileIconExtensionPoint, SwiftFileIconProvider)
         reg.register(RUN_TASK_PROVIDER_EP, SwiftRunTaskProvider(toolchain))
+        reg.register(LANGUAGE_SERVER_EP, SwiftLanguageServer(toolchain, reg.logger("SwiftServer")))
         val symbols = SwiftSymbols(toolchain.home.resolve("symbols"))
         val text = SwiftTextEngine(toolchain.home.resolve("fonts"), symbols)
         val glassParams = runCatching {

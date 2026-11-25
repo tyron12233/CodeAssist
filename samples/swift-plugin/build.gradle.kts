@@ -131,6 +131,7 @@ dependencies {
     compileOnly(project(":plugin-ui-api"))
     compileOnly(project(":build-api"))
     compileOnly(project(":language-api"))
+    compileOnly(project(":lsp-api"))
     compileOnly(project(":project-model-api"))
     compileOnly(libs.kotlinx.coroutines.core)
 

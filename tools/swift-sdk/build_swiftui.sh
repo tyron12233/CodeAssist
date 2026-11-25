@@ -53,6 +53,14 @@ for lib in c m dl log; do
 done
 cp "$EXTRACT/lib/crtbegin_so.o" "$EXTRACT/lib/crtend_so.o" "$WORK/stubs/"
 
+# The language server's stand-ins for libcurl and libxml2 (stage_swift.py writes their sources): carried in the APK.
+for src in "$STAGED"/stubs/*.c; do
+    [[ -f "$src" ]] || continue
+    name="$(basename "$src" .c).so"
+    clang --target="$CLANG_TARGET" -shared -nostdlib -fPIC -Wl,-soname,"$name" -o "$JNI/$name" "$src"
+    echo "==> stub $name ($(grep -c . "$src") symbols)"
+done
+
 echo "==> libSwiftUI.so for $ABI ($TARGET)"
 cd "$WORK"
 swiftc -target "$TARGET" -sdk "$SDK" -resource-dir "$SDK/usr/lib/swift" \

@@ -55,7 +55,12 @@ ABIS = {
 # Libraries the system provides: never carried. libz.so is the platform's zlib (Termux links it as libz.so.1).
 SYSTEM_LIBS = {"libc.so", "libm.so", "libdl.so", "liblog.so", "libz.so", "libandroid.so"}
 # Versioned names Termux links against, and what the APK carries them as.
-RENAMES = {"libz.so.1": "libz.so", "libzstd.so.1": "libzstd.so"}
+RENAMES = {"libz.so.1": "libz.so", "libzstd.so.1": "libzstd.so", "libxml2.so.16": "libxml2.so"}
+# Libraries sourcekit-lsp loads only because it links SwiftPM (through FoundationNetworking and FoundationXML), whose
+# networking and XML it never uses with a compilation database: carried as stubs that define the symbols those two
+# reference (trapping if ever called), so the server loads without libcurl, OpenSSL and libxml2. By name prefix.
+STUBS = {"libcurl.so": ("libFoundationNetworking.so", ("curl_",)),
+         "libxml2.so.16": ("libFoundationXML.so", ("xml", "html", "__xml"))}
 # Runtime libraries a program may load that need packages we do not carry (libxml2, libcurl), or that only tests use.
 SKIP_RUNTIME = {"libFoundationXML.so", "libFoundationNetworking.so", "libXCTest.so", "libTesting.so",
                 "lib_TestingInterop.so", "lib_Testing_Foundation.so", "libswiftRemoteMirror.so"}
@@ -245,6 +250,39 @@ class Elf:
                 return True
         return False
 
+    def dynamic_symbols(self):
+        """(name, defined, is_object) for each .dynsym entry, from the section headers."""
+        d = self.data
+        if self.is64:
+            shoff, = struct.unpack_from("<Q", d, 0x28)
+            shentsize, shnum = struct.unpack_from("<HH", d, 0x3A)
+        else:
+            shoff, = struct.unpack_from("<I", d, 0x20)
+            shentsize, shnum = struct.unpack_from("<HH", d, 0x2E)
+        sections = []
+        for i in range(shnum):
+            o = shoff + i * shentsize
+            if self.is64:
+                _n, sh_type, _f, _a, sh_offset, sh_size, sh_link = struct.unpack_from("<IIQQQQI", d, o)
+            else:
+                _n, sh_type, _f, _a, sh_offset, sh_size, sh_link = struct.unpack_from("<IIIIIII", d, o)
+            sections.append((sh_type, sh_offset, sh_size, sh_link))
+        out = []
+        for sh_type, off, size, link in sections:
+            if sh_type != 11:  # SHT_DYNSYM
+                continue
+            stroff = sections[link][1]
+            step = 24 if self.is64 else 16
+            for o in range(off + step, off + size, step):
+                if self.is64:
+                    name, info, _other, shndx = struct.unpack_from("<IBBH", d, o)
+                else:
+                    name, = struct.unpack_from("<I", d, o)
+                    info, _other, shndx = struct.unpack_from("<BBH", d, o + 12)
+                end = d.index(0, stroff + name)
+                out.append((d[stroff + name:end].decode(), shndx != 0, (info & 0xF) == 1))
+        return out
+
     def save(self, path):
         with open(path, "wb") as f:
             f.write(self.data)
@@ -281,7 +319,7 @@ def closure(roots, index):
         todo, found, missing = [root], {}, set()
         while todo:
             name = todo.pop()
-            if name in found or name in seen:
+            if name in found or name in seen or name in STUBS:
                 continue
             path = index.get(name)
             if path is None:
@@ -353,6 +391,16 @@ def main():
     # Libraries behind headers the Android module map offers (glob, System V IPC): a program using one loads it.
     # Not libiconv.so: it is LGPL, and bionic has iconv itself from API 28; its header stays for the module map.
     extras = ["libandroid-glob.so", "libandroid-sysv-semaphore.so", "libandroid-shmem.so"]
+    # The stubs' symbols, from what their users import; the libraries themselves are built by build_swiftui.sh.
+    stubs_dir = os.path.join(out, "stubs")
+    os.makedirs(stubs_dir)
+    for stub, (user, prefixes) in STUBS.items():
+        syms = sorted({(n, obj) for n, defined, obj in Elf(index[user]).dynamic_symbols()
+                       if not defined and n.startswith(prefixes)})
+        with open(os.path.join(stubs_dir, RENAMES.get(stub, stub)[:-3] + ".c"), "w") as f:
+            f.write(f"// Stub {stub}: the symbols {user} imports, never used by the language server.\n")
+            for n, obj in syms:
+                f.write(f"void *{n} = 0;\n" if obj else f"void {n}(void) {{ __builtin_trap(); }}\n")
     libs, dropped = closure(["swift-frontend"] + language + runtime + extras, index)
     for tool in ["swift-frontend"] + language:
         if tool in dropped:
@@ -377,7 +425,8 @@ def main():
         os.chmod(dest, 0o755)
         total += os.path.getsize(dest)
         left = [n for n in Elf(dest).needed() if n not in SYSTEM_LIBS and n not in
-                {RENAMES.get(k, k) for k in libs} and n not in ("libswiftfrontend.so", "libsourcekitlsp.so")]
+                {RENAMES.get(k, k) for k in libs} and n not in ("libswiftfrontend.so", "libsourcekitlsp.so")
+                and n not in {RENAMES.get(k, k) for k in STUBS}]
         if left:
             die(f"{dest_name} still needs {left}")
     print(f"  {len(libs)} libraries, {total / 1e6:.0f} MB")

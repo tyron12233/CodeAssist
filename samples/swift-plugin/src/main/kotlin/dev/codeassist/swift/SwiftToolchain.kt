@@ -145,6 +145,49 @@ class SwiftToolchain(
         }
     }
 
+    /** sourcekit-lsp, as the APK carries it (bin/sourcekit-lsp, renamed so it is extracted). */
+    val languageServer: Path? get() = reg.nativeLibrary("sourcekitlsp")?.takeIf { Files.isRegularFile(it) }
+
+    /**
+     * A toolchain directory as sourcekit-lsp looks for one (`usr/bin/swift-frontend`, `usr/lib/libsourcekitdInProc.so`
+     * and its plugins, `usr/lib/swift`): the unpacked resource directory, with links to what the APK carries, which has
+     * to live in the native library directory to be executed or loaded. Remade on every start, because that directory
+     * moves when the plugin is updated.
+     */
+    fun languageServerToolchain(): Path? {
+        val libs = libDir ?: return null
+        val usr = root.resolve("usr")
+        val links = mapOf(
+            "bin/swift-frontend" to "libswiftfrontend.so",
+            "bin/swiftc" to "libswiftfrontend.so",
+            "bin/sourcekit-lsp" to "libsourcekitlsp.so",
+            "lib/libsourcekitdInProc.so" to "libsourcekitdInProc.so",
+            "lib/libSwiftSourceKitPlugin.so" to "libSwiftSourceKitPlugin.so",
+            "lib/libSwiftSourceKitClientPlugin.so" to "libSwiftSourceKitClientPlugin.so",
+        )
+        for ((at, lib) in links) {
+            val link = usr.resolve(at)
+            val target = libs.resolve(lib)
+            if (!Files.isRegularFile(target)) continue
+            Files.createDirectories(link.parent)
+            Files.deleteIfExists(link)
+            Files.createSymbolicLink(link, target)
+        }
+        return root
+    }
+
+    /** The compiler arguments of module [moduleName] made of [files], as the language server's database gives them. */
+    fun compileArguments(moduleName: String, files: List<Path>): List<String> = buildList {
+        add(root.resolve("usr/bin/swiftc").toString())
+        add("-module-name"); add(moduleName)
+        add("-target"); add(target)
+        add("-sdk"); add(sdkRoot.toString())
+        add("-resource-dir"); add(resourceDir.toString())
+        add("-module-cache-path"); add(moduleCache.toString())
+        if (hasSwiftUI) { add("-I"); add(swiftUIModules.toString()) }
+        files.forEach { add(it.toString()) }
+    }
+
     /** The environment every Swift process gets: a home and a temp dir of the plugin's own. */
     fun environment(): Map<String, String> = mapOf(
         "HOME" to home.resolve("home").toString(),
