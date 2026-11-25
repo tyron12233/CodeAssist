@@ -1033,7 +1033,7 @@ internal fun KotlinResolver.nearerValueInvokeTargets(call: KtCallExpression, nam
     val local = locals.firstOrNull()
     val isValue = when {
         local != null -> local.kind != SymbolKind.METHOD // the nearest local decides: a local fun is a function
-        else -> innermostClassDeclaresValue(offset, name) ?: return null
+        else -> innermostClassDeclaresValue(offset, name, call) ?: return null
     }
     if (!isValue) return null
     val nearest = valueInvokeTargets(typeOfName(name, offset), offset)
@@ -1208,8 +1208,15 @@ internal fun KotlinResolver.receiverValueInvokeTargets(
 
 /** For the innermost enclosing class that declares a member named [name] (a function, a property, a
  *  constructor `val`/`var`, or an enum entry): true when that member is a VALUE and no same-named FUNCTION
- *  sits beside it, false when a function does. Null when no enclosing class declares the name. */
-private fun KotlinResolver.innermostClassDeclaresValue(offset: Int, name: String): Boolean? {
+ *  sits beside it, false when a function does. Null when no enclosing class declares the name.
+ *
+ *  With a bare [call] in hand and BOTH a function and a value declared there, the functions only win when one
+ *  of them can take the call. Kotlin tries the member functions first, but an inapplicable one does not end
+ *  resolution: the value's `invoke` is next. So `class C(val onPageStarted: (String) -> Unit) : WebViewClient()`
+ *  calling `onPageStarted(url)` inside its own `override fun onPageStarted(view, url, favicon)` invokes the
+ *  property, where binding the override read "inferred type is String but WebView was expected". The functions
+ *  are the class's own and inherited ones; when they can't be enumerated the function still wins, as before. */
+private fun KotlinResolver.innermostClassDeclaresValue(offset: Int, name: String, call: KtCallExpression? = null): Boolean? {
     var node: KtElement? = elementAt(offset)
     while (node != null) {
         if (node is KtClassOrObject) {
@@ -1217,6 +1224,12 @@ private fun KotlinResolver.innermostClassDeclaresValue(offset: Int, name: String
             val hasValue = node.declarations.any {
                 (it is KtProperty && it.name == name) || (it is KtEnumEntry && it.name == name)
             } || node.primaryConstructorParameters.any { it.hasValOrVar() && it.name == name }
+            if (hasFunction && hasValue && call != null) {
+                val fqn = enclosingClassFqnOf(node.declarations.first { it is KtNamedFunction && it.name == name })
+                val functions = fqn?.let { service.membersNamed(it, emptyList(), name) }.orEmpty()
+                    .filter { it.name == name && it.kind == SymbolKind.METHOD }
+                return functions.isNotEmpty() && functions.none { isApplicable(it, call, null) }
+            }
             if (hasFunction) return false
             if (hasValue) return true
         }

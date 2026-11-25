@@ -504,11 +504,14 @@ internal fun KotlinResolver.inferBranchUnion(branches: List<KtExpression?>): Kot
             nullable = true; continue
         }
         val lambda = unwrapParens(e) as? dev.ide.kotlin.syntax.psi.KtLambdaExpression
-        val t = (if (lambda != null && lambdaOwnType && lambda.valueParameters.all { it.typeReference != null })
+        val raw = (if (lambda != null && lambdaOwnType && lambda.valueParameters.all { it.typeReference != null })
             lambdaFunctionType(lambda).let { shape ->
                 if (lambda.valueParameters.isEmpty()) shape
                 else (inferLambdaResult(lambda) as? KotlinType)?.let { r -> service.typeByFqn(shape.qualifiedName, shape.typeArguments.dropLast(1) + r) } ?: shape
             } else inferType(e)) ?: return null // an unknown branch → can't confidently unify
+        // A Java method's `java.lang.String` and a Kotlin `String` are one class: compare under one spelling, or
+        // `if (c) "ua" else WebSettings.getDefaultUserAgent(ctx)` joined them to their supertype `CharSequence`.
+        val t = if (raw.isTypeParameter) raw else canonicalTypeForCheck(raw)
         // So is one typed by a class nothing declares, or by a type variable of some callee that inference left
         // open (`pending[j]` on an unresolved `ArrayList<E>`): joining it would make `Any` of what is not known.
         // (A function type is known by its shape: `kotlin.FunctionN` is synthetic, not declared.)
