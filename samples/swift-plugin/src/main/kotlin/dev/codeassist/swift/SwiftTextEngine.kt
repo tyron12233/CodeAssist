@@ -2,6 +2,8 @@ package dev.codeassist.swift
 
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.text.Layout
 import android.text.SpannableStringBuilder
@@ -11,6 +13,7 @@ import android.text.TextPaint
 import android.text.TextUtils
 import android.text.style.ForegroundColorSpan
 import android.text.style.MetricAffectingSpan
+import android.text.style.ReplacementSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.UnderlineSpan
 import java.io.File
@@ -34,7 +37,7 @@ import kotlin.math.min
  *
  * Works in points, at [PX] pixels per point internally, which is how an iPhone renders (@3x).
  */
-class SwiftTextEngine(private val fontDir: Path) {
+class SwiftTextEngine(private val fontDir: Path, private val symbols: SwiftSymbols? = null) {
 
     data class Span(
         val text: String,
@@ -48,6 +51,10 @@ class SwiftTextEngine(private val fontDir: Path) {
         val kerning: Float,
         val baselineOffset: Float,
         val symbol: String?,
+        /** An inline symbol's frame at this size (iOS's, from the engine): width, height, and depth below the baseline. */
+        val symbolWidth: Float? = null,
+        val symbolHeight: Float? = null,
+        val symbolBaseline: Float? = null,
     )
 
     data class Metrics(val width: Float, val height: Float, val firstBaseline: Float, val lastBaseline: Float)
@@ -97,12 +104,33 @@ class SwiftTextEngine(private val fontDir: Path) {
         }
     }
 
+    /**
+     * A symbol inline in text: as wide as iOS's frame for it at the span's size, drawn from the open symbol set sitting
+     * on the baseline as iOS sets it. Leaves the line's height alone, as iOS does for symbols at text size.
+     */
+    private inner class SymbolSpan(val span: Span) : ReplacementSpan() {
+        private val width = (span.symbolWidth ?: span.size) * PX
+        override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int =
+            ceil(width).toInt()
+        override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: Paint) {
+            val height = (span.symbolHeight ?: span.size) * PX
+            val depth = (span.symbolBaseline ?: 0f) * PX
+            val frame = RectF(x, y + depth - height, x + width, y + depth)
+            symbols?.draw(canvas, span.symbol ?: return, frame, span.size, span.weight, span.color)
+        }
+    }
+
     private fun text(spans: List<Span>): CharSequence {
         val sb = SpannableStringBuilder()
         for (s in spans) {
             val start = sb.length
-            // A symbol inline in text: drawn as a placeholder glyph until the symbol set arrives.
-            sb.append(if (s.symbol != null) "□" else s.text)
+            if (s.symbol != null) {
+                sb.append("\uFFFC")
+                sb.setSpan(StyleSpan(s), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                sb.setSpan(SymbolSpan(s), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                continue
+            }
+            sb.append(s.text)
             val end = sb.length
             if (end == start) continue
             sb.setSpan(StyleSpan(s), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)

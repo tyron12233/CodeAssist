@@ -248,11 +248,11 @@ public struct NavigationLink<Label: View, Destination: View>: View, _PrimitiveVi
 
 extension NavigationLink where Label == Text {
     public init(_ titleKey: LocalizedStringKey, destination: Destination) { self.init(destination: destination) { Text(titleKey) } }
-    public init<S: StringProtocol>(_ title: S, destination: Destination) { self.init(destination: destination) { Text(title) } }
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, destination: Destination) { self.init(destination: destination) { Text(title) } }
     public init(_ titleKey: LocalizedStringKey, @ViewBuilder destination: () -> Destination) {
         self.init(destination: destination()) { Text(titleKey) }
     }
-    public init<S: StringProtocol>(_ title: S, @ViewBuilder destination: () -> Destination) {
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, @ViewBuilder destination: () -> Destination) {
         self.init(destination: destination()) { Text(title) }
     }
 }
@@ -267,7 +267,7 @@ extension NavigationLink where Destination == EmptyView, Label == Text {
     public init<P: Hashable>(_ titleKey: LocalizedStringKey, value: P?) {
         self.init(label: Text(titleKey), entry: { value.map { .value(AnyHashable($0)) } })
     }
-    public init<S: StringProtocol, P: Hashable>(_ title: S, value: P?) {
+    @_disfavoredOverload public init<S: StringProtocol, P: Hashable>(_ title: S, value: P?) {
         self.init(label: Text(title), entry: { value.map { .value(AnyHashable($0)) } })
     }
 }

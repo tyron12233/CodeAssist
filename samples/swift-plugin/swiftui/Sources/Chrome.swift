@@ -69,13 +69,13 @@ public struct Tab<Value: Hashable, Content: View>: View, _PrimitiveView {
 }
 
 extension Tab {
-    public init<S: StringProtocol>(_ title: S, systemImage: String, value: Value, role: TabRole? = nil, @ViewBuilder content: () -> Content) {
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, systemImage: String, value: Value, role: TabRole? = nil, @ViewBuilder content: () -> Content) {
         self.init(label: _TabLabel(title: String(title), systemImage: systemImage), value: value, role: role, content: content())
     }
     public init(_ titleKey: LocalizedStringKey, systemImage: String, value: Value, role: TabRole? = nil, @ViewBuilder content: () -> Content) {
         self.init(label: _TabLabel(title: titleKey.spans.map(\.text).joined(), systemImage: systemImage), value: value, role: role, content: content())
     }
-    public init<S: StringProtocol>(_ title: S, image: String, value: Value, role: TabRole? = nil, @ViewBuilder content: () -> Content) {
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, image: String, value: Value, role: TabRole? = nil, @ViewBuilder content: () -> Content) {
         self.init(label: _TabLabel(title: String(title), systemImage: nil), value: value, role: role, content: content())
     }
     public init(value: Value, role: TabRole? = nil, @ViewBuilder content: () -> Content) {
@@ -87,13 +87,13 @@ extension Tab {
 }
 
 extension Tab where Value == Never {
-    public init<S: StringProtocol>(_ title: S, systemImage: String, role: TabRole? = nil, @ViewBuilder content: () -> Content) {
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, systemImage: String, role: TabRole? = nil, @ViewBuilder content: () -> Content) {
         self.init(label: _TabLabel(title: String(title), systemImage: systemImage), value: nil, role: role, content: content())
     }
     public init(_ titleKey: LocalizedStringKey, systemImage: String, role: TabRole? = nil, @ViewBuilder content: () -> Content) {
         self.init(label: _TabLabel(title: titleKey.spans.map(\.text).joined(), systemImage: systemImage), value: nil, role: role, content: content())
     }
-    public init<S: StringProtocol>(_ title: S, image: String, role: TabRole? = nil, @ViewBuilder content: () -> Content) {
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, image: String, role: TabRole? = nil, @ViewBuilder content: () -> Content) {
         self.init(label: _TabLabel(title: String(title), systemImage: nil), value: nil, role: role, content: content())
     }
     public init(role: TabRole? = nil, @ViewBuilder content: () -> Content) {
@@ -106,7 +106,7 @@ extension Tab where Value == Never {
 
 public struct TabSection<Header: View, Content: View>: View {
     let content: Content
-    public init<S: StringProtocol>(_ title: S, @ViewBuilder content: () -> Content) where Header == Text { self.content = content() }
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, @ViewBuilder content: () -> Content) where Header == Text { self.content = content() }
     public init(@ViewBuilder content: () -> Content, @ViewBuilder header: () -> Header) { self.content = content() }
     public var body: some View { content }
 }

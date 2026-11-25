@@ -37,6 +37,20 @@ final class CoreTextMeasurer: _TextMeasurer {
                 .foregroundColor: NSColor(srgbRed: s.color.r, green: s.color.g, blue: s.color.b, alpha: s.color.a),
             ]
             if s.kerning != 0 { attrs[.kern] = s.kerning }
+            if let sym = s.symbol {
+                // An inline symbol: a run as wide as the symbol's frame, sitting on the baseline as iOS sets it.
+                let m = _SymbolMetrics.shared.frame(sym, size: s.size, large: false)
+                let box = SymbolRun(name: sym, span: s, width: m?.size.width ?? s.size, ascent: m.map { $0.size.height - $0.baseline } ?? s.size,
+                                    descent: m?.baseline ?? 0)
+                var callbacks = CTRunDelegateCallbacks(version: kCTRunDelegateVersion1, dealloc: { Unmanaged<SymbolRun>.fromOpaque($0).release() },
+                    getAscent: { Unmanaged<SymbolRun>.fromOpaque($0).takeUnretainedValue().ascent },
+                    getDescent: { Unmanaged<SymbolRun>.fromOpaque($0).takeUnretainedValue().descent },
+                    getWidth: { Unmanaged<SymbolRun>.fromOpaque($0).takeUnretainedValue().width })
+                attrs[NSAttributedString.Key(kCTRunDelegateAttributeName as String)] = CTRunDelegateCreate(&callbacks, Unmanaged.passRetained(box).toOpaque())
+                attrs[SymbolRun.key] = box
+                out.append(NSAttributedString(string: "\u{FFFC}", attributes: attrs))
+                continue
+            }
             out.append(NSAttributedString(string: s.text, attributes: attrs))
         }
         return out
@@ -89,6 +103,20 @@ final class CoreTextMeasurer: _TextMeasurer {
         let height = l.lineHeight + CGFloat(l.lines.count - 1) * advance
         return _TextMetrics(size: CGSize(width: l.width, height: height), firstBaseline: l.ascent,
                             lastBaseline: CGFloat(l.lines.count - 1) * advance + l.ascent)
+    }
+}
+
+final class SymbolRun: NSObject {
+    static let key = NSAttributedString.Key("codeassist.symbol")
+    let name: String
+    let span: _ResolvedSpan
+    let width: CGFloat, ascent: CGFloat, descent: CGFloat
+    init(name: String, span: _ResolvedSpan, width: CGFloat, ascent: CGFloat, descent: CGFloat) {
+        self.name = name
+        self.span = span
+        self.width = width
+        self.ascent = ascent
+        self.descent = descent
     }
 }
 
@@ -256,6 +284,15 @@ final class Painter {
             ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
             ctx.textPosition = CGPoint(x: x, y: baseline)
             CTLineDraw(line, ctx)
+            for run in CTLineGetGlyphRuns(line) as! [CTRun] {
+                let attrs = CTRunGetAttributes(run) as NSDictionary
+                guard let sym = attrs[SymbolRun.key] as? SymbolRun else { continue }
+                let at = x + CTLineGetOffsetForStringIndex(line, CTRunGetStringRange(run).location, nil)
+                let c = sym.span.color
+                drawSymbol(["r": [at, baseline - sym.ascent, sym.width, sym.ascent + sym.descent].map { NSNumber(value: Double($0)) },
+                            "n": sym.name, "s": NSNumber(value: Double(sym.span.size)), "w": NSNumber(value: sym.span.weight),
+                            "c": String(format: "#%02X%02X%02X%02X", Int(c.r * 255), Int(c.g * 255), Int(c.b * 255), Int(c.a * 255))])
+            }
         }
         ctx.restoreGState()
     }

@@ -102,6 +102,9 @@ class SwiftPreviewFrame(
                 kerning = s.optDouble("k", 0.0).toFloat(),
                 baselineOffset = s.optDouble("b", 0.0).toFloat(),
                 symbol = s.optString("sym").takeIf { it.isNotEmpty() },
+                symbolWidth = s.optDouble("sw").takeIf { !it.isNaN() }?.toFloat(),
+                symbolHeight = s.optDouble("sh").takeIf { !it.isNaN() }?.toFloat(),
+                symbolBaseline = s.optDouble("sb").takeIf { !it.isNaN() }?.toFloat(),
             )
         }
 

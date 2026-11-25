@@ -102,7 +102,13 @@ final class _DisplayList {
     static func span(_ s: _ResolvedSpan) -> String {
         var out = "{\"t\":\(string(s.text)),\"s\":\(num(s.size)),\"w\":\(s.weight),\"d\":\(string("\(s.design)")),\"c\":\(string(s.color.hex))"
         if s.italic { out += ",\"i\":1" }
-        if let sym = s.symbol { out += ",\"sym\":\(string(sym))" }
+        if let sym = s.symbol {
+            out += ",\"sym\":\(string(sym))"
+            // The symbol's frame at the span's size (iOS's, measured): hosts reserve its width and sit it on the baseline.
+            if let m = _SymbolMetrics.shared.frame(sym, size: s.size, large: false) {
+                out += ",\"sw\":\(num(m.size.width)),\"sh\":\(num(m.size.height)),\"sb\":\(num(m.baseline))"
+            }
+        }
         if let u = s.underline { out += ",\"u\":\(string(u.hex))" }
         if let st = s.strikethrough { out += ",\"st\":\(string(st.hex))" }
         if s.kerning != 0 { out += ",\"k\":\(num(s.kerning))" }

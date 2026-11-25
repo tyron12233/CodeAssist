@@ -170,13 +170,13 @@ extension Button where Label == Text {
     public init(_ titleKey: LocalizedStringKey, action: @escaping () -> Void) {
         self.init(action: action) { Text(titleKey) }
     }
-    public init<S: StringProtocol>(_ title: S, action: @escaping () -> Void) {
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, action: @escaping () -> Void) {
         self.init(action: action) { Text(title) }
     }
     public init(_ titleKey: LocalizedStringKey, role: ButtonRole?, action: @escaping () -> Void) {
         self.init(role: role, action: action) { Text(titleKey) }
     }
-    public init<S: StringProtocol>(_ title: S, role: ButtonRole?, action: @escaping () -> Void) {
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, role: ButtonRole?, action: @escaping () -> Void) {
         self.init(role: role, action: action) { Text(title) }
     }
 }
@@ -185,7 +185,7 @@ extension Button where Label == SwiftUILabel<Text, Image> {
     public init(_ titleKey: LocalizedStringKey, systemImage: String, action: @escaping () -> Void) {
         self.init(action: action) { SwiftUILabel(titleKey, systemImage: systemImage) }
     }
-    public init<S: StringProtocol>(_ title: S, systemImage: String, action: @escaping () -> Void) {
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, systemImage: String, action: @escaping () -> Void) {
         self.init(action: action) { SwiftUILabel(title, systemImage: systemImage) }
     }
 }
@@ -441,7 +441,7 @@ extension SwiftUILabel where Title == Text, Icon == Image {
     public init(_ titleKey: LocalizedStringKey, systemImage name: String) {
         self.init(title: { Text(titleKey) }, icon: { Image(systemName: name) })
     }
-    public init<S: StringProtocol>(_ title: S, systemImage name: String) {
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, systemImage name: String) {
         self.init(title: { Text(title) }, icon: { Image(systemName: name) })
     }
     public init(_ titleKey: LocalizedStringKey, image name: String) {
@@ -491,7 +491,7 @@ public struct Toggle<Label: View>: View {
 
 extension Toggle where Label == Text {
     public init(_ titleKey: LocalizedStringKey, isOn: Binding<Bool>) { self.init(isOn: isOn) { Text(titleKey) } }
-    public init<S: StringProtocol>(_ title: S, isOn: Binding<Bool>) { self.init(isOn: isOn) { Text(title) } }
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, isOn: Binding<Bool>) { self.init(isOn: isOn) { Text(title) } }
 }
 
 struct _Switch: View, _PrimitiveView {
@@ -562,7 +562,7 @@ extension TextField where Label == Text {
         prompt = titleKey.spans.map(\.text).joined()
         secure = false
     }
-    public init<S: StringProtocol>(_ title: S, text: Binding<String>) {
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, text: Binding<String>) {
         self.text = text
         prompt = String(title)
         secure = false
@@ -590,7 +590,7 @@ extension SecureField where Label == Text {
     public init(_ titleKey: LocalizedStringKey, text: Binding<String>) {
         field = TextField(secure: titleKey.spans.map(\.text).joined(), text: text)
     }
-    public init<S: StringProtocol>(_ title: S, text: Binding<String>) { field = TextField(secure: String(title), text: text) }
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, text: Binding<String>) { field = TextField(secure: String(title), text: text) }
 }
 
 @MainActor
@@ -739,7 +739,7 @@ public struct Link<Label: View>: View {
 
 extension Link where Label == Text {
     public init(_ titleKey: LocalizedStringKey, destination: URL) { self.init(destination: destination) { Text(titleKey) } }
-    public init<S: StringProtocol>(_ title: S, destination: URL) { self.init(destination: destination) { Text(title) } }
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, destination: URL) { self.init(destination: destination) { Text(title) } }
 }
 
 public protocol PickerStyle {}

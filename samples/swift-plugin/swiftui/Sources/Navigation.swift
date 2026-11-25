@@ -26,7 +26,7 @@ extension View {
     public func navigationTitle(_ titleKey: LocalizedStringKey) -> some View {
         _modified(_TitleModifier(title: titleKey.spans.map(\.text).joined()))
     }
-    public func navigationTitle<S: StringProtocol>(_ title: S) -> some View {
+    @_disfavoredOverload public func navigationTitle<S: StringProtocol>(_ title: S) -> some View {
         _modified(_TitleModifier(title: String(title)))
     }
     public func alert<A: View>(_ titleKey: LocalizedStringKey, isPresented: Binding<Bool>, @ViewBuilder actions: () -> A) -> some View { self }
@@ -154,7 +154,7 @@ extension Section where Parent == Text, Footer == EmptyView {
     public init(_ titleKey: LocalizedStringKey, @ViewBuilder content: () -> Content) {
         self.init(content: content, header: { Text(titleKey) }, footer: { EmptyView() })
     }
-    public init<S: StringProtocol>(_ title: S, @ViewBuilder content: () -> Content) {
+    @_disfavoredOverload public init<S: StringProtocol>(_ title: S, @ViewBuilder content: () -> Content) {
         self.init(content: content, header: { Text(title) }, footer: { EmptyView() })
     }
 }

@@ -51,7 +51,7 @@ rm -rf "$OUT/ref"; cp -R "$container/Documents/parity" "$OUT/ref"
 
 # A case that does not compile against the engine is an API gap: stop, rather than run the previous build.
 rm -f "$OUT/ours"
-if ! swiftc -parse-as-library -module-name Ours -Onone "$ENGINE"/*.swift "$HERE/Cases.swift" "$HERE/GlassCases.swift" "$HERE/ChromeCases.swift" "$HERE/GlassModel.swift" "$HERE/Ours.swift" -o "$OUT/ours" 2> "$OUT/ours-build.log"; then
+if ! swiftc -parse-as-library -module-name Ours -O "$ENGINE"/*.swift "$HERE/Cases.swift" "$HERE/GlassCases.swift" "$HERE/ChromeCases.swift" "$HERE/GlassModel.swift" "$HERE/Ours.swift" -o "$OUT/ours" 2> "$OUT/ours-build.log"; then
     grep -E 'error:' "$OUT/ours-build.log" >&2
     echo "Cases.swift does not compile against the engine (API gap): see above" >&2
     exit 1

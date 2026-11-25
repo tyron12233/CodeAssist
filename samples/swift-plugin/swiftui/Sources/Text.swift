@@ -83,7 +83,7 @@ public struct Text: Equatable, Sendable {
     var textCase: Text.Case? = nil
 
     public init(verbatim content: String) { spans = [_Span(text: content)] }
-    public init<S: StringProtocol>(_ content: S) { spans = [_Span(text: String(content))] }
+    @_disfavoredOverload public init<S: StringProtocol>(_ content: S) { spans = [_Span(text: String(content))] }
     public init(_ key: LocalizedStringKey, tableName: String? = nil, bundle: Bundle? = nil, comment: StaticString? = nil) {
         spans = key.spans
     }

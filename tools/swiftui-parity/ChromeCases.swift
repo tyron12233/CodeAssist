@@ -109,6 +109,14 @@ func chromeCases() -> [(String, AnyView)] {
                 Text("Half sheet")
                     .presentationDetents([.medium])
             })),
+        ("text-inline-symbols", AnyView(VStack(alignment: .leading, spacing: 16) {
+            Text("\(Image(systemName: "star.fill")) Favorites")
+            Text("Battery \(Image(systemName: "battery.100")) full").font(.title)
+            Text(Image(systemName: "heart.fill")) + Text(" Loved by \(Image(systemName: "person.2.fill")) friends")
+            Text("Tap \(Image(systemName: "plus.circle")) to add a row, or \(Image(systemName: "trash")) to remove one, then wrap onto the next line.")
+                .font(.callout).foregroundStyle(.secondary)
+            Label("Inline in a label", systemImage: "info.circle").font(.footnote)
+        }.padding())),
         ("nav-no-title", AnyView(NavigationStack {
             Text("Content")
         })),
