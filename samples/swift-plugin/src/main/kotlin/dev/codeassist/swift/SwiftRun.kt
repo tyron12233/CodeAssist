@@ -87,7 +87,25 @@ internal class RunSwiftTask(
         val generated = pkg.resolve(SwiftPackages.BUILD_DIR).resolve("run").resolve(target).resolve("main.swift")
         Files.createDirectories(generated.parent)
         Files.write(generated, SwiftPackages.runMain(String(Files.readAllBytes(main))).toByteArray())
-        val files = sources.map { if (it == main) generated else it }
+        // Files that use SwiftUI compile against the plugin's SwiftUI; one with #Preview gets the rewrite the preview
+        // pane makes (a #Preview is a macro only Xcode's toolchain defines), in a copy beside the generated main.swift.
+        val texts = sources.associateWith { String(Files.readAllBytes(it)) }
+        val usesSwiftUI = toolchain.hasSwiftUI && texts.values.any { SWIFTUI_IMPORT.containsMatchIn(it) }
+        val copies = HashMap<Path, Path>()
+        copies[generated] = main
+        val files = sources.mapIndexed { index, file ->
+            when {
+                file == main -> generated
+                usesSwiftUI && SwiftPreviewSource.hasPreviews(texts.getValue(file)) -> {
+                    val copy = generated.parent.resolve("previews").resolve(pkg.relativize(file).toString())
+                    Files.createDirectories(copy.parent)
+                    Files.write(copy, SwiftPreviewSource.rewrite(texts.getValue(file), "run$index").text.toByteArray())
+                    copies[copy] = file
+                    copy
+                }
+                else -> file
+            }
+        }
 
         val io: ProgramIo? = console.io
         val lines = LineSplitter(ctx.logger())
@@ -97,10 +115,12 @@ internal class RunSwiftTask(
         // as the Project view shows it.
         val packagePrefix = pkg.toString().trimEnd('/') + "/"
         val write: (String) -> Unit = { text ->
-            rawWrite(text.replace(generated.toString(), main.toString()).replace(packagePrefix, ""))
+            var out = text
+            for ((copy, original) in copies) out = out.replace(copy.toString(), original.toString())
+            rawWrite(out.replace(packagePrefix, ""))
         }
 
-        val command = toolchain.interpretCommand(files, SwiftPackages.moduleName(target))
+        val command = toolchain.interpretCommand(files, SwiftPackages.moduleName(target), withSwiftUI = usesSwiftUI)
         val code = killableTool { cancellation ->
             toolchain.withCompilerLock {
                 val process = ProcessBuilder(command)
@@ -152,3 +172,6 @@ internal class RunSwiftTask(
         }, "swift-run-stdin").apply { isDaemon = true }.start()
     }
 }
+
+/** `import SwiftUI` (also `@preconcurrency import SwiftUI`, `import struct SwiftUI.Color`) at the start of a line. */
+private val SWIFTUI_IMPORT = Regex("""(?m)^\s*(?:@\w+\s+)*import\s+(?:\w+\s+)?SwiftUI\b""")
