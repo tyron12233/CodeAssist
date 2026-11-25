@@ -17,7 +17,7 @@ final class ParityApp: UIResponder, UIApplicationDelegate {
         try? FileManager.default.removeItem(at: out)
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         let only = ProcessInfo.processInfo.environment["PARITY_CASE"]
-        let cases = (parityCases() + glassCases() + glassMapCases() + chromeCases() + darkCases()).filter { only == nil || $0.0 == only }
+        let cases = (parityCases() + glassCases() + glassMapCases() + chromeCases() + darkCases() + apiCases()).filter { only == nil || $0.0 == only }
         capture(cases[...], window: window, into: out)
         return true
     }

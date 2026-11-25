@@ -5,6 +5,8 @@ import Foundation
 
 final class _DisplayList {
     private(set) var ops: [String] = []
+    /// Ops another list recorded (a subtree drawn on its own first), in order.
+    func append(_ more: [String]) { ops += more }
     private var depth = 0
 
     // MARK: Writing

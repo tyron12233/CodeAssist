@@ -142,7 +142,13 @@ extension ForEach: View, _PrimitiveView where Content: View {
 
     func _resolve(_ ctx: _ResolveContext) -> [_Node] {
         // Each element's identity is its id, so its state follows it when the collection is reordered.
-        data.flatMap { element in _resolveView(content(element), ctx.child("id:\(id(element))")) }
+        // An element's id is also its tag unless it has one: what a Picker or TabView over a ForEach selects by.
+        data.flatMap { element -> [_Node] in
+            let key = id(element)
+            let nodes = _resolveView(content(element), ctx.child("id:\(key)"))
+            for node in nodes where node.tagValue == nil { node.tagValue = AnyHashable(key) }
+            return nodes
+        }
     }
 }
 

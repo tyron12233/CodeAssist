@@ -221,7 +221,15 @@ extension View {
         _modified(_EnvironmentModifier { $0._foreground = color.map { AnyShapeStyle($0) } })
     }
     public func foregroundStyle<S: ShapeStyle>(_ style: S) -> some View {
-        _modified(_EnvironmentModifier { $0._foreground = AnyShapeStyle(style) })
+        _modified(_EnvironmentModifier { env in
+            // A hierarchical style (.secondary) is relative to the foreground it replaces: resolved against that one
+            // here, or it would read itself back when drawn.
+            if let level = style as? HierarchicalShapeStyle {
+                env._foreground = AnyShapeStyle(level._resolvedColor(env))
+            } else {
+                env._foreground = AnyShapeStyle(style)
+            }
+        })
     }
     public func foregroundStyle<S1: ShapeStyle, S2: ShapeStyle>(_ primary: S1, _ secondary: S2) -> some View {
         _modified(_EnvironmentModifier { $0._foreground = AnyShapeStyle(primary) })
