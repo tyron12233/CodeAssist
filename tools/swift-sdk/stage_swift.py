@@ -7,6 +7,8 @@ bionic, with the runtime and Foundation for Android beside it. This script takes
 
   out/<abi>/jniLibs/<abi>/  everything that is EXECUTED or mapped as code, flat, under lib*.so names:
     libswiftfrontend.so       bin/swift-frontend, the compiler, which also runs a program (-interpret, LLVM's JIT)
+    libsourcekitlsp.so        bin/sourcekit-lsp, the language server (completion, diagnostics), with sourcekitd
+                              (libsourcekitdInProc.so, a second copy of the compiler) and its plugins
     lib*.so                   every shared library the compiler, the Swift runtime and Foundation load
   out/<abi>/assets/swift/   what is only READ, in the layout the compiler expects under its -sdk root:
     usr/lib/swift/            the resource directory: the standard library's and Foundation's modules, the shims,
@@ -345,18 +347,22 @@ def main():
     runtime = sorted(f for f in os.listdir(runtime_dir) if f.endswith(".so") and f not in SKIP_RUNTIME)
     frontend = os.path.join(root, "bin/swift-frontend")
     index["swift-frontend"] = os.path.realpath(frontend)
+    index["sourcekit-lsp"] = os.path.realpath(os.path.join(root, "bin/sourcekit-lsp"))
+    # The language server and what it loads by path rather than by NEEDED: sourcekitd and its completion plugins.
+    language = ["sourcekit-lsp", "libsourcekitdInProc.so", "libSwiftSourceKitPlugin.so", "libSwiftSourceKitClientPlugin.so"]
     # Libraries behind headers the Android module map offers (glob, System V IPC): a program using one loads it.
     # Not libiconv.so: it is LGPL, and bionic has iconv itself from API 28; its header stays for the module map.
     extras = ["libandroid-glob.so", "libandroid-sysv-semaphore.so", "libandroid-shmem.so"]
-    libs, dropped = closure(["swift-frontend"] + runtime + extras, index)
-    if "swift-frontend" in dropped:
-        die(f"the compiler needs libraries no staged package has: {dropped['swift-frontend']}")
+    libs, dropped = closure(["swift-frontend"] + language + runtime + extras, index)
+    for tool in ["swift-frontend"] + language:
+        if tool in dropped:
+            die(f"{tool} needs libraries no staged package has: {dropped[tool]}")
     for name, missing in sorted(dropped.items()):
         print(f"  left out {name}: needs {', '.join(missing)}")
 
     total = 0
     for name, path in sorted(libs.items()):
-        dest_name = "libswiftfrontend.so" if name == "swift-frontend" else RENAMES.get(name, name)
+        dest_name = {"swift-frontend": "libswiftfrontend.so", "sourcekit-lsp": "libsourcekitlsp.so"}.get(name, RENAMES.get(name, name))
         if not (dest_name.startswith("lib") and dest_name.endswith(".so")):
             die(f"{name} would not survive APK packaging (only lib*.so is extracted)")
         elf = Elf(path)
@@ -371,7 +377,7 @@ def main():
         os.chmod(dest, 0o755)
         total += os.path.getsize(dest)
         left = [n for n in Elf(dest).needed() if n not in SYSTEM_LIBS and n not in
-                {RENAMES.get(k, k) for k in libs} and n != "libswiftfrontend.so"]
+                {RENAMES.get(k, k) for k in libs} and n not in ("libswiftfrontend.so", "libsourcekitlsp.so")]
         if left:
             die(f"{dest_name} still needs {left}")
     print(f"  {len(libs)} libraries, {total / 1e6:.0f} MB")

@@ -57,3 +57,6 @@ x86_64 libiconv 1.19.1 pool/main/libi/libiconv/libiconv_1.19.1_x86_64.deb 3eb0c4
 x86_64 libandroid-sysv-semaphore 0.1-1 pool/main/liba/libandroid-sysv-semaphore/libandroid-sysv-semaphore_0.1-1_x86_64.deb bb13235269380e93d07dc350bdcd9cbd0e0634c46a6085764c8101e2c1ecb723
 x86_64 libandroid-shmem 0.7 pool/main/liba/libandroid-shmem/libandroid-shmem_0.7_x86_64.deb ffa9e4c87467b158b148d0ff92dda796aa038276c2075af3269cdcdb06f25797
 x86_64 zlib 1.4 pool/main/z/zlib/zlib_1.4_x86_64.deb 55ab8f16e492d6ed03c2e2bf701af52cf54a313442dd7adedd3d6f3e3eba2e4f
+aarch64 sourcekit-lsp 6.4.3 pool/main/s/sourcekit-lsp/sourcekit-lsp_6.4.3_aarch64.deb 88640193e7c4ee41b7c8de34c18b50ad36f7d5f60abbe2f5fd26665191f89b14
+arm sourcekit-lsp 6.4.3 pool/main/s/sourcekit-lsp/sourcekit-lsp_6.4.3_arm.deb 7c85f14991d77313484bd3882cb69e3f409eb64236fab094f40987c3ad01e3d0
+x86_64 sourcekit-lsp 6.4.3 pool/main/s/sourcekit-lsp/sourcekit-lsp_6.4.3_x86_64.deb a534e65a5b8c062797e2f2c1b0fdb651b5b896cde0c9db381214beef6ecd9ed8
