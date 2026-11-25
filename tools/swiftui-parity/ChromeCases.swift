@@ -143,5 +143,51 @@ func chromeCases() -> [(String, AnyView)] {
             }
             Tab("Archive", systemImage: "archivebox") { Text("Archive") }
         })),
+        ("nav-push-value", AnyView(NavigationStack(path: .constant([1])) {
+            List {
+                NavigationLink("One", value: 1)
+            }
+            .navigationTitle("Numbers")
+            .navigationDestination(for: Int.self) { n in
+                Text("Number \(n)").navigationTitle("Detail")
+            }
+        })),
+        ("nav-push-inline", AnyView(NavigationStack(path: .constant([1])) {
+            Text("Root")
+                .navigationTitle("Numbers")
+                .navigationDestination(for: Int.self) { n in
+                    List { Text("Row \(n)") }
+                        .navigationTitle("Detail")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Edit") {} } }
+                }
+        })),
+        ("nav-push-notitle", AnyView(NavigationStack(path: .constant(["a"])) {
+            Text("Root")
+                .navigationTitle("Root")
+                .navigationDestination(for: String.self) { s in Text("Pushed \(s)") }
+        })),
+        ("nav-push-presented", AnyView(NavigationStack {
+            Text("Root")
+                .navigationTitle("Root")
+                .navigationDestination(isPresented: .constant(true)) { Text("Shown") }
+        })),
+        ("nav-links-outside-list", AnyView(NavigationStack {
+            VStack(spacing: 20) {
+                NavigationLink("Plain link") { Text("A") }
+                NavigationLink { Text("B") } label: { Label("With icon", systemImage: "star") }
+            }
+            .navigationTitle("Links")
+        })),
+        ("tab-search", AnyView(TabView {
+            Tab("Home", systemImage: "house") { Text("Home") }
+            Tab("Library", systemImage: "books.vertical") { Text("Library") }
+            Tab(role: .search) { Text("Search") }
+        })),
+        ("sheet-two-detents", AnyView(Text("Behind the sheet")
+            .sheet(isPresented: .constant(true)) {
+                Text("Resizable")
+                    .presentationDetents([.medium, .large])
+            })),
     ]
 }

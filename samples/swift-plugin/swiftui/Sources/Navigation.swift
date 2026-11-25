@@ -12,6 +12,11 @@ final class _TitleBox {
     var displayMode: NavigationBarItem.TitleDisplayMode?
     var items: [_BarItemMarker] = []
     var barHidden = false
+    /// navigationDestination(for:) handlers, by the type of value they show.
+    var destinations: [ObjectIdentifier: (AnyHashable, _ResolveContext) -> [_Node]] = [:]
+    /// navigationDestination(isPresented:) / (item:) destinations that are showing: pushed over this page.
+    var presented: [(resolve: (_ResolveContext) -> [_Node], pop: () -> Void)] = []
+    var backHidden = false
 }
 
 extension View {
@@ -24,9 +29,6 @@ extension View {
     public func navigationTitle<S: StringProtocol>(_ title: S) -> some View {
         _modified(_TitleModifier(title: String(title)))
     }
-    public func navigationBarBackButtonHidden(_ hidesBackButton: Bool = true) -> some View { self }
-    public func navigationDestination<D: Hashable, C: View>(for data: D.Type, @ViewBuilder destination: @escaping (D) -> C) -> some View { self }
-    public func navigationDestination<V: View>(isPresented: Binding<Bool>, @ViewBuilder destination: () -> V) -> some View { self }
     public func alert<A: View>(_ titleKey: LocalizedStringKey, isPresented: Binding<Bool>, @ViewBuilder actions: () -> A) -> some View { self }
     public func alert<A: View, M: View>(_ titleKey: LocalizedStringKey, isPresented: Binding<Bool>, @ViewBuilder actions: () -> A, @ViewBuilder message: () -> M) -> some View { self }
     public func confirmationDialog<A: View>(_ titleKey: LocalizedStringKey, isPresented: Binding<Bool>, titleVisibility: Visibility = .automatic, @ViewBuilder actions: () -> A) -> some View { self }
@@ -47,103 +49,10 @@ struct _TitleModifier: _NodeModifier {
 public enum NavigationBarItem {
     public enum TitleDisplayMode: Sendable { case automatic, inline, large }
 }
-public struct NavigationStack<Root: View>: View, _PrimitiveView {
-    let root: Root
-    public init(@ViewBuilder root: () -> Root) { self.root = root() }
-    public init<P>(path: Binding<P>, @ViewBuilder root: () -> Root) { self.root = root() }
-    public var body: Never { _neverBody() }
-
-    func _resolve(_ ctx: _ResolveContext) -> [_Node] {
-        // What the bar shows is only known once the root has resolved: resolve once to find it, then for real knowing
-        // where content goes (below a large title or the inline bar, above a bottom toolbar).
-        let probe = _TitleBox()
-        _ = _resolveView(root, ctx.child("probe").with { $0[_NavigationTitleKey.self] = probe; $0._stackAxis = nil; $0._isProbe = true })
-        let hidden = probe.barHidden
-        let large = !hidden && probe.title != nil && probe.displayMode != .inline
-        let barHeight: CGFloat = hidden ? 0 : large ? _BarMetrics.largeHeight : _BarMetrics.inlineHeight
-        let env = ctx.environment
-        var safe = env._safeRect
-        let barTop = hidden ? 0 : env[_BarTopKey.self]
-        safe.origin.y += barHeight + barTop
-        safe.size.height -= barHeight + barTop
-        if probe.items.contains(where: { $0.placement == .bottom }) {
-            safe.size.height = max(0, min(safe.maxY, env._screenRect.maxY - _BarMetrics.bottomInset) - safe.minY)
-        }
-        let box = _TitleBox()
-        let content = _resolveView(root, ctx.with {
-            $0[_NavigationTitleKey.self] = box
-            $0._stackAxis = nil
-            $0[_UnderLargeTitleKey.self] = large
-            $0._safeRect = safe
-            $0[_BarTopKey.self] = 0
-        })
-        let body = content.count == 1 ? content[0]
-            : _StackNode(path: ctx.path + "/root", env: env, axis: .vertical, alignment: .center, spacing: nil, children: content)
-        var largeTitle: _Node?, inlineTitle: _Node?
-        if !hidden, let title = box.title {
-            if large {
-                let titleCtx = ctx.child("title").with { $0.font = Font(size: 34, weight: .bold); $0._stackAxis = .vertical; $0._foreground = nil }
-                largeTitle = _resolveView(Text(verbatim: title), titleCtx).first
-            } else {
-                let titleCtx = ctx.child("title").with { $0.font = Font(size: 17, weight: .semibold); $0._stackAxis = .vertical; $0._foreground = nil; $0.lineLimit = 1 }
-                inlineTitle = _resolveView(Text(verbatim: title), titleCtx).first
-            }
-        }
-        var leading: [_Node] = [], trailing: [_Node] = [], bottom: [[_Node]] = [[]]
-        if !hidden {
-            for item in box.items {
-                switch item.placement {
-                case .leading: leading += item.nodes
-                case .trailing: trailing += item.nodes
-                case .principal: inlineTitle = item.nodes.first
-                case .bottom:
-                    if item.splits { bottom.append([]) } else { bottom[bottom.count - 1] += item.nodes }
-                }
-            }
-        }
-        bottom = bottom.filter { !$0.isEmpty }
-        return [_NavStackNode(path: ctx.path, env: env, content: body, largeTitle: largeTitle, inlineTitle: inlineTitle,
-                              leading: leading, trailing: trailing, bottomGroups: bottom, barHeight: barHeight)]
-    }
-}
-
 public struct NavigationView<Content: View>: View {
     let content: Content
     public init(@ViewBuilder content: () -> Content) { self.content = content() }
     public var body: some View { NavigationStack { content } }
-}
-
-public struct NavigationLink<Label: View, Destination: View>: View {
-    let label: Label
-    public init(destination: Destination, @ViewBuilder label: () -> Label) { self.label = label() }
-    public init(@ViewBuilder destination: () -> Destination, @ViewBuilder label: () -> Label) { self.label = label() }
-    public var body: some View {
-        HStack {
-            label
-            Spacer()
-            // iOS's disclosure chevron, measured: chevron.right at body size in the tertiary label colour.
-            Image(systemName: "chevron.right").font(.body).foregroundStyle(Color.tertiaryLabel)
-        }
-    }
-}
-
-extension NavigationLink where Label == Text {
-    public init(_ titleKey: LocalizedStringKey, destination: Destination) { self.init(destination: destination) { Text(titleKey) } }
-    public init<S: StringProtocol>(_ title: S, destination: Destination) { self.init(destination: destination) { Text(title) } }
-    public init(_ titleKey: LocalizedStringKey, @ViewBuilder destination: () -> Destination) {
-        self.init(destination: destination) { Text(titleKey) }
-    }
-    public init<S: StringProtocol>(_ title: S, @ViewBuilder destination: () -> Destination) {
-        self.init(destination: destination) { Text(title) }
-    }
-}
-
-extension NavigationLink where Destination == EmptyView {
-    public init<P: Hashable>(value: P?, @ViewBuilder label: () -> Label) { self.label = label() }
-}
-
-extension NavigationLink where Destination == EmptyView, Label == Text {
-    public init<P: Hashable>(_ titleKey: LocalizedStringKey, value: P?) { label = Text(titleKey) }
 }
 
 // MARK: - Lists

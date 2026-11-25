@@ -64,7 +64,7 @@ public struct Tab<Value: Hashable, Content: View>: View, _PrimitiveView {
             label.systemImage = label.systemImage ?? "magnifyingglass"
         }
         return [_TabMarker(path: ctx.path, env: ctx.environment, label: label, value: value.map { AnyHashable($0) },
-                           resolve: { _resolveView(content, ctx.child("content")) })]
+                           isSearch: role == .search, resolve: { _resolveView(content, ctx.child("content")) })]
     }
 }
 
@@ -116,10 +116,12 @@ public struct TabSection<Header: View, Content: View>: View {
 final class _TabMarker: _Node {
     let label: _TabLabel
     let value: AnyHashable?
+    let isSearch: Bool
     let resolve: () -> [_Node]
-    init(path: String, env: EnvironmentValues, label: _TabLabel, value: AnyHashable?, resolve: @escaping () -> [_Node]) {
+    init(path: String, env: EnvironmentValues, label: _TabLabel, value: AnyHashable?, isSearch: Bool, resolve: @escaping () -> [_Node]) {
         self.label = label
         self.value = value
+        self.isSearch = isSearch
         self.resolve = resolve
         super.init(path: path, env: env)
     }
@@ -148,6 +150,7 @@ enum _TabBarMetrics {
 struct _TabEntry {
     let label: _TabLabel
     let value: AnyHashable
+    var isSearch = false
     let nodes: () -> [_Node]
 }
 
@@ -174,7 +177,7 @@ public struct TabView<SelectionValue: Hashable, Content: View>: View, _Primitive
         var entries: [_TabEntry] = []
         for (index, node) in _resolveView(content, inner).enumerated() {
             if let tab = node as? _TabMarker {
-                entries.append(_TabEntry(label: tab.label, value: tab.value ?? AnyHashable(index), nodes: tab.resolve))
+                entries.append(_TabEntry(label: tab.label, value: tab.value ?? AnyHashable(index), isSearch: tab.isSearch, nodes: tab.resolve))
             } else {
                 entries.append(_TabEntry(label: node.tabLabel ?? _TabLabel(), value: node.tagValue ?? AnyHashable(index), nodes: { [node] }))
             }
@@ -218,7 +221,9 @@ public struct TabView<SelectionValue: Hashable, Content: View>: View, _Primitive
             let value = entry.value
             items.append(_TabViewNode.Item(
                 icon: entry.label.systemImage.flatMap { _resolveView(Image(systemName: $0), iconCtx).first },
-                title: entry.label.title.flatMap { _resolveView(Text(verbatim: $0), titleCtx).first },
+                // The search tab is its own glass circle, icon only.
+                title: entry.isSearch ? nil : entry.label.title.flatMap { _resolveView(Text(verbatim: $0), titleCtx).first },
+                isSearch: entry.isSearch,
                 action: { select(value) }))
         }
         let node = _TabViewNode(path: ctx.path, env: env, content: content, contentSafe: safe, items: items, selected: selectedIndex)
@@ -232,6 +237,7 @@ final class _TabViewNode: _Node {
     struct Item {
         let icon: _Node?
         let title: _Node?
+        let isSearch: Bool
         let action: () -> Void
     }
     let content: _Node?
@@ -240,6 +246,9 @@ final class _TabViewNode: _Node {
     let selected: Int
     private var platter: CGRect = .zero
     private var buttons: [CGRect] = []
+    private var searchCircle: CGRect?
+    private var tabs: [Item] { items.filter { !$0.isSearch } }
+    private var selectedTab: Int? { items.indices.contains(selected) && !items[selected].isSearch ? items[..<selected].filter { !$0.isSearch }.count : nil }
 
     init(path: String, env: EnvironmentValues, content: _Node?, contentSafe: CGRect, items: [Item], selected: Int) {
         self.content = content
@@ -260,17 +269,31 @@ final class _TabViewNode: _Node {
         }
         typealias M = _TabBarMetrics
         let screen = env._screenRect
+        // A search tab, measured: a 62 circle of glass at the trailing edge (21 in), its icon centred; the other tabs'
+        // bar then starts at the leading edge (21 in) instead of being centred.
+        searchCircle = nil
+        if let search = items.first(where: \.isSearch) {
+            let circle = CGRect(x: screen.maxX - 21 - M.platterHeight, y: screen.maxY - M.platterBottom - M.platterHeight,
+                                width: M.platterHeight, height: M.platterHeight)
+            searchCircle = circle
+            if let icon = search.icon {
+                let size = icon.sizeThatFits(.unspecified)
+                icon.place(CGRect(x: circle.midX - size.width / 2, y: circle.midY - size.height / 2, width: size.width, height: size.height))
+            }
+        }
+        let items = tabs
         let n = items.count
         guard n > 0 else { return }
         let minimum = M.minimumButtonWidth(n)
         let widths = items.map { max(minimum, ($0.title?.sizeThatFits(.unspecified).width ?? 0) + 31) }
         let total = widths.reduce(0, +)
-        let room = M.maxPlatterWidth - 2 * M.padding
+        let room = (searchCircle == nil ? M.maxPlatterWidth : M.maxPlatterWidth - M.platterHeight - 8) - 2 * M.padding
         var overlap: CGFloat = 8
         if n > 1, total - overlap * CGFloat(n - 1) > room { overlap = (total - room) / CGFloat(n - 1) }
         let inner = total - (n > 1 ? overlap * CGFloat(n - 1) : 0)
         let width = inner + 2 * M.padding
-        platter = CGRect(x: screen.midX - width / 2, y: screen.maxY - M.platterBottom - M.platterHeight, width: width, height: M.platterHeight)
+        platter = CGRect(x: searchCircle == nil ? screen.midX - width / 2 : screen.minX + 21, y: screen.maxY - M.platterBottom - M.platterHeight,
+                         width: width, height: M.platterHeight)
         buttons = []
         var x = platter.minX + M.padding
         for (index, item) in items.enumerated() {
@@ -290,12 +313,19 @@ final class _TabViewNode: _Node {
 
     override func emit(_ list: _DisplayList) {
         content?.emit(list)
-        guard !items.isEmpty else { return }
-        list.glass(Capsule().path(in: platter), bounds: platter, variant: "regular", tint: nil, dark: env.colorScheme == .dark)
-        if buttons.indices.contains(selected) {
+        let dark = env.colorScheme == .dark
+        if let circle = searchCircle, let search = items.first(where: \.isSearch) {
+            list.glass(Circle().path(in: circle), bounds: circle, variant: "regular", tint: nil, dark: dark)
+            search.icon?.emit(list)
+            list.hit(circle, action: _Graph.shared.register(search.action))
+        }
+        let tabs = self.tabs
+        guard !tabs.isEmpty else { return }
+        list.glass(Capsule().path(in: platter), bounds: platter, variant: "regular", tint: nil, dark: dark)
+        if let selected = selectedTab, buttons.indices.contains(selected) {
             list.shape(Capsule().path(in: buttons[selected]), style: AnyShapeStyle(_Chrome.tabSelection), stroke: nil, env: env)
         }
-        for (index, item) in items.enumerated() {
+        for (index, item) in tabs.enumerated() {
             item.icon?.emit(list)
             item.title?.emit(list)
             list.hit(buttons[index], action: _Graph.shared.register(item.action))
@@ -520,17 +550,19 @@ final class _NavStackNode: _Node {
     let content: _Node
     let largeTitle: _Node?
     let inlineTitle: _Node?
+    let back: _Node?
     let leading: [_Node]
     let trailing: [_Node]
     let bottomGroups: [[_Node]]
     let barHeight: CGFloat
     private var platters: [CGRect] = []
 
-    init(path: String, env: EnvironmentValues, content: _Node, largeTitle: _Node?, inlineTitle: _Node?, leading: [_Node],
+    init(path: String, env: EnvironmentValues, content: _Node, largeTitle: _Node?, inlineTitle: _Node?, back: _Node?, leading: [_Node],
          trailing: [_Node], bottomGroups: [[_Node]], barHeight: CGFloat) {
         self.content = content
         self.largeTitle = largeTitle
         self.inlineTitle = inlineTitle
+        self.back = back
         self.leading = leading
         self.trailing = trailing
         self.bottomGroups = bottomGroups
@@ -584,8 +616,16 @@ final class _NavStackNode: _Node {
             largeTitle.place(CGRect(x: rect.minX + M.edge, y: rect.minY + 58, width: size.width, height: size.height))
         }
         if let inlineTitle { place(inlineTitle, centeredAt: CGPoint(x: rect.midX, y: rect.minY + M.platterHeight / 2)) }
+        var leadingX = rect.minX + M.edge
+        if let back {
+            // The back button: chevron.left centred in a 44 circle (measured 0.17 left of centre).
+            let circle = CGRect(x: leadingX, y: rect.minY, width: M.platterHeight, height: M.platterHeight)
+            platters.append(circle)
+            place(back, centeredAt: CGPoint(x: circle.midX - 1.0 / 6, y: circle.midY))
+            leadingX = circle.maxX + 8
+        }
         if !leading.isEmpty {
-            platters.append(placePlatter(leading, x: rect.minX + M.edge, alignTrailing: false, y: rect.minY, height: M.platterHeight))
+            platters.append(placePlatter(leading, x: leadingX, alignTrailing: false, y: rect.minY, height: M.platterHeight))
         }
         if !trailing.isEmpty {
             platters.append(placePlatter(trailing, x: rect.maxX - M.edge, alignTrailing: true, y: rect.minY, height: M.platterHeight))
@@ -614,6 +654,7 @@ final class _NavStackNode: _Node {
         for platter in platters {
             list.glass(Capsule().path(in: platter), bounds: platter, variant: "regular", tint: nil, dark: env.colorScheme == .dark)
         }
+        back?.emit(list)
         for item in leading + trailing + bottomGroups.flatMap({ $0 }) { item.emit(list) }
     }
 }
@@ -636,7 +677,10 @@ final class _PresentationRequest {
 }
 
 /// Where a sheet's content reports what it declares about the sheet (detents).
-final class _SheetBox { var detents: Set<PresentationDetent>? }
+final class _SheetBox {
+    var detents: Set<PresentationDetent>?
+    var dragIndicator: Visibility?
+}
 struct _SheetBoxKey: EnvironmentKey { static let defaultValue: _SheetBox? = nil }
 
 struct _PresentModifier: _NodeModifier {
@@ -690,7 +734,9 @@ extension View {
     public func presentationDetents(_ detents: Set<PresentationDetent>, selection: Binding<PresentationDetent>) -> some View {
         _modified(_SheetBoxModifier { $0.detents = [selection.wrappedValue] })
     }
-    public func presentationDragIndicator(_ visibility: Visibility) -> some View { self }
+    public func presentationDragIndicator(_ visibility: Visibility) -> some View {
+        _modified(_SheetBoxModifier { $0.dragIndicator = visibility })
+    }
     public func presentationCornerRadius(_ cornerRadius: CGFloat?) -> some View { self }
     public func presentationBackground<S: ShapeStyle>(_ style: S) -> some View { self }
     public func presentationBackgroundInteraction(_ interaction: PresentationBackgroundInteraction) -> some View { self }
@@ -792,4 +838,10 @@ func _present(_ request: _PresentationRequest, index: Int, list: _DisplayList) {
     list.hit(sheet, action: graph.register {})
     node.place(_align(node, node.sizeThatFits(ProposedViewSize(contentRect.size)), in: contentRect, .center))
     node.emit(list)
+    // The grabber, shown when the sheet can change size (or asked for): a capsule 34.67 x 5, 5 below the top.
+    let showsGrabber = probe.dragIndicator.map { $0 == .visible } ?? (detents.count > 1)
+    if showsGrabber {
+        let grabber = CGRect(x: sheet.midX - 17 - 1.0 / 3, y: sheet.minY + 5, width: 34 + 2.0 / 3, height: 5)
+        list.shape(Capsule().path(in: grabber), style: AnyShapeStyle(Color(light: _RGBA(hex: 0xAFAFB2), dark: _RGBA(hex: 0x5B5B60))), stroke: nil, env: env)
+    }
 }
