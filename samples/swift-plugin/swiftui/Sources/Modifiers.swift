@@ -124,7 +124,10 @@ extension View {
     public func transition(_ t: AnyTransition) -> some View { self }
     public func zIndex(_ value: Double) -> some View { self }
     public func id<ID: Hashable>(_ id: ID) -> some View { self }
-    public func tag<V: Hashable>(_ tag: V) -> some View { self }
+    public func tag<V: Hashable>(_ tag: V) -> some View {
+        _modified(_WrapModifier { node, _ in node.tagValue = AnyHashable(tag); return node })
+    }
+    public func tag<V: Hashable>(_ tag: V, includeOptional: Bool) -> some View { self.tag(tag) }
     public func accessibilityLabel(_ label: Text) -> some View { self }
     public func accessibilityLabel(_ label: String) -> some View { self }
     public func accessibilityHint(_ hint: Text) -> some View { self }
@@ -152,9 +155,13 @@ extension View {
     public func textFieldStyle<S: TextFieldStyle>(_ style: S) -> some View { self }
     public func toggleStyle<S: ToggleStyle>(_ style: S) -> some View { self }
     public func pickerStyle<S: PickerStyle>(_ style: S) -> some View { self }
-    public func labelStyle<S: LabelStyle>(_ style: S) -> some View { self }
+    public func labelStyle<S: LabelStyle>(_ style: S) -> some View {
+        let kind: _LabelStyleKind = style is IconOnlyLabelStyle ? .iconOnly : style is TitleOnlyLabelStyle ? .titleOnly
+            : style is TitleAndIconLabelStyle ? .titleAndIcon : .automatic
+        return _modified(_EnvironmentModifier { $0._labelStyle = kind })
+    }
     public func symbolRenderingMode(_ mode: SymbolRenderingMode?) -> some View { self }
-    public func symbolVariant(_ variant: SymbolVariants) -> some View { self }
+    public func symbolVariant(_ variant: SymbolVariants) -> some View { _modified(_EnvironmentModifier { $0.symbolVariants = variant }) }
     public func imageScale(_ scale: Image.Scale) -> some View { environment(\.imageScale, scale) }
     public func badge(_ count: Int) -> some View { self }
     public func badge(_ label: Text?) -> some View { self }
@@ -231,9 +238,18 @@ public struct SubmitTriggers: OptionSet, Sendable {
     public static let search = SubmitTriggers(rawValue: 2)
 }
 public enum SymbolRenderingMode: Sendable { case monochrome, multicolor, hierarchical, palette }
+/// A symbol variant is the suffix it adds to a symbol's name (`star` + `.fill`), as SF Symbols names its variants.
 public struct SymbolVariants: Hashable, Sendable {
-    public static let none = SymbolVariants(), circle = SymbolVariants(), square = SymbolVariants()
-    public static let rectangle = SymbolVariants(), fill = SymbolVariants(), slash = SymbolVariants()
+    let suffixes: [String]
+    public static let none = SymbolVariants(suffixes: [])
+    public static let circle = SymbolVariants(suffixes: [".circle"]), square = SymbolVariants(suffixes: [".square"])
+    public static let rectangle = SymbolVariants(suffixes: [".rectangle"]), fill = SymbolVariants(suffixes: [".fill"])
+    public static let slash = SymbolVariants(suffixes: [".slash"])
+    public var circle: SymbolVariants { SymbolVariants(suffixes: suffixes + [".circle"]) }
+    public var square: SymbolVariants { SymbolVariants(suffixes: suffixes + [".square"]) }
+    public var fill: SymbolVariants { SymbolVariants(suffixes: suffixes + [".fill"]) }
+    public var slash: SymbolVariants { SymbolVariants(suffixes: suffixes + [".slash"]) }
+    public func contains(_ other: SymbolVariants) -> Bool { other.suffixes.allSatisfy(suffixes.contains) }
 }
 
 @propertyWrapper
@@ -266,8 +282,8 @@ final class _IgnoresSafeAreaNode: _WrapperNode {
     }
     override func place(_ rect: CGRect) {
         var r = rect
-        let safe = _Device.safeRect
-        let device = CGRect(origin: .zero, size: _Device.size)
+        let safe = env._safeRect
+        let device = env._screenRect
         // An edge at or past the safe area's goes out to the screen's (content taller than the safe area, centred in
         // it, reaches past both).
         if edges.contains(.top), r.minY <= safe.minY + 0.5 { r.size.height += r.minY - device.minY; r.origin.y = device.minY }

@@ -490,7 +490,7 @@ struct Ours {
         _Graph.shared.measurer = CoreTextMeasurer()
         Painter.glassParams = GlassParams.load(URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("glass-params.json").path)
         var total = 0.0, count = 0
-        for (name, view) in (parityCases() + glassCases()) where only == nil || name == only {
+        for (name, view) in (parityCases() + glassCases() + chromeCases()) where only == nil || name == only {
             let preview = _Preview(name) { view }
             _Graph.shared.beginRender()
             let json = _render(preview, index: 0, scheme: .light)

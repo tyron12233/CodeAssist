@@ -20,6 +20,8 @@ final class _Graph {
 
     var actions: [Int: () -> Void] = [:]
     var setters: [Int: (String) -> Void] = [:]
+    /// Sheets and covers the preview being rendered presents, in the order they were found.
+    var presentations: [_PresentationRequest] = []
     private var nextAction = 0
 
     func beginRender() {

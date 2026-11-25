@@ -296,6 +296,7 @@ public struct UnevenRoundedRectangle: Shape {
     }
     public func path(in rect: CGRect) -> Path {
         let c = cornerRadii
+        if style == .continuous { return _continuousPath(rect, c) }
         var p = Path()
         p.move(to: CGPoint(x: rect.minX + c.topLeading, y: rect.minY))
         p.addLine(to: CGPoint(x: rect.maxX - c.topTrailing, y: rect.minY))
@@ -376,4 +377,38 @@ extension Shape where Self == RoundedRectangle {
     public static func rect(cornerRadius: CGFloat, style: RoundedCornerStyle = .continuous) -> RoundedRectangle {
         RoundedRectangle(cornerRadius: cornerRadius, style: style)
     }
+}
+
+/// A rectangle with iOS's continuous ("squircle") corners, each of its own radius: the curve UIBezierPath draws for
+/// roundedRect:cornerRadius:, which reaches 1.528 radii along each edge.
+func _continuousPath(_ r: CGRect, _ radii: RectangleCornerRadii) -> Path {
+    let limit = min(r.width, r.height) / 2 / 1.52866483
+    let tl = min(radii.topLeading, limit), tr = min(radii.topTrailing, limit)
+    let br = min(radii.bottomTrailing, limit), bl = min(radii.bottomLeading, limit)
+    func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: y) }
+    let (minX, minY, maxX, maxY) = (r.minX, r.minY, r.maxX, r.maxY)
+    var p = Path()
+    p.move(to: pt(minX + 1.52866483 * tl, minY))
+    var c = tr
+    p.addLine(to: pt(maxX - 1.52866483 * c, minY))
+    p.addCurve(to: pt(maxX - 0.63149399 * c, minY + 0.07491100 * c), control1: pt(maxX - 1.08849299 * c, minY), control2: pt(maxX - 0.86840701 * c, minY))
+    p.addCurve(to: pt(maxX - 0.07491100 * c, minY + 0.63149399 * c), control1: pt(maxX - 0.37282401 * c, minY + 0.16905900 * c), control2: pt(maxX - 0.16905900 * c, minY + 0.37282401 * c))
+    p.addCurve(to: pt(maxX, minY + 1.52866483 * c), control1: pt(maxX, minY + 0.86840701 * c), control2: pt(maxX, minY + 1.08849299 * c))
+    c = br
+    p.addLine(to: pt(maxX, maxY - 1.52866483 * c))
+    p.addCurve(to: pt(maxX - 0.07491100 * c, maxY - 0.63149399 * c), control1: pt(maxX, maxY - 1.08849299 * c), control2: pt(maxX, maxY - 0.86840701 * c))
+    p.addCurve(to: pt(maxX - 0.63149399 * c, maxY - 0.07491100 * c), control1: pt(maxX - 0.16905900 * c, maxY - 0.37282401 * c), control2: pt(maxX - 0.37282401 * c, maxY - 0.16905900 * c))
+    p.addCurve(to: pt(maxX - 1.52866483 * c, maxY), control1: pt(maxX - 0.86840701 * c, maxY), control2: pt(maxX - 1.08849299 * c, maxY))
+    c = bl
+    p.addLine(to: pt(minX + 1.52866483 * c, maxY))
+    p.addCurve(to: pt(minX + 0.63149399 * c, maxY - 0.07491100 * c), control1: pt(minX + 1.08849299 * c, maxY), control2: pt(minX + 0.86840701 * c, maxY))
+    p.addCurve(to: pt(minX + 0.07491100 * c, maxY - 0.63149399 * c), control1: pt(minX + 0.37282401 * c, maxY - 0.16905900 * c), control2: pt(minX + 0.16905900 * c, maxY - 0.37282401 * c))
+    p.addCurve(to: pt(minX, maxY - 1.52866483 * c), control1: pt(minX, maxY - 0.86840701 * c), control2: pt(minX, maxY - 1.08849299 * c))
+    c = tl
+    p.addLine(to: pt(minX, minY + 1.52866483 * c))
+    p.addCurve(to: pt(minX + 0.07491100 * c, minY + 0.63149399 * c), control1: pt(minX, minY + 1.08849299 * c), control2: pt(minX, minY + 0.86840701 * c))
+    p.addCurve(to: pt(minX + 0.63149399 * c, minY + 0.07491100 * c), control1: pt(minX + 0.16905900 * c, minY + 0.37282401 * c), control2: pt(minX + 0.37282401 * c, minY + 0.16905900 * c))
+    p.addCurve(to: pt(minX + 1.52866483 * c, minY), control1: pt(minX + 0.86840701 * c, minY), control2: pt(minX + 1.08849299 * c, minY))
+    p.closeSubpath()
+    return p
 }

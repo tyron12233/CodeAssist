@@ -5,8 +5,14 @@ import Foundation
 
 struct _NavigationTitleKey: EnvironmentKey { static let defaultValue: _TitleBox? = nil }
 
-/// Where a navigationTitle inside a NavigationStack reports its title, during resolution.
-final class _TitleBox { var title: String? }
+/// Where the views inside a NavigationStack report what its bar shows, during resolution: the title, how it is
+/// displayed, toolbar items.
+final class _TitleBox {
+    var title: String?
+    var displayMode: NavigationBarItem.TitleDisplayMode?
+    var items: [_BarItemMarker] = []
+    var barHidden = false
+}
 
 extension View {
     public func navigationTitle(_ title: Text) -> some View {
@@ -18,20 +24,12 @@ extension View {
     public func navigationTitle<S: StringProtocol>(_ title: S) -> some View {
         _modified(_TitleModifier(title: String(title)))
     }
-    public func navigationBarTitleDisplayMode(_ displayMode: NavigationBarItem.TitleDisplayMode) -> some View { self }
     public func navigationBarBackButtonHidden(_ hidesBackButton: Bool = true) -> some View { self }
     public func navigationDestination<D: Hashable, C: View>(for data: D.Type, @ViewBuilder destination: @escaping (D) -> C) -> some View { self }
     public func navigationDestination<V: View>(isPresented: Binding<Bool>, @ViewBuilder destination: () -> V) -> some View { self }
-    public func toolbar<Content: View>(@ViewBuilder content: () -> Content) -> some View { self }
-    public func toolbar(_ visibility: Visibility, for bars: ToolbarPlacement...) -> some View { self }
-    public func toolbarBackground(_ visibility: Visibility, for bars: ToolbarPlacement...) -> some View { self }
-    public func sheet<Content: View>(isPresented: Binding<Bool>, onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> Content) -> some View { self }
-    public func sheet<Item: Identifiable, Content: View>(item: Binding<Item?>, onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping (Item) -> Content) -> some View { self }
-    public func fullScreenCover<Content: View>(isPresented: Binding<Bool>, onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> Content) -> some View { self }
     public func alert<A: View>(_ titleKey: LocalizedStringKey, isPresented: Binding<Bool>, @ViewBuilder actions: () -> A) -> some View { self }
     public func alert<A: View, M: View>(_ titleKey: LocalizedStringKey, isPresented: Binding<Bool>, @ViewBuilder actions: () -> A, @ViewBuilder message: () -> M) -> some View { self }
     public func confirmationDialog<A: View>(_ titleKey: LocalizedStringKey, isPresented: Binding<Bool>, titleVisibility: Visibility = .automatic, @ViewBuilder actions: () -> A) -> some View { self }
-    public func presentationDetents(_ detents: Set<PresentationDetent>) -> some View { self }
     public func listStyle<S: ListStyle>(_ style: S) -> some View {
         let kind: _ListStyleKind = style is PlainListStyle ? .plain : style is GroupedListStyle ? .grouped : .insetGrouped
         return _modified(_EnvironmentModifier { $0._listStyle = kind })
@@ -49,32 +47,6 @@ struct _TitleModifier: _NodeModifier {
 public enum NavigationBarItem {
     public enum TitleDisplayMode: Sendable { case automatic, inline, large }
 }
-public struct ToolbarPlacement: Sendable {
-    public static let navigationBar = ToolbarPlacement(), tabBar = ToolbarPlacement(), bottomBar = ToolbarPlacement(), automatic = ToolbarPlacement()
-}
-public struct ToolbarItemPlacement: Sendable {
-    public static let automatic = ToolbarItemPlacement(), principal = ToolbarItemPlacement(), primaryAction = ToolbarItemPlacement()
-    public static let topBarLeading = ToolbarItemPlacement(), topBarTrailing = ToolbarItemPlacement(), bottomBar = ToolbarItemPlacement()
-    public static let navigationBarLeading = ToolbarItemPlacement(), navigationBarTrailing = ToolbarItemPlacement()
-    public static let confirmationAction = ToolbarItemPlacement(), cancellationAction = ToolbarItemPlacement()
-}
-public struct ToolbarItem<ID, Content: View>: View {
-    let content: Content
-    public init(placement: ToolbarItemPlacement = .automatic, @ViewBuilder content: () -> Content) where ID == () { self.content = content() }
-    public var body: some View { content }
-}
-public struct ToolbarItemGroup<Content: View>: View {
-    let content: Content
-    public init(placement: ToolbarItemPlacement = .automatic, @ViewBuilder content: () -> Content) { self.content = content() }
-    public var body: some View { content }
-}
-public struct PresentationDetent: Hashable, Sendable {
-    let id: String
-    public static let medium = PresentationDetent(id: "medium"), large = PresentationDetent(id: "large")
-    public static func height(_ height: CGFloat) -> PresentationDetent { PresentationDetent(id: "h\(height)") }
-    public static func fraction(_ fraction: CGFloat) -> PresentationDetent { PresentationDetent(id: "f\(fraction)") }
-}
-
 public struct NavigationStack<Root: View>: View, _PrimitiveView {
     let root: Root
     public init(@ViewBuilder root: () -> Root) { self.root = root() }
@@ -82,34 +54,56 @@ public struct NavigationStack<Root: View>: View, _PrimitiveView {
     public var body: Never { _neverBody() }
 
     func _resolve(_ ctx: _ResolveContext) -> [_Node] {
-        let box = _TitleBox()
+        // What the bar shows is only known once the root has resolved: resolve once to find it, then for real knowing
+        // where content goes (below a large title or the inline bar, above a bottom toolbar).
         let probe = _TitleBox()
-        // The title is only known once the root has resolved; resolve once to find it, then for real knowing whether
-        // content sits under a large title.
-        _ = _resolveView(root, ctx.child("probe").with { $0[_NavigationTitleKey.self] = probe; $0._stackAxis = nil })
-        let large = probe.title != nil
+        _ = _resolveView(root, ctx.child("probe").with { $0[_NavigationTitleKey.self] = probe; $0._stackAxis = nil; $0._isProbe = true })
+        let hidden = probe.barHidden
+        let large = !hidden && probe.title != nil && probe.displayMode != .inline
+        let barHeight: CGFloat = hidden ? 0 : large ? _BarMetrics.largeHeight : _BarMetrics.inlineHeight
+        let env = ctx.environment
+        var safe = env._safeRect
+        let barTop = hidden ? 0 : env[_BarTopKey.self]
+        safe.origin.y += barHeight + barTop
+        safe.size.height -= barHeight + barTop
+        if probe.items.contains(where: { $0.placement == .bottom }) {
+            safe.size.height = max(0, min(safe.maxY, env._screenRect.maxY - _BarMetrics.bottomInset) - safe.minY)
+        }
+        let box = _TitleBox()
         let content = _resolveView(root, ctx.with {
             $0[_NavigationTitleKey.self] = box
             $0._stackAxis = nil
             $0[_UnderLargeTitleKey.self] = large
+            $0._safeRect = safe
+            $0[_BarTopKey.self] = 0
         })
         let body = content.count == 1 ? content[0]
-            : _StackNode(path: ctx.path + "/root", env: ctx.environment, axis: .vertical, alignment: .center, spacing: nil, children: content)
-        // Content fills what is left below the bar, centred, as a navigation stack's root view is.
-        let filled = _FlexFrameNode(child: body, minWidth: nil, idealWidth: nil, maxWidth: .infinity,
-                                    minHeight: nil, idealHeight: nil, maxHeight: .infinity, alignment: .center)
-        guard let title = box.title else { return [filled] }
-        // iOS 26's large-title bar, measured: 106 points below the safe area's top, the title (34 pt bold) at
-        // (16, 58) in it.
-        let titleCtx = ctx.child("title").with { $0.font = Font(size: 34, weight: .bold); $0._stackAxis = .vertical }
-        let titleNodes = _resolveView(Text(title), titleCtx).map {
-            _FixedFrameNode(child: _FlexFrameNode(child: _PaddingNode(child: $0, insets: EdgeInsets(top: 58, leading: 16, bottom: 0, trailing: 16)),
-                                                  minWidth: nil, idealWidth: nil, maxWidth: .infinity, minHeight: nil, idealHeight: nil, maxHeight: nil, alignment: .topLeading),
-                            width: nil, height: 106, alignment: .topLeading)
+            : _StackNode(path: ctx.path + "/root", env: env, axis: .vertical, alignment: .center, spacing: nil, children: content)
+        var largeTitle: _Node?, inlineTitle: _Node?
+        if !hidden, let title = box.title {
+            if large {
+                let titleCtx = ctx.child("title").with { $0.font = Font(size: 34, weight: .bold); $0._stackAxis = .vertical; $0._foreground = nil }
+                largeTitle = _resolveView(Text(verbatim: title), titleCtx).first
+            } else {
+                let titleCtx = ctx.child("title").with { $0.font = Font(size: 17, weight: .semibold); $0._stackAxis = .vertical; $0._foreground = nil; $0.lineLimit = 1 }
+                inlineTitle = _resolveView(Text(verbatim: title), titleCtx).first
+            }
         }
-        let stack = _StackNode(path: ctx.path, env: ctx.environment, axis: .vertical, alignment: .leading, spacing: 0, children: titleNodes + [filled])
-        stack.edgeBackground = body.edgeBackground
-        return [stack]
+        var leading: [_Node] = [], trailing: [_Node] = [], bottom: [[_Node]] = [[]]
+        if !hidden {
+            for item in box.items {
+                switch item.placement {
+                case .leading: leading += item.nodes
+                case .trailing: trailing += item.nodes
+                case .principal: inlineTitle = item.nodes.first
+                case .bottom:
+                    if item.splits { bottom.append([]) } else { bottom[bottom.count - 1] += item.nodes }
+                }
+            }
+        }
+        bottom = bottom.filter { !$0.isEmpty }
+        return [_NavStackNode(path: ctx.path, env: env, content: body, largeTitle: largeTitle, inlineTitle: inlineTitle,
+                              leading: leading, trailing: trailing, bottomGroups: bottom, barHeight: barHeight)]
     }
 }
 
@@ -369,14 +363,3 @@ public struct Form<Content: View>: View {
     public var body: some View { List { content } }
 }
 
-public struct TabView<SelectionValue: Hashable, Content: View>: View {
-    let content: Content
-    public init(@ViewBuilder content: () -> Content) where SelectionValue == Int { self.content = content() }
-    public init(selection: Binding<SelectionValue>?, @ViewBuilder content: () -> Content) { self.content = content() }
-    public var body: some View { content }
-}
-
-extension View {
-    public func tabItem<V: View>(@ViewBuilder _ label: () -> V) -> some View { self }
-    public func tabViewStyle<S>(_ style: S) -> some View { self }
-}

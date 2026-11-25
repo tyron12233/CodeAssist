@@ -3,6 +3,8 @@
 # Cases.swift. Needs Xcode and a booted iPhone Simulator (the canvas is the iPhone 17 Pro's 402x874 points).
 #
 #   ./run.sh            build both sides, capture the reference, compare: prints the share of differing pixels per case
+#   ./run.sh ref        capture the reference only
+#   ./run.sh dump <c>   print the UIKit view tree of one case (frames, fonts, colours)
 #   ./run.sh probe      print real SwiftUI's frames for Probe.swift's calibration views
 #
 # Output in $OUT (default /tmp/parity): ref/<case>.png, out/<case>.png (reference | ours | difference).
@@ -37,14 +39,19 @@ if [[ "${1:-}" == probe ]]; then
     exit 0
 fi
 
-bundle Ref dev.codeassist.parity "$HERE/RefApp.swift" "$HERE/Cases.swift" "$HERE/GlassCases.swift"
+bundle Ref dev.codeassist.parity "$HERE/RefApp.swift" "$HERE/Cases.swift" "$HERE/GlassCases.swift" "$HERE/ChromeCases.swift"
+if [[ "${1:-}" == dump ]]; then # ./run.sh dump <case>: the UIKit view tree of one case
+    SIMCTL_CHILD_PARITY_CASE="$2" SIMCTL_CHILD_PARITY_DUMP=1 xcrun simctl launch --console-pty --terminate-running-process booted dev.codeassist.parity | grep TREE | sed 's/^TREE //'
+    exit 0
+fi
 xcrun simctl launch --console-pty --terminate-running-process booted dev.codeassist.parity | grep -E 'PARITY (CASE|DONE)' | tail -1
 container="$(xcrun simctl get_app_container booted dev.codeassist.parity data)"
 rm -rf "$OUT/ref"; cp -R "$container/Documents/parity" "$OUT/ref"
+[[ "${1:-}" == ref ]] && exit 0
 
 # A case that does not compile against the engine is an API gap: stop, rather than run the previous build.
 rm -f "$OUT/ours"
-if ! swiftc -parse-as-library -module-name Ours -Onone "$ENGINE"/*.swift "$HERE/Cases.swift" "$HERE/GlassCases.swift" "$HERE/GlassModel.swift" "$HERE/Ours.swift" -o "$OUT/ours" 2> "$OUT/ours-build.log"; then
+if ! swiftc -parse-as-library -module-name Ours -Onone "$ENGINE"/*.swift "$HERE/Cases.swift" "$HERE/GlassCases.swift" "$HERE/ChromeCases.swift" "$HERE/GlassModel.swift" "$HERE/Ours.swift" -o "$OUT/ours" 2> "$OUT/ours-build.log"; then
     grep -E 'error:' "$OUT/ours-build.log" >&2
     echo "Cases.swift does not compile against the engine (API gap): see above" >&2
     exit 1

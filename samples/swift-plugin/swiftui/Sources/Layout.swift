@@ -198,6 +198,10 @@ class _Node {
     var edgeBackground: Color?
     /// In a List row: how far past the row's leading edge its separator starts (a Label's title, past its icon column).
     var separatorLeading: CGFloat?
+    /// The value `.tag(_:)` gave this view: what a TabView or Picker selects it by.
+    var tagValue: AnyHashable?
+    /// What `.tabItem { }` shows for this view in a tab bar.
+    var tabLabel: _TabLabel?
     /// Explicit alignment guides set with `.alignmentGuide`, in this node's own coordinates.
     var guides: [ObjectIdentifier: (ViewDimensions) -> CGFloat] = [:]
     private var sizeCache: [ProposedViewSize: CGSize] = [:]
@@ -251,6 +255,8 @@ class _WrapperNode: _Node {
         guides = child.guides
         edgeBackground = child.edgeBackground
         separatorLeading = child.separatorLeading
+        tagValue = child.tagValue
+        tabLabel = child.tabLabel
     }
     override func _sizeThatFits(_ proposal: ProposedViewSize) -> CGSize { child.sizeThatFits(proposal) }
     override func place(_ rect: CGRect) {

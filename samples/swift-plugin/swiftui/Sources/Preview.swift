@@ -107,6 +107,7 @@ func _render(_ preview: _Preview, index: Int, scheme: ColorScheme) -> String {
     var env = EnvironmentValues()
     env.colorScheme = scheme
     let ctx = _ResolveContext(graph: graph, path: "p\(index)", environment: env)
+    graph.presentations = []
     let nodes = _resolveView(root, ctx)
     let list = _DisplayList()
     let background = (nodes.count == 1 ? nodes[0].edgeBackground : nil ?? nil).map { $0.resolve(scheme) }
@@ -128,6 +129,12 @@ func _render(_ preview: _Preview, index: Int, scheme: ColorScheme) -> String {
     let size = node.sizeThatFits(ProposedViewSize(safe.size))
     node.place(_align(node, size, in: safe, .center))
     node.emit(list)
+    // Sheets go over everything, in the order they were presented (one a sheet presents goes over it).
+    var presented = 0
+    while presented < graph.presentations.count {
+        _present(graph.presentations[presented], index: presented, list: list)
+        presented += 1
+    }
     return "{\"name\":\(_DisplayList.string(preview.name)),\"w\":\(_DisplayList.num(device.width)),\"h\":\(_DisplayList.num(device.height)),\"bg\":\(_DisplayList.string(background.hex)),\"ops\":\(list.json)}"
 }
 

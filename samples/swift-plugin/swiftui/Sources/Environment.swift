@@ -57,6 +57,13 @@ struct _MinimumScaleKey: EnvironmentKey { static let defaultValue: CGFloat = 1 }
 struct _TruncationKey: EnvironmentKey { static let defaultValue: Text.TruncationMode = .tail }
 struct _LineSpacingKey: EnvironmentKey { static let defaultValue: CGFloat = 0 }
 struct _ImageScaleKey: EnvironmentKey { static let defaultValue: Image.Scale = .medium }
+struct _SafeRectKey: EnvironmentKey { static let defaultValue: CGRect? = nil }
+struct _ScreenRectKey: EnvironmentKey { static let defaultValue: CGRect? = nil }
+struct _LabelStyleKey: EnvironmentKey { static let defaultValue: _LabelStyleKind = .automatic }
+struct _SymbolVariantKey: EnvironmentKey { static let defaultValue: SymbolVariants = .none }
+struct _ProbeKey: EnvironmentKey { static let defaultValue = false }
+/// How far below the top of its space a navigation bar starts: 16 in a sheet, measured.
+struct _BarTopKey: EnvironmentKey { static let defaultValue: CGFloat = 0 }
 
 extension EnvironmentValues {
     public var font: Font? { get { self[_FontKey.self] } set { self[_FontKey.self] = newValue } }
@@ -92,6 +99,14 @@ extension EnvironmentValues {
     var _stackAxis: Axis? { get { self[_StackAxisKey.self] } set { self[_StackAxisKey.self] = newValue } }
     var _buttonStyle: _ButtonStyleKind { get { self[_ButtonStyleKey.self] } set { self[_ButtonStyleKey.self] = newValue } }
     var _listStyle: _ListStyleKind { get { self[_ListStyleKey.self] } set { self[_ListStyleKey.self] = newValue } }
+    /// The safe area content is laid out in, in screen points: the device's, or what a tab bar, toolbar or sheet leaves.
+    var _safeRect: CGRect { get { self[_SafeRectKey.self] ?? _Device.safeRect } set { self[_SafeRectKey.self] = newValue } }
+    /// What ignoring the safe area reaches: the screen, or a sheet's bounds.
+    var _screenRect: CGRect { get { self[_ScreenRectKey.self] ?? CGRect(origin: .zero, size: _Device.size) } set { self[_ScreenRectKey.self] = newValue } }
+    var _labelStyle: _LabelStyleKind { get { self[_LabelStyleKey.self] } set { self[_LabelStyleKey.self] = newValue } }
+    public var symbolVariants: SymbolVariants { get { self[_SymbolVariantKey.self] } set { self[_SymbolVariantKey.self] = newValue } }
+    /// True while a container resolves its content only to learn what it declares (titles, toolbars, detents).
+    var _isProbe: Bool { get { self[_ProbeKey.self] } set { self[_ProbeKey.self] = newValue } }
 }
 
 // MARK: - Value types the environment carries
@@ -121,7 +136,8 @@ public struct RedactionReasons: OptionSet, Sendable {
 }
 
 public struct DismissAction {
-    public func callAsFunction() {}
+    var action: (() -> Void)?
+    public func callAsFunction() { action?() }
 }
 
 public struct OpenURLAction {

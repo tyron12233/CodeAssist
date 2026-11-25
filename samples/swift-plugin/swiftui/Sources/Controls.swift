@@ -242,10 +242,20 @@ final class _ImageNode: _Node {
 
     private var fontSize: CGFloat { (env.font ?? .body).size }
 
+    /// The symbol's name with the environment's variants (`.symbolVariant(.fill)`, a tab bar's fill) applied where
+    /// the symbol has them.
+    private lazy var symbolName: String? = {
+        guard var name = image.systemName else { return nil }
+        for suffix in env.symbolVariants.suffixes where !name.contains(suffix + ".") && !name.hasSuffix(suffix) {
+            if _SymbolMetrics.shared.frame(name + suffix, size: 17, large: false) != nil { name += suffix }
+        }
+        return name
+    }()
+
     /// A symbol's frame at the font's point size, as iOS gives it (_SymbolMetrics, measured in the Simulator); a name
     /// the table does not know gets a box of the font's size.
     private var intrinsic: CGSize {
-        if let name = image.systemName {
+        if let name = symbolName {
             if let m = _SymbolMetrics.shared.frame(name, size: fontSize, large: env[_ImageScaleKey.self] == .large) { return m.size }
             let s = _ceilToPixel(fontSize * 1.2)
             return CGSize(width: s, height: s)
@@ -254,7 +264,7 @@ final class _ImageNode: _Node {
     }
 
     override func baselines(for size: CGSize) -> (first: CGFloat?, last: CGFloat?) {
-        guard let name = image.systemName, !image.isResizable,
+        guard let name = symbolName, !image.isResizable,
               let m = _SymbolMetrics.shared.frame(name, size: fontSize, large: env[_ImageScaleKey.self] == .large) else { return (nil, nil) }
         return (size.height - m.baseline, size.height - m.baseline)
     }
@@ -266,7 +276,7 @@ final class _ImageNode: _Node {
 
     override func emit(_ list: _DisplayList) {
         let color = (env._foreground?._resolvedColor(env) ?? .primary).resolve(env.colorScheme)
-        if let name = image.systemName {
+        if let name = symbolName {
             let weight = (env._weight ?? (env.font ?? .body).weight).value
             list.symbol(frame, name: name, size: image.isResizable ? min(frame.width, frame.height) / 1.2 : fontSize, weight: weight, color: color,
                         large: env[_ImageScaleKey.self] == .large)
@@ -414,9 +424,14 @@ public struct SwiftUILabel<Title: View, Icon: View>: View {
             }
             ._separatorLeading(40)
         } else {
-            HStack(spacing: 8) {
-                icon
-                title
+            switch environment._labelStyle {
+            case .iconOnly: icon
+            case .titleOnly: title
+            default:
+                HStack(spacing: 8) {
+                    icon
+                    title
+                }
             }
         }
     }
@@ -437,6 +452,7 @@ extension SwiftUILabel where Title == Text, Icon == Image {
 public typealias Label<Title: View, Icon: View> = SwiftUILabel<Title, Icon>
 
 public protocol LabelStyle {}
+enum _LabelStyleKind { case automatic, iconOnly, titleOnly, titleAndIcon }
 public struct TitleOnlyLabelStyle: LabelStyle { public init() {} }
 public struct IconOnlyLabelStyle: LabelStyle { public init() {} }
 public struct TitleAndIconLabelStyle: LabelStyle { public init() {} }
