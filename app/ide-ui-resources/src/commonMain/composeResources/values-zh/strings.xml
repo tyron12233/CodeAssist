@@ -3064,4 +3064,16 @@
     <string name="home_claude_title">新功能：让 Claude 处理你的项目</string>
     <string name="home_claude_body">将 claude.ai、Claude 应用或 Claude Code 连接到 CodeAssist 中打开的项目。</string>
     <string name="home_claude_action">设置</string>
+    <string name="project_plugins_title">此项目需要 %1$s</string>
+    <string name="project_plugins_title_unknown">此项目需要一个插件</string>
+    <string name="project_plugins_not_installed">此项目使用 %1$s 创建，但该插件未安装。没有它，项目无法构建，代码也没有高亮和补全。</string>
+    <string name="project_plugins_turned_off">%1$s 已关闭。开启后即可构建和编辑此项目。</string>
+    <string name="project_plugins_needs_permission">%1$s 已安装，但尚未获准运行。请在“插件”中允许。</string>
+    <string name="project_plugins_failed">%1$s 已安装，但无法加载。可在“插件”中的插件页面查看原因。</string>
+    <string name="project_plugins_not_loaded">%1$s 已就绪。重新打开项目即可使用。</string>
+    <string name="project_plugins_unknown">已安装的内容都不支持其 %1$s 模块。没有支持它们的插件，项目无法构建。</string>
+    <string name="project_plugins_turn_on">开启</string>
+    <string name="project_plugins_open_plugins">打开插件</string>
+    <string name="project_plugins_reopen">重新打开</string>
+    <string name="project_plugins_open_anyway">仍然打开</string>
 </resources>

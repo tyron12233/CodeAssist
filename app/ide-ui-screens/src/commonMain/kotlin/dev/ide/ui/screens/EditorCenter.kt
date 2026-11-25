@@ -93,6 +93,9 @@ import kotlinx.coroutines.withContext
 /** The Learn task banner while a lesson runs in this project, provided by [EditorScreen]; null otherwise. */
 internal val LocalLessonBanner = androidx.compose.runtime.staticCompositionLocalOf<(@Composable () -> Unit)?> { null }
 
+/** The open project's notice about a plugin it needs and does not have, provided by [EditorScreen]; null otherwise. */
+internal val LocalProjectNotice = androidx.compose.runtime.staticCompositionLocalOf<(@Composable () -> Unit)?> { null }
+
 @Composable
 internal fun EditorCenter(
     state: IdeUiState,
@@ -314,6 +317,7 @@ internal fun EditorCenter(
                 Column(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
                     // A running lesson's task banner: under the top bar, above the notices and the file tabs.
                     LocalLessonBanner.current?.invoke()
+                    LocalProjectNotice.current?.invoke()
                     DepsProgressBar(depsState) { depsScope.launch { state.backend.deps.retryDependencyResolution() } }
                     // Hoisted so the notice strip can report the count and the banner can render the cards from the
                     // same state; two holders would disagree about which warnings had been dismissed.

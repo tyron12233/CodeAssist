@@ -540,7 +540,8 @@ private fun AppRoute(
         // ([CodeAssistAppState.projectOpen]); this is the backstop for an engine unloaded under the editor, which
         // must not compose a screen whose backend throws "No project is open" (a wrong Back target did, in 3.40.0).
         Screen.Editor -> if (app.epoch <= 0) {
-            LaunchedEffect(Unit) { app.navigateTo(Screen.Projects) }
+            // A reopen closes the project for a moment; the editor comes back with it rather than leaving.
+            if (!app.reopening) LaunchedEffect(Unit) { app.navigateTo(Screen.Projects) }
         } else EditorScreen(
             state = state,
             onToggleTheme = { app.toggleTheme(dark) },
@@ -558,6 +559,19 @@ private fun AppRoute(
             onOpenRun = { app.navigateTo(Screen.Run) },
             onRunDockedChange = { app.runDocked = it },
             fileActions = fileActions,
+            // A plugin this project was made with is missing (it was opened anyway, resumed, or opened from
+            // somewhere that does not ask): say which, and offer the fix. Not in a lesson's workspace.
+            projectNotice = if (app.lessonInEditor) null else {
+                {
+                    MissingPluginsBanner(
+                        backend = state.backend,
+                        rootPath = state.backend.project.rootPath,
+                        epoch = app.epoch,
+                        onResolve = app::resolveProjectPlugin,
+                        onReopen = { app.reopenProject(state::saveAllNow) },
+                    )
+                }
+            },
             topBanner = app.currentLessonId?.takeIf { app.lessonInEditor }?.let { lessonId ->
                 {
                     LessonBanner(
@@ -1041,7 +1055,7 @@ private fun ProjectPickerRoute(
             { fileActions.openUrl(BetaInfo.DISCORD_URL) }
         } else null,
         // Downloading is a browser's job, so the card is offered only where links open.
-        onGetPlugins = if (fileActions.canOpenUrl) app::openGetPlugins else null,
+        onGetPlugins = if (fileActions.canOpenUrl) ({ app.openGetPlugins() }) else null,
         onSponsor = if (fileActions.canOpenUrl) {
             { fileActions.openUrl(BetaInfo.SPONSOR_URL) }
         } else null,

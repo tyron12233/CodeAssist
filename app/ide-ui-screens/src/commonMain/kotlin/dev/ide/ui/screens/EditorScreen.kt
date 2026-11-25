@@ -97,6 +97,8 @@ fun EditorScreen(
     fileActions: FileActions = FileActions.None,
     /** Shown above the whole editor while a lesson runs in this project (the Learn task banner). */
     topBanner: (@Composable () -> Unit)? = null,
+    /** Shown under the top bar when the project needs a plugin it does not have (see [LocalProjectNotice]). */
+    projectNotice: (@Composable () -> Unit)? = null,
 ) {
     // Everything in the editor that leaves the project (the top bar's arrow, the palette) asks first.
     val requestCloseProject = { onCloseProjectConfirmChange(true) }
@@ -177,7 +179,7 @@ fun EditorScreen(
         val hiddenBars = hiddenSystemBarsWidth()
         // The lesson banner is drawn inside the editor column, under the top bar and above the file tabs
         // (where AIDE puts its trainer header), so both layouts pick it up without threading it through.
-        androidx.compose.runtime.CompositionLocalProvider(LocalLessonBanner provides topBanner) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalLessonBanner provides topBanner, LocalProjectNotice provides projectNotice) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val wide = maxWidth - hiddenBars >= COMPACT_BREAKPOINT
             LaunchedEffect(wide, state.runFullScreen) {

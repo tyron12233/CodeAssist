@@ -3101,4 +3101,16 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="home_claude_title">New: let Claude work on your projects</string>
     <string name="home_claude_body">Connect claude.ai, the Claude app or Claude Code to the project open in CodeAssist.</string>
     <string name="home_claude_action">Set up</string>
+    <string name="project_plugins_title">This project needs %1$s</string>
+    <string name="project_plugins_title_unknown">This project needs a plugin</string>
+    <string name="project_plugins_not_installed">It was made with %1$s, which isn't installed. Without it, the project can't be built and its code has no highlighting or completion.</string>
+    <string name="project_plugins_turned_off">%1$s is turned off. Turn it on to build and edit this project.</string>
+    <string name="project_plugins_needs_permission">%1$s is installed but hasn't been allowed to run yet. Allow it under Plugins.</string>
+    <string name="project_plugins_failed">%1$s is installed but couldn't load. Its page under Plugins says why.</string>
+    <string name="project_plugins_not_loaded">%1$s is ready. Reopen the project to use it.</string>
+    <string name="project_plugins_unknown">Nothing installed supports its %1$s modules. Without the plugin that does, the project can't be built.</string>
+    <string name="project_plugins_turn_on">Turn on</string>
+    <string name="project_plugins_open_plugins">Open Plugins</string>
+    <string name="project_plugins_reopen">Reopen</string>
+    <string name="project_plugins_open_anyway">Open anyway</string>
 </resources>

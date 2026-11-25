@@ -853,6 +853,16 @@ interface ProjectService {
     /** Open the existing project rooted at [rootPath]; becomes active (bumps [projectEpoch]). */
     suspend fun openProject(rootPath: String): Boolean = false
 
+    /**
+     * The plugins the project at [rootPath] needs that are not working for it on this device, read before it is
+     * opened (so the picker can offer them first) or for the open project (its editor notice). Nothing missing,
+     * or a host that cannot tell, is [UiProjectPluginCheck.ok].
+     */
+    suspend fun projectPluginCheck(rootPath: String): UiProjectPluginCheck = UiProjectPluginCheck()
+
+    /** Close the open project and open it again, so it takes up a plugin that arrived since it was opened. */
+    suspend fun reopenProject(): Boolean = false
+
     /** Permanently delete the project rooted at [rootPath] from disk. */
     suspend fun deleteProject(rootPath: String): Boolean = false
 
@@ -1003,6 +1013,39 @@ interface ProjectService {
     /** Raw bytes of the image at [path], for previewing a file the user picked outside any project (the
      *  export screen's screenshots). Null when it isn't a readable image of a sane size. */
     suspend fun imageBytes(path: String): ByteArray? = null
+}
+
+/** Why a plugin a project needs is not working for it. */
+enum class UiProjectPluginState {
+    /** Not on this device: it has to be downloaded. */
+    NOT_INSTALLED,
+
+    /** On this device, turned off. */
+    TURNED_OFF,
+
+    /** Installed, and not allowed to run yet. */
+    NEEDS_PERMISSION,
+
+    /** On this device and allowed, but it did not load. */
+    FAILED,
+
+    /** Running, but it arrived after the open project was opened: opening the project again takes it up. */
+    NOT_LOADED,
+}
+
+/** A plugin a project needs: [name] as it was when the project last had it. */
+data class UiProjectPlugin(val id: String, val name: String, val state: UiProjectPluginState)
+
+/**
+ * What a project needs from this device's plugins and does not get: the plugins it was last opened with that are
+ * missing ([plugins]), or, for a project with no such record, the module types nothing here provides
+ * ([unknownModuleTypes]).
+ */
+data class UiProjectPluginCheck(
+    val plugins: List<UiProjectPlugin> = emptyList(),
+    val unknownModuleTypes: List<String> = emptyList(),
+) {
+    val ok: Boolean get() = plugins.isEmpty() && unknownModuleTypes.isEmpty()
 }
 
 /**

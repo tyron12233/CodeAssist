@@ -1124,6 +1124,7 @@ class IdeServicesBackend(
         // Point the shared application environment at the now-active engine, for app-level extension callbacks
         // (command actions, synthetic-R, the XML resource host) that resolve the open project through it.
         manager?.env?.activeEngine = next
+        recordProjectPlugins(next)
         followFileSystem(next)
         _projectEpoch.value = ++epochsIssued
         // Publish the project lifecycle for plugin subscribers, on the same app bus. Opened for the new engine;
@@ -1136,6 +1137,28 @@ class IdeServicesBackend(
             }
         }
         if (prev !== next) runCatching { prev?.close() }
+    }
+
+    override var pluginsAtOpen: Set<String> = emptySet()
+        private set
+
+    /**
+     * Note which plugins [next] needs while they are present (see [dev.ide.core.plugins.ProjectPlugins]), so an
+     * open after one of them is gone can say which, and what was running as it opened.
+     */
+    private fun recordProjectPlugins(next: IdeServices) {
+        val env = manager?.env ?: return
+        val catalog = env.pluginCatalog
+        pluginsAtOpen = catalog.all.mapTo(HashSet()) { it.id }.filterTo(HashSet()) { env.isPluginRunning(it) }
+        runCatching {
+            dev.ide.core.plugins.ProjectPlugins.record(
+                root = next.workspaceRoot,
+                projects = next.store.workspace.projects,
+                registry = env.platform.extensions,
+                candidates = catalog.all.filterNot { catalog.isEssential(it.id) }.associate { it.id to it.name },
+                isRunning = env::isPluginRunning,
+            )
+        }.onFailure { log.warn("Couldn't record the plugins ${next.workspaceRoot} needs", it) }
     }
 
     /** The last [projectEpoch] a swap handed out. Never reused, so a reopen after [closeEngine] (which sets the

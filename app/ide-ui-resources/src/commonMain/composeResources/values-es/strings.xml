@@ -3100,4 +3100,16 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="home_claude_title">Novedad: deja que Claude trabaje en tus proyectos</string>
     <string name="home_claude_body">Conecta claude.ai, la app de Claude o Claude Code al proyecto abierto en CodeAssist.</string>
     <string name="home_claude_action">Configurar</string>
+    <string name="project_plugins_title">Este proyecto necesita %1$s</string>
+    <string name="project_plugins_title_unknown">Este proyecto necesita un complemento</string>
+    <string name="project_plugins_not_installed">Se creó con %1$s, que no está instalado. Sin él, el proyecto no se puede compilar y su código no tiene resaltado ni autocompletado.</string>
+    <string name="project_plugins_turned_off">%1$s está desactivado. Actívalo para compilar y editar este proyecto.</string>
+    <string name="project_plugins_needs_permission">%1$s está instalado, pero aún no tiene permiso para ejecutarse. Permítelo en Complementos.</string>
+    <string name="project_plugins_failed">%1$s está instalado, pero no se pudo cargar. Su página en Complementos indica por qué.</string>
+    <string name="project_plugins_not_loaded">%1$s está listo. Vuelve a abrir el proyecto para usarlo.</string>
+    <string name="project_plugins_unknown">Nada de lo instalado admite sus módulos %1$s. Sin el complemento que lo hace, el proyecto no se puede compilar.</string>
+    <string name="project_plugins_turn_on">Activar</string>
+    <string name="project_plugins_open_plugins">Abrir Complementos</string>
+    <string name="project_plugins_reopen">Volver a abrir</string>
+    <string name="project_plugins_open_anyway">Abrir de todos modos</string>
 </resources>

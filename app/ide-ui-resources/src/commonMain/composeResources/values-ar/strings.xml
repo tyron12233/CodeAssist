@@ -3281,4 +3281,16 @@
     <string name="home_claude_title">جديد: دع Claude يعمل على مشاريعك</string>
     <string name="home_claude_body">اربط claude.ai أو تطبيق Claude أو Claude Code بالمشروع المفتوح في CodeAssist.</string>
     <string name="home_claude_action">إعداد</string>
+    <string name="project_plugins_title">يحتاج هذا المشروع إلى %1$s</string>
+    <string name="project_plugins_title_unknown">يحتاج هذا المشروع إلى إضافة</string>
+    <string name="project_plugins_not_installed">أُنشئ باستخدام %1$s، وهي غير مثبتة. بدونها لا يمكن بناء المشروع، ولا يتوفر لشيفرته تمييز أو إكمال تلقائي.</string>
+    <string name="project_plugins_turned_off">%1$s متوقفة. شغّلها لبناء هذا المشروع وتعديله.</string>
+    <string name="project_plugins_needs_permission">%1$s مثبتة لكن لم يُسمح لها بالعمل بعد. اسمح لها من الإضافات.</string>
+    <string name="project_plugins_failed">%1$s مثبتة لكن تعذّر تحميلها. صفحتها في الإضافات توضح السبب.</string>
+    <string name="project_plugins_not_loaded">%1$s جاهزة. أعد فتح المشروع لاستخدامها.</string>
+    <string name="project_plugins_unknown">لا يوجد شيء مثبت يدعم وحدات %1$s فيه. بدون الإضافة التي تدعمها لا يمكن بناء المشروع.</string>
+    <string name="project_plugins_turn_on">تشغيل</string>
+    <string name="project_plugins_open_plugins">فتح الإضافات</string>
+    <string name="project_plugins_reopen">إعادة الفتح</string>
+    <string name="project_plugins_open_anyway">فتح على أي حال</string>
 </resources>

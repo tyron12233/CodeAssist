@@ -3094,4 +3094,16 @@
     <string name="home_claude_title">Новое: Claude может работать с вашими проектами</string>
     <string name="home_claude_body">Подключите claude.ai, приложение Claude или Claude Code к проекту, открытому в CodeAssist.</string>
     <string name="home_claude_action">Настроить</string>
+    <string name="project_plugins_title">Этому проекту нужен %1$s</string>
+    <string name="project_plugins_title_unknown">Этому проекту нужен плагин</string>
+    <string name="project_plugins_not_installed">Он создан с плагином %1$s, который не установлен. Без него проект нельзя собрать, а в коде нет подсветки и автодополнения.</string>
+    <string name="project_plugins_turned_off">%1$s отключён. Включите его, чтобы собирать и редактировать этот проект.</string>
+    <string name="project_plugins_needs_permission">%1$s установлен, но ещё не получил разрешение на запуск. Разрешите его в разделе «Плагины».</string>
+    <string name="project_plugins_failed">%1$s установлен, но не загрузился. Причина указана на его странице в разделе «Плагины».</string>
+    <string name="project_plugins_not_loaded">%1$s готов. Откройте проект заново, чтобы им воспользоваться.</string>
+    <string name="project_plugins_unknown">Ничто из установленного не поддерживает его модули %1$s. Без плагина, который их поддерживает, проект нельзя собрать.</string>
+    <string name="project_plugins_turn_on">Включить</string>
+    <string name="project_plugins_open_plugins">Открыть плагины</string>
+    <string name="project_plugins_reopen">Открыть заново</string>
+    <string name="project_plugins_open_anyway">Всё равно открыть</string>
 </resources>

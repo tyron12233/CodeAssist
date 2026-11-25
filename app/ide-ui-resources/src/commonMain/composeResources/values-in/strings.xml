@@ -2933,4 +2933,16 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="home_claude_title">Baru: biarkan Claude mengerjakan proyek Anda</string>
     <string name="home_claude_body">Hubungkan claude.ai, aplikasi Claude, atau Claude Code ke proyek yang terbuka di CodeAssist.</string>
     <string name="home_claude_action">Siapkan</string>
+    <string name="project_plugins_title">Proyek ini memerlukan %1$s</string>
+    <string name="project_plugins_title_unknown">Proyek ini memerlukan plugin</string>
+    <string name="project_plugins_not_installed">Proyek ini dibuat dengan %1$s, yang tidak terpasang. Tanpanya, proyek tidak bisa di-build dan kodenya tidak memiliki penyorotan atau pelengkapan.</string>
+    <string name="project_plugins_turned_off">%1$s dinonaktifkan. Aktifkan untuk mem-build dan mengedit proyek ini.</string>
+    <string name="project_plugins_needs_permission">%1$s sudah terpasang tetapi belum diizinkan berjalan. Izinkan di Plugin.</string>
+    <string name="project_plugins_failed">%1$s sudah terpasang tetapi gagal dimuat. Halamannya di Plugin menjelaskan alasannya.</string>
+    <string name="project_plugins_not_loaded">%1$s sudah siap. Buka ulang proyek untuk menggunakannya.</string>
+    <string name="project_plugins_unknown">Tidak ada yang terpasang yang mendukung modul %1$s-nya. Tanpa plugin yang mendukungnya, proyek tidak bisa di-build.</string>
+    <string name="project_plugins_turn_on">Aktifkan</string>
+    <string name="project_plugins_open_plugins">Buka Plugin</string>
+    <string name="project_plugins_reopen">Buka ulang</string>
+    <string name="project_plugins_open_anyway">Tetap buka</string>
 </resources>
