@@ -51,6 +51,8 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -1406,11 +1408,41 @@ private fun StepsTab(steps: List<BuildStepUi>) {
         EmptyState(stringResource(Res.string.buildc_no_steps), Modifier.fillMaxSize())
         return
     }
+    // Open on the step that is running, not the top of a long task graph: the list starts there on its first
+    // frame (the tab is composed fresh each time it is selected), then follows each new running step.
+    val anchor = runningStepAnchor(steps)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = anchor ?: 0)
+    val runningIndex by rememberUpdatedState(steps.indexOfFirst { it.status == StepStatus.Running })
+    // Cleared when the user scrolls the running step out of view, so following never fights their reading;
+    // set again once a scroll ends with it back in view (or with nothing running, which covers the next build).
+    // Our own animateScrollToItem ends with the running step in view, so it never clears this by itself.
+    var following by remember { mutableStateOf(true) }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (!scrolling) {
+                val running = runningIndex
+                following = running < 0 || listState.layoutInfo.visibleItemsInfo.any { it.index == running }
+            }
+        }
+    }
+    LaunchedEffect(anchor) {
+        if (anchor != null && following) runCatching { listState.animateScrollToItem(anchor) }
+    }
     // Per-row selection (see LogColumn): keeps a scrolled-off selected step from crashing the outer
     // SelectionManager with a stale selectable id. Whole-list copy is the tab's Copy button.
-    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         items(steps) { SelectionContainer { StepRow(it) } }
     }
+}
+
+/**
+ * The index the Steps list scrolls to so the running step is in view: the first running step (the earliest of
+ * parallel ones, so the others show below it), with [context] settled steps above it to show where the build
+ * came from. Null when nothing is running, which leaves the list where it is.
+ */
+internal fun runningStepAnchor(steps: List<BuildStepUi>, context: Int = 2): Int? {
+    val running = steps.indexOfFirst { it.status == StepStatus.Running }
+    return if (running < 0) null else (running - context).coerceAtLeast(0)
 }
 
 @Composable
