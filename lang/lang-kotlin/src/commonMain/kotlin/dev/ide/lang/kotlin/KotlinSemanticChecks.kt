@@ -3331,8 +3331,24 @@ internal class KotlinSemanticChecks(
                 { isSetter = true; candidates = listOf(decapitalizeAccessor(name.substring(3)), "is" + name.substring(3)) }
             else -> return null
         }
+        // An assignment can only stand where a statement does: a setter whose result is used (a builder chain's
+        // `.setContentTitle(t)`, a value) cannot become `x = v`.
+        if (isSetter && qualified.parent !is KtBlockExpression) return null
         val recvType = resolver.inferType(qualified.receiverExpression) ?: return null
         if (recvType.isTypeParameter || !service.isJavaType(recvType.qualifiedName)) return null
+        if (isSetter) {
+            // Kotlin makes a Java `setX` a property's setter only when it returns void and a `getX`/`isX` exists:
+            // a builder's `setSmallIcon(icon)` returns the builder, and a set-only accessor has no property at all.
+            val setters = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name)
+                .filter { it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
+            if (setters.none { (it.type as? KotlinType)?.qualifiedName == "kotlin.Unit" }) return null
+            val suffix = name.substring(3)
+            val hasGetter = listOf("get$suffix", "is$suffix").any { getter ->
+                service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, getter)
+                    .any { it.kind == SymbolKind.METHOD && it.paramTypes.isEmpty() }
+            }
+            if (!hasGetter) return null
+        }
         // Only when the synthetic property actually resolves — so applying the suggestion can't break the code.
         var propType: KotlinType? = null
         val prop = candidates.firstOrNull { cand ->
