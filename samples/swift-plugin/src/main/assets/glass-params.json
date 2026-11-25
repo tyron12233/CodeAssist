@@ -16,8 +16,8 @@
     1.0283,
     0.0754
   ],
-  "darkA" : 0.3,
-  "darkB" : 0.1,
+  "darkA" : 0.31,
+  "darkB" : 0.0588,
   "lensDepth" : 32,
   "lensPower" : 1.6,
   "lensTable" : [

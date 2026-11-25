@@ -170,7 +170,8 @@ class SwiftGlass(params: JSONObject?) {
                         cg = cg * (1 - tintAmount) + tg * tintAmount
                         cb = cb * (1 - tintAmount) + tb * tintAmount
                     }
-                    if (dPt < rimWidth) {
+                    // Measured: dark glass has no bright rim.
+                    if (dPt < rimWidth && !(dark && variant != "clear")) {
                         val k = rimAmount * (1 - dPt / rimWidth)
                         cr += (1 - cr) * k; cg += (1 - cg) * k; cb += (1 - cb) * k
                     }

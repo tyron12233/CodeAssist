@@ -158,7 +158,8 @@ enum GlassModel {
                         c = RGB(row(0), row(4), row(8))
                     }
                     if let t = tint { c = c.mix(t, p.tintAmount) }
-                    if d < p.rimWidth {
+                    // Measured: dark glass has no bright rim.
+                    if d < p.rimWidth && !(dark && variant != "clear") {
                         let k = p.rimAmount * (1 - d / p.rimWidth)
                         c = c.map { $0 + (1 - $0) * k }
                     }

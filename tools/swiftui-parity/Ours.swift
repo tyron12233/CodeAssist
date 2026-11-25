@@ -396,9 +396,33 @@ func compare(_ ref: CGImage, _ ours: CGImage) -> (Double, CGImage) {
 /// Fits GlassParams to the Simulator: each glass case's backdrop is painted once (glass ops skipped), then the model
 /// is applied with candidate parameters and scored by the mean colour error (0...1) inside the glass shapes and a
 /// margin around them, against the reference. Coordinate descent with shrinking steps.
+/// Per-channel summed-area tables of a 1206 x 2622 RGBA bitmap (rows of [stride] bytes): [channel][(y+1)*1207 + x+1].
+func integral(_ px: UnsafePointer<UInt8>, stride: Int) -> [[Double]] {
+    let w = 1206, h = 2622
+    var t = [[Double]](repeating: [Double](repeating: 0, count: (w + 1) * (h + 1)), count: 3)
+    for ch in 0..<3 {
+        t[ch].withUnsafeMutableBufferPointer { s in
+            for y in 0..<h {
+                var row = 0.0
+                for x in 0..<w {
+                    row += Double(px[y * stride + x * 4 + ch])
+                    s[(y + 1) * (w + 1) + x + 1] = s[y * (w + 1) + x + 1] + row
+                }
+            }
+        }
+    }
+    return t
+}
+let blurK = Int((Double(ProcessInfo.processInfo.environment["FIT_BLUR"] ?? "0") ?? 0) * 3)
+func windowMean(_ t: [[Double]], _ x: Int, _ y: Int, _ ch: Int) -> Double {
+    let w = 1207, x0 = max(0, x - blurK), x1 = min(1206, x + blurK + 1), y0 = max(0, y - blurK), y1 = min(2622, y + blurK + 1)
+    let s = t[ch]
+    return (s[y1 * w + x1] - s[y0 * w + x1] - s[y1 * w + x0] + s[y0 * w + x0]) / Double((x1 - x0) * (y1 - y0))
+}
+
 @MainActor
 func fitGlass(refDir: URL, out: String) {
-    struct Case { let ref: [UInt8]; let backdrop: [UInt8]; let stride: Int; let ops: [[String: Any]]; let region: [Int] }
+    struct Case { let ref: [UInt8]; let backdrop: [UInt8]; let stride: Int; let ops: [[String: Any]]; let region: [Int]; var refIntegral: [[Double]]? = nil }
     var cases: [Case] = []
     let only = ProcessInfo.processInfo.environment["FIT_CASES"]?.split(separator: ",").map(String.init)
     for (name, view) in glassCases() where only == nil || only!.contains(name) {
@@ -425,7 +449,10 @@ func fitGlass(refDir: URL, out: String) {
             let y0 = max(0, Int((r[1] - 40) * 3)), y1 = min(2622, Int((r[1] + r[3] + 40) * 3))
             for y in stride(from: y0, to: y1, by: 2) { for x in stride(from: x0, to: x1, by: 2) { region.append(y * 1206 + x) } }
         }
-        cases.append(Case(ref: rgba(refImage), backdrop: backdrop, stride: rowBytes, ops: Array(ops[firstGlass...]), region: region))
+        let ref = rgba(refImage)
+        var c = Case(ref: ref, backdrop: backdrop, stride: rowBytes, ops: Array(ops[firstGlass...]), region: region)
+        if blurK > 0 { c.refIntegral = ref.withUnsafeBufferPointer { integral($0.baseAddress!, stride: 1206 * 4) } }
+        cases.append(c)
         print("fit: \(name) (\(region.count) samples)")
     }
     func score(_ p: GlassParams) -> Double {
@@ -437,6 +464,17 @@ func fitGlass(refDir: URL, out: String) {
             c.backdrop.withUnsafeBufferPointer { dst.update(from: $0.baseAddress!, count: c.backdrop.count) }
             painter.paint(c.ops)
             var err = 0.0
+            if blurK > 0 {
+                // FIT_BLUR: compare colours averaged over a (2k+1)-pixel square, so a band frosted in about the right
+                // place scores better than sharp stripes that happen to line up.
+                let ours = integral(dst, stride: c.stride)
+                for i in c.region {
+                    let y = i / 1206, x = i % 1206
+                    for ch in 0..<3 { err += abs(windowMean(ours, x, y, ch) - windowMean(c.refIntegral!, x, y, ch)) }
+                }
+                total += err / Double(max(1, c.region.count)) / (3 * 255)
+                continue
+            }
             for i in c.region {
                 let y = i / 1206, x = i % 1206
                 let o = y * c.stride + x * 4, r = i * 4
