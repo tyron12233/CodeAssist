@@ -84,6 +84,8 @@ class BuiltInParityTest {
         val spiModuleAliases = setOf("platform.moduleAnalysis")
         val spiWorkspaceAliases = setOf(
             "platform.buildControl", "platform.symbolSearch", "platform.moduleSources",
+            // Not an alias: a query-only view over the engine's index (SPI 3.9.0).
+            "platform.indexQueries",
             "platform.moduleResources",
             // Not an alias: a read view over the Android facets with no internal counterpart. Workspace-scoped
             // all the same, like the module model it reads.
@@ -104,7 +106,7 @@ class BuiltInParityTest {
             moduleAnalyzers + workspaceServices + spiModuleAliases + spiWorkspaceAliases +
                 spiApplicationServices,
             byId.keys,
-            "exactly the 19 engine services plus the 10 published-SPI keys",
+            "exactly the 19 engine services plus the 11 published-SPI keys",
         )
         spiApplicationServices.forEach {
             assertEquals(ServiceScopeLevel.APPLICATION, byId.getValue(it).level, it)

@@ -1,4 +1,4 @@
-# The compiled surface of io.github.tyron12233:index-api, pinned at SPI 3.8.0.
+# The compiled surface of io.github.tyron12233:index-api, pinned at SPI 3.9.0.
 # A plugin links against these by name and descriptor; see :spi-compat.
 # Regenerate with: ./gradlew :spi-compat:test -Dspi.updateBaselines=true
 dev/ide/index/IndexEvent
@@ -35,6 +35,7 @@ dev/ide/index/IndexKt
 	kind class
 	super java/lang/Object
 	method static getINDEX_EP()Ldev/ide/platform/ExtensionPoint;
+	method static getINDEX_QUERIES()Ldev/ide/platform/ServiceKey;
 dev/ide/index/IndexScope
 	kind class
 	super java/lang/Object

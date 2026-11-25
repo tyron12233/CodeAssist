@@ -756,7 +756,11 @@ class IdeServices private constructor(
                         // A `.kt`/`.java` save may have added/removed a declaration (e.g. a `View` subclass) —
                         // refresh source-index snapshots (custom-view tag list). XML resource reindexes don't touch
                         // source declarations, so they skip the bump.
-                        if (!path.toString().endsWith(".xml")) bumpSourceIndexGeneration()
+                        // A file only a plugin's index reads (`.swift`) declares nothing those snapshots hold.
+                        val name = path.toString()
+                        if (name.endsWith(".java") || name.endsWith(".kt") || name.endsWith(".kts")) {
+                            bumpSourceIndexGeneration()
+                        }
                         if (path.toString().endsWith(".java")) javaIndexGeneration.incrementAndGet()
                     }
                 }
@@ -775,6 +779,11 @@ class IdeServices private constructor(
             override fun refreshOverlay(path: Path) = this@IdeServices.refreshOverlay(path)
 
             override fun isResourcePath(path: Path) = this@IdeServices.isResourcePath(path)
+            override fun isPluginIndexedSource(path: Path): Boolean {
+                val suffixes = (indexService as? IndexServiceImpl)?.extraSourceSuffixes ?: return false
+                val name = path.fileName?.toString() ?: return false
+                return suffixes.any { name.endsWith(it) }
+            }
             override fun configurationChanged() {
                 // Seam for out-of-process engines: configuration-change hints hang off here (a no-op until a
                 // listener is attached).

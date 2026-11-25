@@ -107,6 +107,10 @@ internal class WorkspaceEventHub(
         /** A path under an Android `res/` tree (a change to it can change the synthetic R). */
         fun isResourcePath(path: Path): Boolean
 
+        /** A file of a type only a plugin's index reads ([dev.ide.index.IndexExtension.sourceFileExtensions]),
+         *  such as `.swift`. A save or create re-indexes it like `.java`/`.kt`, and touches nothing else. */
+        fun isPluginIndexedSource(path: Path): Boolean = false
+
         /** The file system changed under the UI rather than through it: the file tree and any clean open
          *  tab must re-read from disk. The seam the host's file-system epoch hangs off. */
         fun fileSystemChanged()
@@ -293,6 +297,8 @@ internal class WorkspaceEventHub(
                             reactions.reindexSourceAsync(p)
                             // Java sees Kotlin through light classes: re-read this one file, not the project.
                             if (isKotlin(p)) reactions.kotlinSourceChanged(p)
+                        } else if (reactions.isPluginIndexedSource(p)) {
+                            reactions.reindexSourceAsync(p)
                         }
                     }
 
@@ -312,6 +318,11 @@ internal class WorkspaceEventHub(
                             reactions.reindexSourceAsync(p)
                             invalidate = true; membershipChanged = true
                             if (isKotlin(p)) synthetic = true
+                        } else if (reactions.isPluginIndexedSource(p)) {
+                            // Only a plugin's index reads it: add it to the index, no classpath re-sync and
+                            // no analyzer teardown, since neither the classpath nor a Java/Kotlin name changed.
+                            reactions.reindexSourceAsync(p)
+                            membershipChanged = true
                         } else {
                             resync = true // a non-source file (a dropped jar) can change the classpath
                         }

@@ -42,6 +42,8 @@ class WorkspaceReactionTest {
         override fun rekeyOverlays(from: Path, to: Path) {}
         override fun refreshOverlay(path: Path) { overlaysRefreshed.add(path); calls.add("overlay:$path") }
         override fun isResourcePath(path: Path) = path.toString().contains("/res/")
+        /** As if a plugin's index asked for `.greet` files. */
+        override fun isPluginIndexedSource(path: Path) = path.toString().endsWith(".greet")
         override fun configurationChanged() {}
         override fun fileSystemChanged() { fileSystemChanges++ }
     }
@@ -101,6 +103,26 @@ class WorkspaceReactionTest {
         assertEquals(listOf<Path>(Path.of("/proj/src/A.kt")), r.kotlinChanges)
         assertEquals(0, r.syntheticInvalidations, "a .kt save is not a synthetic-class-wide change")
         assertEquals(0, r.analyzerInvalidations)
+    }
+
+    /** A file only a plugin's index reads: re-indexed on save and on create, and nothing heavier, since neither
+     *  the classpath nor any Java/Kotlin name changed. A plain unknown file still takes the old create path. */
+    @Test
+    fun pluginIndexedFileIsReindexedWithoutResyncOrTeardown() {
+        val (saved, _) = react(listOf(changed("/proj/src/hi.greet")))
+        assertEquals(listOf<Path>(Path.of("/proj/src/hi.greet")), saved.reindexed)
+        assertEquals(0, saved.analyzerInvalidations)
+        assertEquals(0, saved.resyncs)
+
+        val (created, membership) = react(listOf(FileCreated(Vf("/proj/src/new.greet"))))
+        assertEquals(listOf<Path>(Path.of("/proj/src/new.greet")), created.reindexed, "added targeted")
+        assertEquals(0, created.resyncs, "no full re-sync for a file no classpath reads")
+        assertEquals(0, created.analyzerInvalidations, "no Java/Kotlin name changed")
+        assertEquals(1, membership, "the file set changed")
+
+        val (other, _) = react(listOf(FileCreated(Vf("/proj/src/notes.txt"))))
+        assertTrue(other.reindexed.isEmpty(), "no index asked for .txt")
+        assertEquals(1, other.resyncs, "an unknown created file keeps the catch-all re-sync")
     }
 
     @Test

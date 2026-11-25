@@ -13,6 +13,9 @@ extension-point registration:
   the Kotlin call under the cursor in `runCatching { }` and leaves the result selected, and is listed in the
   Alt-Enter popup, the editor's overflow menu, and the palette while an editor is focused;
 - a **category** in Settings (`SETTINGS_PAGE_EP`);
+- an **index** over the project's `.hello` files (`INDEX_EP`, asking for the `.hello` suffix through
+  `sourceFileExtensions`), and an editor action, "Hello: where else is this name greeted?", that reads it back
+  through `INDEX_QUERIES` ([`HelloIndex.kt`](src/main/kotlin/com/example/hello/HelloIndex.kt));
 - **log lines** attributed to `com.example.hello`, which the Logs screen can filter by.
 
 It also contributes **build logic**, in
