@@ -102,6 +102,25 @@ class AndroidGameFalsePositivesTest {
         assertTrue(errors("ReadOnly.kt", code).any { it.contains("remove") }, "List.iterator() is a read-only Iterator")
     }
 
+    @Test
+    fun editTextSetTextWithAStringIsNotOfferedAsPropertyAccess() {
+        // EditText narrows getText() to Editable, so its synthetic `text` is an Editable: `et.text = s` with a
+        // String does not compile, and `et.setText(s)` must not be nudged toward it. TextView's `text` is a
+        // CharSequence and still is; so is EditText given a value that IS an Editable.
+        val code = """
+            package demo
+            fun f(et: g.EditText, tv: g.TextView, s: String, e: g.Editable) {
+                et.setText(s)
+                tv.setText(s)
+                et.setText(e)
+            }
+        """.trimIndent()
+        val nudges = diagnostics("EditText.kt", code)
+            .filter { it.code == KotlinDiagnosticCodes.USE_PROPERTY_ACCESS }
+            .map { code.substring(it.range.start, it.range.end) }
+        assertEquals(listOf("setText(s)", "setText(e)"), nudges)
+    }
+
     private fun errors(name: String, code: String): List<String> =
         diagnostics(name, code).filter { it.severity == Severity.ERROR }
             .map { "${it.code} '${code.substring(it.range.start, it.range.end)}' ${it.message}" }
@@ -163,6 +182,12 @@ class AndroidGameFalsePositivesTest {
                 "g/TextView" to cls("g/TextView", "g/View") {
                     method("setText", "(Ljava/lang/CharSequence;)V"); method("getText", "()Ljava/lang/CharSequence;")
                 },
+                // android.text.Editable : CharSequence, and android.widget.EditText, which narrows getText().
+                "g/Editable" to ClassWriter(0).run {
+                    visit(V, PUB or Opcodes.ACC_ABSTRACT or Opcodes.ACC_INTERFACE, "g/Editable", null, OBJ, arrayOf("java/lang/CharSequence"))
+                    visitEnd(); toByteArray()
+                },
+                "g/EditText" to cls("g/EditText", "g/TextView") { method("getText", "()Lg/Editable;") },
                 // android.app.Activity: <T extends View> T findViewById(int), runOnUiThread(Runnable).
                 "g/Activity" to cls("g/Activity") {
                     method("findViewById", "(I)Lg/View;", "<T:Lg/View;>(I)TT;")
