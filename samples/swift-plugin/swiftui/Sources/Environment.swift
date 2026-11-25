@@ -56,6 +56,7 @@ struct _ScenePhaseKey: EnvironmentKey { static let defaultValue: ScenePhase = .a
 struct _MinimumScaleKey: EnvironmentKey { static let defaultValue: CGFloat = 1 }
 struct _TruncationKey: EnvironmentKey { static let defaultValue: Text.TruncationMode = .tail }
 struct _LineSpacingKey: EnvironmentKey { static let defaultValue: CGFloat = 0 }
+struct _ImageScaleKey: EnvironmentKey { static let defaultValue: Image.Scale = .medium }
 
 extension EnvironmentValues {
     public var font: Font? { get { self[_FontKey.self] } set { self[_FontKey.self] = newValue } }
@@ -81,6 +82,7 @@ extension EnvironmentValues {
     public var minimumScaleFactor: CGFloat { get { self[_MinimumScaleKey.self] } set { self[_MinimumScaleKey.self] = newValue } }
     public var truncationMode: Text.TruncationMode { get { self[_TruncationKey.self] } set { self[_TruncationKey.self] = newValue } }
     public var lineSpacing: CGFloat { get { self[_LineSpacingKey.self] } set { self[_LineSpacingKey.self] = newValue } }
+    public var imageScale: Image.Scale { get { self[_ImageScaleKey.self] } set { self[_ImageScaleKey.self] = newValue } }
 
     var _foreground: AnyShapeStyle? { get { self[_ForegroundKey.self] } set { self[_ForegroundKey.self] = newValue } }
     var _tint: Color? { get { self[_TintKey.self] } set { self[_TintKey.self] = newValue } }

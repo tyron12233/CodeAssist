@@ -110,8 +110,8 @@ final class _DisplayList {
         return out + "}"
     }
 
-    func symbol(_ frame: CGRect, name: String, size: CGFloat, weight: Int, color: _RGBA) {
-        ops.append("{\"o\":\"symbol\",\"r\":\(Self.rect(frame)),\"n\":\(Self.string(name)),\"s\":\(Self.num(size)),\"w\":\(weight),\"c\":\(Self.string(color.hex))}")
+    func symbol(_ frame: CGRect, name: String, size: CGFloat, weight: Int, color: _RGBA, large: Bool = false) {
+        ops.append("{\"o\":\"symbol\",\"r\":\(Self.rect(frame)),\"n\":\(Self.string(name)),\"s\":\(Self.num(size)),\"w\":\(weight),\"c\":\(Self.string(color.hex))\(large ? ",\"sc\":\"l\"" : "")}")
     }
 
     func pushClip(_ path: Path) {

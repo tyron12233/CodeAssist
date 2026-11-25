@@ -245,7 +245,7 @@ final class Painter {
         let r = op["r"] as! [NSNumber]
         let frame = CGRect(x: r[0].doubleValue, y: r[1].doubleValue, width: r[2].doubleValue, height: r[3].doubleValue)
         let size = CGFloat((op["s"] as! NSNumber).doubleValue)
-        let config = NSImage.SymbolConfiguration(pointSize: size, weight: .regular)
+        let config = NSImage.SymbolConfiguration(pointSize: size, weight: .regular, scale: op["sc"] as? String == "l" ? .large : .medium)
             .applying(NSImage.SymbolConfiguration(paletteColors: [NSColor(cgColor: Self.color(op["c"] as! String))!]))
         guard let image = NSImage(systemSymbolName: op["n"] as! String, accessibilityDescription: nil)?.withSymbolConfiguration(config),
               let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }

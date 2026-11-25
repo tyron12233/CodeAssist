@@ -31,6 +31,11 @@ struct ListProbe: View {
     var body: some View {
         NavigationStack {
             List {
+                Section("Labels") {
+                    ForEach(["star.fill", "lock.fill", "wifi", "chevron.right", "antenna.radiowaves.left.and.right", "gearshape"], id: \.self) { n in
+                        Label { Text(n).report("lbl.title.\(n)") } icon: { Image(systemName: n).report("lbl.icon.\(n)") }
+                    }
+                }
                 Section {
                     Text("Apples").report("list.row1")
                     Text("Bananas").report("list.row2")
@@ -131,6 +136,11 @@ struct ProbeView: View {
                     }
                 }
                 Label("Label", systemImage: "star").report("label")
+                VStack(alignment: .leading) {
+                    ForEach(["star.fill", "lock.fill", "chevron.right"], id: \.self) { n in
+                        Label { Text(n).report("plbl.title.\(n)") } icon: { Image(systemName: n).report("plbl.icon.\(n)") }
+                    }
+                }
             }
         }
     }

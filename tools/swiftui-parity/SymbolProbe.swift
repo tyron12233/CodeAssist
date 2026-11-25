@@ -14,8 +14,10 @@ final class SymbolProbe: UIResponder, UIApplicationDelegate {
         // frame SwiftUI gives Image(systemName:) (checked against SwiftUI's own frames for star, heart.fill,
         // chevron.right and gearshape at 12, 17 and 34 pt).
         let sizes: [CGFloat] = [11, 12, 13, 15, 16, 17, 20, 22, 28, 34]
+        // Then the large symbol scale at body size (L17): what a Label's icon is in a List row, and .imageScale(.large).
         let configs = sizes.map { UIImage.SymbolConfiguration(pointSize: $0, weight: .regular, scale: .medium) }
-        var out = "# SF Symbol frames by point size (\(sizes.map { "\(Int($0))" }.joined(separator: ","))): w,h,baseline in thirds of a point\n"
+            + [UIImage.SymbolConfiguration(pointSize: 17, weight: .regular, scale: .large)]
+        var out = "# SF Symbol frames by point size (\(sizes.map { "\(Int($0))" }.joined(separator: ",")),L17): w,h,baseline in thirds of a point\n"
         var missing = 0
         for name in names {
             var cells: [String] = []
@@ -24,7 +26,7 @@ final class SymbolProbe: UIResponder, UIApplicationDelegate {
                 let t = { (v: CGFloat) in Int((v * 3).rounded()) }
                 cells.append("\(t(image.size.width)),\(t(image.size.height)),\(t(image.baselineOffsetFromBottom ?? 0))")
             }
-            if cells.count != sizes.count { missing += 1; continue }
+            if cells.count != configs.count { missing += 1; continue }
             out += name + "\t" + cells.joined(separator: " ") + "\n"
         }
         let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("symbol-metrics.tsv")

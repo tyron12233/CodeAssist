@@ -143,6 +143,24 @@ func parityCases() -> [(String, AnyView)] {
                 Text("Version 1.0")
             }
         })),
+        ("list-labels", AnyView(List {
+            Label("Favorites", systemImage: "star.fill")
+            Label("Privacy", systemImage: "lock.fill")
+            Label("Wi-Fi", systemImage: "wifi")
+            Label("Settings", systemImage: "gearshape")
+        })),
+        ("navigation-label-links", AnyView(NavigationStack {
+            List {
+                Section {
+                    NavigationLink { Text("General") } label: { Label("General", systemImage: "gearshape") }
+                    NavigationLink { Text("Privacy") } label: { Label("Privacy", systemImage: "lock.fill") }
+                    NavigationLink { Text("Favorites") } label: { Label("Favorites", systemImage: "star.fill") }
+                } footer: {
+                    Text("Changes apply right away.")
+                }
+            }
+            .navigationTitle("Settings")
+        })),
         ("navigation-title", AnyView(NavigationStack {
             Text("Content")
                 .navigationTitle("Inbox")

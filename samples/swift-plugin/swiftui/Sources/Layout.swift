@@ -196,6 +196,8 @@ class _Node {
     /// A colour this view paints across the whole screen, safe areas included, when it is a preview's root (a List's
     /// grouped background does that on iOS).
     var edgeBackground: Color?
+    /// In a List row: how far past the row's leading edge its separator starts (a Label's title, past its icon column).
+    var separatorLeading: CGFloat?
     /// Explicit alignment guides set with `.alignmentGuide`, in this node's own coordinates.
     var guides: [ObjectIdentifier: (ViewDimensions) -> CGFloat] = [:]
     private var sizeCache: [ProposedViewSize: CGSize] = [:]
@@ -248,6 +250,7 @@ class _WrapperNode: _Node {
         layoutPriority = child.layoutPriority
         guides = child.guides
         edgeBackground = child.edgeBackground
+        separatorLeading = child.separatorLeading
     }
     override func _sizeThatFits(_ proposal: ProposedViewSize) -> CGSize { child.sizeThatFits(proposal) }
     override func place(_ rect: CGRect) {
@@ -327,6 +330,8 @@ final class _StackNode: _Node {
         self.spacing = spacing
         self.children = children
         super.init(path: path, env: env)
+        // A row's separator follows its leading content: a Label first in a row (a NavigationLink's) sets it.
+        if axis == .horizontal { separatorLeading = children.first?.separatorLeading }
     }
 
     private func gaps() -> [CGFloat] {
@@ -790,6 +795,14 @@ extension View {
     }
 
     public func offset(x: CGFloat = 0, y: CGFloat = 0) -> some View { offset(CGSize(width: x, height: y)) }
+
+    func _separatorLeading(_ offset: CGFloat) -> some View {
+        _modified(_WrapModifier { node, _ in
+            let wrapper = _WrapperNode(child: node)
+            wrapper.separatorLeading = offset
+            return wrapper
+        })
+    }
 
     public func alignmentGuide(_ g: HorizontalAlignment, computeValue: @escaping (ViewDimensions) -> CGFloat) -> some View {
         _modified(_WrapModifier { node, _ in

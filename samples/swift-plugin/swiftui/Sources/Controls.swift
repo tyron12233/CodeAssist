@@ -234,7 +234,7 @@ final class _ImageNode: _Node {
     /// the table does not know gets a box of the font's size.
     private var intrinsic: CGSize {
         if let name = image.systemName {
-            if let m = _SymbolMetrics.shared.frame(name, size: fontSize) { return m.size }
+            if let m = _SymbolMetrics.shared.frame(name, size: fontSize, large: env[_ImageScaleKey.self] == .large) { return m.size }
             let s = _ceilToPixel(fontSize * 1.2)
             return CGSize(width: s, height: s)
         }
@@ -242,7 +242,8 @@ final class _ImageNode: _Node {
     }
 
     override func baselines(for size: CGSize) -> (first: CGFloat?, last: CGFloat?) {
-        guard let name = image.systemName, !image.isResizable, let m = _SymbolMetrics.shared.frame(name, size: fontSize) else { return (nil, nil) }
+        guard let name = image.systemName, !image.isResizable,
+              let m = _SymbolMetrics.shared.frame(name, size: fontSize, large: env[_ImageScaleKey.self] == .large) else { return (nil, nil) }
         return (size.height - m.baseline, size.height - m.baseline)
     }
 
@@ -255,7 +256,8 @@ final class _ImageNode: _Node {
         let color = (env._foreground?._resolvedColor(env) ?? .primary).resolve(env.colorScheme)
         if let name = image.systemName {
             let weight = (env._weight ?? (env.font ?? .body).weight).value
-            list.symbol(frame, name: name, size: image.isResizable ? min(frame.width, frame.height) / 1.2 : fontSize, weight: weight, color: color)
+            list.symbol(frame, name: name, size: image.isResizable ? min(frame.width, frame.height) / 1.2 : fontSize, weight: weight, color: color,
+                        large: env[_ImageScaleKey.self] == .large)
         } else {
             list.shape(Path(roundedRect: frame, cornerRadius: 4), style: AnyShapeStyle(Color.secondarySystemFill), stroke: nil, env: env)
             list.symbol(frame, name: "photo", size: min(frame.width, frame.height) / 3, weight: 400, color: Color.gray.resolve(env.colorScheme))
@@ -271,6 +273,8 @@ public enum ContentMode: Hashable, CaseIterable, Sendable { case fit, fill }
 final class _SymbolMetrics: @unchecked Sendable {
     static let shared = _SymbolMetrics()
     private var sizes: [CGFloat] = []
+    /// Where the large-scale entry at body size (`L17`) sits in a row, if the table has one.
+    private var largeIndex: Int?
     private var table: [String: [Int]]?
 
     struct Frame {
@@ -286,7 +290,9 @@ final class _SymbolMetrics: @unchecked Sendable {
             for line in text.split(separator: "\n") {
                 if line.hasPrefix("#") {
                     if let open = line.firstIndex(of: "("), let close = line.firstIndex(of: ")") {
-                        sizes = line[line.index(after: open)..<close].split(separator: ",").compactMap { Double($0) }.map { CGFloat($0) }
+                        let tokens = line[line.index(after: open)..<close].split(separator: ",")
+                        sizes = tokens.compactMap { Double($0) }.map { CGFloat($0) }
+                        largeIndex = tokens.firstIndex(of: "L17")
                     }
                     continue
                 }
@@ -299,8 +305,19 @@ final class _SymbolMetrics: @unchecked Sendable {
         return result
     }
 
+    /// [large]: the large symbol scale (a List row's Label icon, `.imageScale(.large)`): exact at 17 pt, elsewhere the
+    /// medium frame scaled by this symbol's large/medium ratio at 17 pt.
+    func frame(_ name: String, size: CGFloat, large: Bool = false) -> Frame? {
+        guard let medium = frame(name, size: size) else { return nil }
+        guard large, let li = largeIndex, let v = load()[name], v.count > 3 * li + 2, let m17 = frame(name, size: 17) else { return medium }
+        let lw = CGFloat(v[3 * li]) / 3, lh = CGFloat(v[3 * li + 1]) / 3, lb = CGFloat(v[3 * li + 2]) / 3
+        if size == 17 { return Frame(size: CGSize(width: lw, height: lh), baseline: lb) }
+        let fw = lw / max(m17.size.width, 0.1), fh = lh / max(m17.size.height, 0.1)
+        return Frame(size: CGSize(width: _roundToPixel(medium.size.width * fw), height: _roundToPixel(medium.size.height * fh)), baseline: medium.baseline * fh)
+    }
+
     func frame(_ name: String, size: CGFloat) -> Frame? {
-        guard let v = load()[name], !sizes.isEmpty, v.count == sizes.count * 3 else { return nil }
+        guard let v = load()[name], !sizes.isEmpty, v.count >= sizes.count * 3 else { return nil }
         func at(_ i: Int) -> (CGFloat, CGFloat, CGFloat) { (CGFloat(v[3 * i]) / 3, CGFloat(v[3 * i + 1]) / 3, CGFloat(v[3 * i + 2]) / 3) }
         let (w, h, b): (CGFloat, CGFloat, CGFloat)
         if let exact = sizes.firstIndex(of: size) {
@@ -373,10 +390,22 @@ public struct SwiftUILabel<Title: View, Icon: View>: View {
         self.title = title()
         self.icon = icon()
     }
+    @Environment(\.self) private var environment
+
     public var body: some View {
-        HStack(spacing: 8) {
-            icon
-            title
+        if environment[_InListKey.self] {
+            // iOS's list row label, measured: the icon at the large scale, in the accent colour, centred in a
+            // 24-point column; the title 16 points after it, so titles line up whatever the icons' widths.
+            HStack(spacing: 0) {
+                icon.imageScale(.large).foregroundStyle(TintShapeStyle()).frame(width: 24)
+                title.padding(.leading, 16)
+            }
+            ._separatorLeading(40)
+        } else {
+            HStack(spacing: 8) {
+                icon
+                title
+            }
         }
     }
 }

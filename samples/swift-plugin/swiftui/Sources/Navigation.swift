@@ -127,7 +127,8 @@ public struct NavigationLink<Label: View, Destination: View>: View {
         HStack {
             label
             Spacer()
-            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Color.tertiaryLabel)
+            // iOS's disclosure chevron, measured: chevron.right at body size in the tertiary label colour.
+            Image(systemName: "chevron.right").font(.body).foregroundStyle(Color.tertiaryLabel)
         }
     }
 }
@@ -284,14 +285,18 @@ func _listBody(_ ctx: _ResolveContext, sections: [_SectionMarker]) -> _Node {
         var cardRows: [_Node] = []
         for (i, row) in section.rows.enumerated() {
             let padded = _PaddingNode(child: row, insets: EdgeInsets(top: M.rowVerticalPadding, leading: M.rowInset, bottom: M.rowVerticalPadding, trailing: M.rowInset))
-            cardRows.append(_FlexFrameNode(child: padded, minWidth: nil, idealWidth: nil, maxWidth: .infinity,
-                                           minHeight: M.rowMinHeight, idealHeight: nil, maxHeight: nil, alignment: .leading))
+            var cell: _Node = _FlexFrameNode(child: padded, minWidth: nil, idealWidth: nil, maxWidth: .infinity,
+                                             minHeight: M.rowMinHeight, idealHeight: nil, maxHeight: nil, alignment: .leading)
             if i < section.rows.count - 1 {
+                // The separator is drawn in the row's own last point (rows stay 52 apart), from where the row's text
+                // starts (past a Label's icon column) to 16 before the card's edge.
                 let line = _ShapeNode(path: section.path + "/sep\(i)", env: env, shape: _AnyShape(Rectangle()),
                                       fill: AnyShapeStyle(M.separatorColor), stroke: nil)
                 let sized = _FixedFrameNode(child: line, width: nil, height: M.separator, alignment: .center)
-                cardRows.append(_PaddingNode(child: sized, insets: EdgeInsets(top: 0, leading: M.rowInset, bottom: 0, trailing: M.rowInset)))
+                let inset = _PaddingNode(child: sized, insets: EdgeInsets(top: 0, leading: M.rowInset + (row.separatorLeading ?? 0), bottom: 0, trailing: M.rowInset))
+                cell = _LayeredNode(child: cell, secondary: [inset], alignment: .bottom, isOverlay: true)
             }
+            cardRows.append(cell)
         }
         if !cardRows.isEmpty {
             let card = _StackNode(path: section.path + "/card", env: env, axis: .vertical, alignment: .leading, spacing: 0, children: cardRows)

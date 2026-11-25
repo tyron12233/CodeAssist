@@ -153,7 +153,7 @@ extension View {
     public func labelStyle<S: LabelStyle>(_ style: S) -> some View { self }
     public func symbolRenderingMode(_ mode: SymbolRenderingMode?) -> some View { self }
     public func symbolVariant(_ variant: SymbolVariants) -> some View { self }
-    public func imageScale(_ scale: Image.Scale) -> some View { self }
+    public func imageScale(_ scale: Image.Scale) -> some View { environment(\.imageScale, scale) }
     public func badge(_ count: Int) -> some View { self }
     public func badge(_ label: Text?) -> some View { self }
     public func help(_ text: String) -> some View { self }
