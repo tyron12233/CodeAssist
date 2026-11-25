@@ -427,6 +427,12 @@ public struct SwiftUILabel<Title: View, Icon: View>: View {
             switch environment._labelStyle {
             case .iconOnly: icon
             case .titleOnly: title
+            case .unavailable:
+                // ContentUnavailableView's label: a large secondary symbol over a title2 bold title.
+                VStack(spacing: 15 + 1.0 / 3) {
+                    icon.font(.system(size: 48)).foregroundStyle(.secondary)
+                    title.font(.title2.bold())
+                }
             default:
                 HStack(spacing: 8) {
                     icon
@@ -452,7 +458,7 @@ extension SwiftUILabel where Title == Text, Icon == Image {
 public typealias Label<Title: View, Icon: View> = SwiftUILabel<Title, Icon>
 
 public protocol LabelStyle {}
-enum _LabelStyleKind { case automatic, iconOnly, titleOnly, titleAndIcon }
+enum _LabelStyleKind { case automatic, iconOnly, titleOnly, titleAndIcon, unavailable }
 public struct TitleOnlyLabelStyle: LabelStyle { public init() {} }
 public struct IconOnlyLabelStyle: LabelStyle { public init() {} }
 public struct TitleAndIconLabelStyle: LabelStyle { public init() {} }

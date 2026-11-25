@@ -136,6 +136,7 @@ class SwiftToolchain(
             add("-resource-dir"); add(resourceDir.toString())
             add("-sdk"); add(sdkRoot.toString())
             add("-module-cache-path"); add(moduleCache.toString())
+            addAll(macroArguments(libs, frontend = true))
             // Where the JIT finds the runtime a program loads (libswiftCore.so, libFoundation.so, ...).
             add("-L"); add(libs.toString())
             if (withSwiftUI) { add("-I"); add(swiftUIModules.toString()) }
@@ -185,7 +186,24 @@ class SwiftToolchain(
         add("-resource-dir"); add(resourceDir.toString())
         add("-module-cache-path"); add(moduleCache.toString())
         if (hasSwiftUI) { add("-I"); add(swiftUIModules.toString()) }
+        libDir?.let { addAll(macroArguments(it, frontend = false)) }
         files.forEach { add(it.toString()) }
+    }
+
+    /**
+     * Where macros are expanded: the toolchain's macro plugins (`@Observable`, `#Predicate`) and the compiler's
+     * in-process plugin server, which the APK carries among its native libraries. The compiler would look for them
+     * beside its own executable, as a toolchain lays them out; on the device that executable is a renamed library.
+     * [frontend]: as swift-frontend takes them, else as the driver-style arguments the language server reads.
+     */
+    private fun macroArguments(libs: Path, frontend: Boolean): List<String> {
+        val server = libs.resolve("libSwiftInProcPluginServer.so")
+        if (!Files.isRegularFile(server)) return emptyList()
+        return if (frontend) {
+            listOf("-plugin-path", libs.toString(), "-in-process-plugin-server-path", server.toString())
+        } else {
+            listOf("-plugin-path", libs.toString(), "-Xfrontend", "-in-process-plugin-server-path", "-Xfrontend", server.toString())
+        }
     }
 
     /** The environment every Swift process gets: a home and a temp dir of the plugin's own. */

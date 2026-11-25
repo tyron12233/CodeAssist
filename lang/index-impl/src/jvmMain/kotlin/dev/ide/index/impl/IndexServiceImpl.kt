@@ -162,6 +162,14 @@ class IndexServiceImpl(
     }
 
     private val states: Map<IndexId, State> = extensions.associate { it.id to State(it) }
+
+    /**
+     * Source-root file suffixes the walk reads beyond `.java`/`.kt`: the union of every extension's
+     * [IndexExtension.sourceFileExtensions], each with its leading dot. This is how a plugin's index over its
+     * own language's files (`.swift`, `.dart`) gets them at all. The host reads it too, to re-index those files
+     * on save and create the way it does `.java`/`.kt`.
+     */
+    val extraSourceSuffixes: Set<String> = sourceSuffixesOf(extensions)
     private val blockCache = BlockCache(blockCacheBytes, blockSize)
 
     /** True on memory-constrained hosts ([constrainedHeap]). Drives memory-vs-speed trade-offs during the build
@@ -991,10 +999,12 @@ class IndexServiceImpl(
             }
 
             // Walk the current source/resource tree, interning each file to its id and capturing its (size, mtime)
-            // fingerprint. Source roots: Java/Kotlin. Resource roots: Android res XML. Inputs are disjoint — each
+            // fingerprint. Source roots: Java/Kotlin, plus the suffixes an extension asked for
+            // ([extraSourceSuffixes]). Resource roots: Android res XML. Inputs are disjoint: each
             // extension's inputFilter selects its own, so the Java indexes ignore .xml and the resource index .java.
             val groups =
-                roots.map { it to setOf(".java", ".kt") } + resourceRoots.map { it to setOf(".xml") }
+                roots.map { it to BUILT_IN_SOURCE_SUFFIXES + extraSourceSuffixes } +
+                    resourceRoots.map { it to setOf(".xml") }
             val excluded = runCatching { excludedDirs() }.getOrDefault(emptySet())
             for ((root, exts) in groups) {
                 if (!Files.isDirectory(root)) continue
@@ -1598,6 +1608,19 @@ class IndexServiceImpl(
     }
 
     companion object {
+        /** What the source walk always reads under a source root, whatever the extensions ask for. */
+        val BUILT_IN_SOURCE_SUFFIXES: Set<String> = setOf(".java", ".kt")
+
+        /** The extra source suffixes [extensions] ask for, normalized to a leading dot, minus the built-in ones. */
+        fun sourceSuffixesOf(extensions: List<IndexExtension<*, *>>): Set<String> =
+            extensions.asSequence()
+                .flatMap { ext -> runCatching { ext.sourceFileExtensions }.getOrDefault(emptySet()).asSequence() }
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && it != "." }
+                .map { if (it.startsWith('.')) it else ".$it" }
+                .filterNot { it in BUILT_IN_SOURCE_SUFFIXES }
+                .toSet()
+
         /** Inputs parsed in parallel per batch inside one artifact build (see [buildArtifact]). Bounds the
          *  resident inputs + their entries while keeping the (≤8-wide) build dispatcher fed. */
         private const val PARALLEL_BATCH = 64

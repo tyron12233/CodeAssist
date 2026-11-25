@@ -3,6 +3,7 @@ package com.example.hello
 import dev.ide.build.BUILD_PLUGIN_EP
 import dev.ide.build.RUN_TASK_PROVIDER_EP
 import dev.ide.build.SOURCE_GENERATOR_EP
+import dev.ide.index.INDEX_EP
 import dev.ide.platform.log.Logger
 import dev.ide.platform.notify.MessageSeverity
 import dev.ide.platform.notify.USER_MESSAGES
@@ -30,6 +31,8 @@ import dev.ide.plugin.action.UI_ACTION_EP
  * It contributes to several surfaces, each a plain extension-point registration:
  *  - a command in the command palette and the More menu ([UI_ACTION_EP]);
  *  - an editor action at the caret, on the same extension point but the [ActionPlaces.EDITOR] place;
+ *  - an index over the project's `.hello` files ([INDEX_EP]), and an editor action that queries it back through
+ *    `INDEX_QUERIES` (see [HelloGreetingIndex] and [findGreetings] in HelloIndex.kt);
  *  - a category in Settings ([SETTINGS_PAGE_EP]);
  *  - build logic: a task on every build graph, a source generator, and a Run-picker row (see
  *    [HelloBuildReportPlugin], [HelloBuildInfoGenerator] and [HelloRunTaskProvider] in HelloBuildPlugin.kt);
@@ -86,6 +89,21 @@ class HelloPlugin : Plugin {
             ) { ctx -> wrapInRunCatching(ctx, log) },
         )
 
+        // A plugin index over the plugin's own `.hello` files, and an editor action that queries it back
+        // (HelloIndex.kt). The action shows only where the caret is on a name in a `.hello` file.
+        reg.register(INDEX_EP, HelloGreetingIndex())
+        reg.register(
+            UI_ACTION_EP,
+            SimpleAction(
+                id = "com.example.hello.findGreetings",
+                text = "Hello: where else is this name greeted?",
+                places = setOf(ActionPlaces.EDITOR),
+                iconId = "search",
+                order = 110,
+                visible = { ctx -> greetedNameAtCaret(ctx) != null },
+            ) { ctx -> findGreetings(ctx) },
+        )
+
         val settings = HelloSettingsPage(log)
         reg.register(SETTINGS_PAGE_EP, settings)
 
@@ -101,7 +119,7 @@ class HelloPlugin : Plugin {
 
         reportPackagedBinaries(reg, log)
 
-        log.info("registered 2 actions, 1 settings page and 3 build contributions; the UI facet adds a tool window")
+        log.info("registered 3 actions, 1 index, 1 settings page and 3 build contributions; the UI facet adds a tool window")
     }
 }
 

@@ -7,6 +7,7 @@ bionic, with the runtime and Foundation for Android beside it. This script takes
 
   out/<abi>/jniLibs/<abi>/  everything that is EXECUTED or mapped as code, flat, under lib*.so names:
     libswiftfrontend.so       bin/swift-frontend, the compiler, which also runs a program (-interpret, LLVM's JIT)
+    lib*Macros.so             the macro plugins (lib/swift/host/plugins) and the in-process plugin server
     libsourcekitlsp.so        bin/sourcekit-lsp, the language server (completion, diagnostics), with sourcekitd
                               (libsourcekitdInProc.so, a second copy of the compiler) and its plugins
     lib*.so                   every shared library the compiler, the Swift runtime and Foundation load
@@ -301,7 +302,7 @@ def is_elf(path):
 def library_index(root, triple):
     """Every shared library in the merged prefix by the name a NEEDED entry uses, following symlinks."""
     index = {}
-    for rel in ("lib", "lib/swift/host/compiler", f"opt/ndk-multilib/{triple}/lib"):
+    for rel in ("lib", "lib/swift/host/compiler", "lib/swift/host", "lib/swift/host/plugins", f"opt/ndk-multilib/{triple}/lib"):
         base = os.path.join(root, rel)
         if not os.path.isdir(base):
             continue
@@ -388,6 +389,9 @@ def main():
     index["sourcekit-lsp"] = os.path.realpath(os.path.join(root, "bin/sourcekit-lsp"))
     # The language server and what it loads by path rather than by NEEDED: sourcekitd and its completion plugins.
     language = ["sourcekit-lsp", "libsourcekitdInProc.so", "libSwiftSourceKitPlugin.so", "libSwiftSourceKitClientPlugin.so"]
+    # Macros: the compiler's in-process plugin server and the toolchain's macro plugins (@Observable, #Predicate,
+    # #URL...), loaded by path like code, so carried with it.
+    macros = ["libSwiftInProcPluginServer.so", "libObservationMacros.so", "libFoundationMacros.so", "libSwiftMacros.so"]
     # Libraries behind headers the Android module map offers (glob, System V IPC): a program using one loads it.
     # Not libiconv.so: it is LGPL, and bionic has iconv itself from API 28; its header stays for the module map.
     extras = ["libandroid-glob.so", "libandroid-sysv-semaphore.so", "libandroid-shmem.so"]
@@ -401,8 +405,8 @@ def main():
             f.write(f"// Stub {stub}: the symbols {user} imports, never used by the language server.\n")
             for n, obj in syms:
                 f.write(f"void *{n} = 0;\n" if obj else f"void {n}(void) {{ __builtin_trap(); }}\n")
-    libs, dropped = closure(["swift-frontend"] + language + runtime + extras, index)
-    for tool in ["swift-frontend"] + language:
+    libs, dropped = closure(["swift-frontend"] + language + macros + runtime + extras, index)
+    for tool in ["swift-frontend"] + language + macros:
         if tool in dropped:
             die(f"{tool} needs libraries no staged package has: {dropped[tool]}")
     for name, missing in sorted(dropped.items()):

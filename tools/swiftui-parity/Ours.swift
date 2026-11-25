@@ -219,6 +219,25 @@ final class Painter {
                     let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: colors, locations: locations)!
                     let pts = (g["p"] as! [NSNumber]).map { CGFloat($0.doubleValue) }
                     switch g["k"] as! String {
+                    case "angular":
+                        // SwiftUI's angular gradient starts at the trailing edge and runs clockwise on screen.
+                        // Wedges of half a degree, each the gradient's colour at its angle (CGContext has no conic gradient).
+                        let c = CGPoint(x: pts[0], y: pts[1]), r: CGFloat = 2000
+                        let comps = stops.map { Self.color($0[0] as! String).components! }
+                        for k in 0..<720 {
+                            let t = Double(k) / 720, a0 = t * 2 * .pi, a1 = Double(k + 1) / 720 * 2 * .pi
+                            var j = 0
+                            while j < locations.count - 2 && Double(locations[j + 1]) < t { j += 1 }
+                            let span = max(1e-6, Double(locations[min(j + 1, locations.count - 1)] - locations[j]))
+                            let f = min(1, max(0, (t - Double(locations[j])) / span))
+                            let a = comps[j], b = comps[min(j + 1, comps.count - 1)]
+                            ctx.setFillColor(CGColor(srgbRed: a[0] + (b[0] - a[0]) * f, green: a[1] + (b[1] - a[1]) * f, blue: a[2] + (b[2] - a[2]) * f, alpha: a[3] + (b[3] - a[3]) * f))
+                            ctx.move(to: c)
+                            ctx.addLine(to: CGPoint(x: c.x + r * cos(a0), y: c.y + r * sin(a0)))
+                            ctx.addLine(to: CGPoint(x: c.x + r * cos(a1), y: c.y + r * sin(a1)))
+                            ctx.closePath()
+                            ctx.fillPath()
+                        }
                     case "radial":
                         ctx.drawRadialGradient(gradient, startCenter: CGPoint(x: pts[0], y: pts[1]), startRadius: pts[2],
                                                endCenter: CGPoint(x: pts[0], y: pts[1]), endRadius: pts[3], options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
@@ -581,7 +600,7 @@ struct Ours {
         _Graph.shared.measurer = CoreTextMeasurer()
         Painter.glassParams = GlassParams.load(URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("glass-params.json").path)
         var total = 0.0, count = 0
-        for (name, view) in (parityCases() + glassCases() + chromeCases() + darkCases()) where only == nil || name == only {
+        for (name, view) in (parityCases() + glassCases() + chromeCases() + darkCases() + apiCases()) where only == nil || name == only {
             let preview = _Preview(name) { view }
             _Graph.shared.beginRender()
             let json = _render(preview, index: 0, scheme: name.hasSuffix("-dark") ? .dark : .light)

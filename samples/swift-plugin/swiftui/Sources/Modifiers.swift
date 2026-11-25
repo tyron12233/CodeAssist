@@ -19,7 +19,7 @@ extension View {
     public func background<V: View>(alignment: Alignment = .center, @ViewBuilder content: () -> V) -> some View {
         _modified(_LayerModifier(layer: AnyView(content()), alignment: alignment, isOverlay: false))
     }
-    public func background<V: View>(_ background: V, alignment: Alignment = .center) -> some View {
+    @_disfavoredOverload public func background<V: View>(_ background: V, alignment: Alignment = .center) -> some View {
         _modified(_LayerModifier(layer: AnyView(background), alignment: alignment, isOverlay: false))
     }
     public func background<S: ShapeStyle>(_ style: S, ignoresSafeAreaEdges edges: Edge.Set = .all) -> some View {
@@ -38,7 +38,7 @@ extension View {
     public func overlay<V: View>(alignment: Alignment = .center, @ViewBuilder content: () -> V) -> some View {
         _modified(_LayerModifier(layer: AnyView(content()), alignment: alignment, isOverlay: true))
     }
-    public func overlay<V: View>(_ overlay: V, alignment: Alignment = .center) -> some View {
+    @_disfavoredOverload public func overlay<V: View>(_ overlay: V, alignment: Alignment = .center) -> some View {
         _modified(_LayerModifier(layer: AnyView(overlay), alignment: alignment, isOverlay: true))
     }
     public func overlay<S: ShapeStyle>(_ style: S, ignoresSafeAreaEdges edges: Edge.Set = .all) -> some View {
@@ -154,9 +154,12 @@ extension View {
     public func onSubmit(of triggers: SubmitTriggers = .text, _ action: @escaping () -> Void) -> some View { self }
     public func textFieldStyle<S: TextFieldStyle>(_ style: S) -> some View { self }
     public func toggleStyle<S: ToggleStyle>(_ style: S) -> some View { self }
-    public func pickerStyle<S: PickerStyle>(_ style: S) -> some View { self }
+    public func pickerStyle<S: PickerStyle>(_ style: S) -> some View {
+        let kind = _pickerStyleKind(style)
+        return _modified(_EnvironmentModifier { $0[_PickerStyleKey.self] = kind })
+    }
     public func labelStyle<S: LabelStyle>(_ style: S) -> some View {
-        let kind: _LabelStyleKind = style is IconOnlyLabelStyle ? .iconOnly : style is TitleOnlyLabelStyle ? .titleOnly
+        let kind: _LabelStyleKind = style is _UnavailableLabelStyle ? .unavailable : style is IconOnlyLabelStyle ? .iconOnly : style is TitleOnlyLabelStyle ? .titleOnly
             : style is TitleAndIconLabelStyle ? .titleAndIcon : .automatic
         return _modified(_EnvironmentModifier { $0._labelStyle = kind })
     }

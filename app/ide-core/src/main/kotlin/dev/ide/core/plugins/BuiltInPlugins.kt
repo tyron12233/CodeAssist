@@ -93,6 +93,7 @@ import dev.ide.core.templates.KmpLibraryTemplate
 import dev.ide.core.templates.SwingCanvasTemplate
 import dev.ide.core.templates.WeatherSampleTemplate
 import dev.ide.index.INDEX_EP
+import dev.ide.index.INDEX_QUERIES
 import dev.ide.index.SYMBOL_SEARCH
 import dev.ide.ksp.DefaultKspProcessorLoader
 import dev.ide.ksp.KspProcessorCatalog
@@ -971,6 +972,11 @@ private class IdeCoreServicesPlugin : Plugin {
         // nothing else: the alias resolves ANDROID_RESOURCE_SERVICE lazily, like every other one.
         reg.service(BUILD_CONTROL, ServiceScopeLevel.WORKSPACE) { getService(BUILD_SERVICE) }
         reg.service(SYMBOL_SEARCH, ServiceScopeLevel.WORKSPACE) { getService(SEARCH_SERVICE) }
+        // Not an alias: a query-only view over the engine's index, so a plugin can read the index it contributed
+        // (or any other) outside an analyzer, and cannot rebuild or invalidate it.
+        reg.service(INDEX_QUERIES, ServiceScopeLevel.WORKSPACE) {
+            dev.ide.core.services.IndexQueriesService(getService(ENGINE_CONTEXT).indexService)
+        }
         reg.service(MODULE_SOURCES, ServiceScopeLevel.WORKSPACE) { getService(MODULE_SERVICE) }
         reg.service(MODULE_ANALYSIS, ServiceScopeLevel.MODULE) { getService(MODULE_ANALYZERS) }
         reg.service(PROJECT_SYNC_SERVICE, ServiceScopeLevel.WORKSPACE) {

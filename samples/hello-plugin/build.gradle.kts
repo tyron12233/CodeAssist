@@ -61,6 +61,8 @@ dependencies {
     compileOnly(project(":build-api"))
     // The interpreter SPI (HelloInterpreter): running the open project's code with no compile step.
     compileOnly(project(":interp-api"))
+    // The index SPI (HelloIndex.kt): an index over the project's `.hello` files, and INDEX_QUERIES to read it.
+    compileOnly(project(":index-api"))
 
     // Compose, at the versions the IDE bundles and in the coordinates an out-of-tree plugin would use, so
     // this sample also checks that those pins are the right ones. compileOnly for the same reason as the

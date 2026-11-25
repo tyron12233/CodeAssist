@@ -441,8 +441,16 @@ const val PLUGIN_API_VERSION: Int = 4
  * And `PluginManifest.optionalDependsOn` (TOML `optionalDependsOn = [...]`): plugins this one works with but
  * does not need. A present one loads first; a missing one blocks nothing, and the Plugins screen offers to get
  * it, as it now also does for a missing [PluginManifest.dependsOn]. An older host ignores the key.
+ *
+ * `3.9.0` opens the index to a plugin both ways. `dev.ide.index.INDEX_QUERIES` (`platform.indexQueries`,
+ * WORKSPACE) in `index-api` answers queries against any index, the plugin's own included, from anywhere it
+ * holds the workspace's services; before, only an analyzer, quick fix or intention could ask, through
+ * `AnalysisTarget.index`. And `IndexExtension.sourceFileExtensions` in `model-api` names the file types an index
+ * needs read: the source walk read only `.java` and `.kt`, so an index over `.swift` or `.dart` files was never
+ * handed one. Those files are now walked under the source roots and re-indexed on save and create. Additive; an
+ * older host never reads the suffixes, and naming the key there throws a `LinkageError` a plugin can catch.
  */
-const val PLUGIN_SPI_VERSION: String = "3.8.0"
+const val PLUGIN_SPI_VERSION: String = "3.9.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry

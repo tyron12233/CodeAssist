@@ -465,7 +465,7 @@ The full inventory is in [Appendix A](#appendix-a-extension-point-index). A repr
 | `dev.ide.analysis.ANALYZER_EP` | An inspection producing diagnostics |
 | `dev.ide.analysis.QUICK_FIX_PROVIDER_EP` | A fix for a diagnostic |
 | `dev.ide.analysis.ACTION_PROVIDER_EP` | A caret intention (no diagnostic needed) |
-| `dev.ide.index.INDEX_EP` | A persisted symbol index |
+| `dev.ide.index.INDEX_EP` | A persisted index, queried back through `INDEX_QUERIES` (section 14g) |
 | `dev.ide.build.BUILD_SYSTEM_EP` | Support for a new build system |
 | `dev.ide.build.BUILD_PLUGIN_EP` | Extra tasks wired into every build graph |
 | `dev.ide.build.SOURCE_GENERATOR_EP` | A code generator that runs before compilation |
@@ -2915,6 +2915,60 @@ so use `serviceOrNull` if you support one.
 
 No capability: asking for analysis to run again shows the user nothing new.
 
+## 14g. Contribute an index and query it
+
+An index is an `IndexExtension<K, V>` registered on `INDEX_EP`, the same extension point the IDE's own
+indexes use. It is built in the background, saved on disk, kept current when a file is saved or created, and
+rebuilt only when your `version` changes. A plugin index runs through all of that the way a built-in index does.
+
+```kotlin
+class TodoIndex : IndexExtension<String, TodoHit> {
+    override val id = IndexId("com.example.todos")     // unique; prefix it with your plugin id
+    override val version = 1                          // bump when what index() emits changes
+    override val keyDescriptor = StringKeyDescriptor
+    override val valueExternalizer = TodoHitExternalizer
+    override val matching = MatchingMode.PREFIX_ONLY
+    // Your language's files. The IDE reads only .java and .kt under source roots unless an index asks (3.9.0).
+    override val sourceFileExtensions = setOf(".swift")
+    // Every index sees every file the walk reads, so select yours.
+    override val inputFilter = InputFilter { it.origin == IndexOrigin.SOURCE && it.unitName?.endsWith(".swift") == true }
+
+    override fun index(input: IndexInput): Map<String, Collection<TodoHit>> = ...   // pure: no I/O, no state
+}
+
+reg.register(INDEX_EP, TodoIndex())
+```
+
+Query it with `INDEX_QUERIES` (`dev.ide.index.IndexQueries`, WORKSPACE, since SPI 3.9.0) from anywhere you
+hold the workspace's services, such as an action's `ctx.workspaceServices`. An analyzer, quick fix or intention
+already has the same thing as `AnalysisTarget.index`.
+
+```kotlin
+val index = workspace.service(INDEX_QUERIES)
+if (!index.status.ready) return                                         // a miss means nothing yet
+val hits = index.exact<TodoHit>(IndexId("com.example.todos"), "fixme").toList()
+val file = hits.firstOrNull()?.let { index.filePath(it.fileId) }      // store input.fileId, resolve it here
+```
+
+`prefix` and `fuzzy` return scored `Hit`s; an empty prefix or pattern returns nothing rather than every key.
+On a host older than 3.9.0 the `INDEX_QUERIES` constant does not exist, so naming it throws a `LinkageError`;
+catch that if you support one. Until a build finishes with `status.ready`, an empty answer means
+"not indexed yet", not "absent"; subscribe to `IndexTopics.INDEXING` to hear when one does. The key is
+query-only. The IDE decides when to build and re-index, so there is no way to start a rebuild or drop the
+cache, and the library half of that cache is shared by every project on the device.
+
+Things that bite:
+
+- `index()` runs on indexing threads, several files at once. Keep it pure. Use `input.shared(key) { ... }` to
+  parse a file once for several of your indexes.
+- Files are read from the modules' source roots only. A file outside them is not walked.
+- Plugins load when the IDE starts, so a newly installed index starts working after the restart the Plugins
+  screen asks for. Its first build then indexes every matching file in the project.
+- The value is written with your `Externalizer`. Change its bytes and you must bump `version`, or the next
+  launch reads the old bytes with the new reader.
+
+No capability: reading the project's own index exposes nothing the plugin could not read from the files.
+
 ## 15. Ship your plugin as its own app
 
 Everything above is the internal tier, where a plugin is a module inside the IDE. A plugin can instead be a
@@ -3449,6 +3503,7 @@ with `Module.service(key)` / `Workspace.service(key)` from an extension point ca
 | `dev.ide.model.WORKSPACE_SERVICE` | WORKSPACE | `Workspace` | The bound workspace. The `ServiceScope.workspace()` helper is this lookup |
 | `dev.ide.build.BUILD_CONTROL` | WORKSPACE | `BuildControl` | Start or stop the build; compile and run a module's `main` and capture its output |
 | `dev.ide.index.SYMBOL_SEARCH` | WORKSPACE | `SymbolSearch` | Symbol and member lookup over the workspace indexes |
+| `dev.ide.index.INDEX_QUERIES` | WORKSPACE | `IndexQueries` | Query any index by id, a plugin's own included: exact, prefix and fuzzy lookup, a value's file, and readiness (section 14g) |
 | `dev.ide.model.MODULE_SOURCES` | WORKSPACE | `ModuleSources` | A module's source sets and source roots, including adding one |
 | `dev.ide.model.MODULE_DEPENDENCIES` | WORKSPACE | `ModuleDependencies` | Maven dependencies as the Dependencies screen sees them: search, versions, a module's resolved graph with conflicts, and adding a library, a BOM or a repository (section 14e) |
 | `dev.ide.model.ANDROID_MODULES` | WORKSPACE | `AndroidModules` | Each Android module's configuration as the build resolves it: SDK levels, namespace and application id, build features, build types, flavors, variants with their application ids, and the active variant (section 14d) |
