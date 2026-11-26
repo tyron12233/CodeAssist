@@ -11,7 +11,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 // by :playground-spike, so none of it blocks the UI thread. This is the UI side of that protocol: one message in,
 // one message out, matched by id. The wire format is the worker's: see its Worker.kt.
 
-@JsFun("(url, handler) => { const w = new Worker(url, { type: 'module' }); w.onmessage = (e) => handler(e.data.type, e.data.id ?? 0, e.data.a ?? '', e.data.b ?? '', e.data.c ?? '', e.data.d ?? ''); w.onerror = (e) => handler('fatal', 0, String((e && e.message) || 'worker failed'), '', '', ''); return w; }")
+@JsFun("(url, handler) => { const w = new Worker(url, { type: 'module' }); w.onmessage = (e) => handler(e.data.type, e.data.id ?? 0, e.data.a ?? '', e.data.b ?? '', e.data.c ?? '', e.data.d ?? ''); w.onerror = (e) => handler('fatal', 0, String((e && e.message) || 'worker failed') + (e && e.error && e.error.stack ? ' @ ' + String(e.error.stack).split('\\n').slice(0, 8).map((l) => l.trim().replace(/https?:[^ )]*\\//, '')).join(' | ') : ''), '', '', ''); return w; }")
 private external fun createWorker(url: String, handler: (String, Int, String, String, String, String) -> Unit): JsAny
 
 @JsFun("(w, type, id, source, offset, base, end, path) => w.postMessage({ type, id, source, offset, base, end, path })")
@@ -37,6 +37,8 @@ class EngineClient(
 ) {
     private var nextId = 1
     private val waiting = HashMap<Int, CancellableContinuation<Array<String>>>()
+    /** What each unanswered request is (for the report when the worker dies). */
+    private val inFlight = HashMap<Int, String>()
     private var worker: JsAny? = null
     private var ready: CancellableContinuation<Unit>? = null
     var isReady = false
@@ -53,11 +55,11 @@ class EngineClient(
                 "status" -> onStatus(a)
                 "ready" -> { isReady = true; onStatus("ready (engine loaded in ${a.toLongOrNull()?.div(100)?.div(10.0) ?: a} s)"); ready?.resume(Unit); ready = null; onReady() }
                 "fatal" -> {
-                    lastFatal = a; onStatus("engine failed: $a"); failAll()
+                    lastFatal = a + " [in flight: " + inFlight.values.joinToString() + "]"; onStatus("engine failed: $a"); failAll()
                     // A worker that was up and died (a crash mid-run) is replaced; one that never came up is not retried.
                     if (isReady) stop()
                 }
-                else -> waiting.remove(id)?.resume(arrayOf(a, b, c, d))
+                else -> { inFlight.remove(id); waiting.remove(id)?.resume(arrayOf(a, b, c, d)) }
             }
         }
     }
@@ -79,13 +81,14 @@ class EngineClient(
 
     private fun failAll() {
         val pending = waiting.values.toList()
-        waiting.clear()
+        waiting.clear(); inFlight.clear()
         pending.forEach { it.resume(arrayOf("", "", "", "")) }
     }
 
     private suspend fun ask(type: String, path: String, source: String, offset: Int, end: Int = 0, method: String = ""): Array<String> = suspendCancellableCoroutine { k ->
         val id = nextId++
         waiting[id] = k
+        inFlight[id] = "$type $path"
         k.invokeOnCancellation { waiting.remove(id) }
         postToWorker(worker ?: return@suspendCancellableCoroutine k.resume(arrayOf("", "", "", "")), type, id, source, offset, method, end, path)
     }
