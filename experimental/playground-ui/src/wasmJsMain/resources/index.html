@@ -175,6 +175,11 @@
     if (use !== real) Object.defineProperty(window, 'devicePixelRatio', { get: function () { return use; }, configurable: true });
   })();
 </script>
+<script>
+  // Repeat visits: a service worker keeps the content-hashed engine, libraries and wasm (sw.js). It needs https or
+  // localhost; elsewhere the browser's own HTTP cache does the same job, given long cache headers on those files.
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+</script>
 <script src="playground-ui.js?v=@ASSETS@"></script>
 </body>
 </html>

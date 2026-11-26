@@ -33,18 +33,25 @@ special headers: no `SharedArrayBuffer`, no cross-origin isolation.
 
 ## Caching
 
-`index.html` and `playground-ui.js` are the only files with fixed names. The worker and the jars sit in directories named
-for a hash of what they hold (`worker-<h>/`, `jars-<h>/`), the page is built to ask for exactly those, and webpack hashes
-the `.wasm` files itself. So:
+`index.html` and `playground-ui.js` are the only files with fixed names that matter. The worker and the jars sit in
+directories named for a hash of what they hold (`worker-<h>/`, `jars-<h>/`), the page is built to ask for exactly those,
+and webpack hashes the `.wasm` files itself. So a browser can never run a new page against an old worker or old jars
+(that mix fails in odd ways: a run that finishes with no output, a worker that dies on a method that is not there).
 
-* `index.html`, `playground-ui.js`: `Cache-Control: no-cache` (revalidate each visit).
+What a host should send:
+
+* `index.html`, `playground-ui.js`, `sw.js`: `Cache-Control: no-cache` (revalidate each visit).
 * `worker-*/`, `jars-*/`, `*.wasm`: `Cache-Control: public, max-age=31536000, immutable`.
 
-A browser then never runs a new page against an old worker or old jars. That mix fails in odd ways (a run that finishes
-with no output, a worker that dies on a method that is not there), and it is what a server without cache headers produces.
+On top of that `sw.js` is a service worker that keeps the hashed files (the engine, the libraries, the wasm) and serves
+them with no request at all on a repeat visit; fonts and strings (`composeResources/`) are served from it and refreshed
+behind it. `index.html` and `playground-ui.js` are always fetched first, so a new build is picked up at once, and old
+builds' files are dropped when a newer page is seen. It only speeds up repeat visits: the page does not work offline.
+A service worker needs https or `localhost`; over plain http (a LAN address) the browser's HTTP cache does the same job
+given the headers above. The first visit cannot use it (the worker does not control the page yet), and the second
+fetches again, from the HTTP cache if the headers are right.
 
-Measured: the app's wasm is 50 MB in development mode and 11 MB in production, `playground-ui.js` 3.5 MB and 0.5 MB.
-Most of the rest of the production directory (about 47 MB) is the jars the engine loads.
+What is not cached: the class indexes. They are rebuilt in the worker each start (the loading screen's last step).
 
 ## Soft keyboard (touch devices)
 
