@@ -42,6 +42,9 @@ class EngineClient(
     var isReady = false
         private set
 
+    /** Why the worker last died (its error event's message), for a run that was lost with it. */
+    private var lastFatal = ""
+
     fun start() {
         worker = createWorker(workerUrl()) { type, id, a, b, c, d ->
             when (type) {
@@ -49,7 +52,11 @@ class EngineClient(
                 "boot" -> postToWorker(worker!!, "init", 0, "", 0, jarsBaseUrl(), 0, "")
                 "status" -> onStatus(a)
                 "ready" -> { isReady = true; onStatus("ready (engine loaded in ${a.toLongOrNull()?.div(100)?.div(10.0) ?: a} s)"); ready?.resume(Unit); ready = null; onReady() }
-                "fatal" -> { onStatus("engine failed: $a"); failAll() }
+                "fatal" -> {
+                    lastFatal = a; onStatus("engine failed: $a"); failAll()
+                    // A worker that was up and died (a crash mid-run) is replaced; one that never came up is not retried.
+                    if (isReady) stop()
+                }
                 else -> waiting.remove(id)?.resume(arrayOf(a, b, c, d))
             }
         }
@@ -113,6 +120,13 @@ class EngineClient(
     suspend fun run(path: String, source: String): RunResult {
         if (!isReady) return RunResult("", "", "The engine is still loading.", "")
         val r = ask("run", path, source, 0)
+        // A real answer always carries its "lower/run" timing. An empty one is failAll(): the worker died (a stack
+        // overflow is an uncatchable RangeError, or it ran out of memory) or was stopped, and that is not "no output".
+        if (r[3].isEmpty()) {
+            val why = lastFatal.ifEmpty { "the engine stopped before the program finished" }
+            lastFatal = ""
+            return RunResult("", "", "The run was lost: $why. The engine is restarting; run again.", "")
+        }
         return RunResult(r[0], r[1], r[2], r[3])
     }
 }
