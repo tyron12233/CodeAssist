@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // model-api — the value types and interfaces the rest of the SPI is built out of, and the only part of it
@@ -31,6 +32,9 @@ kotlin {
     iosSimulatorArm64()
 
     iosArm64()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { nodejs() }
 
     sourceSets {
         commonMain.dependencies {

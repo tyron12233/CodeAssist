@@ -1,0 +1,22 @@
+{
+  "name": "playground-editor",
+  "private": true,
+  "description": "The Playground's code editor (CodeMirror 6), bundled into one script. Build: npm run build",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild editor.js --bundle --minify --format=esm --target=es2022 --outfile=../../build/editor-bundle/editor.js"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.18.0",
+    "@codemirror/commands": "^6.7.0",
+    "@codemirror/language": "^6.10.0",
+    "@codemirror/legacy-modes": "^6.4.0",
+    "@codemirror/lint": "^6.8.0",
+    "@codemirror/state": "^6.5.0",
+    "@codemirror/theme-one-dark": "^6.1.0",
+    "@codemirror/view": "^6.36.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // jvm-vm: a closed-world JVM bytecode interpreter that runs where there is no JVM.
@@ -18,6 +19,10 @@ kotlin {
     jvm {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
     }
+
+    // The browser (Playground). Tests run under Node, which reads the fixture jars from the host disk.
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { nodejs() }
 
     // skikoBridges.def is a table of every skia C bridge (see tools/skiko_bridges_def.py): referencing them
     // keeps them in the link, and the table is how the VM looks them up by name.

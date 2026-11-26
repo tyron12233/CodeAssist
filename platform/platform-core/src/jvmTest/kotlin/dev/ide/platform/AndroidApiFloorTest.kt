@@ -169,6 +169,7 @@ class AndroidApiFloorTest {
             "desktopMain",             // the desktop shell's half of a Compose target: never on a device
             "desktopPatch",            // :ide-embedded's java.desktop patch, for the JVM inside the iOS app
             "iosMain", "iosArm64Main", "iosSimulatorArm64Main", // no JDK to call
+            "wasmJsMain", "wasmJsTest", // the browser build: no JDK, never in the APK
             "nativeMain", "nativeTest",
         )
         val covered = productionSourceSets.map { it.removePrefix("src/") }.toSet()

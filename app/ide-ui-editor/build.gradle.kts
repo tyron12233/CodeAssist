@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // The code editor: the canvas and its gutter, completion and the popups around it, find/replace, the block
@@ -27,6 +28,9 @@ kotlin {
     // resolve per platform, in `src/iosMain`.
     iosSimulatorArm64()
     iosArm64()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { browser() }
 
     sourceSets {
         commonMain.dependencies {

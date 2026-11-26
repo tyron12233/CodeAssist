@@ -59,6 +59,8 @@ dependencyResolutionManagement {
                 // multiplatform artifact publishes each variant as its own module, so a filter naming only
                 // the root coordinate resolves the metadata and then finds no jar.
                 includeModuleByRegex("org\\.jetbrains", "syntax-api.*")
+                // The wasm variant of syntax-api (the browser Playground) depends on this sibling module.
+                includeModuleByRegex("org\\.jetbrains", "multiplatform.*")
             }
         }
         maven("https://cache-redirector.jetbrains.com/intellij-repository/releases") {
@@ -179,6 +181,10 @@ include(
     // against the real one over android.jar. A decoder agreeing with ASM's API is not the same claim as
     // the CONSUMER producing the same symbols.
     ":kotlin-symbols",
+    // The browser Playground spike: source text -> parse + lower (wasm) -> run in :jvm-vm -> output.
+    ":playground-spike",
+    // The same Playground with the IDE's OWN editor (Compose Multiplatform, :ide-ui-editor) on wasmJs, not CodeMirror.
+    ":playground-ui",
 )
 
 // The IDE shells (Compose Multiplatform + AGP). These apply the Android Gradle plugin / Compose KMP plugin,
@@ -296,7 +302,7 @@ val layers = mapOf(
     // Test-only harnesses, consumed via testImplementation.
     "tools" to listOf("test-support", "bench-support"),
     // Work that is not part of the product yet: built and tested by CI, imported by nothing.
-    "experimental" to listOf("kotlin-syntax", "kotlin-symbols"),
+    "experimental" to listOf("kotlin-syntax", "kotlin-symbols", "playground-spike", "playground-ui"),
 )
 
 // `samples` holds plugins built as their own apps; it is already a directory, so it needs no mapping.

@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // project-model-api — the spine of the framework: Workspace/Project/Module, the modification
@@ -25,6 +26,9 @@ kotlin {
     iosSimulatorArm64()
 
     iosArm64()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { nodejs() }
 
     sourceSets {
         commonMain.dependencies {

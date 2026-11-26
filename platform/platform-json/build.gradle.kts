@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // platform-json — the dependency-free JSON reader and writer, as a multiplatform module.
@@ -23,6 +24,9 @@ kotlin {
     // Matches the one iOS target the port declares; see app/ide-ios.
     iosSimulatorArm64()
     iosArm64()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { browser() }
 
     sourceSets {
         commonTest.dependencies {

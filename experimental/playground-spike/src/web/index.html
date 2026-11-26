@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kotlin Playground</title>
+<style>
+  :root { --bg:#111418; --panel:#181c22; --ink:#e6e8eb; --dim:#8b93a0; --accent:#b6f23d; --err:#ff7b72; --line:#2a303a; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f6f7f9; --panel:#fff; --ink:#1b1f24; --dim:#66707c; --accent:#3f6b00; --err:#c0322b; --line:#d8dde3; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui, sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 48px; display:grid; gap:14px; }
+  h1 { margin:0; font-size:20px; }
+  .bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  #status { color:var(--dim); font-size:13px; }
+  button { background:var(--accent); color:#111; border:0; border-radius:8px; padding:9px 18px; font:600 14px system-ui; cursor:pointer; }
+  button:disabled { opacity:.45; cursor:default; }
+  pre { width:100%; margin:0; background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px; font:13.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; tab-size:4; }
+  #editor { height: 380px; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--panel); }
+  #editor .cm-editor { height:100%; }
+  .hint { color:var(--dim); font-size:12.5px; }
+  pre { min-height: 120px; white-space: pre-wrap; overflow:auto; }
+  pre.error { color: var(--err); }
+  #timing { color:var(--dim); font-size:12.5px; }
+</style>
+</head>
+<body data-state="loading">
+<main>
+  <h1>Kotlin Playground</h1>
+  <div class="bar">
+    <button id="run" disabled>Run</button>
+    <span id="status">starting…</span>
+  </div>
+  <div id="editor" aria-label="Kotlin source"></div>
+  <pre id="out" aria-live="polite"></pre>
+  <div id="timing"></div>
+  <div class="hint">Ctrl-Space completes · Cmd/Ctrl-Enter runs · problems are underlined as you type</div>
+</main>
+<script src="main.js" type="module"></script>
+</body>
+</html>

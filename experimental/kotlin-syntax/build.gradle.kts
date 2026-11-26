@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // kotlin-syntax (EXPERIMENTAL) — a portable Kotlin lexer + parser that mirrors the compiler's PSI shape.
@@ -34,6 +35,10 @@ kotlin {
     iosSimulatorArm64()
 
     iosArm64()
+
+    // The browser target (Playground spike). Tests run under Node: headless, no Chrome/Karma.
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { nodejs() }
 
     sourceSets {
         commonMain {
