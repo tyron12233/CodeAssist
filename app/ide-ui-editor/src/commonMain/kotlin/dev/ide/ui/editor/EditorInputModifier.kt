@@ -110,16 +110,26 @@ internal fun Modifier.editorInput(
         if (!pinchZoom) Modifier else Modifier.pointerInput(Unit) {
             awaitEachGesture {
                 awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                // A new font size re-shapes every visible line, which costs far more than a frame on a phone (the
+                // browser build most of all). So the size the fingers ask for is accumulated here and applied only
+                // when it differs from the applied one by PINCH_STEP, and exactly once more when the fingers lift:
+                // the zoom still follows the pinch, in steps, instead of re-shaping on every touch event.
+                var asked = liveScale.value
+                var applied = asked
                 do {
                     val event = awaitPointerEvent(PointerEventPass.Initial)
                     if (event.changes.count { it.pressed } >= 2) {
                         val z = event.calculateZoom()
-                        if (z != 1f) onFontScaleChange(clampFontScale(liveScale.value * z))
+                        if (z != 1f) {
+                            asked = clampFontScale(asked * z)
+                            if (kotlin.math.abs(asked / applied - 1f) >= PINCH_STEP) { onFontScaleChange(asked); applied = asked }
+                        }
                         // Consume the whole 2-finger gesture (even on a no-zoom frame) so it stays a pure pinch —
                         // the scrollable/tap detectors below see consumed changes and skip it.
                         event.changes.forEach { if (it.pressed) it.consume() }
                     }
                 } while (event.changes.any { it.pressed })
+                if (asked != applied) onFontScaleChange(asked)
             }
         },
     )
@@ -575,3 +585,6 @@ private const val WHEEL_STREAM_LINES = 1f
 
 /** Notches closer together than this are one continuous stream; Android sends a trackpad's at one per frame. */
 private const val WHEEL_STREAM_MS = 20L
+
+/** How far (as a fraction) a pinch must move the font size before it is applied: see the pinch handler. */
+private const val PINCH_STEP = 0.04f
