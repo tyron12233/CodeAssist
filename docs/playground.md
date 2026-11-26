@@ -21,7 +21,7 @@ page (Compose Multiplatform for web, the desktop IDE shell)          Web Worker 
 
 ```
 ./gradlew :playground-ui:assemblePlayground            # build/playground-web/       (development mode)
-./gradlew :playground-ui:assemblePlaygroundProduction  # build/playground-web-prod/  (wasm-opt)
+./gradlew :playground-ui:assemblePlaygroundProduction  # build/playground-web-prod/  (wasm-opt; about 9 minutes)
 ```
 
 The production build needs Binaryen's `wasm-opt` on the machine (`brew install binaryen`, `apt install binaryen`, or
@@ -43,6 +43,18 @@ the `.wasm` files itself. So:
 A browser then never runs a new page against an old worker or old jars. That mix fails in odd ways (a run that finishes
 with no output, a worker that dies on a method that is not there), and it is what a server without cache headers produces.
 
+Measured: the app's wasm is 50 MB in development mode and 11 MB in production, `playground-ui.js` 3.5 MB and 0.5 MB.
+Most of the rest of the production directory (about 47 MB) is the jars the engine loads.
+
+## Soft keyboard (touch devices)
+
+The editor draws its text on a canvas, so there is no text field for a phone's keyboard to type into. `index.html` has a
+hidden `<textarea>` for that (`window.playgroundIme`) and `EditorTextInput.wasmJs.kt` feeds what is typed in it to the
+editor session: text, Enter, Backspace. iOS Safari raises the keyboard only for a `focus()` made synchronously inside a
+touch handler, and the editor learns of a tap through coroutines, so every tap focuses the field at once and the editor
+then claims it (`EditorImeHandle.show`); a tap it does not claim (a button) drops the focus and the keyboard. Predictive
+text and CJK reach the editor when a word is finished, not as it is composed.
+
 ## Loading screen
 
 `index.html` shows a loading screen at once, covering the app until the engine is ready: the app (a download of about
@@ -52,8 +64,10 @@ sitting at a blank page. The app and the worker report stages through `showLoadi
 ## Limits
 
 * The interpreter is a tree-walker inside a VM: about 850 VM steps per loop iteration. Fine for demos and exercises,
-  not for heavy computation. A run has a time budget (`budgetMillis`) and a call depth limit of 80 (a wasm worker's
-  stack is small, and overflowing it is an uncatchable error: the page replaces the worker and reports a lost run).
+  not for heavy computation. A run has a time budget (`budgetMillis`) and a call depth limit of 80, or 30 on WebKit (Safari and every iOS
+  browser: a worker there has a stack about a quarter of Chrome's, and overflowing it is an uncatchable error: the page
+  replaces the worker and reports a lost run). The VM runs a call to another bytecode method in the same loop rather than
+  recursing on the host stack, which is what makes even 30 fit.
 * Stop terminates the worker and starts another; the libraries come from the HTTP cache.
 * Only the standard library and kotlinx.coroutines are available to a program.
 * Rename works within the current file; shortcut glyphs are missing from the shell's font.

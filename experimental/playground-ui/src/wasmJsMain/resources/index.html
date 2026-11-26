@@ -93,30 +93,74 @@
   })();
 </script>
 <script>
-  // iOS Safari shows the keyboard only for a focus() made synchronously inside a touch handler. Compose focuses its
-  // hidden text field after the tap, through coroutines, which is too late: the field is focused and no keyboard comes.
-  // So a tap (not a scroll or a drag) focuses a stand-in field of ours right away, inside the handler, which raises the
-  // keyboard; Compose then moves focus to its own field, and the keyboard stays up for it. If Compose did not take the
-  // focus (the tap was on a button, not the editor), the stand-in is dropped again and the keyboard goes away.
-  (function () {
-    if (!window.matchMedia || !matchMedia('(pointer: coarse)').matches) return;
-    var stand = document.createElement('input');
-    stand.type = 'text'; stand.setAttribute('aria-hidden', 'true'); stand.tabIndex = -1;
-    stand.setAttribute('autocapitalize', 'off'); stand.setAttribute('autocorrect', 'off'); stand.setAttribute('spellcheck', 'false');
-    // 16px or larger, or iOS zooms the page when it is focused. Invisible and out of the way, but not display:none.
-    stand.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;font-size:16px;border:0;padding:0;pointer-events:none;';
-    document.body.appendChild(stand);
+  // The soft keyboard on a touch device. The editor draws its own text on a canvas, so there is no text field for the
+  // keyboard to type into: this hidden <textarea> is it, and what is typed in it is handed to the editor
+  // (EditorTextInput.wasmJs.kt registers a handler through window.playgroundIme).
+  //
+  // iOS Safari raises the keyboard only for a focus() made synchronously inside a touch handler, and the editor
+  // learns of the tap later, through coroutines. So every tap focuses the field at once, here; the editor then
+  // "claims" it (show). A tap the editor did not claim (a button, say) drops the focus again and the keyboard with it.
+  window.playgroundIme = (function () {
+    var coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+    var ta = null, handler = null, claimed = false, composing = false, SENTINEL = '\u200b';
+    function make() {
+      ta = document.createElement('textarea');
+      ta.setAttribute('aria-hidden', 'true'); ta.tabIndex = -1; ta.rows = 1;
+      ta.setAttribute('autocapitalize', 'off'); ta.setAttribute('autocorrect', 'off'); ta.setAttribute('autocomplete', 'off'); ta.setAttribute('spellcheck', 'false');
+      ta.setAttribute('enterkeyhint', 'enter'); ta.setAttribute('inputmode', 'text');
+      // 16px or larger, or iOS zooms the page when it is focused. Invisible and out of the way, but not display:none.
+      ta.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;font-size:16px;border:0;padding:0;margin:0;resize:none;overflow:hidden;pointer-events:none;caret-color:transparent;';
+      reset();
+      document.body.appendChild(ta);
+      // Everything arrives as beforeinput; cancelling it keeps the field at its sentinel, so Backspace always has
+      // something to delete (a field that is empty sends nothing) and the editor stays the only copy of the text.
+      ta.addEventListener('beforeinput', function (e) {
+        if (!handler || composing) return;
+        var t = e.inputType, d = e.data;
+        if (t === 'insertText' || t === 'insertReplacementText' || t === 'insertFromPaste' || t === 'insertFromYank') {
+          if (d == null && e.dataTransfer) d = e.dataTransfer.getData('text/plain');
+          if (d) handler('text', d);
+        } else if (t === 'insertLineBreak' || t === 'insertParagraph') handler('enter', '');
+        else if (t === 'deleteContentBackward' || t === 'deleteWordBackward' || t === 'deleteSoftLineBackward') handler(t === 'deleteContentBackward' ? 'backspace' : 'backspace-word', '');
+        else if (t === 'deleteContentForward' || t === 'deleteWordForward') handler('delete', '');
+        else return;
+        e.preventDefault();
+      });
+      // A composition (predictive text, a dead key, CJK) is not cancellable: let it run in the field and commit its
+      // result when it ends.
+      ta.addEventListener('compositionstart', function () { composing = true; });
+      ta.addEventListener('compositionend', function (e) {
+        composing = false;
+        if (handler && e.data) handler('text', e.data);
+        reset();
+      });
+      // Keys typed on a hardware keyboard are the field's now; the editor's own key handler must not take them a
+      // second time.
+      ta.addEventListener('keydown', function (e) { if (handler) e.stopPropagation(); }, true);
+      ta.addEventListener('keyup', function (e) { if (handler) e.stopPropagation(); }, true);
+    }
+    function reset() { ta.value = SENTINEL; try { ta.setSelectionRange(1, 1); } catch (e) {} }
     var x0 = 0, y0 = 0;
-    document.addEventListener('touchstart', function (e) { var t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; }, { capture: true, passive: true });
-    document.addEventListener('touchend', function (e) {
-      var t = e.changedTouches[0];
-      if (Math.abs(t.clientX - x0) > 10 || Math.abs(t.clientY - y0) > 10) return;
-      if (document.getElementById('boot') && document.getElementById('boot').style.display !== 'none') return;
-      var before = document.activeElement;
-      if (before && before !== stand && /^(textarea|input)$/i.test(before.tagName)) return; // already editing: nothing to raise
-      stand.focus({ preventScroll: true });
-      setTimeout(function () { if (document.activeElement === stand) stand.blur(); }, 700);
-    }, { capture: true, passive: true });
+    if (coarse) {
+      // The claim is reset when a touch starts: the editor's own pointer-up (show) arrives before this page's touchend.
+      document.addEventListener('touchstart', function (e) { var t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; claimed = false; }, { capture: true, passive: true });
+      document.addEventListener('touchend', function (e) {
+        var t = e.changedTouches[0];
+        if (Math.abs(t.clientX - x0) > 10 || Math.abs(t.clientY - y0) > 10) return; // a scroll or a drag, not a tap
+        var boot = document.getElementById('boot');
+        if (boot && boot.style.display !== 'none') return;
+        if (!ta) make();
+        ta.focus({ preventScroll: true });
+        setTimeout(function () { if (!claimed && document.activeElement === ta) ta.blur(); }, 700);
+      }, { capture: true, passive: true });
+    }
+    return {
+      coarse: coarse,
+      attach: function (h) { handler = h; return coarse; },
+      detach: function () { handler = null; claimed = false; if (ta && document.activeElement === ta) ta.blur(); },
+      show: function () { if (!coarse || !handler) return; if (!ta) make(); claimed = true; if (document.activeElement !== ta) { reset(); ta.focus({ preventScroll: true }); } },
+      hide: function () { claimed = false; if (ta && document.activeElement === ta) ta.blur(); }
+    };
   })();
 </script>
 <script src="playground-ui.js?v=@ASSETS@"></script>
