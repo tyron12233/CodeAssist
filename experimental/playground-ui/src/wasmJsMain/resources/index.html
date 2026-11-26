@@ -163,6 +163,18 @@
     };
   })();
 </script>
+<script>
+  // The app draws everything itself, on a canvas as many device pixels wide as the screen. A phone at 3x pixel density
+  // makes that 2.25 times the pixels of one at 2x, and a frame is paid for per pixel. On touch devices the density the
+  // app sees is capped at 2 (text is a little softer); `?dpr=3` asks for the real one, `?dpr=1.5` for less.
+  (function () {
+    var want = parseFloat(new URLSearchParams(location.search).get('dpr'));
+    var coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+    var real = window.devicePixelRatio || 1;
+    var use = want > 0 ? want : (coarse ? Math.min(real, 2) : real);
+    if (use !== real) Object.defineProperty(window, 'devicePixelRatio', { get: function () { return use; }, configurable: true });
+  })();
+</script>
 <script src="playground-ui.js?v=@ASSETS@"></script>
 </body>
 </html>
