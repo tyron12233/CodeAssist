@@ -112,4 +112,18 @@ class PlaygroundPipelineTest {
         println("HOT total ${o.vmSteps} steps")
         for ((name, steps) in o.hot) println("HOT ${(steps * 1000 / total).toInt() / 10.0}% ${steps} $name")
     }
+
+    @Test
+    fun whereTheStepsGoForCalls() {
+        mountHostFiles(VmClasspath.entries)
+        val engine = PlaygroundEngine(VmClasspath.entries, budgetMillis = 120_000)
+        fun src(n: Int) = "package demo\nfun fib(n: Int): Int = if (n < 2) n else fib(n - 1) + fib(n - 2)\nfun main() { println(fib($n)) }\n"
+        val small = engine.run(src(12))
+        val big = engine.run(src(14), profile = true)
+        check(small.error == null && big.error == null) { "${small.error} ${big.error}" }
+        // fib(n) makes fib(n+1)*2-1 calls: 465 for fib(12), 1219 for fib(14)
+        println("CALL steps per fib call: ${(big.vmSteps - small.vmSteps) / (1219 - 465)}")
+        val total = big.vmSteps.toDouble()
+        for ((name, steps) in big.hot.take(16)) println("HOTF ${(steps * 1000 / total).toInt() / 10.0}% $steps $name")
+    }
 }

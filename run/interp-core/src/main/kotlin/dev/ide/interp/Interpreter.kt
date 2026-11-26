@@ -215,10 +215,32 @@ class Interpreter(
      *  already holds the bare key, see `expandPreviewModel`), then the resolver-chosen overload (by declared
      *  arity) so an omitted-defaults call finds the full declaration rather than a same-named shorter overload;
      *  the exact call-arity key is the fallback when the declared arity isn't recorded. */
-    private fun sourceFunctionFor(callee: ResolvedCallable, argCount: Int): ResolvedFunction? =
-        (callee as? ResolvedCallable.Source)?.let { functions[it.declId] }
-            ?: declaredArity(callee)?.let { functions["${callee.displayName}/$it"] }
-            ?: functions["${callee.displayName}/$argCount"]
+    private fun sourceFunctionFor(callee: ResolvedCallable, argCount: Int): ResolvedFunction? {
+        // A call site resolves to the same function every time it runs, but finding it builds and hashes strings
+        // (the declId, then `name/arity` after parsing the arity out of the id). Remember the answer on the callee,
+        // for THIS interpreter (the tree can be shared by several, each with its own `functions`). Only the two
+        // lookups that do not depend on [argCount] are remembered; the fallback below does, so it is not.
+        if (callee is ResolvedCallable.Source) {
+            (callee.resolutionCache as? ResolvedHere)?.let { if (it.owner === this) return it.function }
+            val found = functions[callee.declId] ?: declaredArity(callee)?.let { functions["${callee.displayName}/$it"] }
+            if (found != null) {
+                callee.resolutionCache = ResolvedHere(this, found)
+                return found
+            }
+        } else {
+            declaredArity(callee)?.let { functions["${callee.displayName}/$it"] }?.let { return it }
+        }
+        return functions["${callee.displayName}/$argCount"]
+    }
+
+    /** What [sourceFunctionFor] remembers on a callee: the interpreter it was resolved in, and the function. */
+    private class ResolvedHere(val owner: Interpreter, val function: ResolvedFunction)
+
+    /** Whether [call]'s arguments are all plain positional ones, so nothing needs reordering into declared order. */
+    private fun plainArguments(call: RNode.Call): Boolean {
+        for (a in call.args) if (a.name != null || a.trailingLambda) return false
+        return true
+    }
 
     /** The [topLevelPropertyState] key when [node] is a read of a top-level `var` backing field (a no-arg
      *  TOP_LEVEL call to a source property whose function is [ResolvedFunction.mutableBackingField]) — the same
@@ -469,17 +491,36 @@ class Interpreter(
             // Kotlin's `Map.iterator()` is `entries.iterator()` (a Map isn't itself Iterable), so `for (e in map)`
             // / `for ((k, v) in map)` iterate the entry set; each element is a `Map.Entry`.
             val iterationSource = if (iterable is Map<*, *>) iterable.entries else iterable
-            val iterator = invoke0(iterationSource, "iterator")
-                ?: throw InterpreterException("no iterator() on ${iterable.javaClass.name}")
             val budget = LoopBudget()
             try {
-                while (invoke0(iterator, "hasNext") == true) {
-                    // Fresh per-iteration scope: the loop variable (and any closure capturing it) is bound anew
-                    // each pass, matching Kotlin's per-iteration capture rather than aliasing one shared slot.
-                    val iterEnv = Env(env)
-                    iterEnv.define(node.loopVar.slot, invoke0(iterator, "next"))
-                    runLoopBody(node.body, iterEnv, node.label)
-                    guardLoop(budget)
+                if (iterationSource is IntProgression) {
+                    // `for (i in a..b)`, `downTo`, `step`: count in Int rather than through an iterator object that is
+                    // then driven by reflection, which is what a range costs otherwise. Same order, same bounds.
+                    val step = iterationSource.step
+                    var i = iterationSource.first
+                    val last = iterationSource.last
+                    while (if (step > 0) i <= last else i >= last) {
+                        val iterEnv = Env(env)
+                        iterEnv.define(node.loopVar.slot, i)
+                        runLoopBody(node.body, iterEnv, node.label)
+                        guardLoop(budget)
+                        if (if (step > 0) i > last - step else i < last - step) break // the next step would pass `last` (or overflow)
+                        i += step
+                    }
+                } else {
+                    val iterator = invoke0(iterationSource, "iterator")
+                        ?: throw InterpreterException("no iterator() on ${iterable.javaClass.name}")
+                    // A real Iterator is driven directly: `invoke0` looks the method up by name and invokes it
+                    // reflectively, twice per element.
+                    val direct = iterator as? Iterator<*>
+                    while (if (direct != null) direct.hasNext() else invoke0(iterator, "hasNext") == true) {
+                        // Fresh per-iteration scope: the loop variable (and any closure capturing it) is bound anew
+                        // each pass, matching Kotlin's per-iteration capture rather than aliasing one shared slot.
+                        val iterEnv = Env(env)
+                        iterEnv.define(node.loopVar.slot, if (direct != null) direct.next() else invoke0(iterator, "next"))
+                        runLoopBody(node.body, iterEnv, node.label)
+                        guardLoop(budget)
+                    }
                 }
             } catch (b: BreakSignal) { /* break exits the loop */
             } catch (b: LabeledBreakSignal) {
@@ -905,6 +946,11 @@ class Interpreter(
                 }
             }
             val right = eval(call.args.first().value, env)
+            // Primitive arithmetic and comparison, by operator number: no string hashing, no promotion helper. Only
+            // the cases whose answer is plain Kotlin (Int/Long/Double operands, with Kotlin's own widening); anything
+            // else, including a source or value class, falls through to the general path below, unchanged.
+            val code = operatorCode(call, op)
+            if (code != OP_OTHER) numericOperator(code, left, right)?.let { return it }
             // A value-class arithmetic operator (`Size / 2f` → `Size.div-impl`, `Offset + o`, `Dp * n`): the
             // receiver is the UNBOXED underlying (a Long for Size/Offset, a Float for Dp), which IS a `Number`,
             // so the primitive-arithmetic shortcut below would silently misfire (dividing the packed bits as a
@@ -1069,10 +1115,9 @@ class Interpreter(
                     emptyList()
                 ).also { topLevelPropertyState[key] = it }
             }
-            val argv = reorderNamedArgs(
-                target.params.map { it.name },
-                call.args,
-                call.args.map { eval(it.value, env) })
+            val evaluated = call.args.map { eval(it.value, env) }
+            // Reordering is for named arguments and a trailing lambda that skips defaults; a plain call has neither.
+            val argv = if (plainArguments(call)) evaluated else reorderNamedArgs(target.params.map { it.name }, call.args, evaluated)
             val reified = reifiedBindingsFor(call, env)
             val invoke = { invokeFunction(target, NO_RECEIVER, argv, reified) }
             return if (callee.isComposable && composableInvoker != null) {
@@ -3386,6 +3431,53 @@ class Interpreter(
         return m.invoke(receiver)
     }
 
+    /** [call]'s operator as a number, from the cache on the node (see [RNode.Call.operatorCode]). */
+    private fun operatorCode(call: RNode.Call, op: String): Int {
+        var code = call.operatorCode
+        if (code < 0) {
+            code = when (op) {
+                "plus" -> OP_PLUS; "minus" -> OP_MINUS; "times" -> OP_TIMES; "div" -> OP_DIV; "rem" -> OP_REM
+                "lt" -> OP_LT; "le" -> OP_LE; "gt" -> OP_GT; "ge" -> OP_GE
+                "eq" -> OP_EQ; "ne" -> OP_NE
+                else -> OP_OTHER
+            }
+            call.operatorCode = code
+        }
+        return code
+    }
+
+    /**
+     * `left <op> right` for the operand pairs where Kotlin's answer is plain arithmetic, or null to leave it to the
+     * general path. Mixed Int/Long widens to Long and any Double widens to Double, as in Kotlin; `==` and `!=` are
+     * only taken for two Ints or two Longs (a Double's boxed `equals` and Int-vs-Long are the general path's call).
+     * Division by zero throws here exactly as it did through `applyI`/`applyL`.
+     */
+    private fun numericOperator(code: Int, a: Any?, b: Any?): Any? {
+        if (a is Int && b is Int) return when (code) {
+            OP_PLUS -> a + b; OP_MINUS -> a - b; OP_TIMES -> a * b; OP_DIV -> a / b; OP_REM -> a % b
+            OP_LT -> a < b; OP_LE -> a <= b; OP_GT -> a > b; OP_GE -> a >= b
+            OP_EQ -> a == b; OP_NE -> a != b
+            else -> null
+        }
+        if ((a is Long || a is Int) && (b is Long || b is Int)) {
+            val x = (a as Number).toLong()
+            val y = (b as Number).toLong()
+            return when (code) {
+                OP_PLUS -> x + y; OP_MINUS -> x - y; OP_TIMES -> x * y; OP_DIV -> x / y; OP_REM -> x % y
+                OP_LT -> x < y; OP_LE -> x <= y; OP_GT -> x > y; OP_GE -> x >= y
+                OP_EQ -> if (a is Long && b is Long) x == y else null
+                OP_NE -> if (a is Long && b is Long) x != y else null
+                else -> null
+            }
+        }
+        if (a is Double && b is Double) return when (code) {
+            OP_PLUS -> a + b; OP_MINUS -> a - b; OP_TIMES -> a * b; OP_DIV -> a / b; OP_REM -> a % b
+            OP_LT -> a < b; OP_LE -> a <= b; OP_GT -> a > b; OP_GE -> a >= b
+            else -> null
+        }
+        return null
+    }
+
     private fun arithmetic(op: String, a: Any?, b: Any?): Any {
         if (a !is Number || b !is Number) throw InterpreterException("non-numeric operands for `$op`: $a, $b")
         return when {
@@ -3874,14 +3966,33 @@ class Interpreter(
         val RECURSION_ABORT =
             InterpreterException("call stack overflowed (unbounded recursion) — aborting to avoid crashing the preview")
 
+        const val OP_OTHER = 0
+        const val OP_PLUS = 1
+        const val OP_MINUS = 2
+        const val OP_TIMES = 3
+        const val OP_DIV = 4
+        const val OP_REM = 5
+        const val OP_LT = 6
+        const val OP_LE = 7
+        const val OP_GT = 8
+        const val OP_GE = 9
+        const val OP_EQ = 10
+        const val OP_NE = 11
         val ARITHMETIC = setOf("plus", "minus", "times", "div", "rem")
         val COMPARISON = setOf("lt", "le", "gt", "ge")
         val BITWISE = setOf("and", "or", "xor", "shl", "shr", "ushr")
         /** Owners of the primitive-numeric arithmetic operators (`5 + 3`), computed as intrinsics — never a
          *  value-class member, so the value-class operator probe skips them to keep hot arithmetic class-load-free. */
+        /**
+         * The primitive numeric owners an operator's callee can carry. The resolver writes the SHORT name
+         * (`Int`, `Long`) on an operator callee, not the qualified one, so both spellings are here: with only the
+         * qualified names the "skip the value-class probe for primitive arithmetic" check never matched, and every
+         * `Int + Int` paid a class load attempt (`invokeUnboxedValueClassMember`) before the arithmetic it is.
+         */
         val PRIMITIVE_NUMERIC_FQNS = setOf(
             "kotlin.Int", "kotlin.Long", "kotlin.Float", "kotlin.Double", "kotlin.Short", "kotlin.Byte",
             "kotlin.Char", "kotlin.UInt", "kotlin.ULong", "kotlin.UShort", "kotlin.UByte",
+            "Int", "Long", "Float", "Double", "Short", "Byte", "Char", "UInt", "ULong", "UShort", "UByte",
         )
         val COMPONENT = Regex("component(\\d+)")
 
