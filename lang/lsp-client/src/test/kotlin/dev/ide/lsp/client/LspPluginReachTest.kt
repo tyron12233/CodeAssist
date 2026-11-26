@@ -51,6 +51,10 @@ class LspPluginReachTest {
         context!!.notifyConfigurationChanged()
         session.requestOrThrow("textDocument/hover", null, 10_000) // fence: earlier notifications are received
 
+        // The notification and the fence travel separately, so on a loaded machine the count can trail the reply by a
+        // moment: wait for it rather than read it once. A notification that is never sent still fails, after the wait.
+        val deadline = System.nanoTime() + 10_000_000_000L
+        while (count("workspace/didChangeConfiguration") < before + 1 && System.nanoTime() < deadline) Thread.sleep(25)
         assertEquals(before + 1, count("workspace/didChangeConfiguration"), "${server.received}")
     }
 
