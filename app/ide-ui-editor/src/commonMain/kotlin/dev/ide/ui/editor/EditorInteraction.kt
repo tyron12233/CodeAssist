@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +43,13 @@ internal class EditorInteraction(initialRevision: Int) {
 
     /** Whether the last input was a touch (vs. mouse/keyboard) — gates the touch selection chrome. */
     var lastInputWasTouch by mutableStateOf(false)
+
+    /**
+     * The font scale a pinch in progress is asking for, or 0 when none. While it is set the editor paints its existing
+     * layout scaled by `pinchTarget / zoom` (cheap, draw only) and the real size is committed once, when the fingers
+     * lift: a new size re-shapes every visible line, which on a phone in the browser costs about a quarter of a second.
+     */
+    var pinchTarget by mutableFloatStateOf(0f)
 
     // Touch tap-vs-scroll disambiguation. The observer in `editorInput` records where a touch went down and
     // flips `touchScrolled` once the finger travels past touch-slop, so the tap detector can refuse to commit a
