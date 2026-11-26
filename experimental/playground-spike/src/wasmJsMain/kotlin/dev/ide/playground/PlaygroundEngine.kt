@@ -38,17 +38,23 @@ class RunOutcome(
  * [classpath] names files already in the in-memory file system (the host mounts them: a `fetch` in the
  * browser, the disk under Node). It must contain the kotlin-stdlib and the jars of `:interp-core`.
  */
+/** Safari and every browser on iOS: the engine behind them is WebKit's, whose workers have a small stack. */
+@JsFun("() => { const u = navigator.userAgent; return /iPhone|iPad|iPod/.test(u) || (/AppleWebKit/.test(u) && !/Chrome\\/|Chromium|Edg\\//.test(u)); }")
+private external fun isWebKit(): Boolean
+
 class PlaygroundEngine(
     private val classpath: List<String>,
     /** Wall-clock a program may run, per loop and in all. */
     private val budgetMillis: Long = 20_000,
     /**
-     * How deep interpreted calls may nest before the run is stopped with a clear error. Measured in Chrome: 100
-     * nested calls run and 130 overflow the engine's stack (about 8 KB of wasm stack per interpreted call, and
-     * a browser gives a worker roughly 1 MB), which is an uncatchable `RangeError`. So the limit is a margin
-     * below that; the page restarts the worker if something still gets through.
+     * How deep interpreted calls may nest before the run is stopped with a clear error. A worker's stack is small
+     * and overflowing it is an uncatchable `RangeError`, so this is a margin below what fits. The VM runs a call
+     * to another bytecode method without recursing on the host, but natives and the host's own calls into the VM
+     * still nest. Measured: Chrome (about 1 MB) takes well over 80; WebKit's workers (Safari, every iOS browser)
+     * have about a quarter of that, and 40 nested calls ran there while 79 did not. The page restarts the worker
+     * if something still gets through.
      */
-    private val callDepth: Int = 80,
+    private val callDepth: Int = if (isWebKit()) 30 else 80,
 ) {
     // Opening a jar is the expensive part of a VM's first class load; the opened archives are read-only and
     // are shared by every run's VM (each run still gets a fresh VM, so statics start clean).
