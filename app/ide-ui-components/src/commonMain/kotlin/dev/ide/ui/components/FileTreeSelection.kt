@@ -305,7 +305,13 @@ internal fun SelectionBar(
 ) {
     var moreOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
     Row(
+        // The bar is drawn over the list, so it paints its own backdrop and takes every touch that lands on it
+        // (the gaps around the pill included) rather than letting them reach the rows underneath.
         modifier.fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .pointerInput(Unit) {
+                awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
+            }
             .padding(horizontal = 6.dp, vertical = 4.dp)
             .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(14.dp))
             .padding(horizontal = 2.dp, vertical = 2.dp),

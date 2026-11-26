@@ -120,9 +120,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.first
 import androidx.compose.ui.input.pointer.isShiftPressed
 import dev.ide.ui.backend.pathLeafName
 import dev.ide.ui.generated.resources.filetree_cut
@@ -337,34 +334,6 @@ fun FileNavigator(
             return pick?.newTargetDir() ?: rootDir
         }
         val showBar = fileOps != null && (selection.mode || selection.size > 1)
-        // The bar takes room above the list. Scroll the list by the same amount as it comes and goes, so the rows
-        // stay where they are on screen: the row under a finger that just long-pressed it stays under the finger.
-        var barHeight by remember { mutableStateOf(0) }
-        var scrolledForBar by remember { mutableStateOf(0) }
-        LaunchedEffect(showBar) {
-            if (showBar) {
-                val h = snapshotFlow { barHeight }.first { it > 0 }
-                scrolledForBar = listState.scrollBy(h.toFloat()).toInt()
-            } else if (scrolledForBar != 0) {
-                listState.scrollBy(-scrolledForBar.toFloat())
-                scrolledForBar = 0
-            }
-        }
-        if (showBar) SelectionBar(
-            modifier = Modifier.onSizeChanged { barHeight = it.height },
-            count = selection.size,
-            onClear = { selection.clear() },
-            onCut = { fileOps!!.onCut(selectedPaths()); selection.clear() },
-            onCopy = { fileOps!!.onCopy(selectedPaths()); selection.clear() },
-            onDelete = { fileOps!!.onDelete(selectedNodes()) },
-        ) { close ->
-            val nodes = selectedNodes()
-            val one = nodes.singleOrNull()
-            if (one != null) RowMenuItems(one, cb, selection, nodes, close)
-            else BatchMenuItems(nodes, cb, close, onSelectAll = {
-                visibleNodes().filter { it.selectablePath() != null }.forEach { selection.ids[it.id] = true }
-            })
-        }
         // Follow the editor: a file opened anywhere else (a search hit, a jump to a declaration, a file just
         // created) scrolls its row into view, so the tree shows what is being edited rather than wherever it
         // was left. Each file is revealed once, and that is remembered across the pane closing, so reopening
@@ -533,6 +502,23 @@ fun FileNavigator(
                             Modifier.animateItem(),
                         )
                     }
+                }
+                // Drawn over the top of the list rather than above it: the list keeps its bounds, so no row moves
+                // when the bar comes and goes, and the row under a finger that just long-pressed it stays under it.
+                if (showBar) SelectionBar(
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    count = selection.size,
+                    onClear = { selection.clear() },
+                    onCut = { fileOps!!.onCut(selectedPaths()); selection.clear() },
+                    onCopy = { fileOps!!.onCopy(selectedPaths()); selection.clear() },
+                    onDelete = { fileOps!!.onDelete(selectedNodes()) },
+                ) { close ->
+                    val nodes = selectedNodes()
+                    val one = nodes.singleOrNull()
+                    if (one != null) RowMenuItems(one, cb, selection, nodes, close)
+                    else BatchMenuItems(nodes, cb, close, onSelectAll = {
+                        visibleNodes().filter { it.selectablePath() != null }.forEach { selection.ids[it.id] = true }
+                    })
                 }
                 if (drag.active) DragChip(drag, drag.targetDir?.let(::pathLeafName))
             }
