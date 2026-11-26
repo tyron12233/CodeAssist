@@ -7,6 +7,8 @@ import dev.ide.ui.LocalPluginFileOpener
 import dev.ide.ui.LocalPluginNavigator
 import dev.ide.ui.theme.Ide
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import dev.ide.ui.platform.transientStatusBarHeight
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -251,11 +253,17 @@ internal fun EditorCenter(
     UiPluginHost.ensureLoaded()
     val rightPrimary = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).firstOrNull()
     val claudeLink = dev.ide.ui.components.rememberClaudeLinkState(state.backend)
-    Box(modifier) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var topInWindow by remember { mutableStateOf(0.dp) }
+    Box(
+        modifier.onGloballyPositioned { topInWindow = with(density) { it.positionInWindow().y.toDp() } },
+    ) {
         // Zen mode hid the status bar, and a swipe in from the top shows it again floating over the window, on top of
         // the tabs strip and its controls. The strip moves down for as long as it is there.
+        // Only what the window does not already give: with the bar back for good (the app resumed in zen mode) the
+        // root pads for it and this view starts below it, so it adds nothing; over a transient bar it starts at 0.
         val barPad by androidx.compose.animation.core.animateDpAsState(
-            if (state.zenMode) transientStatusBarHeight() else 0.dp,
+            if (state.zenMode) (transientStatusBarHeight() - topInWindow).coerceAtLeast(0.dp) else 0.dp,
             tween(Motion.BASE, easing = Motion.quiet),
             label = "zenStatusBar",
         )
