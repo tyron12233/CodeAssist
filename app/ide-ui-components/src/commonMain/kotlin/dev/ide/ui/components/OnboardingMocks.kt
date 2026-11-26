@@ -1,6 +1,8 @@
 package dev.ide.ui.components
 
 import dev.ide.ui.theme.Ide
+import dev.ide.ui.generated.resources.*
+import org.jetbrains.compose.resources.stringResource
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -232,7 +234,7 @@ private fun TabChip() {
 @Composable
 private fun BetaChip() {
     Box(Modifier.clip(RoundedCornerShape(50)).background(Ide.colors.info.copy(alpha = 0.16f)).padding(horizontal = 7.dp, vertical = 2.dp)) {
-        Text("BETA", color = Ide.colors.info, fontFamily = Ide.type.uiFamily, fontSize = 9.5f.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp)
+        Text(stringResource(Res.string.onb_mock_beta), color = Ide.colors.info, fontFamily = Ide.type.uiFamily, fontSize = 9.5f.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp)
     }
 }
 
@@ -263,7 +265,7 @@ internal fun JdtCompletionMock() {
             19 to with(s) { listOf(df("    "), kw("if "), pn("("), df("note"), pn("."), df("is")) },
         ),
         signature = "isPinned(): boolean",
-        doc = "Whether the note is pinned to top",
+        doc = stringResource(Res.string.onb_mock_doc_jdt),
         rows = listOf(
             CompRow("M", MaterialTheme.colorScheme.primary, "isPinned", "is", "boolean", selected = true),
             CompRow("M", MaterialTheme.colorScheme.primary, "isArchived", "is", "boolean"),
@@ -281,7 +283,7 @@ internal fun KotlinCompletionMock() {
             25 to with(s) { listOf(df("  "), kw("return "), df("repo"), pn("."), df("pin")) },
         ),
         signature = "pinnedNotes: List<Note>",
-        doc = "Notes pinned to the top, newest first",
+        doc = stringResource(Res.string.onb_mock_doc_kotlin),
         beta = true,
         rows = listOf(
             CompRow("P", PropertyColor, "pinnedNotes", "pin", "List<Note>", selected = true),
@@ -300,7 +302,7 @@ internal fun XmlCompletionMock() {
             12 to with(s) { listOf(df("    "), pr("android"), pn(":"), pr("layout")) },
         ),
         signature = "android:layout_width",
-        doc = "Required. Width of the view",
+        doc = stringResource(Res.string.onb_mock_doc_xml),
         rows = listOf(
             CompRow("P", PropertyColor, "layout_width", "layout", "dimension", selected = true),
             CompRow("P", PropertyColor, "layout_height", "layout", "dimension"),
@@ -413,7 +415,7 @@ internal fun BlocksMock() {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Box(Modifier.size(6.dp).background(Ide.colors.run, CircleShape))
-            Text("live projection · synced with Code", color = MaterialTheme.colorScheme.outline, fontFamily = Ide.type.uiFamily, fontSize = 11.sp)
+            Text(stringResource(Res.string.onb_mock_live_projection), color = MaterialTheme.colorScheme.outline, fontFamily = Ide.type.uiFamily, fontSize = 11.sp)
         }
     }
 }
@@ -498,7 +500,7 @@ internal fun BuildConsoleMock() {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
             Icon(CaIcons.terminal, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Build", color = MaterialTheme.colorScheme.onSurface, fontFamily = Ide.type.uiFamily, fontSize = 13.5f.sp, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.buildc_build), color = MaterialTheme.colorScheme.onSurface, fontFamily = Ide.type.uiFamily, fontSize = 13.5f.sp, fontWeight = FontWeight.SemiBold)
             Text("app", color = MaterialTheme.colorScheme.outline, fontFamily = Ide.type.codeFamily, fontSize = 11.5f.sp)
             Spacer(Modifier.weight(1f))
             Row(
@@ -507,17 +509,17 @@ internal fun BuildConsoleMock() {
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 Icon(CaIcons.check, null, Modifier.size(12.dp), tint = Ide.colors.run)
-                Text("Succeeded", color = Ide.colors.run, fontFamily = Ide.type.uiFamily, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.buildc_status_succeeded), color = Ide.colors.run, fontFamily = Ide.type.uiFamily, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
             Text("3.2s", color = MaterialTheme.colorScheme.outline, fontFamily = Ide.type.codeFamily, fontSize = 11.5f.sp)
         }
         Spacer(Modifier.height(12.dp))
         Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            BuildStepRow("Resolve", "42 deps")
-            BuildStepRow("Compile", "javac · kotlinc")
+            BuildStepRow(stringResource(Res.string.onb_mock_step_resolve), stringResource(Res.string.onb_mock_step_resolve_detail, 42))
+            BuildStepRow(stringResource(Res.string.onb_mock_step_compile), "javac · kotlinc")
             BuildStepRow("Dex", "API 26")
-            BuildStepRow("Package", "app-debug.apk")
-            BuildStepRow("Sign", "debug key")
+            BuildStepRow(stringResource(Res.string.onb_mock_step_package), "app-debug.apk")
+            BuildStepRow(stringResource(Res.string.onb_mock_step_sign), stringResource(Res.string.onb_mock_step_sign_detail))
         }
         Spacer(Modifier.height(10.dp))
         Row(
@@ -526,11 +528,14 @@ internal fun BuildConsoleMock() {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             DoneCircle(18)
+            val installedOn = stringResource(Res.string.onb_mock_installed_on, "\u0000", "Pixel 8")
             Text(
                 buildAnnotatedString {
-                    append("Installed ")
+                    // The sentence is translated whole; the file name is cut out of it at a marker to be set in code type.
+                    val parts = installedOn.split('\u0000', limit = 2)
+                    append(parts[0])
                     withStyle(SpanStyle(fontFamily = Ide.type.codeFamily, color = MaterialTheme.colorScheme.onSurfaceVariant)) { append("app-debug.apk") }
-                    append(" on Pixel 8")
+                    append(parts.getOrElse(1) { "" })
                 },
                 color = MaterialTheme.colorScheme.onSurface,
                 fontFamily = Ide.type.uiFamily,
@@ -584,11 +589,11 @@ internal fun CommandPaletteMock() {
                 }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-            PaletteGroupHeader("RUN")
-            PaletteRowMock(CaIcons.play, "Run app", "app", "⌘R", selected = true)
-            PaletteGroupHeader("GO TO")
+            PaletteGroupHeader(stringResource(Res.string.onb_mock_palette_run))
+            PaletteRowMock(CaIcons.play, stringResource(Res.string.onb_mock_palette_run_app), "app", "⌘R", selected = true)
+            PaletteGroupHeader(stringResource(Res.string.onb_mock_palette_goto))
             PaletteRowMock(CaIcons.file, "NoteRepository.java", "app/data", null)
-            PaletteRowMock(CaIcons.code, "isPinned()", "symbol", null)
+            PaletteRowMock(CaIcons.code, "isPinned()", stringResource(Res.string.onb_mock_palette_symbol), null)
         }
     }
 }
@@ -658,7 +663,7 @@ internal fun ComposePreviewMock() {
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Box(Modifier.size(6.dp).background(Ide.colors.run, CircleShape))
-            Text("LIVE", color = Ide.colors.run, fontFamily = Ide.type.uiFamily, fontSize = 10.5f.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(Res.string.onb_mock_live), color = Ide.colors.run, fontFamily = Ide.type.uiFamily, fontSize = 10.5f.sp, fontWeight = FontWeight.Bold)
         }
         // The device frame, centered.
         Box(Modifier.align(Alignment.Center)) {
@@ -717,8 +722,8 @@ internal fun FilesAccessMock() {
                     contentAlignment = Alignment.Center,
                 ) { Icon(CaIcons.folder, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary) }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("Your project files", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                    Text("Open in any file manager — add icons, layouts, assets.", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 2)
+                    Text(stringResource(Res.string.onb_mock_files_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(Res.string.onb_mock_files_desc), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 2)
                 }
             }
             Row(
@@ -734,7 +739,7 @@ internal fun FilesAccessMock() {
             ) {
                 Icon(CaIcons.share, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(6.dp))
-                Text("Open in file manager", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.onb_mock_files_open), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             }
         }
     }

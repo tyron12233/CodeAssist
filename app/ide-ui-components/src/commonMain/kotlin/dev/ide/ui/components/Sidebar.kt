@@ -87,6 +87,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.AdPlacement
+import dev.ide.ui.LocalBackendText
 import dev.ide.ui.LocalHostFileActions
 import dev.ide.ui.LocalPluginFileOpener
 import dev.ide.ui.LocalPluginNavigator
@@ -196,9 +197,10 @@ fun pluginPanels(anchor: ToolWindowAnchor, backend: IdeBackend, activeFilePath: 
             override fun openFile(path: String, offset: Int) = openInEditor(path, offset)
         }
     }
+    val text = LocalBackendText.current
     return tools.map { tw ->
         SidebarPanel(
-            tw.id, tw.title, actionIcon(tw.iconId), tw.order,
+            tw.id, text.tr(tw.title), actionIcon(tw.iconId), tw.order,
             busy = tw.busy?.invoke(backend) == true, badge = tw.badge?.invoke(backend) ?: 0,
         ) { tw.content(ctx) }
     }

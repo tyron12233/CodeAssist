@@ -102,48 +102,22 @@ internal object AgentSettingsPage : SettingsPage {
     override val scope: SettingsScope = SettingsScope.APPLICATION
     override val order: Int = 90
 
+    /** The action that opens the providers screen; the settings UI maps it to that screen's route. */
+    const val OPEN_PROVIDERS: String = "openProviders"
+
     override fun onChanged(key: String, values: PreferenceReader) {
         // Unlike the MCP server, the FTP server starts and stops at once, in the open project.
         if (key == AgentBackend.FTP_PREF) AgentBackend.forProject(null)?.setFtpServerEnabled(values.bool(key, false))
     }
 
     override fun controls(): List<SettingControl> = listOf(
-        SettingControl.Choice(
-            key = "provider",
-            title = "Provider",
-            description = "Which AI provider the agent uses.",
-            default = "anthropic",
-            options = listOf(
-                SettingControl.Choice.Option("anthropic", "Anthropic (Claude)"),
-                SettingControl.Choice.Option("openai", "OpenAI"),
-                SettingControl.Choice.Option("gemini", "Google Gemini"),
-                SettingControl.Choice.Option("openrouter", "OpenRouter"),
-                SettingControl.Choice.Option("gateway", "Custom gateway"),
-            ),
-        ),
-        SettingControl.Text(
-            key = "anthropicKey",
-            title = "Anthropic API key",
-            description = "Used when the provider is Anthropic.",
-            placeholder = "sk-ant-...",
-        ),
-        SettingControl.Text(
-            key = "openaiKey",
-            title = "OpenAI API key",
-            description = "Used when the provider is OpenAI (or an OpenAI-compatible gateway).",
-            placeholder = "sk-...",
-        ),
-        SettingControl.Text(
-            key = "geminiKey",
-            title = "Gemini API key",
-            description = "Used when the provider is Google Gemini.",
-            placeholder = "AIza...",
-        ),
-        SettingControl.Text(
-            key = "openrouterKey",
-            title = "OpenRouter API key",
-            description = "Used when the provider is OpenRouter.",
-            placeholder = "sk-or-...",
+        // The provider, its keys and a custom endpoint live on their own screen (the UI routes this action to it):
+        // one row per provider with its state, so the list grows with the providers instead of this page.
+        SettingControl.Action(
+            key = OPEN_PROVIDERS,
+            title = "AI providers",
+            description = "Choose which provider the agent uses and manage API keys, backup keys and custom endpoints.",
+            buttonLabel = "Manage",
         ),
         SettingControl.Text(
             key = "model",
@@ -242,24 +216,6 @@ internal object AgentSettingsPage : SettingsPage {
             max = 4000,
             step = 10,
             unit = "K",
-            advanced = true,
-        ),
-        SettingControl.Text(
-            key = "gatewayKey",
-            title = "Gateway API key",
-            description = "Used when the provider is Custom gateway.",
-            advanced = true,
-        ),
-        SettingControl.Text(
-            key = "gatewayBaseUrl",
-            title = "Gateway base URL",
-            description = "An OpenAI-compatible endpoint (OpenRouter, LiteLLM, or self-hosted).",
-            advanced = true,
-        ),
-        SettingControl.Text(
-            key = "gatewayModel",
-            title = "Gateway model",
-            description = "The model name to request from the custom gateway.",
             advanced = true,
         ),
     )

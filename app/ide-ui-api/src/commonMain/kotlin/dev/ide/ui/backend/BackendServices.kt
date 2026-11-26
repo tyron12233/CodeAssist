@@ -1483,6 +1483,13 @@ interface StoreService {
         detail: String? = null,
     ): String? = "Reviews are not available in this build"
 
+    /** Flag a publisher (a spam account, someone pretending to be someone else). Quiet when repeated. */
+    suspend fun reportPublisher(
+        handle: String,
+        reason: UiReportReason,
+        detail: String? = null,
+    ): String? = "Reporting is not available in this build"
+
     /** Flag a whole project rather than one of its reviews. */
     suspend fun reportItem(
         itemId: String,
@@ -1600,6 +1607,38 @@ interface StoreService {
      * queue while they decide about the account behind it.
      */
     suspend fun resolveReport(reportId: String, actioned: Boolean): String? =
+        "Moderation is not available in this build"
+
+    /**
+     * A moderator's view of project [slug]: its listing state, whether it is an Editor's Choice, its publisher,
+     * the versions it can be rolled back to and its open reports. Null for anyone who is not a moderator, or
+     * when it could not be read.
+     */
+    suspend fun moderatedItem(slug: String): UiModeratedItem? = null
+
+    /** Put project [slug] in Editor's Choice, or take it out. Null when it went, else why not. */
+    suspend fun setEditorsChoice(slug: String, on: Boolean): String? = "Moderation is not available in this build"
+
+    /**
+     * Archive project [slug]: off Explore, search and shelves, while its page, its link and the copies people
+     * installed stay. [reason] is sent to its publisher and is required. With [archived] false, an archived,
+     * held or removed project goes back in the listings.
+     */
+    suspend fun archiveItem(slug: String, archived: Boolean, reason: String?): String? =
+        "Moderation is not available in this build"
+
+    /** Remove project [slug] from the store at once; it is deleted for good after 30 days unless restored. */
+    suspend fun removeItem(slug: String, reason: String): String? = "Moderation is not available in this build"
+
+    /** Serve project [slug]'s earlier approved version [versionCode] from now on, telling its publisher [reason]. */
+    suspend fun rollbackItem(slug: String, versionCode: Int, reason: String): String? =
+        "Moderation is not available in this build"
+
+    /** Ban or unban publisher [handle]: a banned publisher's projects leave the store. */
+    suspend fun setPublisherBanned(handle: String, banned: Boolean): String? = "Moderation is not available in this build"
+
+    /** Give or take the verified tick of publisher [handle]. */
+    suspend fun setPublisherVerified(handle: String, verified: Boolean): String? =
         "Moderation is not available in this build"
 
     /**
@@ -2510,6 +2549,9 @@ interface AgentService {
          * the shell's entry points (the editor menu, Settings, Home) and the plugin agree on the route.
          */
         const val SCREEN_USE_WITH_CLAUDE: String = "agent.claude"
+
+        /** The agent UI's provider and key manager, reached from Settings (AI) and the chat. */
+        const val SCREEN_PROVIDERS: String = "agent.providers"
     }
 
     /** A no-op agent for backends that wire none. */

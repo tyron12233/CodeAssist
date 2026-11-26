@@ -202,6 +202,55 @@ class SupabaseModerationService(
         return unit(rpc("store_resolve_report", """{"p_report":${q(reportId)},"p_actioned":$actioned}""", token))
     }
 
+    override fun item(slug: String): StoreResult<dev.ide.store.ModeratedItem?> {
+        val token = accounts.bearer() ?: return StoreResult.Failed("Sign in first")
+        return when (val r = rpc("store_mod_item", """{"p_slug":${q(slug)}}""", token)) {
+            is StoreResult.Ok -> StoreResult.Ok(parseModeratedItem(JsonReader.parseOrNull(r.value)))
+            is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
+        }
+    }
+
+    override fun setEditorsChoice(slug: String, on: Boolean): StoreResult<String> =
+        action("store_mod_set_editors_choice", """{"p_slug":${q(slug)},"p_on":$on}""")
+
+    override fun archive(slug: String, archived: Boolean, reason: String?): StoreResult<String> =
+        action(
+            "store_mod_archive",
+            """{"p_slug":${q(slug)},"p_archived":$archived,"p_reason":${reason?.let { q(it) } ?: "null"}}""",
+        )
+
+    override fun remove(slug: String, reason: String): StoreResult<String> =
+        action("store_mod_remove", """{"p_slug":${q(slug)},"p_reason":${q(reason)}}""")
+
+    override fun rollback(slug: String, versionCode: Int, reason: String): StoreResult<String> =
+        action("store_mod_rollback", """{"p_slug":${q(slug)},"p_version_code":$versionCode,"p_reason":${q(reason)}}""")
+
+    override fun setPublisherBanned(handle: String, banned: Boolean): StoreResult<Unit> {
+        val token = accounts.bearer() ?: return StoreResult.Failed("Sign in first")
+        return unit(rpc("store_set_publisher_banned", """{"p_handle":${q(handle)},"p_banned":$banned}""", token))
+    }
+
+    override fun setPublisherVerified(handle: String, verified: Boolean): StoreResult<Unit> {
+        val token = accounts.bearer() ?: return StoreResult.Failed("Sign in first")
+        return unit(rpc("store_set_publisher_verified", """{"p_handle":${q(handle)},"p_verified":$verified}""", token))
+    }
+
+    /** One moderator action RPC and the `{ok, message}` it answers with, the refusal's sentence kept as written. */
+    private fun action(name: String, body: String): StoreResult<String> {
+        val token = accounts.bearer() ?: return StoreResult.Failed("Sign in first")
+        return when (val r = rpc(name, body, token)) {
+            is StoreResult.Ok -> {
+                val json = JsonReader.parseOrNull(r.value)
+                val message = JsonReader.str(json, "message")
+                if (JsonReader.bool(json, "ok")) StoreResult.Ok(message ?: "Done")
+                else StoreResult.Failed(message ?: "The store refused that")
+            }
+            is StoreResult.Unavailable -> StoreResult.Unavailable(r.reason)
+            is StoreResult.Failed -> StoreResult.Failed(r.message, r.status)
+        }
+    }
+
     override fun payloadUrl(submission: PendingSubmission): String? {
         if (!configured) return null
         val bucket = if (submission.status == "approved") PAYLOADS else UPLOADS
@@ -434,6 +483,43 @@ class SupabaseModerationService(
                 reviewStars = JsonReader.int(value, "review_stars"),
                 reviewText = JsonReader.str(value, "review_text"),
                 reviewStatus = JsonReader.str(value, "review_status"),
+                itemStatus = JsonReader.str(value, "item_status"),
+                itemHoldKind = JsonReader.str(value, "item_hold_kind"),
+                itemOpenReports = JsonReader.int(value, "item_open_reports"),
+                isPublisherReport = JsonReader.bool(value, "is_publisher_report"),
+                publisherHandle = JsonReader.str(value, "publisher_handle"),
+                publisherName = JsonReader.str(value, "publisher_name"),
+                publisherBanned = JsonReader.bool(value, "publisher_banned"),
+            )
+        }
+
+        /** The `store_mod_item` document, or null for a slug that names nothing. */
+        internal fun parseModeratedItem(value: Any?): dev.ide.store.ModeratedItem? {
+            val slug = JsonReader.str(value, "slug") ?: return null
+            val publisher = JsonReader.obj(value)?.get("publisher")
+            return dev.ide.store.ModeratedItem(
+                slug = slug,
+                title = JsonReader.str(value, "title") ?: slug,
+                status = JsonReader.str(value, "status").orEmpty(),
+                holdKind = JsonReader.str(value, "holdKind"),
+                holdReason = JsonReader.str(value, "holdReason"),
+                purgeAt = JsonReader.str(value, "purgeAt"),
+                editorsChoice = JsonReader.bool(value, "editorsChoice"),
+                publisherHandle = JsonReader.str(publisher, "handle"),
+                publisherName = JsonReader.str(publisher, "name"),
+                publisherBanned = JsonReader.bool(publisher, "banned"),
+                publisherVerified = JsonReader.bool(publisher, "verified"),
+                versions = JsonReader.arr(JsonReader.obj(value)?.get("versions")).mapNotNull { v ->
+                    val name = JsonReader.str(v, "version") ?: return@mapNotNull null
+                    dev.ide.store.ModeratedVersion(name, JsonReader.int(v, "versionCode"), JsonReader.bool(v, "current"))
+                },
+                openReports = JsonReader.arr(JsonReader.obj(value)?.get("openReports")).map { r ->
+                    dev.ide.store.ModeratedReport(
+                        reason = JsonReader.str(r, "reason").orEmpty(),
+                        detail = JsonReader.str(r, "detail"),
+                        createdAt = JsonReader.str(r, "createdAt"),
+                    )
+                },
             )
         }
     }

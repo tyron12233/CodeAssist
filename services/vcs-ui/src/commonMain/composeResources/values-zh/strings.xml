@@ -149,7 +149,7 @@
     <string name="vcs_clone_unrecognized_body">%1$s 已克隆并添加到你的项目中，但没有构建系统能识别它。你可以浏览和编辑其文件；构建和运行需要先设置好模块。</string>
     <string name="vcs_clone_unrecognized_open">以编辑方式打开</string>
     <string name="vcs_private">私有</string>
-    <string name="vcs_fork">Fork</string>
+    <string name="vcs_fork">复刻</string>
 
     <!-- GitHub screen -->
     <string name="vcs_github">GitHub</string>

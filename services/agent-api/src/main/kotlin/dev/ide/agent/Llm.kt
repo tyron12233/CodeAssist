@@ -193,10 +193,19 @@ data class LlmModelInfo(val id: String, val displayName: String, val supportsThi
  */
 data class ProviderConfig(val apiKey: String, val baseUrl: String? = null, val caCertificatePem: String? = null)
 
+/**
+ * What the settings UI needs to ask a user for a provider's credentials, so adding a provider needs no UI change:
+ * the key field's hint text and the page where a key is created. Empty for a provider that needs no key.
+ */
+data class ProviderCredentials(val keyPlaceholder: String = "", val keyUrl: String? = null)
+
 /** A named LLM provider. Implement this and register it to add a provider. */
 interface LlmProvider {
     val id: String
     val displayName: String
+
+    /** How the user gets and enters this provider's API key; the key field's hint and a link to create one. */
+    val credentials: ProviderCredentials get() = ProviderCredentials()
     val models: List<LlmModelInfo>
     val defaultModel: String
 

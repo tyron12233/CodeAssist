@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.LocalBackendText
 import dev.ide.ui.generated.resources.cancel
 import dev.ide.ui.generated.resources.plugins_leftover_confirm_body
 import dev.ide.ui.generated.resources.plugins_leftovers_confirm_all_title
@@ -626,7 +627,7 @@ private fun PluginCard(
             PluginGlyph(p.name, p.id)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    p.name,
+                    LocalBackendText.current.tr(p.name),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -635,7 +636,7 @@ private fun PluginCard(
                 )
                 if (p.description.isNotBlank()) {
                     Text(
-                        p.description,
+                        LocalBackendText.current.tr(p.description),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
@@ -711,7 +712,7 @@ private fun PluginDetail(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             PluginGlyph(p.name, p.id, size = 64.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(p.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = c.onSurface)
+                Text(LocalBackendText.current.tr(p.name), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = c.onSurface)
                 val sub = listOfNotNull(p.version.takeIf { it.isNotBlank() }?.let { "v$it" }, p.origin.takeIf { it.isNotBlank() })
                 if (sub.isNotEmpty()) Text(sub.joinToString("  ·  "), style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -722,7 +723,7 @@ private fun PluginDetail(
             }
         }
         if (p.description.isNotBlank()) {
-            Text(p.description, style = MaterialTheme.typography.bodyMedium, color = c.onSurface)
+            Text(LocalBackendText.current.tr(p.description), style = MaterialTheme.typography.bodyMedium, color = c.onSurface)
         }
 
         p.error?.let { error ->

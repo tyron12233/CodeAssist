@@ -634,13 +634,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private fun keyPoolFor(cfg: ResolvedConfig, model: String): ApiKeyPool =
         keyPools.getOrPut("${cfg.selectedId}|$model|${cfg.keys.hashCode()}") { ApiKeyPool(cfg.keys) }
 
-    private fun keyField(providerId: String): String = when (providerId) {
-        "openai" -> "openaiKey"
-        "gemini" -> "geminiKey"
-        "openrouter" -> "openrouterKey"
-        GATEWAY -> "gatewayKey"
-        else -> "anthropicKey"
-    }
+    /** The preference holding a provider's key: `<id>Key` for every provider, so a new one needs no mapping here
+     *  (the built-ins keep their saved names: `anthropicKey`, `openaiKey`, `geminiKey`, `openrouterKey`, `gatewayKey`). */
+    private fun keyField(providerId: String): String = "${providerId}Key"
 
     /**
      * Forces the loop to be rebuilt on the next send. The loop itself is kept so the rebuild carries its history
@@ -660,6 +656,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
                 apiKey = if (p.id == FREE_AI) FREE_AI_SESSION_KEY.takeIf { freeAiCredits.signedIn() }.orEmpty()
                 else pref(keyField(p.id)).orEmpty(),
                 backupKeys = if (p.id == FREE_AI) emptyList() else backupKeys(p.id),
+                keyPlaceholder = p.credentials.keyPlaceholder,
+                keyUrl = p.credentials.keyUrl,
             )
         }
         // A synthetic "Custom gateway" entry (OpenAI-compatible endpoint); its client is the OpenAI provider.
@@ -1635,7 +1633,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             UiAgentCommand("model", "Choose the model"),
             UiAgentCommand("mcp", "Manage MCP servers and skills"),
             UiAgentCommand("skills", "Manage the skills the agent can load"),
-            UiAgentCommand("claude", "Let Claude work on this project"),
+            UiAgentCommand("claude", "Let an AI app work on this project"),
         )
 
         private const val INIT_PROMPT = "Explore this project and write an AGENTS.md file at the project root " +

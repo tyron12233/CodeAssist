@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.LocalBackendText
 import androidx.compose.runtime.Composable
 import dev.ide.ui.backend.UiSettingControl
 import dev.ide.ui.backend.UiSettingsPage

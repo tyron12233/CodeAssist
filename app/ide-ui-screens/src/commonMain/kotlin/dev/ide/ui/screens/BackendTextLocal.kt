@@ -3,8 +3,8 @@ package dev.ide.ui.screens
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.intl.Locale
+import dev.ide.ui.LocalBackendText
 import dev.ide.ui.backend.BackendText
 import dev.ide.ui.backend.UiExerciseResult
 import dev.ide.ui.backend.UiExerciseVerdict as V
@@ -14,25 +14,19 @@ import kotlinx.coroutines.sync.withLock
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
 
-/**
- * The translation table for the text the backend writes in English (see [BackendText]), for the language the
- * UI is showing. Empty, so everything passes through as written, until the table has loaded and for every
- * language that has none.
- *
- * Read it where the text is shown, not where it is fetched: the table loads after the first frames, and text
- * translated while it was still empty would stay English for as long as that value is kept.
- */
-val LocalBackendText = staticCompositionLocalOf { BackendText.EMPTY }
-
 /** The table for the UI's current language, loaded once per process and language. */
 @Composable
 fun rememberBackendText(): BackendText {
-    val language = Locale.current.language.lowercase()
+    val language = backendTableLanguage(Locale.current.language)
     val table by produceState(BackendTextTables.cached(language) ?: BackendText.EMPTY, language) {
         value = BackendTextTables.load(language)
     }
     return table
 }
+
+/** The table's language code for a locale language: Indonesian is "in" on older JVMs and "id" on newer ones. */
+internal fun backendTableLanguage(language: String): String =
+    language.lowercase().let { if (it == "in") "id" else it }
 
 internal object BackendTextTables {
     private val lock = Mutex()

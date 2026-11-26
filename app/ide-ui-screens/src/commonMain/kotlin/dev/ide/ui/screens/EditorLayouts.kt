@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.LocalBackendText
 import dev.ide.ui.platform.rememberWindowFold
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
@@ -915,7 +916,7 @@ internal fun CompactLayout(
                             showSource = leftPanels.any { it.id == LeftPanelId.SOURCE },
                             rightTool = rightPrimary?.let { tw ->
                                 RightToolNavItem(
-                                    actionIcon(tw.iconId), tw.title, open = state.selectedRightPanel != null,
+                                    actionIcon(tw.iconId), LocalBackendText.current.tr(tw.title), open = state.selectedRightPanel != null,
                                     onClick = {
                                         if (state.selectedRightPanel != null) state.selectedRightPanel = null
                                         else state.selectRightPanel(tw.id)

@@ -74,6 +74,9 @@ import dev.ide.agent.ui.generated.resources.chat_fetch_models
 import dev.ide.agent.ui.generated.resources.chat_fetch_models_failed
 import dev.ide.agent.ui.generated.resources.chat_fetching_models
 import dev.ide.agent.ui.generated.resources.chat_gateway_hint
+import dev.ide.agent.ui.generated.resources.chat_get_api_key
+import dev.ide.agent.ui.generated.resources.chat_provider_not_set_up
+import dev.ide.agent.ui.generated.resources.chat_provider_use
 import dev.ide.agent.ui.generated.resources.chat_hide
 import dev.ide.agent.ui.generated.resources.chat_model
 import dev.ide.agent.ui.generated.resources.chat_openrouter_connected
@@ -103,6 +106,16 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 internal fun AgentProvidersSheet(backend: IdeBackend, onClose: () -> Unit) {
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            AgentProvidersPage(backend, onClose)
+        }
+    }
+}
+
+/** The providers page itself, for hosting as a screen (Settings → AI → Manage) or inside [AgentProvidersSheet]. */
+@Composable
+internal fun AgentProvidersPage(backend: IdeBackend, onClose: () -> Unit) {
     var cfg by remember { mutableStateOf(backend.agent.config()) }
     val signIn by backend.agent.openRouterSignIn.collectAsState()
     val freeAi by backend.agent.freeAi.collectAsState()
@@ -112,8 +125,10 @@ internal fun AgentProvidersSheet(backend: IdeBackend, onClose: () -> Unit) {
     val free = cfg.providers.firstOrNull { it.id == FREE_AI_PROVIDER }
     val select = { id: String -> backend.agent.selectProvider(id); cfg = backend.agent.config() }
 
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    // The provider whose details are open. One at a time, so the list stays a list however many providers there are.
+    var expanded by remember { mutableStateOf<String?>(null) }
+    run {
+        run {
             ExpressiveScaffold(
                 title = stringResource(Res.string.chat_providers_title),
                 onBack = onClose,
@@ -139,6 +154,8 @@ internal fun AgentProvidersSheet(backend: IdeBackend, onClose: () -> Unit) {
                         ProviderCard(
                             provider = provider,
                             selected = provider.id == cfg.selectedProvider,
+                            expanded = expanded == provider.id,
+                            onToggle = { expanded = if (expanded == provider.id) null else provider.id },
                             gatewayBaseUrl = cfg.gatewayBaseUrl,
                             gatewayModel = cfg.gatewayModel,
                             gatewayCaCert = cfg.gatewayCaCert,
@@ -201,6 +218,9 @@ private fun FreeAiCard(backend: IdeBackend, selected: Boolean, onSelect: () -> U
 private fun ProviderCard(
     provider: UiAgentProvider,
     selected: Boolean,
+    /** Whether the details (key fields, endpoint) are open. Independent of [selected]: opening one is not using it. */
+    expanded: Boolean,
+    onToggle: () -> Unit,
     gatewayBaseUrl: String,
     gatewayModel: String,
     gatewayCaCert: String,
@@ -235,17 +255,23 @@ private fun ProviderCard(
             .clip(shape)
             .background(container, shape)
             .border(1.dp, if (selected) scheme.primary else scheme.outlineVariant, shape)
-            .clickable(onClick = onSelect)
+            .clickable(onClick = onToggle)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RadioDot(selected, onContainer)
+            // The radio is its own target: it picks the provider the agent uses, the rest of the row opens it.
+            Box(Modifier.clip(CircleShape).clickable(onClick = onSelect).padding(4.dp)) { RadioDot(selected, onContainer) }
             Text(
                 provider.displayName,
                 color = onContainer, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )
+            if (selected) {
+                Chip(stringResource(Res.string.free_ai_in_use), fill = scheme.primary, textColor = scheme.onPrimary)
+            } else if (!hasKey) {
+                Chip(stringResource(Res.string.chat_provider_not_set_up))
+            }
             if (hasKey) {
                 // A solid tonal pair rather than a tinted wash of the status green: Material has no success
                 // container, and tertiary is the role that reads as a positive state at full opacity.
@@ -256,10 +282,20 @@ private fun ProviderCard(
                 )
             }
         }
-        if (selected) {
+        if (expanded) {
             signIn?.invoke()
             if (!keyless) {
-                SecretField(key, stringResource(if (isGateway) Res.string.chat_api_key_optional else Res.string.chat_api_key)) { key = it; onSetKey(it) }
+                SecretField(key, stringResource(if (isGateway) Res.string.chat_api_key_optional else Res.string.chat_api_key), provider.keyPlaceholder) { key = it; onSetKey(it) }
+                provider.keyUrl?.let { url ->
+                    val uriHandler = LocalUriHandler.current
+                    Text(
+                        stringResource(Res.string.chat_get_api_key),
+                        color = scheme.primary, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clip(RoundedCornerShape(Ca.radius.pill))
+                            .clickable { runCatching { uriHandler.openUri(url) } }
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                    )
+                }
                 BackupKeys(backups) { backups = it; onSetBackupKeys(it) }
             }
             if (isGateway) {
@@ -278,6 +314,9 @@ private fun ProviderCard(
                 PlainField(caCert, stringResource(Res.string.chat_ca_cert)) { caCert = it; onSetGateway(baseUrl, model, it) }
                 Text(stringResource(Res.string.chat_ca_cert_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                 Text(stringResource(Res.string.chat_gateway_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+            }
+            if (!selected) {
+                PrimaryButton(stringResource(Res.string.chat_provider_use), onSelect, Modifier.fillMaxWidth(), icon = CaIcons.sparkle)
             }
         }
     }
@@ -460,8 +499,9 @@ private fun RadioDot(selected: Boolean, selectedTint: Color = MaterialTheme.colo
 }
 
 @Composable
-private fun SecretField(value: String, placeholder: String, onValueChange: (String) -> Unit) {
+private fun SecretField(value: String, label: String, hint: String = "", onValueChange: (String) -> Unit) {
     var visible by remember { mutableStateOf(false) }
+    val placeholder = if (hint.isBlank()) label else "$label · $hint"
     val shape = RoundedCornerShape(Ca.radius.control)
     Row(
         Modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHighest)

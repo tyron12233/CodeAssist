@@ -162,7 +162,8 @@ internal fun LaunchSplash(
         Canvas(Modifier.fillMaxSize()) {
             val center = systemIcon?.let { Offset(it.centerX - origin.x, it.centerY - origin.y) } ?: this.center
             val logoScale = 1f + 0.02f * glow + 0.10f * exit.value
-            if (glow > 0f) {
+            // A radius that is not positive would make Android's RadialGradient throw, so a zero logo size skips the glow.
+            if (glow > 0f && logoPx * 0.36f * logoScale > 0f) {
                 val radius = logoPx * 0.36f * logoScale
                 drawCircle(
                     Brush.radialGradient(

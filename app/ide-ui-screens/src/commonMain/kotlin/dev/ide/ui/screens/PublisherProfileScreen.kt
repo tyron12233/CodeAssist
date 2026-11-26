@@ -23,6 +23,7 @@ import dev.ide.ui.components.SupportingOnContainer
 import dev.ide.ui.components.formatRating
 import dev.ide.ui.components.installsLabel
 import dev.ide.ui.generated.resources.*
+import dev.ide.ui.generated.resources.report_thanks
 import dev.ide.ui.pluralStringResource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -99,6 +100,10 @@ fun PublisherProfileScreen(
     var following by remember(handle) { mutableStateOf<Boolean?>(null) }
     var followMessage by remember(handle) { mutableStateOf<String?>(null) }
     val signedIn = backend.store.authState().collectAsState().value.signedIn
+    // The "more" sheet (report, and a moderator's verify and ban) and the report sheet it leads to.
+    var actionsSheet by remember(handle) { mutableStateOf(false) }
+    var reporting by remember(handle) { mutableStateOf(false) }
+    val thanks = stringResource(Res.string.report_thanks)
 
     val profile by produceState<UiPublisherProfile?>(null, handle, backend) {
         value = UiPublisherProfile(handle, handle, loading = true)
@@ -117,10 +122,11 @@ fun PublisherProfileScreen(
     Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
             DetailTopBar(
-                // The page's own header carries the name; the bar keeps only the way back.
+                // The page's own header carries the name; the bar keeps only the way back and "more".
                 title = "",
                 isSaved = false,
                 onBack = onBack,
+                onMore = if (current != null && !current.loading) ({ actionsSheet = true }) else null,
             )
             when {
                 current == null -> Missing()
@@ -231,6 +237,32 @@ fun PublisherProfileScreen(
                 } }
             }
         }
+    }
+
+    val shown = current?.takeIf { !it.loading }
+    if (actionsSheet && shown != null) {
+        PublisherActionsSheet(
+            backend = backend,
+            handle = handle,
+            name = shown.displayName,
+            verified = shown.verified,
+            onReport = {
+                actionsSheet = false
+                // Reporting needs an account; without one, the page's own sign-in is the way in.
+                if (signedIn) reporting = true else onNeedSignIn?.invoke()
+            },
+            onChanged = {},
+            onDismiss = { actionsSheet = false },
+        )
+    }
+    if (reporting) {
+        ReportPublisherSheet(
+            backend = backend,
+            handle = handle,
+            onDismiss = { reporting = false },
+            // Said where the follow button says its outcomes.
+            onReported = { reporting = false; followMessage = thanks },
+        )
     }
 }
 

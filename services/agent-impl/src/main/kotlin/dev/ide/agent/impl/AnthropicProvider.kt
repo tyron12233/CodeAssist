@@ -6,6 +6,7 @@ import dev.ide.agent.LlmEffort
 import dev.ide.agent.LlmMessage
 import dev.ide.agent.LlmModelInfo
 import dev.ide.agent.LlmProvider
+import dev.ide.agent.ProviderCredentials
 import dev.ide.agent.LlmRequest
 import dev.ide.agent.LlmRole
 import dev.ide.agent.LlmStreamEvent
@@ -35,6 +36,7 @@ class AnthropicProvider(
 ) : LlmProvider {
     override val id: String = "anthropic"
     override val displayName: String = "Anthropic (Claude)"
+    override val credentials: ProviderCredentials = ProviderCredentials(keyPlaceholder = "sk-ant-...", keyUrl = "https://console.anthropic.com/settings/keys")
     override val models: List<LlmModelInfo> = listOf(
         LlmModelInfo("claude-opus-5", "Claude Opus 5", supportsThinking = true),
         LlmModelInfo("claude-opus-4-8", "Claude Opus 4.8", supportsThinking = true),

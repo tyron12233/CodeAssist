@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.LocalBackendText
 import dev.ide.ui.platform.excludeSystemGestures
 import dev.ide.ui.backend.RunGutter
 import dev.ide.ui.backend.TestOutput
@@ -302,7 +303,7 @@ internal fun EditorCenter(
                 onToggleConsole = { state.consoleOpen = !state.consoleOpen },
                 consoleOpen = state.consoleOpen,
                 rightToolIconId = rightPrimary?.iconId,
-                rightToolTitle = rightPrimary?.title ?: "",
+                rightToolTitle = rightPrimary?.title?.let { LocalBackendText.current.tr(it) } ?: "",
                 rightToolBusy = rightPrimary?.busy?.invoke(state.backend) == true,
                 rightToolOpen = state.selectedRightPanel != null,
                 onToggleRightTool = { rightPrimary?.let { state.toggleRightPanel(it.id) } },

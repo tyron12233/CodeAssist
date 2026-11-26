@@ -3,6 +3,7 @@ package dev.ide.agent.impl
 import dev.ide.agent.LlmClient
 import dev.ide.agent.LlmModelInfo
 import dev.ide.agent.LlmProvider
+import dev.ide.agent.ProviderCredentials
 import dev.ide.agent.ProviderConfig
 
 /**
@@ -24,6 +25,7 @@ class OpenRouterProvider(private val transport: LlmTransport) : LlmProvider {
 
     override val id: String = "openrouter"
     override val displayName: String = "OpenRouter"
+    override val credentials: ProviderCredentials = ProviderCredentials(keyPlaceholder = "sk-or-...", keyUrl = "https://openrouter.ai/keys")
     override val models: List<LlmModelInfo> = listOf(
         LlmModelInfo("anthropic/claude-opus-5", "Claude Opus 5"),
         LlmModelInfo("anthropic/claude-sonnet-5", "Claude Sonnet 5"),

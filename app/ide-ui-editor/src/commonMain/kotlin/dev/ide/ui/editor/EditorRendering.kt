@@ -723,7 +723,8 @@ private fun DrawScope.drawCandle(cx: Float, cy: Float, lineHeight: Float, color:
 
     // A soft halo that fades to nothing, so it lights the text around the flame instead of sitting on it.
     val glowCenter = Offset(cx + lean * 0.5f, base - h * 0.45f)
-    drawCircle(
+    // Android's RadialGradient throws on a radius that is not positive (a zero line height gives exactly 0).
+    if (h * 0.95f > 0f) drawCircle(
         Brush.radialGradient(listOf(Color(0xFFFF9A2E).copy(alpha = 0.28f), Color.Transparent), glowCenter, h * 0.95f),
         radius = h * 0.95f,
         center = glowCenter,

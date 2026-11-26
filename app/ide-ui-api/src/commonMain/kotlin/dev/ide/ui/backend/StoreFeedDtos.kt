@@ -534,6 +534,15 @@ data class UiReportedContent(
     val reviewText: String? = null,
     /** True when the review has already been hidden, so the action reads Restore rather than Hide. */
     val reviewHidden: Boolean = false,
+    /** The reported project's listing state, so its actions fit it. Null for a publisher report. */
+    val itemState: UiListingState? = null,
+    /** How many reports are open on the project, this one included. */
+    val itemOpenReports: Int = 0,
+    /** True when a publisher was reported rather than a project or a review. */
+    val isPublisherReport: Boolean = false,
+    val publisherHandle: String? = null,
+    val publisherName: String? = null,
+    val publisherBanned: Boolean = false,
 )
 
 /** [message] is shown verbatim on failure: the backend's quota and validation messages are user-facing. */
@@ -669,7 +678,55 @@ data class UiReviewPage(
  * A fixed set rather than free text: a moderator triaging a queue needs to sort by kind, and "other"
  * carries the detail field for everything that does not fit.
  */
-enum class UiReportReason { MALWARE, SPAM, COPYRIGHT, INAPPROPRIATE, BROKEN, OTHER }
+enum class UiReportReason {
+    MALWARE, SPAM, COPYRIGHT, INAPPROPRIATE, BROKEN, OTHER,
+
+    /** A publisher pretending to be someone else. Offered only when reporting a publisher. */
+    IMPERSONATION,
+}
+
+/** Where a project stands in the store's listings, as a moderator sees it. */
+enum class UiListingState {
+    LISTED,
+
+    /** Taken off the listings by a moderator; its page, link and installs stay. */
+    ARCHIVED,
+
+    /** Off the listings because several people reported it, until a moderator looks. */
+    HELD_FOR_REPORTS,
+
+    /** Removed: gone everywhere, deleted for good after 30 days unless restored. */
+    REMOVED,
+
+    /** Not published (a draft, pending, rejected or unpublished by its publisher). */
+    OTHER,
+}
+
+/**
+ * A moderator's view of one project, which decides what their menu on its page offers.
+ *
+ * [holdReason] is what its publisher was told when it was archived or removed. [purgeAtMs] is when a removed
+ * one is deleted for good.
+ */
+data class UiModeratedItem(
+    val slug: String,
+    val title: String,
+    val state: UiListingState,
+    val holdReason: String? = null,
+    val purgeAtMs: Long? = null,
+    val editorsChoice: Boolean = false,
+    val publisherHandle: String? = null,
+    val publisherName: String? = null,
+    val publisherBanned: Boolean = false,
+    val publisherVerified: Boolean = false,
+    /** Its approved versions, newest first: what it can be rolled back to. */
+    val versions: List<UiModeratedVersion> = emptyList(),
+    val openReports: List<UiModeratedReport> = emptyList(),
+)
+
+data class UiModeratedVersion(val version: String, val versionCode: Int, val current: Boolean)
+
+data class UiModeratedReport(val reason: String, val detail: String? = null)
 
 
 // ---- publisher profiles ----

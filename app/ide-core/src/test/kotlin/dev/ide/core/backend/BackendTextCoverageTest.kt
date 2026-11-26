@@ -16,52 +16,56 @@ import kotlin.test.fail
 
 /**
  * Every piece of English the backend can put on screen (the Learn catalog, the project templates, the settings
- * pages) has a translation in the Arabic table the UI reads ([BackendText]).
+ * pages, the bundled plugins' names) has a translation in every table the UI reads ([BackendText]).
  *
- * The full list is written to `build/i18n/backend-text-sources.json` and what the Arabic table lacks to
- * `build/i18n/backend-ar-missing.json`, which is the file to translate when this fails: add each entry, English
- * to Arabic, to `:ide-ui-resources` `composeResources/files/i18n/backend-ar.json`. Code in backticks stays
- * exactly as written; the test checks that too.
+ * The full list is written to `build/i18n/backend-text-sources.json` and what each table lacks to
+ * `build/i18n/backend-<language>-missing.json`, which is the file to translate when this fails: add each entry,
+ * English to that language, to `:ide-ui-resources` `composeResources/files/i18n/backend-<language>.json`
+ * (ar, es, id, pt, ru, zh). Code in backticks stays exactly as written; the test checks that too.
  */
 class BackendTextCoverageTest {
 
-    private val arabicTable: Path =
-        Paths.get("../ide-ui-resources/src/commonMain/composeResources/files/i18n/backend-ar.json")
+    private fun table(language: String): Path =
+        Paths.get("../ide-ui-resources/src/commonMain/composeResources/files/i18n/backend-$language.json")
+
+    private val languages = listOf("ar", "es", "id", "pt", "ru", "zh")
 
     @Test
-    fun theArabicTableCoversEveryBackendString() {
+    fun everyTableCoversEveryBackendString() {
         val sources = backendStrings()
         val out = Paths.get("build/i18n")
         Files.createDirectories(out)
         Files.write(out.resolve("backend-text-sources.json"), jsonList(sources).toByteArray(Charsets.UTF_8))
 
-        val table = if (Files.isRegularFile(arabicTable)) {
-            BackendText.parse(String(Files.readAllBytes(arabicTable), Charsets.UTF_8))
-        } else BackendText.EMPTY
-        val missing = sources.filter { table.translate(it) == null }
-        Files.write(out.resolve("backend-ar-missing.json"), jsonList(missing).toByteArray(Charsets.UTF_8))
-        if (missing.isNotEmpty()) {
-            fail(
-                "${missing.size} of ${sources.size} backend strings have no Arabic translation " +
-                    "(listed in ${out.toAbsolutePath().resolve("backend-ar-missing.json")}), e.g.:\n" +
-                    missing.take(10).joinToString("\n") { "  " + it.take(120).replace("\n", "\\n") },
-            )
+        val failures = languages.mapNotNull { lang ->
+            val file = table(lang)
+            val table = if (Files.isRegularFile(file)) {
+                BackendText.parse(String(Files.readAllBytes(file), Charsets.UTF_8))
+            } else BackendText.EMPTY
+            val missing = sources.filter { table.translate(it) == null }
+            Files.write(out.resolve("backend-$lang-missing.json"), jsonList(missing).toByteArray(Charsets.UTF_8))
+            if (missing.isEmpty()) null
+            else "$lang: ${missing.size} of ${sources.size} backend strings have no translation " +
+                "(listed in ${out.toAbsolutePath().resolve("backend-$lang-missing.json")}), e.g.:\n" +
+                missing.take(5).joinToString("\n") { "  " + it.take(120).replace("\n", "\\n") }
         }
+        if (failures.isNotEmpty()) fail(failures.joinToString("\n"))
     }
 
     @Test
     fun translationsKeepTheirCodeAndMarkup() {
-        if (!Files.isRegularFile(arabicTable)) return
-        val entries = BackendText.parse(String(Files.readAllBytes(arabicTable), Charsets.UTF_8)).entries
-        val broken = entries.entries.mapNotNull { (en, ar) ->
-            val why = when {
-                ar.isBlank() -> "empty"
-                codeSpans(en).sorted() != codeSpans(ar).sorted() -> "code in backticks changed: ${codeSpans(en)} vs ${codeSpans(ar)}"
-                en.split("**").size != ar.split("**").size -> "bold markers (**) differ"
-                en.count { it == '\n' } > 0 && ar.count { it == '\n' } == 0 -> "line breaks lost"
-                else -> null
+        val broken = languages.filter { Files.isRegularFile(table(it)) }.flatMap { lang ->
+            val entries = BackendText.parse(String(Files.readAllBytes(table(lang)), Charsets.UTF_8)).entries
+            entries.entries.mapNotNull { (en, tr) ->
+                val why = when {
+                    tr.isBlank() -> "empty"
+                    codeSpans(en).sorted() != codeSpans(tr).sorted() -> "code in backticks changed: ${codeSpans(en)} vs ${codeSpans(tr)}"
+                    en.split("**").size != tr.split("**").size -> "bold markers (**) differ"
+                    en.count { it == '\n' } > 0 && tr.count { it == '\n' } == 0 -> "line breaks lost"
+                    else -> null
+                }
+                why?.let { "$lang ${en.take(80).replace("\n", "\\n")}: $it" }
             }
-            why?.let { "${en.take(80).replace("\n", "\\n")}: $it" }
         }
         assertTrue(broken.isEmpty(), "${broken.size} translations break their source's code or markup:\n" + broken.take(20).joinToString("\n"))
     }
@@ -114,6 +118,8 @@ class BackendTextCoverageTest {
                     }
                 }
                 add("Other")
+                // Plugins screen: a bundled plugin's name and description.
+                manager.env.pluginCatalog.all.forEach { m -> add(m.name); add(m.description) }
                 // Settings: every page, built-in or contributed by a bundled plugin, with a project open.
                 backend.settings.settingsPages().forEach { page ->
                     add(page.title)
@@ -132,6 +138,10 @@ class BackendTextCoverageTest {
         // Build Runtime descriptions that only an Android device reaches (SettingsBackend.buildRuntimeControls),
         // with sample numbers: the table matches them with the device's own numbers put back in.
         ANDROID_ONLY.forEach(::add)
+        // Controls that exist only on some hosts or builds, so the desktop test above never lists them.
+        CONDITIONAL_SETTINGS.forEach(::add)
+        // The Store's shelf titles, subtitles and eyebrows: the server writes them (supabase `store_shelves`).
+        STORE_SHELVES.forEach(::add)
         return out.toList()
     }
 
@@ -163,6 +173,50 @@ class BackendTextCoverageTest {
     }
 
     private companion object {
+        val STORE_SHELVES = listOf(
+            "Editor's Choice",
+            "Hand-picked by the review team",
+            "Editorial",
+            "Top charts",
+            "Collections",
+            "curated by the team",
+            "Most liked",
+            "What the community keeps coming back to",
+            "Browse by kind",
+            "New & updated",
+            "Everything in the store",
+            "Spooky builds",
+            "Haunted houses, pumpkins and things that go bump. Tag yours #spookyjam to enter the jam.",
+            "Halloween",
+            "Spooky Jam: most liked",
+            "Publish with the #spookyjam tag. The most liked entry on Nov 9 gets featured.",
+            "Community jam",
+            "Fresh this week",
+            "Published in the last seven days",
+            "New",
+            "Just updated",
+            "New versions of projects already in the store",
+            "A different collection every Monday",
+            "This week",
+            "Winter builds",
+            "Snow globes, countdowns and cozy little apps. Tag yours #winter to add it to the shelf.",
+            "Winter",
+            "Liked this month",
+            "What the community saved in the last 30 days",
+        )
+        val CONDITIONAL_SETTINGS = listOf(
+            "App icon",
+            "The icon your launcher shows. Some launchers take a few seconds to update, and may remove a home screen shortcut to the old icon",
+            "Default", "Pumpkin", "Snowflake",
+            // Tool window titles, contributed by UI plugins outside this module (the sidebar, the phone's bottom bar).
+            "AI", "Notifications",
+            // The "connect an AI app" screen and the chat command that opens it.
+            "Connect an AI app", "Let an AI app work on this project",
+            "Reminders",
+            "An occasional notification about a project you left unfinished. At most one a week.",
+            "Share performance analytics",
+            "Anonymous performance metrics only — never your code or file names",
+        )
         val ANDROID_ONLY = listOf(
             "R8 runs inside the IDE, capped at this app's memory limit (~512 MB). Pick Forked VM to give R8 more by running it in a separate VM.",
             "This device can't run R8 in a separate VM, so it runs in-process (~512 MB). Large apps may run out of memory; there's nothing to tune here.",

@@ -190,7 +190,7 @@ fun CodeAssistApp(
             // Translations of the text the backend writes in English (lessons, templates, settings pages).
             val backendText = dev.ide.ui.screens.rememberBackendText()
             CompositionLocalProvider(
-                dev.ide.ui.screens.LocalBackendText provides backendText,
+                dev.ide.ui.LocalBackendText provides backendText,
                 LocalSeason provides season,
                 dev.ide.ui.holiday.LocalHolidayLedger provides app.holidayLedger,
                 LocalAds provides app.adController,

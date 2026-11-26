@@ -37,6 +37,11 @@ actual fun PlatformSystemBars(darkTheme: Boolean) {
         val controller = WindowCompat.getInsetsController(window, view)
         controller.isAppearanceLightStatusBars = !darkTheme
         controller.isAppearanceLightNavigationBars = !darkTheme
+        // 3-button navigation: the system paints its own light/dark scrim (picked from the PHONE's mode, not the
+        // app's) under the buttons, so a dark app on a light-mode phone got a light grey bar. Transparent with no
+        // contrast scrim lets the app background show through, matching the theme.
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        if (android.os.Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
     }
 }
 
