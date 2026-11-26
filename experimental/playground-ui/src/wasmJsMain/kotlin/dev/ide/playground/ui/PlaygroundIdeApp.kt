@@ -18,6 +18,7 @@ import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.TreeNode
+import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.TreeViewMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +46,11 @@ class PlaygroundIdeBackend(engine: EngineClient) : PlaygroundBackend(engine, map
     )
 
     override fun saveFile(path: String, text: String) { documents[path] = text }
+
+    // What the shell restores when it opens the project: Main.kt, in a tab and active, so the Playground lands on
+    // code, not on the empty "No file open" screen.
+    override fun openTabs(): UiOpenTabs = UiOpenTabs.ofPaths(listOf(PATH), activeIndex = 0)
+    override fun hasSavedSession(): Boolean = true
 
     private val reanalysis = MutableStateFlow(0)
 
