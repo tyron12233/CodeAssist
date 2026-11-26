@@ -44,18 +44,13 @@ plugins {
 // forbids. Needed on the root project (the shared env spec) and on every project that has the target.
 plugins.withType<WasmNodeJsPlugin> { extensions.configure<WasmNodeJsEnvSpec> { download.set(false) } }
 
-// The production Playground (`wasmJsBrowserDistribution`) shrinks the wasm with Binaryen's `wasm-opt`. Its download
-// is a project repository too, so it comes from the machine as well: `BINARYEN_HOME` (the directory holding
-// `bin/wasm-opt`), else wherever `wasm-opt` is on the PATH (`brew install binaryen`, `apt install binaryen`).
-// Without one the production task fails; the development distribution (`assemblePlayground`) never needs it.
-val binaryenHome: File? = (System.getenv("BINARYEN_HOME")?.let(::File)
-    ?: System.getenv("PATH").orEmpty().split(File.pathSeparator)
-        .map { File(it, "wasm-opt") }.firstOrNull { it.canExecute() }?.canonicalFile?.parentFile?.parentFile)
+// The production Playground (`wasmJsBrowserDistribution`) shrinks the wasm with Binaryen's `wasm-opt`. Its download is a
+// project repository too, so it is not downloaded: with the download off, the Kotlin plugin runs the bare command
+// `wasm-opt`, which therefore has to be on the PATH (`brew install binaryen`; on CI a release, see
+// .github/workflows/playground.yml). Without one the production task fails; the development distribution
+// (`assemblePlayground`) never needs it.
 fun Project.useLocalBinaryen() = plugins.withType<BinaryenPlugin> {
-    extensions.configure<BinaryenEnvSpec> {
-        download.set(false)
-        binaryenHome?.let { installationDirectory.set(it) }
-    }
+    extensions.configure<BinaryenEnvSpec> { download.set(false) }
 }
 useLocalBinaryen()
 

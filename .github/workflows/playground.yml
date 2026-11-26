@@ -15,7 +15,7 @@ on:
 
 # The browser Playground (docs/playground.md): the engine's tests under Node, then the production web build.
 # Unlike ci.yml this builds the Compose shells, so CI_CORE_ONLY is NOT set and the runner's Android SDK is needed
-# just to configure the build (ubuntu-latest has one). Node and Binaryen come from the machine: the settings'
+# just to configure the build (ubuntu-latest has one). Node and Binaryen come from the PATH: the settings'
 # repository policy forbids Gradle's own downloads of them.
 env:
   JAVA_VERSION: "25"
@@ -43,11 +43,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       # The release, not apt's package: Ubuntu's is too old for the flags Kotlin/Wasm passes (`--enable-stack-switching`).
-      # Pinned to the version the production build was verified with. The root build reads BINARYEN_HOME.
+      # Pinned to the version the production build was verified with. With Gradle's own download off, the Kotlin plugin runs
+      # the bare command `wasm-opt`, so it has to be on the PATH.
       - name: Install Binaryen (wasm-opt)
         run: |
           curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz | tar xz -C "$RUNNER_TEMP"
-          echo "BINARYEN_HOME=$RUNNER_TEMP/binaryen-version_133" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/binaryen-version_133/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/binaryen-version_133/bin/wasm-opt" --version
 
       - name: Engine tests under Node

@@ -24,10 +24,11 @@ page (Compose Multiplatform for web, the desktop IDE shell)          Web Worker 
 ./gradlew :playground-ui:assemblePlaygroundProduction  # build/playground-web-prod/  (wasm-opt; about 9 minutes)
 ```
 
-The production build needs Binaryen's `wasm-opt` on the machine (`brew install binaryen`, or a release from
-https://github.com/WebAssembly/binaryen/releases with `BINARYEN_HOME` pointing at the directory that holds `bin/wasm-opt`; verified with
-version 133. Ubuntu's apt package is too old: it rejects the `--enable-stack-switching` flag Kotlin/Wasm passes). Gradle's own download of it is a project repository, which
-the settings' repository policy (`FAIL_ON_PROJECT_REPOS`) refuses; Node comes from the machine for the same reason.
+The production build needs Binaryen's `wasm-opt` **on the PATH** (`brew install binaryen`, or a release from
+https://github.com/WebAssembly/binaryen/releases with its `bin/` directory on the PATH; verified with version 133). Ubuntu's apt
+package is too old: it rejects the `--enable-stack-switching` flag Kotlin/Wasm passes. Gradle's own download of Binaryen is a project
+repository, which the settings' repository policy (`FAIL_ON_PROJECT_REPOS`) refuses, and with it off the Kotlin plugin runs the
+bare command `wasm-opt`. Node comes from the machine for the same reason.
 
 Serve the output directory with any static server (`python3 -m http.server`, nginx, a bucket behind a CDN). Needs no
 special headers: no `SharedArrayBuffer`, no cross-origin isolation.
