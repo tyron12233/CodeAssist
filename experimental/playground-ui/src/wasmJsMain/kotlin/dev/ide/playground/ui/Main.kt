@@ -44,7 +44,7 @@ import dev.ide.ui.theme.CodeAssistTheme
 import dev.ide.ui.theme.rememberJetBrainsMono
 import kotlinx.coroutines.launch
 
-private val SAMPLE = """
+internal val SAMPLE = """
 package demo
 
 data class Point(val x: Int, val y: Int) {
@@ -62,11 +62,15 @@ fun main() {
 }
 """.trimStart()
 
-private const val PATH = "/project/Main.kt"
+internal const val PATH = "/project/Main.kt"
+
+/** `?editor` asks for the compact page (just the editor and an output pane) instead of the whole IDE. */
+@JsFun("() => new URLSearchParams(location.search).has('editor')")
+private external fun wantsEditorOnly(): Boolean
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
-    ComposeViewport("app") { PlaygroundApp() }
+    ComposeViewport("app") { if (wantsEditorOnly()) PlaygroundApp() else PlaygroundIdeApp() }
 }
 
 /**

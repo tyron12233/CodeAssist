@@ -23,6 +23,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            implementation(project(":ide-ui")) // the whole desktop shell: CodeAssistApp
             implementation(project(":ide-ui-editor"))
             implementation(project(":ide-ui-testing")) // StubBackend: every service a no-op, so only the editor's are overridden
             implementation(project(":platform-json"))

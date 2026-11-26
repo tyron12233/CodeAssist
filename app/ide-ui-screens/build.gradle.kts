@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // The screens: the project home, the store, Learn and the daily challenges, settings, the run and logs
@@ -25,6 +26,9 @@ kotlin {
     // iOS. The screens are common Compose over the `IdeBackend` port, so they build for iOS unchanged.
     iosSimulatorArm64()
     iosArm64()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { browser() }
 
     sourceSets {
         commonMain.dependencies {

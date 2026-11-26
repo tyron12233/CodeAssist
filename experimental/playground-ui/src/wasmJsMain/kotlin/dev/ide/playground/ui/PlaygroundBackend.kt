@@ -35,8 +35,11 @@ import dev.ide.ui.backend.UiTextEdit
  * diagnostics are answered by the engine worker. The editor asks for them on every keystroke the way it does
  * against the real IDE; the answers are the same Kotlin completion and checks, run in the worker.
  */
-class PlaygroundBackend(private val engine: EngineClient) : StubBackend() {
-    private val documents = HashMap<String, String>()
+open class PlaygroundBackend(
+    protected val engine: EngineClient,
+    initialFiles: Map<String, String> = emptyMap(),
+) : StubBackend() {
+    protected val documents = HashMap<String, String>(initialFiles)
 
     /** The text the editor shows now, and a way to edit it: a rename the editor did not apply itself needs both. */
     var currentText: () -> String = { "" }
