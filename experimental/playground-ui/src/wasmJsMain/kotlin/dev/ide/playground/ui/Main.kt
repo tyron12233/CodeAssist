@@ -150,7 +150,7 @@ fun PlaygroundApp() {
             timing = ""
             status = "running..."
             scope.launch {
-                val r = engine.run(session.doc.text.toString())
+                val r = engine.run(PATH, session.doc.text.toString())
                 if (runSeq[0] != mine) return@launch // stopped (or superseded) while it ran
                 running = false
                 failed = r.error.isNotEmpty()

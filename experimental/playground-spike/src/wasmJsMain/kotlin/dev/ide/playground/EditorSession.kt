@@ -41,6 +41,9 @@ import dev.ide.lang.kotlin.resolve.KotlinResolverCaches
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.SourceIndexBuilder
 import dev.ide.platform.createDirectories
+import dev.ide.platform.deleteFile
+import dev.ide.platform.fileInfo
+import dev.ide.platform.writeFileAtomically
 import dev.ide.vfs.VirtualFile
 import kotlin.time.TimeSource
 
@@ -110,17 +113,18 @@ class EditorSession(classpath: List<String>) {
     /** Resolver memo caches shared by the passes over one snapshot, so a keystroke's passes pay for inference once. */
     private fun cachesFor(parsed: KotlinParsedFile): KotlinResolverCaches {
         val stamp = service.externalContentStamp(parsed.file.path)
-        cachesFor?.let { (p, c) -> if (p === parsed && stampOf == stamp) return c }
-        stampOf = stamp
-        return KotlinResolverCaches().also { cachesFor = parsed to it }
+        cachesByPath[parsed.file.path]?.let { if (it.parsed === parsed && it.stamp == stamp) return it.caches }
+        return KotlinResolverCaches().also { cachesByPath[parsed.file.path] = CachesEntry(parsed, stamp, it) }
     }
+
+    private class CachesEntry(val parsed: KotlinParsedFile, val stamp: Long, val caches: KotlinResolverCaches)
 
     private fun resolverFor(parsed: KotlinParsedFile): KotlinResolver =
         KotlinResolver(parsed.ktFile, parsed, service, cachesFor(parsed))
 
     private val highlighter by lazy {
         KotlinSemanticHighlighter(
-            parsedFor = { f -> last?.takeIf { it.file.path == f.path } },
+            parsedFor = { f -> parsedByPath[f.path] },
             resolverFor = ::resolverFor,
             refresh = { }, // the host re-asks per keystroke; nothing subscribes to an invalidation
             externalStampFor = { service.externalContentStamp(it) },
@@ -128,14 +132,45 @@ class EditorSession(classpath: List<String>) {
     }
 
     private val inlays by lazy {
-        KotlinInlayHintService(parsedFor = { f -> last?.takeIf { it.file.path == f.path } }, resolverFor = ::resolverFor)
+        KotlinInlayHintService(parsedFor = { f -> parsedByPath[f.path] }, resolverFor = ::resolverFor)
     }
     private val analysis = IncrementalSemanticAnalysis(service, resolveReady = { index != null })
 
     private var version = 0L
-    private var last: KotlinParsedFile? = null
-    private var cachesFor: Pair<KotlinParsedFile, KotlinResolverCaches>? = null
-    private var stampOf = 0L
+
+    /** The last parse of each file (reused while its text is unchanged), and the resolver caches built over it. */
+    private val parsedByPath = HashMap<String, KotlinParsedFile>()
+    private val cachesByPath = HashMap<String, CachesEntry>()
+
+    /**
+     * The project as the worker knows it: every file's CURRENT text, for open and unopened files alike. It is the
+     * symbol model's overlay, so a declaration typed in one file is visible from the next without a save.
+     */
+    private val files = LinkedHashMap<String, String>()
+
+    /** Make [path] part of the project with [text] (a new file, or a changed one the host is not editing right now). */
+    fun put(path: String, text: String) {
+        files[path] = text
+        // The service lists a source root through the file system, so the file must exist there; the overlay then
+        // supplies its text, which is always at least as new as what is written.
+        writeFileAtomically(path, text.encodeToByteArray())
+        service.setOverlay(HashMap(files))
+    }
+
+    /** Remove [path] from the project. */
+    fun remove(path: String) {
+        files.remove(path)
+        parsedByPath.remove(path)
+        cachesByPath.remove(path)
+        deleteFile(path)
+        service.setOverlay(HashMap(files))
+    }
+
+    /** Every file the project holds, in path order. */
+    fun paths(): List<String> = files.keys.sorted()
+
+    /** The text of [path] as the project holds it, or null. */
+    fun textOf(path: String): String? = files[path]
 
     private class Buffer(override val file: VirtualFile, private val content: String) : DocumentSnapshot {
         override val version: Long = 1
@@ -143,25 +178,30 @@ class EditorSession(classpath: List<String>) {
         override fun length(): Int = content.length
     }
 
-    /** The parse of [text], reused while the text is unchanged (the passes of one keystroke share it). */
-    private fun parsed(text: String): KotlinParsedFile {
-        last?.let { if (it.ktFile.text.contentEquals(text)) return it }
-        val kt = KotlinParserHost.parse(FILE_NAME, text)
-        return KotlinParsedFile(kt, MemoryFile(FILE_PATH), ++version).also { last = it }
+    /** The parse of [path]'s [text], reused while the text is unchanged (the passes of one keystroke share it). */
+    private fun parsed(path: String, text: String): KotlinParsedFile {
+        parsedByPath[path]?.let { if (it.ktFile.text.contentEquals(text)) return it }
+        val kt = KotlinParserHost.parse(path.substringAfterLast('/'), text)
+        return KotlinParsedFile(kt, MemoryFile(path), ++version).also { parsedByPath[path] = it }
     }
 
-    private fun sync(text: String): KotlinParsedFile {
-        service.setOverlay(mapOf(FILE_PATH to text))
-        val p = parsed(text)
+    /** Make [text] the current content of [path], and the symbol model reflect every file; returns [path]'s parse. */
+    private fun sync(path: String, text: String): KotlinParsedFile {
+        if (files[path] != text) {
+            files[path] = text
+            if (fileInfo(path) == null) writeFileAtomically(path, text.encodeToByteArray()) // it must be listable
+            service.setOverlay(HashMap(files))
+        }
+        val p = parsed(path, text)
         service.syncFocal(p.file.path, p.ktFile.text.hashCode()) { SourceIndexBuilder.extractFrom(p.ktFile, p, p.file.path) }
         return p
     }
 
-    suspend fun complete(text: String, offset: Int): CompletionOutcome {
+    suspend fun complete(path: String, text: String, offset: Int): CompletionOutcome {
         val started = TimeSource.Monotonic.markNow()
-        sync(text)
+        sync(path, text)
         val result = completion.complete(
-            CompletionRequest(Buffer(MemoryFile(FILE_PATH), text), offset, CompletionTrigger.Explicit),
+            CompletionRequest(Buffer(MemoryFile(path), text), offset, CompletionTrigger.Explicit),
             KotlinLanguage.ID,
         )
         return CompletionOutcome(
@@ -184,15 +224,14 @@ class EditorSession(classpath: List<String>) {
         KotlinEditorFeatures(
             service = service,
             analysis = analysis,
-            parsedFor = { path -> last?.takeIf { it.file.path == path } },
-            refreshOverlay = { lastText?.let { service.setOverlay(mapOf(FILE_PATH to it)) } },
+            parsedFor = { path -> parsedByPath[path] },
+            refreshOverlay = { service.setOverlay(HashMap(files)) },
             syncFocal = { p -> service.syncFocal(p.file.path, p.ktFile.text.hashCode()) { SourceIndexBuilder.extractFrom(p.ktFile, p, p.file.path) } },
         )
     }
     private val signatures by lazy { KotlinSignatureHelpService(service) }
     private val formatter = KotlinFormatter()
     private val importOrganizer = KotlinImportOrganizer()
-    private var lastText: String? = null
 
     private fun editsJson(edits: List<DocumentEdit>?): String = buildString {
         append('[')
@@ -220,7 +259,7 @@ class EditorSession(classpath: List<String>) {
         features.usageTargetAt(file, text, offset, readSource = { null }, includeOverloads = forRename)
 
     private fun usageRanges(file: MemoryFile, text: String, target: KotlinUsageTarget): List<Triple<Int, Int, Boolean>> {
-        val declarations = target.declarations.filter { it.first == FILE_PATH }.map { Triple(it.second.start, it.second.end, true) }
+        val declarations = target.declarations.filter { it.first == file.path }.map { Triple(it.second.start, it.second.end, true) }
         val references = features.usagesIn(file, text, target).map { Triple(it.start, it.end, false) }
         return (declarations + references).distinctBy { it.first }.sortedBy { it.first }
     }
@@ -229,10 +268,9 @@ class EditorSession(classpath: List<String>) {
      * One entry point for the features that return a small answer: [method] names it, [start]/[end] are the caret
      * or the selection, and the result is JSON the host maps to its own types (`null` when there is nothing).
      */
-    suspend fun call(method: String, text: String, start: Int, end: Int): String {
-        val file = MemoryFile(FILE_PATH)
-        val parsedFile = sync(text)
-        lastText = text
+    suspend fun call(method: String, path: String, text: String, start: Int, end: Int): String {
+        val file = MemoryFile(path)
+        val parsedFile = sync(path, text)
         return when (method) {
             "folds" -> KotlinOutline.folds(text).joinToString(",", "[", "]") {
                 "[${it.startOffset},${it.endOffset},${jsonString(it.placeholder)},${jsonString(it.kind)},${it.collapsedByDefault}]"
@@ -264,9 +302,10 @@ class EditorSession(classpath: List<String>) {
                 if (start < 0) formatter.format(file, text, FORMAT_STYLE) else formatter.formatRange(file, text, TextRange(start, end), FORMAT_STYLE),
             )
             "imports" -> editsJson(importOrganizer.organizeImports(file, text))
-            // Go to declaration: only a target in THIS file can be opened here; a library class has no source to show.
+            // Go to declaration: a target in any file of the project can be opened (the host's navigation does it); a
+            // library class has no source to show here, so it answers nothing.
             "definition" -> features.navigationTargets(file, text, start, NavKind.DECLARATION)
-                .firstOrNull { it.file.path == FILE_PATH }?.let { "{\"offset\":${it.offset}}" } ?: "null"
+                .firstOrNull { it.file.path in files }?.let { "{\"path\":${jsonString(it.file.path)},\"offset\":${it.offset}}" } ?: "null"
             "actions" -> codeActions(file, parsedFile, start).joinToString(",", "[", "]") { jsonString(it.title) }
             "applyaction" -> editsJson(codeActions(file, parsedFile, start).getOrNull(end)?.edits)
             "usages" -> usageTarget(file, text, start, forRename = false)?.let { t ->
@@ -285,22 +324,22 @@ class EditorSession(classpath: List<String>) {
         }
     }
 
-    suspend fun semanticTokens(text: String): List<TokenOutcome> {
-        val p = sync(text)
+    suspend fun semanticTokens(path: String, text: String): List<TokenOutcome> {
+        val p = sync(path, text)
         return highlighter.highlight(p.file).map {
             TokenOutcome(it.range.start, it.range.end, it.kind.id, it.modifiers.map(HighlightModifier::name))
         }
     }
 
-    suspend fun inlayHints(text: String, start: Int, end: Int): List<HintOutcome> {
-        val p = sync(text)
+    suspend fun inlayHints(path: String, text: String, start: Int, end: Int): List<HintOutcome> {
+        val p = sync(path, text)
         return inlays.hints(p.file, TextRange(start, end)).map {
             HintOutcome(it.offset, it.parts.map { part -> part.text }, it.kind.name, it.tooltip, it.paddingLeft, it.paddingRight)
         }
     }
 
-    fun diagnose(text: String): List<DiagnosticOutcome> {
-        val p = sync(text)
+    fun diagnose(path: String, text: String): List<DiagnosticOutcome> {
+        val p = sync(path, text)
         // The parser's own syntax errors, then the semantic checks over the tree.
         return (p.diagnostics + analysis.diagnostics(p)).map {
             DiagnosticOutcome(it.range.start, it.range.end, it.severity.name, it.message, it.code)
@@ -312,7 +351,5 @@ class EditorSession(classpath: List<String>) {
         private val FORMAT_STYLE = FormatStyle(styleId = "kotlin_official", indentSize = 4, continuationIndent = 8, tabWidth = 4)
 
         const val PROJECT_DIR = "/project"
-        const val FILE_NAME = "Main.kt"
-        const val FILE_PATH = "$PROJECT_DIR/$FILE_NAME"
     }
 }

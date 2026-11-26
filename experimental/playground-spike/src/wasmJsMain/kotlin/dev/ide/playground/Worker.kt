@@ -17,7 +17,9 @@ import kotlinx.coroutines.launch
 //                                                    to it (a module worker finishes loading asynchronously, and a
 //                                                    message posted earlier finds no handler and is dropped)
 //   page -> worker   { type: "init", base }          fetch <base>manifest.json and every jar it lists
-//                    { type: "run", id, source }     run a program
+//                    { type: "put", path, source }  /  { type: "remove", path }   the project's files (no reply)
+//                    { type: "run", id, path, source }   run the program whose main() is in `path`
+//                    Every request below names its file in `path` ("/project/Main.kt" when it does not).
 //                    { type: "complete", id, source, offset }   completions at a caret offset
 //                    { type: "diagnose", id, source }           the file's diagnostics
 //                    { type: "semantic", id, source }           type-aware colouring: what each identifier IS
@@ -35,8 +37,8 @@ import kotlinx.coroutines.launch
 // lines below. A jar crosses as one base64 string: copying an ArrayBuffer element by element would be
 // millions of interop calls, and a native `FileReader.readAsDataURL` does the encoding for free.
 
-@JsFun("(handler) => { self.onmessage = (e) => handler(e.data.type, e.data.id ?? 0, e.data.base ?? '', e.data.source ?? '', e.data.offset ?? 0, e.data.end ?? 0); }")
-private external fun onMessage(handler: (String, Int, String, String, Int, Int) -> Unit)
+@JsFun("(handler) => { self.onmessage = (e) => handler(e.data.type, e.data.id ?? 0, e.data.base ?? '', e.data.source ?? '', e.data.offset ?? 0, e.data.end ?? 0, e.data.path ?? ''); }")
+private external fun onMessage(handler: (String, Int, String, String, Int, Int, String) -> Unit)
 
 @JsFun("(type, id, a, b, c, d) => self.postMessage({ type, id, a, b, c, d })")
 private external fun post(type: String, id: Int, a: String, b: String, c: String, d: String)
@@ -104,17 +106,20 @@ private fun init(base: String) {
     )
 }
 
-private fun run(id: Int, source: String) {
+/** The file a request is about: the one it names, or `Main.kt` for a page that never says (the CodeMirror page). */
+private fun pathOf(path: String): String = path.ifEmpty { "/project/Main.kt" }
+
+private fun run(id: Int, path: String, source: String) {
     val e = engine ?: return post("fatal", id, "run before ready", "", "", "")
-    val outcome = e.run(source)
+    val outcome = e.run(pathOf(path), source)
     post("result", id, outcome.stdout, outcome.result ?: "", outcome.error ?: "", "${outcome.lowerMillis}/${outcome.runMillis}")
 }
 
-private fun complete(id: Int, source: String, offset: Int) {
+private fun complete(id: Int, path: String, source: String, offset: Int) {
     val session = editor ?: return post("fatal", id, "complete before ready", "", "", "")
     scope.launch {
         try {
-            val r = session.complete(source, offset)
+            val r = session.complete(pathOf(path), source, offset)
             post("completions", id, completionsJson(r), "", "", "")
         } catch (e: Throwable) {
             post("completions", id, """{"from":$offset,"to":$offset,"items":[],"error":${jsonString(e.message ?: e.toString())}}""", "", "", "")
@@ -122,51 +127,54 @@ private fun complete(id: Int, source: String, offset: Int) {
     }
 }
 
-private fun diagnose(id: Int, source: String) {
+private fun diagnose(id: Int, path: String, source: String) {
     val session = editor ?: return post("fatal", id, "diagnose before ready", "", "", "")
     val json = try {
-        diagnosticsJson(session.diagnose(source))
+        diagnosticsJson(session.diagnose(pathOf(path), source))
     } catch (e: Throwable) {
         "[]"
     }
     post("diagnostics", id, json, "", "", "")
 }
 
-private fun call(id: Int, method: String, source: String, start: Int, end: Int) {
+private fun call(id: Int, method: String, path: String, source: String, start: Int, end: Int) {
     val session = editor ?: return post("fatal", id, "call before ready", "", "", "")
     scope.launch {
-        val json = try { session.call(method, source, start, end) } catch (e: Throwable) { "null" }
+        val json = try { session.call(method, pathOf(path), source, start, end) } catch (e: Throwable) { "null" }
         post("reply", id, json, "", "", "")
     }
 }
 
-private fun semantic(id: Int, source: String) {
+private fun semantic(id: Int, path: String, source: String) {
     val session = editor ?: return post("fatal", id, "semantic before ready", "", "", "")
     scope.launch {
-        val json = try { tokensJson(session.semanticTokens(source)) } catch (e: Throwable) { "[]" }
+        val json = try { tokensJson(session.semanticTokens(pathOf(path), source)) } catch (e: Throwable) { "[]" }
         post("semantic", id, json, "", "", "")
     }
 }
 
-private fun hints(id: Int, source: String, start: Int, end: Int) {
+private fun hints(id: Int, path: String, source: String, start: Int, end: Int) {
     val session = editor ?: return post("fatal", id, "hints before ready", "", "", "")
     scope.launch {
-        val json = try { hintsJson(session.inlayHints(source, start, end)) } catch (e: Throwable) { "[]" }
+        val json = try { hintsJson(session.inlayHints(pathOf(path), source, start, end)) } catch (e: Throwable) { "[]" }
         post("hints", id, json, "", "", "")
     }
 }
 
 fun main() {
-    onMessage { type, id, base, source, offset, end ->
+    onMessage { type, id, base, source, offset, end, path ->
         try {
             when (type) {
                 "init" -> init(base)
-                "run" -> run(id, source)
-                "complete" -> complete(id, source, offset)
-                "diagnose" -> diagnose(id, source)
-                "semantic" -> semantic(id, source)
-                "hints" -> hints(id, source, offset, end)
-                "call" -> call(id, base, source, offset, end)
+                "run" -> run(id, path, source)
+                "complete" -> complete(id, path, source, offset)
+                "diagnose" -> diagnose(id, path, source)
+                "semantic" -> semantic(id, path, source)
+                "hints" -> hints(id, path, source, offset, end)
+                "call" -> call(id, base, path, source, offset, end)
+                // The project's files, kept current so the language service sees every one of them.
+                "put" -> editor?.put(path, source)
+                "remove" -> editor?.remove(path)
             }
         } catch (e: Throwable) {
             post("fatal", id, e.message ?: e.toString(), "", "", "")

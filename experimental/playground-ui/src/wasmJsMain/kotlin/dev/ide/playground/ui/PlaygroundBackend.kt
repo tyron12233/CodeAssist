@@ -50,7 +50,7 @@ open class PlaygroundBackend(
 
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
         val empty = UiCompletionResult(emptyList(), offset, offset)
-        val json = engine.complete(text, offset).ifEmpty { return empty }
+        val json = engine.complete(path, text, offset).ifEmpty { return empty }
         val root = JsonReader.parseOrNull(json) as? Map<*, *> ?: return empty
         val items = (root["items"] as? List<*>).orEmpty().mapIndexedNotNull { i, raw ->
             val it = raw as? Map<*, *> ?: return@mapIndexedNotNull null
@@ -77,7 +77,7 @@ open class PlaygroundBackend(
     }
 
     override suspend fun analyze(path: String, text: String): List<UiDiagnostic> {
-        val json = engine.diagnose(text).ifEmpty { return emptyList() }
+        val json = engine.diagnose(path, text).ifEmpty { return emptyList() }
         val list = JsonReader.parseOrNull(json) as? List<*> ?: return emptyList()
         val lineStarts = ArrayList<Int>().apply { add(0); text.forEachIndexed { i, c -> if (c == '\n') add(i + 1) } }
         return list.mapNotNull { raw ->
@@ -102,7 +102,7 @@ open class PlaygroundBackend(
     }
 
     override suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> {
-        val json = engine.semantic(text).ifEmpty { return emptyList() }
+        val json = engine.semantic(path, text).ifEmpty { return emptyList() }
         val list = JsonReader.parseOrNull(json) as? List<*> ?: return emptyList()
         return list.mapNotNull { raw ->
             val t = raw as? List<*> ?: return@mapNotNull null
@@ -116,7 +116,7 @@ open class PlaygroundBackend(
     }
 
     override suspend fun hintsAt(path: String, text: String, startOffset: Int, endOffset: Int): List<UiInlayHint> {
-        val json = engine.hints(text, startOffset, endOffset).ifEmpty { return emptyList() }
+        val json = engine.hints(path, text, startOffset, endOffset).ifEmpty { return emptyList() }
         val list = JsonReader.parseOrNull(json) as? List<*> ?: return emptyList()
         return list.mapNotNull { raw ->
             val h = raw as? Map<*, *> ?: return@mapNotNull null
@@ -138,17 +138,17 @@ open class PlaygroundBackend(
 
     private fun num(v: Any?): Int = (v as Number).toInt()
 
-    private suspend fun json(method: String, text: String, start: Int = 0, end: Int = 0): Any? =
-        engine.call(method, text, start, end).takeIf { it.isNotEmpty() }?.let { JsonReader.parseOrNull(it) }
+    private suspend fun json(method: String, path: String, text: String, start: Int = 0, end: Int = 0): Any? =
+        engine.call(method, path, text, start, end).takeIf { it.isNotEmpty() }?.let { JsonReader.parseOrNull(it) }
 
     override suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> =
-        (json("folds", text) as? List<*>).orEmpty().mapNotNull { raw ->
+        (json("folds", path, text) as? List<*>).orEmpty().mapNotNull { raw ->
             val f = raw as? List<*> ?: return@mapNotNull null
             UiFoldRegion(num(f[0]), num(f[1]), f[2] as String, f[3] as String, f[4] == true)
         }
 
     override suspend fun signatureHelp(path: String, text: String, offset: Int): UiSignatureHelp? {
-        val h = json("signature", text, offset) as? Map<*, *> ?: return null
+        val h = json("signature", path, text, offset) as? Map<*, *> ?: return null
         return UiSignatureHelp(
             signatures = (h["signatures"] as? List<*>).orEmpty().mapNotNull { raw ->
                 val sig = raw as? Map<*, *> ?: return@mapNotNull null
@@ -168,7 +168,7 @@ open class PlaygroundBackend(
     }
 
     override suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? {
-        val d = json("quickdoc", text, offset) as? Map<*, *> ?: return null
+        val d = json("quickdoc", path, text, offset) as? Map<*, *> ?: return null
         return UiQuickDoc(
             signature = d["signature"] as String, name = d["name"] as String, kind = d["kind"] as String,
             container = d["container"] as? String, doc = d["doc"] as? String, docFormat = d["docFormat"] as String,
@@ -180,37 +180,37 @@ open class PlaygroundBackend(
         UiTextEdit(num(e[0]), num(e[1]), e[2] as String)
     }
 
-    override suspend fun formatDocument(path: String, text: String): List<UiTextEdit> = edits(json("format", text, -1, -1))
+    override suspend fun formatDocument(path: String, text: String): List<UiTextEdit> = edits(json("format", path, text, -1, -1))
 
     override suspend fun formatRange(path: String, text: String, selStart: Int, selEnd: Int): List<UiTextEdit> =
-        edits(json("format", text, selStart, selEnd))
+        edits(json("format", path, text, selStart, selEnd))
 
-    override suspend fun optimizeImports(path: String, text: String): List<UiTextEdit> = edits(json("imports", text))
+    override suspend fun optimizeImports(path: String, text: String): List<UiTextEdit> = edits(json("imports", path, text))
 
     override suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? =
-        (json("definition", text, offset) as? Map<*, *>)?.let { UiDefinition(path, num(it["offset"])) }
+        (json("definition", path, text, offset) as? Map<*, *>)?.let { UiDefinition(it["path"] as? String ?: path, num(it["offset"])) }
 
     override suspend fun expandSelection(path: String, text: String, selStart: Int, selEnd: Int): UiTextRange? =
-        (json("expand", text, selStart, selEnd) as? List<*>)?.let { UiTextRange(num(it[0]), num(it[1])) }
+        (json("expand", path, text, selStart, selEnd) as? List<*>)?.let { UiTextRange(num(it[0]), num(it[1])) }
 
     override suspend fun actionsAt(path: String, text: String, selStart: Int, selEnd: Int): List<UiAction> =
-        (json("actions", text, selStart) as? List<*>).orEmpty().mapIndexedNotNull { i, title ->
+        (json("actions", path, text, selStart) as? List<*>).orEmpty().mapIndexedNotNull { i, title ->
             (title as? String)?.let { UiAction(i, it, UiActionKind.QUICK_FIX) }
         }
 
     // The worker recomputes the list for this text and caret and takes the n-th: a fix computed against older text
     // lands in the wrong place, so nothing is remembered between listing and applying.
     override suspend fun applyAction(path: String, text: String, selStart: Int, selEnd: Int, actionId: Int): UiActionEdits =
-        UiActionEdits(focal = edits(json("applyaction", text, selStart, actionId)))
+        UiActionEdits(focal = edits(json("applyaction", path, text, selStart, actionId)))
 
     override suspend fun usageHighlights(path: String, text: String, offset: Int): List<UiUsageHighlight>? =
-        (json("usages", text, offset) as? List<*>)?.mapNotNull { raw ->
+        (json("usages", path, text, offset) as? List<*>)?.mapNotNull { raw ->
             val u = raw as? List<*> ?: return@mapNotNull null
             UiUsageHighlight(num(u[0]), num(u[1]), write = u[2] == true)
         }
 
     override suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? =
-        (json("prepare", text, offset) as? Map<*, *>)?.let { UiRenameTarget(it["oldName"] as String, it["kind"] as String) }
+        (json("prepare", path, text, offset) as? Map<*, *>)?.let { UiRenameTarget(it["oldName"] as String, it["kind"] as String) }
 
     /**
      * Rename the symbol at [offset] to [newName]. The editor's in-place rename has already rewritten this file and
@@ -218,7 +218,7 @@ open class PlaygroundBackend(
      * only confirms. The dialog form passes the text as it is, and then the edits are ours to apply.
      */
     override suspend fun rename(path: String, text: String, offset: Int, newName: String): UiRenameResult {
-        val found = edits(engine.call("rename:$newName", text, offset, 0).takeIf { it.isNotEmpty() }?.let { JsonReader.parseOrNull(it) })
+        val found = edits(engine.call("rename:$newName", path, text, offset, 0).takeIf { it.isNotEmpty() }?.let { JsonReader.parseOrNull(it) })
         if (found.isEmpty()) return UiRenameResult(false, "Nothing here can be renamed.")
         if (text == currentText()) applyEdits(found)
         return UiRenameResult(true, "", occurrences = found.size, filesChanged = 1)

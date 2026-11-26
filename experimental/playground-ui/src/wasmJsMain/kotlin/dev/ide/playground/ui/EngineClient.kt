@@ -14,8 +14,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 @JsFun("(url, handler) => { const w = new Worker(url, { type: 'module' }); w.onmessage = (e) => handler(e.data.type, e.data.id ?? 0, e.data.a ?? '', e.data.b ?? '', e.data.c ?? '', e.data.d ?? ''); w.onerror = (e) => handler('fatal', 0, String((e && e.message) || 'worker failed'), '', '', ''); return w; }")
 private external fun createWorker(url: String, handler: (String, Int, String, String, String, String) -> Unit): JsAny
 
-@JsFun("(w, type, id, source, offset, base, end) => w.postMessage({ type, id, source, offset, base, end })")
-private external fun postToWorker(w: JsAny, type: String, id: Int, source: String, offset: Int, base: String, end: Int)
+@JsFun("(w, type, id, source, offset, base, end, path) => w.postMessage({ type, id, source, offset, base, end, path })")
+private external fun postToWorker(w: JsAny, type: String, id: Int, source: String, offset: Int, base: String, end: Int, path: String)
 
 @JsFun("(w) => w.terminate()")
 private external fun terminateWorker(w: JsAny)
@@ -46,7 +46,7 @@ class EngineClient(
         worker = createWorker(workerUrl()) { type, id, a, b, c, d ->
             when (type) {
                 // The worker's handler is installed: only now may it be spoken to (see Worker.kt).
-                "boot" -> postToWorker(worker!!, "init", 0, "", 0, jarsBaseUrl(), 0)
+                "boot" -> postToWorker(worker!!, "init", 0, "", 0, jarsBaseUrl(), 0, "")
                 "status" -> onStatus(a)
                 "ready" -> { isReady = true; onStatus("ready (engine loaded in ${a.toLongOrNull()?.div(100)?.div(10.0) ?: a} s)"); ready?.resume(Unit); ready = null; onReady() }
                 "fatal" -> { onStatus("engine failed: $a"); failAll() }
@@ -76,32 +76,43 @@ class EngineClient(
         pending.forEach { it.resume(arrayOf("", "", "", "")) }
     }
 
-    private suspend fun ask(type: String, source: String, offset: Int, end: Int = 0, method: String = ""): Array<String> = suspendCancellableCoroutine { k ->
+    private suspend fun ask(type: String, path: String, source: String, offset: Int, end: Int = 0, method: String = ""): Array<String> = suspendCancellableCoroutine { k ->
         val id = nextId++
         waiting[id] = k
         k.invokeOnCancellation { waiting.remove(id) }
-        postToWorker(worker ?: return@suspendCancellableCoroutine k.resume(arrayOf("", "", "", "")), type, id, source, offset, method, end)
+        postToWorker(worker ?: return@suspendCancellableCoroutine k.resume(arrayOf("", "", "", "")), type, id, source, offset, method, end, path)
     }
 
-    /** The completion reply's JSON (see Worker.kt), or "" if the engine is not up. */
-    suspend fun complete(source: String, offset: Int): String = if (!isReady) "" else ask("complete", source, offset)[0]
+    /** Make [path] part of the project, with [text], so the language service sees it from every other file. No reply. */
+    fun put(path: String, text: String) {
+        if (isReady) postToWorker(worker ?: return, "put", 0, text, 0, "", 0, path)
+    }
+
+    /** Drop [path] from the project. No reply. */
+    fun remove(path: String) {
+        if (isReady) postToWorker(worker ?: return, "remove", 0, "", 0, "", 0, path)
+    }
+
+    /** The completion reply's JSON (see Worker.kt) for [path], or "" if the engine is not up. */
+    suspend fun complete(path: String, source: String, offset: Int): String = if (!isReady) "" else ask("complete", path, source, offset)[0]
 
     /** The diagnostics reply's JSON, or "" if the engine is not up. */
-    suspend fun diagnose(source: String): String = if (!isReady) "" else ask("diagnose", source, 0)[0]
+    suspend fun diagnose(path: String, source: String): String = if (!isReady) "" else ask("diagnose", path, source, 0)[0]
 
     /** The semantic-tokens reply's JSON: `[from, to, kind, "MODIFIERS"]` per token; "" if the engine is not up. */
-    suspend fun semantic(source: String): String = if (!isReady) "" else ask("semantic", source, 0)[0]
+    suspend fun semantic(path: String, source: String): String = if (!isReady) "" else ask("semantic", path, source, 0)[0]
 
     /** The inlay-hints reply's JSON for `[start, end)`; "" if the engine is not up. */
-    suspend fun hints(source: String, start: Int, end: Int): String = if (!isReady) "" else ask("hints", source, start, end)[0]
+    suspend fun hints(path: String, source: String, start: Int, end: Int): String = if (!isReady) "" else ask("hints", path, source, start, end)[0]
 
     /** One of the engine's small answers (`folds`, `signature`, `quickdoc`, `format`, `imports`, `definition`, `expand`) as JSON; "" if the engine is not up. */
-    suspend fun call(method: String, source: String, start: Int = 0, end: Int = 0): String =
-        if (!isReady) "" else ask("call", source, start, end, method)[0]
+    suspend fun call(method: String, path: String, source: String, start: Int = 0, end: Int = 0): String =
+        if (!isReady) "" else ask("call", path, source, start, end, method)[0]
 
-    suspend fun run(source: String): RunResult {
+    /** Run the program whose `fun main()` is in [path] (current text [source]); the other files are the ones [put] gave it. */
+    suspend fun run(path: String, source: String): RunResult {
         if (!isReady) return RunResult("", "", "The engine is still loading.", "")
-        val r = ask("run", source, 0)
+        val r = ask("run", path, source, 0)
         return RunResult(r[0], r[1], r[2], r[3])
     }
 }

@@ -3,10 +3,9 @@
 // See LICENSE-EXCEPTION: a plugin linking against this file may use any license.
 package dev.ide.playground
 
-import dev.ide.kotlin.syntax.psi.KtNamedFunction
-import dev.ide.kotlin.syntax.psi.KtProperty
-import dev.ide.lang.kotlin.interp.KotlinTreeResolver
+import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
 import dev.ide.lang.kotlin.interp.PreviewWire
+import dev.ide.lang.kotlin.interp.reachableSourceFunctions
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
@@ -56,12 +55,19 @@ class PlaygroundEngine(
     private val classPath = ClassPath(classpath)
     private val stdlib = classpath.single { it.substringAfterLast('/').startsWith("kotlin-stdlib-") }
 
-    fun run(source: String, profile: Boolean = false): RunOutcome {
+    /** Run `/project/Main.kt` (a single-file program). */
+    fun run(source: String, profile: Boolean = false): RunOutcome = run(DEFAULT_ENTRY, source, profile)
+
+    /**
+     * Run the program whose `fun main()` is in [entryPath] (whose current text is [source]). The rest of the
+     * project is read from the in-memory file system, where the host keeps every file's latest text.
+     */
+    fun run(entryPath: String, source: String, profile: Boolean = false): RunOutcome {
         val out = StringBuilder()
         val start = TimeSource.Monotonic.markNow()
         var lowered = 0L
         return try {
-            val blob = lower(source)
+            val blob = lower(entryPath, source)
             lowered = start.elapsedNow().inWholeMilliseconds
             val vm = Vm(classPath, stdout = { out.append(it) })
             val result = vm.invokeStatic("dev/ide/interp/VmProgramEntry", "run", "([BJI)Ljava/lang/String;", blob, budgetMillis, callDepth) as String
@@ -71,29 +77,27 @@ class PlaygroundEngine(
         }
     }
 
-    /** Parse [source] and lower it to the wire blob whose entry is `fun main()`. */
-    private fun lower(source: String): ByteArray {
-        val dir = "/project"
-        val path = "$dir/Main.kt"
-        check(writeFileAtomically(path, source.encodeToByteArray())) { "could not write $path" }
-        val kt = KotlinParserHost.parse("Main.kt", source)
-        val service = KotlinSymbolService(listOf<VirtualFile>(MemoryFile(dir)), listOf(stdlib))
-        val parsed = KotlinParsedFile(kt, MemoryFile(path), 0)
-        val resolver = KotlinTreeResolver(kt, parsed, service)
-        val program = buildMap {
-            kt.declarations.filterIsInstance<KtNamedFunction>().forEach { fn ->
-                val f = resolver.lowerFunction(fn)
-                put("${f.name}/${f.params.size}", f)
-            }
-            // A top-level `val`/`var` becomes a synthetic `name/0` getter: there is no compiled facade to read.
-            kt.declarations.filterIsInstance<KtProperty>().forEach { p ->
-                val name = p.name ?: return@forEach
-                val hasValue = p.initializer != null || p.getter?.bodyExpression != null || p.getter?.bodyBlockExpression != null
-                if (hasValue && !containsKey("$name/0")) put("$name/0", resolver.lowerTopLevelProperty(p))
-            }
+    /**
+     * Lower the program that starts at `fun main()` in [entryPath] to the wire blob: that file, and every file of the
+     * project it reaches (the lowering that previews use to follow a call or a type into another file).
+     */
+    private fun lower(entryPath: String, source: String): ByteArray {
+        check(writeFileAtomically(entryPath, source.encodeToByteArray())) { "could not write $entryPath" }
+        val kt = KotlinParserHost.parse(entryPath.substringAfterLast('/'), source)
+        val service = KotlinSymbolService(listOf<VirtualFile>(MemoryFile(PROJECT_ROOT)), listOf(stdlib))
+        val parsed = KotlinParsedFile(kt, MemoryFile(entryPath), 0)
+        val model = KotlinPreviewLowering(service).crossFileModel(parsed)
+        val main = model.program["main/0"] ?: error("no `fun main()` in ${entryPath.substringAfterLast('/')}")
+        // Everything `main` can reach has to be interpretable, or the run would die half way through.
+        val broken = reachableSourceFunctions(main, model.program, model.classes).filterNot { it.isComplete }
+        check(broken.isEmpty()) {
+            "${broken.first().name} could not be interpreted: " + broken.first().diagnostics.joinToString("; ") { it.reason }
         }
-        val main = program["main/0"] ?: error("no `fun main()` in the source")
-        check(main.isComplete) { "main could not be interpreted: " + main.diagnostics.joinToString("; ") { it.reason } }
-        return PreviewWire.encode(main, program, resolver.lowerClasses())
+        return PreviewWire.encode(main, model.program, model.classes)
+    }
+
+    private companion object {
+        const val PROJECT_ROOT = "/project"
+        const val DEFAULT_ENTRY = "/project/Main.kt"
     }
 }
