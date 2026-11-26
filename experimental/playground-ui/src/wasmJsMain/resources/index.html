@@ -198,6 +198,21 @@
         setTimeout(function () { if (window.__debugLog) window.__debugLog('700ms: claimed=' + claimed); if (!claimed && document.activeElement === ta) ta.blur(); }, 700);
       }, { capture: true, passive: true });
     }
+    // A tap is followed by synthesized mouse events, and a mouse press moves the focus to the app's own focusable element,
+    // which took it from the field a few milliseconds after the keyboard was asked for and sent the keyboard away
+    // (seen on an iPhone: focusout on the field, focusin on a div, before the click). Refuse that focus change while the
+    // editor holds the field, and if it happened anyway take the focus back in the click, which iOS also accepts.
+    if (coarse) {
+      document.addEventListener('mousedown', function (e) {
+        if (handler && claimed && ta && document.activeElement === ta) e.preventDefault();
+      }, true);
+      document.addEventListener('click', function () {
+        if (handler && claimed && ta && document.activeElement !== ta) {
+          ta.focus({ preventScroll: true });
+          if (window.__debugLog) window.__debugLog('click: took the focus back -> active=' + (document.activeElement === ta ? 'ime' : document.activeElement && document.activeElement.tagName));
+        }
+      }, true);
+    }
     return {
       coarse: coarse,
       attach: function (h) { handler = h; if (window.__debugLog) window.__debugLog('ime.attach coarse=' + coarse); return coarse; },
