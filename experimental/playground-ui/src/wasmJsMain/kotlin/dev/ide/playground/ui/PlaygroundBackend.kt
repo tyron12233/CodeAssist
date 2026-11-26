@@ -8,7 +8,13 @@ import dev.ide.ui.StubBackend
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiCompletionKind
 import dev.ide.ui.backend.UiCompletionResult
+import dev.ide.ui.backend.UiAction
+import dev.ide.ui.backend.UiActionEdits
+import dev.ide.ui.backend.UiActionKind
 import dev.ide.ui.backend.UiDefinition
+import dev.ide.ui.backend.UiRenameResult
+import dev.ide.ui.backend.UiRenameTarget
+import dev.ide.ui.backend.UiUsageHighlight
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiFoldRegion
 import dev.ide.ui.backend.UiQuickDoc
@@ -31,6 +37,10 @@ import dev.ide.ui.backend.UiTextEdit
  */
 class PlaygroundBackend(private val engine: EngineClient) : StubBackend() {
     private val documents = HashMap<String, String>()
+
+    /** The text the editor shows now, and a way to edit it: a rename the editor did not apply itself needs both. */
+    var currentText: () -> String = { "" }
+    var applyEdits: (List<UiTextEdit>) -> Unit = {}
 
     override fun updateDocument(path: String, text: String) { documents[path] = text }
     override fun readFile(path: String): String = documents[path] ?: ""
@@ -179,6 +189,37 @@ class PlaygroundBackend(private val engine: EngineClient) : StubBackend() {
 
     override suspend fun expandSelection(path: String, text: String, selStart: Int, selEnd: Int): UiTextRange? =
         (json("expand", text, selStart, selEnd) as? List<*>)?.let { UiTextRange(num(it[0]), num(it[1])) }
+
+    override suspend fun actionsAt(path: String, text: String, selStart: Int, selEnd: Int): List<UiAction> =
+        (json("actions", text, selStart) as? List<*>).orEmpty().mapIndexedNotNull { i, title ->
+            (title as? String)?.let { UiAction(i, it, UiActionKind.QUICK_FIX) }
+        }
+
+    // The worker recomputes the list for this text and caret and takes the n-th: a fix computed against older text
+    // lands in the wrong place, so nothing is remembered between listing and applying.
+    override suspend fun applyAction(path: String, text: String, selStart: Int, selEnd: Int, actionId: Int): UiActionEdits =
+        UiActionEdits(focal = edits(json("applyaction", text, selStart, actionId)))
+
+    override suspend fun usageHighlights(path: String, text: String, offset: Int): List<UiUsageHighlight>? =
+        (json("usages", text, offset) as? List<*>)?.mapNotNull { raw ->
+            val u = raw as? List<*> ?: return@mapNotNull null
+            UiUsageHighlight(num(u[0]), num(u[1]), write = u[2] == true)
+        }
+
+    override suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? =
+        (json("prepare", text, offset) as? Map<*, *>)?.let { UiRenameTarget(it["oldName"] as String, it["kind"] as String) }
+
+    /**
+     * Rename the symbol at [offset] to [newName]. The editor's in-place rename has already rewritten this file and
+     * passes the text from BEFORE it, to have "the rest of the project" renamed: here there is none, so that call
+     * only confirms. The dialog form passes the text as it is, and then the edits are ours to apply.
+     */
+    override suspend fun rename(path: String, text: String, offset: Int, newName: String): UiRenameResult {
+        val found = edits(engine.call("rename:$newName", text, offset, 0).takeIf { it.isNotEmpty() }?.let { JsonReader.parseOrNull(it) })
+        if (found.isEmpty()) return UiRenameResult(false, "Nothing here can be renamed.")
+        if (text == currentText()) applyEdits(found)
+        return UiRenameResult(true, "", occurrences = found.size, filesChanged = 1)
+    }
 
     private fun modifier(name: String): UiHighlightModifier? = when (name) {
         "DECLARATION" -> UiHighlightModifier.Declaration

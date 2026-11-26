@@ -146,4 +146,27 @@ class EditorSessionTest {
         assertTrue(s.call("format", src, -1, -1).startsWith("[["), "badly spaced code is reformatted")
         assertTrue(s.call("imports", src, 0, 0).startsWith("[["), "unused imports are removed")
     }
+
+    @Test
+    fun quickFixesUsagesAndRename() = runTest {
+        val s = session()
+        val src = "package demo\n\nclass Point(val x: Int, val y: Int) {\n    fun dist2() = x * x + y * y\n}\n\nfun main() {\n    val p = Point(1, 2)\n    val q = Point(3, 4)\n    println(p.dist2() + q.dist2() + p.x)\n    val r = Random()\n}\n"
+        fun at(marker: String, delta: Int = 0) = src.indexOf(marker) + delta
+
+        println("EDITOR FIX actions at Random: " + s.call("actions", src, at("Random()") + 2, 0))
+        println("EDITOR FIX applyaction 0: " + s.call("applyaction", src, at("Random()") + 2, 0))
+        println("EDITOR FIX usages of local p: " + s.call("usages", src, at("val p") + 4, 0))
+        println("EDITOR FIX usages of property x: " + s.call("usages", src, at("val x") + 4, 0))
+        println("EDITOR FIX prepare p: " + s.call("prepare", src, at("val p") + 4, 0))
+        println("EDITOR FIX prepare class Point: " + s.call("prepare", src, at("class Point") + 8, 0))
+        println("EDITOR FIX prepare println (library): " + s.call("prepare", src, at("println") + 2, 0))
+        println("EDITOR FIX rename p -> origin: " + s.call("rename:origin", src, at("val p") + 4, 0))
+        println("EDITOR FIX rename Point -> Vec: " + s.call("rename:Vec", src, at("class Point") + 8, 0))
+
+        assertTrue(s.call("actions", src, at("Random()") + 2, 0).contains("mport"), "an unresolved name offers an import")
+        assertTrue(s.call("usages", src, at("val p") + 4, 0).startsWith("[["), "usages of a local")
+        assertTrue(s.call("prepare", src, at("val p") + 4, 0).contains("oldName"), "a local is renameable")
+        assertTrue(s.call("prepare", src, at("println") + 2, 0) == "null", "a library function is not")
+        assertTrue(s.call("rename:origin", src, at("val p") + 4, 0).startsWith("[["), "rename answers with edits")
+    }
 }

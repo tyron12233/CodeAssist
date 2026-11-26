@@ -12,7 +12,10 @@ import dev.ide.lang.dom.TextRange
 import dev.ide.lang.dom.expandSelection
 import dev.ide.lang.formatting.FormatStyle
 import dev.ide.lang.incremental.DocumentEdit
+import dev.ide.lang.kotlin.KotlinDiagnosticCodes
 import dev.ide.lang.kotlin.KotlinEditorFeatures
+import dev.ide.lang.kotlin.KotlinImportFix
+import dev.ide.lang.kotlin.KotlinUsageTarget
 import dev.ide.lang.kotlin.KotlinFormatter
 import dev.ide.lang.kotlin.KotlinImportOrganizer
 import dev.ide.lang.kotlin.KotlinSignatureHelpService
@@ -200,6 +203,28 @@ class EditorSession(classpath: List<String>) {
         append(']')
     }
 
+    /** The code actions at [offset], as the iOS host lists them: import fixes, plus the two diagnostic-keyed ones. */
+    private fun codeActions(file: MemoryFile, parsedFile: KotlinParsedFile, offset: Int): List<KotlinImportFix> {
+        val out = ArrayList<KotlinImportFix>(features.importFixesAt(file, offset))
+        val covering = analysis.diagnostics(parsedFile)
+            .filter { offset >= it.range.start && offset <= it.range.end }
+            .map { it.code }
+            .toSet()
+        if (covering.any { it in KotlinDiagnosticCodes.IMPLEMENT_MEMBERS }) features.implementMembersFix(file, offset)?.let { out += it }
+        if (KotlinDiagnosticCodes.SUSPEND_OVERRIDE in covering) features.suspendModifierFix(file, offset)?.let { out += it }
+        return out
+    }
+
+    /** What Find Usages and Rename act on at [offset], with every range of it in this file (declarations marked). */
+    private fun usageTarget(file: MemoryFile, text: String, offset: Int, forRename: Boolean): KotlinUsageTarget? =
+        features.usageTargetAt(file, text, offset, readSource = { null }, includeOverloads = forRename)
+
+    private fun usageRanges(file: MemoryFile, text: String, target: KotlinUsageTarget): List<Triple<Int, Int, Boolean>> {
+        val declarations = target.declarations.filter { it.first == FILE_PATH }.map { Triple(it.second.start, it.second.end, true) }
+        val references = features.usagesIn(file, text, target).map { Triple(it.start, it.end, false) }
+        return (declarations + references).distinctBy { it.first }.sortedBy { it.first }
+    }
+
     /**
      * One entry point for the features that return a small answer: [method] names it, [start]/[end] are the caret
      * or the selection, and the result is JSON the host maps to its own types (`null` when there is nothing).
@@ -242,8 +267,21 @@ class EditorSession(classpath: List<String>) {
             // Go to declaration: only a target in THIS file can be opened here; a library class has no source to show.
             "definition" -> features.navigationTargets(file, text, start, NavKind.DECLARATION)
                 .firstOrNull { it.file.path == FILE_PATH }?.let { "{\"offset\":${it.offset}}" } ?: "null"
+            "actions" -> codeActions(file, parsedFile, start).joinToString(",", "[", "]") { jsonString(it.title) }
+            "applyaction" -> editsJson(codeActions(file, parsedFile, start).getOrNull(end)?.edits)
+            "usages" -> usageTarget(file, text, start, forRename = false)?.let { t ->
+                usageRanges(file, text, t).joinToString(",", "[", "]") { "[${it.first},${it.second},${it.third}]" }
+            } ?: "null"
+            "prepare" -> usageTarget(file, text, start, forRename = true)?.takeIf { it.renameable }
+                ?.let { "{\"oldName\":${jsonString(it.name)},\"kind\":${jsonString(it.kind)}}" } ?: "null"
             "expand" -> expandSelection(parsedFile, start, end, text.length)?.let { "[${it.start},${it.end}]" } ?: "null"
-            else -> "null"
+            else -> if (method.startsWith("rename:")) {
+                // Every name range of the symbol under the caret, replaced by the new name (one file: nothing else to touch).
+                val newName = method.removePrefix("rename:")
+                usageTarget(file, text, start, forRename = true)?.takeIf { it.renameable }?.let { t ->
+                    usageRanges(file, text, t).joinToString(",", "[", "]") { "[${it.first},${it.second},${jsonString(newName)}]" }
+                } ?: "null"
+            } else "null"
         }
     }
 

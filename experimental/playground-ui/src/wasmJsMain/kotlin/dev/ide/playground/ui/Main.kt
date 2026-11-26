@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ComposeViewport
 import dev.ide.ui.editor.CodeEditor
@@ -109,6 +110,15 @@ fun PlaygroundApp() {
         }
         val backend = remember { PlaygroundBackend(engine) }
         val session = remember { EditorSession(SAMPLE, CodeLanguage.Kotlin) }
+        backend.currentText = { session.doc.text.toString() }
+        backend.applyEdits = { edits ->
+            // Back to front, so an earlier edit cannot shift a later one's offsets; one batch, so undo is one step.
+            session.beginBatch()
+            for (e in edits.sortedByDescending { it.start }) {
+                session.replaceRange(e.start, e.end.coerceAtLeast(e.start), e.newText, TextRange(e.start + e.newText.length))
+            }
+            session.endBatch()
+        }
         val scope = rememberCoroutineScope()
         LaunchedEffect(Unit) { engine.start() }
 
