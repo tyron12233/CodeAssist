@@ -22,10 +22,13 @@ import kotlinx.coroutines.launch
 //                    { type: "diagnose", id, source }           the file's diagnostics
 //                    { type: "semantic", id, source }           type-aware colouring: what each identifier IS
 //                    { type: "hints", id, source, offset, end } inlay hints for [offset, end)
+//                    { type: "call", id, base: method, source, offset, end }  folds, signature, quickdoc, format,
+//                                                       imports, definition, expand: one JSON answer (see EditorSession.call)
 //   worker -> page   { type: "status", a }           progress text
 //                    { type: "ready", a: millis }    the engine is loaded
 //                    { type: "result", id, a: stdout, b: result, c: error, d: "lower/run millis" }
 //                    { type: "completions", id, a: <json> }  /  { type: "diagnostics", id, a: <json> }
+//                    { type: "reply", id, a: <json> }        the answer to a "call"
 //                    { type: "fatal", a }            the worker itself failed
 //
 // Everything here is Kotlin; only the transport (message events, `fetch`) is JS, and it is kept to the few
@@ -129,6 +132,14 @@ private fun diagnose(id: Int, source: String) {
     post("diagnostics", id, json, "", "", "")
 }
 
+private fun call(id: Int, method: String, source: String, start: Int, end: Int) {
+    val session = editor ?: return post("fatal", id, "call before ready", "", "", "")
+    scope.launch {
+        val json = try { session.call(method, source, start, end) } catch (e: Throwable) { "null" }
+        post("reply", id, json, "", "", "")
+    }
+}
+
 private fun semantic(id: Int, source: String) {
     val session = editor ?: return post("fatal", id, "semantic before ready", "", "", "")
     scope.launch {
@@ -155,6 +166,7 @@ fun main() {
                 "diagnose" -> diagnose(id, source)
                 "semantic" -> semantic(id, source)
                 "hints" -> hints(id, source, offset, end)
+                "call" -> call(id, base, source, offset, end)
             }
         } catch (e: Throwable) {
             post("fatal", id, e.message ?: e.toString(), "", "", "")

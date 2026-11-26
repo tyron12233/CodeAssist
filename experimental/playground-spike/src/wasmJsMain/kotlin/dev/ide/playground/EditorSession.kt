@@ -7,7 +7,18 @@ import dev.ide.index.impl.ClasspathIndex
 import dev.ide.lang.completion.CompletionRequest
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.lang.completion.complete
+import dev.ide.kotlin.syntax.KotlinOutline
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.dom.expandSelection
+import dev.ide.lang.formatting.FormatStyle
+import dev.ide.lang.incremental.DocumentEdit
+import dev.ide.lang.kotlin.KotlinEditorFeatures
+import dev.ide.lang.kotlin.KotlinFormatter
+import dev.ide.lang.kotlin.KotlinImportOrganizer
+import dev.ide.lang.kotlin.KotlinSignatureHelpService
+import dev.ide.lang.kotlin.NavKind
+import dev.ide.lang.signature.SignatureHelpRequest
+import dev.ide.lang.signature.SignatureHelpTrigger
 import dev.ide.lang.hints.InlayHintKind
 import dev.ide.lang.highlight.HighlightModifier
 import dev.ide.lang.incremental.DocumentSnapshot
@@ -164,6 +175,78 @@ class EditorSession(classpath: List<String>) {
         )
     }
 
+    // ---- the rest of the editor's features, answered as JSON by [call] --------------------------------------------
+
+    private val features by lazy {
+        KotlinEditorFeatures(
+            service = service,
+            analysis = analysis,
+            parsedFor = { path -> last?.takeIf { it.file.path == path } },
+            refreshOverlay = { lastText?.let { service.setOverlay(mapOf(FILE_PATH to it)) } },
+            syncFocal = { p -> service.syncFocal(p.file.path, p.ktFile.text.hashCode()) { SourceIndexBuilder.extractFrom(p.ktFile, p, p.file.path) } },
+        )
+    }
+    private val signatures by lazy { KotlinSignatureHelpService(service) }
+    private val formatter = KotlinFormatter()
+    private val importOrganizer = KotlinImportOrganizer()
+    private var lastText: String? = null
+
+    private fun editsJson(edits: List<DocumentEdit>?): String = buildString {
+        append('[')
+        edits.orEmpty().forEachIndexed { i, e ->
+            if (i > 0) append(',')
+            append('[').append(e.offset).append(',').append(e.offset + e.oldLength).append(',').append(jsonString(e.newText.toString())).append(']')
+        }
+        append(']')
+    }
+
+    /**
+     * One entry point for the features that return a small answer: [method] names it, [start]/[end] are the caret
+     * or the selection, and the result is JSON the host maps to its own types (`null` when there is nothing).
+     */
+    suspend fun call(method: String, text: String, start: Int, end: Int): String {
+        val file = MemoryFile(FILE_PATH)
+        val parsedFile = sync(text)
+        lastText = text
+        return when (method) {
+            "folds" -> KotlinOutline.folds(text).joinToString(",", "[", "]") {
+                "[${it.startOffset},${it.endOffset},${jsonString(it.placeholder)},${jsonString(it.kind)},${it.collapsedByDefault}]"
+            }
+            "signature" -> signatures.signatureHelp(
+                SignatureHelpRequest(Buffer(file, text), start, SignatureHelpTrigger.CursorUpdate),
+            )?.let { h ->
+                buildString {
+                    append("{\"activeSignature\":").append(h.activeSignature).append(",\"activeParameter\":").append(h.activeParameter)
+                    append(",\"signatures\":[")
+                    h.signatures.forEachIndexed { i, sig ->
+                        if (i > 0) append(',')
+                        append("{\"label\":").append(jsonString(sig.label)).append(",\"doc\":").append(jsonOrNull(sig.documentation))
+                        append(",\"active\":").append(sig.activeParameter ?: -1).append(",\"params\":[")
+                        sig.parameters.forEachIndexed { j, p ->
+                            if (j > 0) append(',')
+                            append('[').append(jsonString(p.label)).append(',').append(p.labelStart).append(',').append(p.labelEnd).append(',').append(p.alreadyNamed).append(']')
+                        }
+                        append("]}")
+                    }
+                    append("]}")
+                }
+            } ?: "null"
+            "quickdoc" -> features.quickDoc(file, text, start)?.let {
+                "{\"signature\":${jsonString(it.signature)},\"name\":${jsonString(it.name)},\"kind\":${jsonString(it.kind.name.lowercase())}," +
+                    "\"container\":${jsonOrNull(it.container)},\"doc\":${jsonOrNull(it.doc)},\"docFormat\":${jsonString(it.docFormat.name.lowercase())}}"
+            } ?: "null"
+            "format" -> editsJson(
+                if (start < 0) formatter.format(file, text, FORMAT_STYLE) else formatter.formatRange(file, text, TextRange(start, end), FORMAT_STYLE),
+            )
+            "imports" -> editsJson(importOrganizer.organizeImports(file, text))
+            // Go to declaration: only a target in THIS file can be opened here; a library class has no source to show.
+            "definition" -> features.navigationTargets(file, text, start, NavKind.DECLARATION)
+                .firstOrNull { it.file.path == FILE_PATH }?.let { "{\"offset\":${it.offset}}" } ?: "null"
+            "expand" -> expandSelection(parsedFile, start, end, text.length)?.let { "[${it.start},${it.end}]" } ?: "null"
+            else -> "null"
+        }
+    }
+
     suspend fun semanticTokens(text: String): List<TokenOutcome> {
         val p = sync(text)
         return highlighter.highlight(p.file).map {
@@ -187,6 +270,9 @@ class EditorSession(classpath: List<String>) {
     }
 
     companion object {
+        /** Kotlin official: 4-space indent, 8-space continuation (what `CodeStyleSettings.default("kotlin")` is). */
+        private val FORMAT_STYLE = FormatStyle(styleId = "kotlin_official", indentSize = 4, continuationIndent = 8, tabWidth = 4)
+
         const val PROJECT_DIR = "/project"
         const val FILE_NAME = "Main.kt"
         const val FILE_PATH = "$PROJECT_DIR/$FILE_NAME"

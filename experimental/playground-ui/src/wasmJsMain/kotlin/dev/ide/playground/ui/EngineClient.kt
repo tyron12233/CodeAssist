@@ -17,6 +17,9 @@ private external fun createWorker(url: String, handler: (String, Int, String, St
 @JsFun("(w, type, id, source, offset, base, end) => w.postMessage({ type, id, source, offset, base, end })")
 private external fun postToWorker(w: JsAny, type: String, id: Int, source: String, offset: Int, base: String, end: Int)
 
+@JsFun("(w) => w.terminate()")
+private external fun terminateWorker(w: JsAny)
+
 @JsFun("() => new URL('./jars/', location.href).href")
 private external fun jarsBaseUrl(): String
 
@@ -26,7 +29,12 @@ private external fun workerUrl(): String
 /** What a run produced: stdout, the entry's value, the error (empty when none), and "lower/run" milliseconds. */
 class RunResult(val stdout: String, val result: String, val error: String, val timing: String)
 
-class EngineClient(private val onStatus: (String) -> Unit, private val onReady: () -> Unit = {}) {
+class EngineClient(
+    private val onStatus: (String) -> Unit,
+    private val onReady: () -> Unit = {},
+    /** The engine went away (a [stop], or it failed): it is not ready until [onReady] fires again. */
+    private val onLost: () -> Unit = {},
+) {
     private var nextId = 1
     private val waiting = HashMap<Int, CancellableContinuation<Array<String>>>()
     private var worker: JsAny? = null
@@ -47,17 +55,32 @@ class EngineClient(private val onStatus: (String) -> Unit, private val onReady: 
         }
     }
 
+    /**
+     * Stop whatever the engine is doing, by throwing the worker away and starting another: the interpreter cannot be
+     * interrupted from outside, and a worker is cheap to replace (the jars are in the HTTP cache). Anything waiting
+     * for an answer gets an empty one.
+     */
+    fun stop() {
+        worker?.let { terminateWorker(it) }
+        worker = null
+        isReady = false
+        failAll()
+        onLost()
+        onStatus("restarting the engine...")
+        start()
+    }
+
     private fun failAll() {
         val pending = waiting.values.toList()
         waiting.clear()
         pending.forEach { it.resume(arrayOf("", "", "", "")) }
     }
 
-    private suspend fun ask(type: String, source: String, offset: Int, end: Int = 0): Array<String> = suspendCancellableCoroutine { k ->
+    private suspend fun ask(type: String, source: String, offset: Int, end: Int = 0, method: String = ""): Array<String> = suspendCancellableCoroutine { k ->
         val id = nextId++
         waiting[id] = k
         k.invokeOnCancellation { waiting.remove(id) }
-        postToWorker(worker!!, type, id, source, offset, "", end)
+        postToWorker(worker ?: return@suspendCancellableCoroutine k.resume(arrayOf("", "", "", "")), type, id, source, offset, method, end)
     }
 
     /** The completion reply's JSON (see Worker.kt), or "" if the engine is not up. */
@@ -71,6 +94,10 @@ class EngineClient(private val onStatus: (String) -> Unit, private val onReady: 
 
     /** The inlay-hints reply's JSON for `[start, end)`; "" if the engine is not up. */
     suspend fun hints(source: String, start: Int, end: Int): String = if (!isReady) "" else ask("hints", source, start, end)[0]
+
+    /** One of the engine's small answers (`folds`, `signature`, `quickdoc`, `format`, `imports`, `definition`, `expand`) as JSON; "" if the engine is not up. */
+    suspend fun call(method: String, source: String, start: Int = 0, end: Int = 0): String =
+        if (!isReady) "" else ask("call", source, start, end, method)[0]
 
     suspend fun run(source: String): RunResult {
         if (!isReady) return RunResult("", "", "The engine is still loading.", "")

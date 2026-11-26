@@ -20,7 +20,7 @@ internal fun jsonString(s: String): String = buildString(s.length + 2) {
     append('"')
 }
 
-private fun jsonOrNull(s: String?): String = if (s == null) "null" else jsonString(s)
+internal fun jsonOrNull(s: String?): String = if (s == null) "null" else jsonString(s)
 
 internal fun completionsJson(r: CompletionOutcome): String = buildString {
     append("{\"from\":").append(r.from).append(",\"to\":").append(r.to)

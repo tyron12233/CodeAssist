@@ -122,4 +122,28 @@ class EditorSessionTest {
         println("EDITOR SNIPPET hints: $hints")
         assertTrue(": List<Int>" in hints && hints.none { it.contains("Nothing") }, "sum is a List<Int>; got $hints")
     }
+
+    @Test
+    fun theOtherEditorFeatures() = runTest {
+        val s = session()
+        val src = "package demo\n\nimport kotlin.collections.ArrayList\nimport java.util.Random\n\ndata class Point(val x:Int,val y:Int) {\n    fun dist2() = x*x + y*y\n}\n\nfun main() {\n    val p = Point(1,2)\n    println(p.dist2())\n    listOf(1, 2).map { it }\n}\n"
+        fun at(marker: String, delta: Int = 0) = src.indexOf(marker) + delta
+
+        println("EDITOR CALL folds: " + s.call("folds", src, 0, 0))
+        println("EDITOR CALL signature: " + s.call("signature", src, at("println(") + 8, 0))
+        println("EDITOR CALL quickdoc listOf: " + s.call("quickdoc", src, at("listOf") + 2, 0).take(300))
+        println("EDITOR CALL quickdoc Point: " + s.call("quickdoc", src, at("Point(1") + 2, 0).take(300))
+        println("EDITOR CALL format: " + s.call("format", src, -1, -1).take(400))
+        println("EDITOR CALL imports: " + s.call("imports", src, 0, 0))
+        println("EDITOR CALL definition of Point at use: " + s.call("definition", src, at("Point(1") + 2, 0) + "  (declared at ${at("class Point") + 11})")
+        println("EDITOR CALL definition of println (library): " + s.call("definition", src, at("println") + 2, 0))
+        println("EDITOR CALL expand: " + s.call("expand", src, at("dist2()") + 1, at("dist2()") + 1))
+
+        assertTrue(s.call("folds", src, 0, 0).startsWith("[["), "the class and function bodies fold")
+        assertTrue(s.call("signature", src, at("println(") + 8, 0) != "null", "signature help inside println(")
+        assertTrue(s.call("definition", src, at("Point(1") + 2, 0).contains("offset"), "a project type navigates")
+        assertTrue(s.call("definition", src, at("println") + 2, 0) == "null", "a library function has no source to open")
+        assertTrue(s.call("format", src, -1, -1).startsWith("[["), "badly spaced code is reformatted")
+        assertTrue(s.call("imports", src, 0, 0).startsWith("[["), "unused imports are removed")
+    }
 }

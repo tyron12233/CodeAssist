@@ -8,7 +8,14 @@ import dev.ide.ui.StubBackend
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiCompletionKind
 import dev.ide.ui.backend.UiCompletionResult
+import dev.ide.ui.backend.UiDefinition
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.backend.UiFoldRegion
+import dev.ide.ui.backend.UiQuickDoc
+import dev.ide.ui.backend.UiSignature
+import dev.ide.ui.backend.UiSignatureHelp
+import dev.ide.ui.backend.UiSignatureParam
+import dev.ide.ui.backend.UiTextRange
 import dev.ide.ui.backend.UiHighlightModifier
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiInlayKind
@@ -115,6 +122,63 @@ class PlaygroundBackend(private val engine: EngineClient) : StubBackend() {
             )
         }
     }
+
+    private fun num(v: Any?): Int = (v as Number).toInt()
+
+    private suspend fun json(method: String, text: String, start: Int = 0, end: Int = 0): Any? =
+        engine.call(method, text, start, end).takeIf { it.isNotEmpty() }?.let { JsonReader.parseOrNull(it) }
+
+    override suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> =
+        (json("folds", text) as? List<*>).orEmpty().mapNotNull { raw ->
+            val f = raw as? List<*> ?: return@mapNotNull null
+            UiFoldRegion(num(f[0]), num(f[1]), f[2] as String, f[3] as String, f[4] == true)
+        }
+
+    override suspend fun signatureHelp(path: String, text: String, offset: Int): UiSignatureHelp? {
+        val h = json("signature", text, offset) as? Map<*, *> ?: return null
+        return UiSignatureHelp(
+            signatures = (h["signatures"] as? List<*>).orEmpty().mapNotNull { raw ->
+                val sig = raw as? Map<*, *> ?: return@mapNotNull null
+                UiSignature(
+                    label = sig["label"] as String,
+                    parameters = (sig["params"] as? List<*>).orEmpty().mapNotNull { p ->
+                        val a = p as? List<*> ?: return@mapNotNull null
+                        UiSignatureParam(a[0] as String, num(a[1]), num(a[2]), a[3] == true)
+                    },
+                    documentation = sig["doc"] as? String,
+                    activeParameter = (sig["active"] as? Number)?.toInt()?.takeIf { it >= 0 },
+                )
+            },
+            activeSignature = num(h["activeSignature"]),
+            activeParameter = num(h["activeParameter"]),
+        )
+    }
+
+    override suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? {
+        val d = json("quickdoc", text, offset) as? Map<*, *> ?: return null
+        return UiQuickDoc(
+            signature = d["signature"] as String, name = d["name"] as String, kind = d["kind"] as String,
+            container = d["container"] as? String, doc = d["doc"] as? String, docFormat = d["docFormat"] as String,
+        )
+    }
+
+    private fun edits(v: Any?): List<UiTextEdit> = (v as? List<*>).orEmpty().mapNotNull { raw ->
+        val e = raw as? List<*> ?: return@mapNotNull null
+        UiTextEdit(num(e[0]), num(e[1]), e[2] as String)
+    }
+
+    override suspend fun formatDocument(path: String, text: String): List<UiTextEdit> = edits(json("format", text, -1, -1))
+
+    override suspend fun formatRange(path: String, text: String, selStart: Int, selEnd: Int): List<UiTextEdit> =
+        edits(json("format", text, selStart, selEnd))
+
+    override suspend fun optimizeImports(path: String, text: String): List<UiTextEdit> = edits(json("imports", text))
+
+    override suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? =
+        (json("definition", text, offset) as? Map<*, *>)?.let { UiDefinition(path, num(it["offset"])) }
+
+    override suspend fun expandSelection(path: String, text: String, selStart: Int, selEnd: Int): UiTextRange? =
+        (json("expand", text, selStart, selEnd) as? List<*>)?.let { UiTextRange(num(it[0]), num(it[1])) }
 
     private fun modifier(name: String): UiHighlightModifier? = when (name) {
         "DECLARATION" -> UiHighlightModifier.Declaration
