@@ -183,8 +183,6 @@ include(
     ":kotlin-symbols",
     // The browser Playground spike: source text -> parse + lower (wasm) -> run in :jvm-vm -> output.
     ":playground-spike",
-    // The same Playground with the IDE's OWN editor (Compose Multiplatform, :ide-ui-editor) on wasmJs, not CodeMirror.
-    ":playground-ui",
 )
 
 // The IDE shells (Compose Multiplatform + AGP). These apply the Android Gradle plugin / Compose KMP plugin,
@@ -211,6 +209,9 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":ide-ui-screens", // the destinations: home, store, Learn, challenges, settings, run/logs, managers
         ":ide-ui-testing", // test-only: StubBackend, the empty IdeBackend every UI layer's tests render against
         ":ide-ui",
+        // The Playground with the IDE's OWN editor and shell (Compose Multiplatform on wasmJs, not CodeMirror). Here, not
+        // with :playground-spike above: it depends on :ide-ui, which a CI_CORE_ONLY build does not have.
+        ":playground-ui",
         ":agent-ui", // the AI agent's Compose UI as a self-contained plugin module (chat panel + provider sheet + permission overlay)
         ":vcs-ui", // the version-control Compose UI as a self-contained plugin module (Git panel, branches, history, sign-in, clone)
         ":layout-editor", // the Android layout editor: a built-in plugin written against the plugin SPI only (engine + UI facet)
