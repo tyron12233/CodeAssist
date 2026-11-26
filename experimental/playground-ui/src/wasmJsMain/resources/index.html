@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kotlin Playground (IDE editor)</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #111418; }
-  #app { position: fixed; inset: 0; }
+  html, body { margin: 0; height: 100%; background: #111418; overflow: hidden; overscroll-behavior: none; touch-action: none; -webkit-text-size-adjust: 100%; -webkit-touch-callout: none; }
+  #app { position: fixed; inset: 0; touch-action: none; }
   /* The loading screen: above the app and swallowing every touch until the engine is up, so nothing can be typed or
      run into a half-loaded page. It is plain HTML so it shows at once, while the 48 MB of the app is still arriving. */
   #boot { position: fixed; inset: 0; z-index: 10; background: #111418; color: #c9d1d9; display: flex; align-items: center;
@@ -61,7 +61,18 @@
     function draw() { box.textContent = head + '\n' + lines.slice(-24).join('\n'); }
     function tag(e) { return e && e.tagName ? e.tagName.toLowerCase() + (e.getAttribute && e.getAttribute('aria-hidden') ? '(ime)' : '') : String(e); }
     document.addEventListener('DOMContentLoaded', function () { document.body.appendChild(box); });
-    (function f(t) { if (last) { frames++; worst = Math.max(worst, t - last); } last = t; requestAnimationFrame(f); })(0);
+    var lastEvent = '-', lastEventAt = 0, resizes = 0, gcLike = 0;
+    function note(what) { lastEvent = what; lastEventAt = performance.now(); }
+    (function f(t) {
+      if (last) {
+        frames++; worst = Math.max(worst, t - last);
+        if (t - last > 100) log('SLOW FRAME ' + Math.round(t - last) + 'ms  last event: ' + lastEvent + ' ' + Math.round(performance.now() - lastEventAt) + 'ms ago');
+      }
+      last = t; requestAnimationFrame(f);
+    })(0);
+    window.addEventListener('resize', function () { resizes++; note('resize'); log('resize ' + innerWidth + 'x' + innerHeight + ' vv ' + (visualViewport ? Math.round(visualViewport.height) : '-')); });
+    if (window.visualViewport) visualViewport.addEventListener('resize', function () { note('vv.resize'); log('vv.resize ' + Math.round(visualViewport.width) + 'x' + Math.round(visualViewport.height) + ' scale ' + visualViewport.scale.toFixed(2)); });
+    window.addEventListener('scroll', function () { note('page scroll'); log('PAGE scroll ' + scrollX + ',' + scrollY); }, true);
     setInterval(function () {
       fps = frames; frames = 0;
       msgsSec = Object.keys(msgs).map(function (k) { return k + ':' + msgs[k]; }).join(' ') || '-'; msgs = {};
@@ -73,9 +84,10 @@
       worst = 0; draw();
     }, 1000);
     var post = Worker.prototype.postMessage;
-    Worker.prototype.postMessage = function (m) { try { var k = (m && m.type) || '?'; msgs[k] = (msgs[k] || 0) + 1; } catch (e) {} return post.apply(this, arguments); };
+    Worker.prototype.postMessage = function (m) { try { var k = (m && m.type) || '?'; msgs[k] = (msgs[k] || 0) + 1; note('to-engine ' + k); } catch (e) {} return post.apply(this, arguments); };
     ['touchstart', 'touchend', 'touchcancel', 'pointerdown', 'pointerup', 'pointercancel', 'click'].forEach(function (ev) {
       document.addEventListener(ev, function (e) {
+        note(ev);
         var t = e.touches ? (e.changedTouches && e.changedTouches[0]) : e;
         log(ev + ' ' + tag(e.target) + (e.pointerType ? ' ' + e.pointerType : '') + (t ? ' @' + Math.round(t.clientX) + ',' + Math.round(t.clientY) : '') + (e.defaultPrevented ? ' PREVENTED' : '') + (e.cancelable === false ? ' (not cancelable)' : ''));
         if (ev === 'touchend') setTimeout(function () { log('  +800ms focus=' + tag(document.activeElement)); }, 800);
