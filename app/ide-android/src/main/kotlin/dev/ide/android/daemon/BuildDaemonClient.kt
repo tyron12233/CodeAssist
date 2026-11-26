@@ -43,6 +43,8 @@ class BuildDaemonClient(
     private val onConnected: () -> Unit = {},
     /** The daemon died; [pid] is the process that died (-1 when it never reported one), for its OS death record. */
     private val onDeath: (pid: Int) -> Unit = {},
+    /** The binding dropped (the service went away) without a death notice: the daemon can no longer be reached. */
+    private val onDisconnected: () -> Unit = {},
 ) {
     private val appContext = context.applicationContext
     private val log = Log.logger("ide.daemon")
@@ -111,12 +113,17 @@ class BuildDaemonClient(
         override fun onServiceDisconnected(name: ComponentName?) {
             log.warn("ui(pid=${Process.myPid()}): daemon disconnected")
             daemon = null
+            onDisconnected()
         }
     }
 
     @Volatile
     var isBound: Boolean = false
         private set
+
+    /** Whether a live daemon binder is held right now. A bound client can be without one: between a disconnect and
+     *  the system's reconnect, calls such as [open] are silently dropped, so a caller must not count on them. */
+    val hasDaemon: Boolean get() = daemon != null
 
     /** Bind the daemon; [onReady] runs once connected, with the live [IBuildDaemon]. */
     fun bind(onReady: (IBuildDaemon) -> Unit) {
@@ -146,4 +153,23 @@ class BuildDaemonClient(
     fun answerPermission(id: Int, decision: Int) = runCatching { daemon?.answerPermission(id, decision) }
     fun clearAppLog() = runCatching { daemon?.clearAppLog() }
     fun unbind() = runCatching { isBound = false; appContext.unbindService(connection) }
+
+    /** Kill the build process. For one that went silent: a hung process keeps serving the same dead service, so
+     *  unbinding or rebinding only reconnects to it. Its death reaches [onDeath], and the system restarts the
+     *  service for the binding that is still held. A no-op without a known pid, or for this process itself. */
+    fun killDaemon(): Boolean {
+        val pid = daemonPid
+        if (pid <= 0 || pid == Process.myPid()) return false
+        runCatching { Process.killProcess(pid) }
+        log.warn("ui(pid=${Process.myPid()}): killed the unresponsive build process (pid=$pid)")
+        return true
+    }
+
+    /** Drop the binding and bind afresh: a new connection to a new service instance, which also resets the system's
+     *  restart back-off for a service that kept dying. [onReady] runs once the new connection is up. */
+    fun rebind(onReady: (IBuildDaemon) -> Unit = {}) {
+        unbind()
+        daemon = null
+        bind(onReady)
+    }
 }
