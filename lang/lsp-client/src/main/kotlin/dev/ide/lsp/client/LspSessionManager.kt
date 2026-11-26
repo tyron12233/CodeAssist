@@ -186,13 +186,29 @@ class LspSessionManager(
         return (custom ?: projectRoot).toAbsolutePath().normalize()
     }
 
-    private fun newSession(definition: LanguageServerDefinition, root: Path, projectRoot: Path): LspSession =
-        LspSession(
-            definition,
-            Context(root, projectRoot.toAbsolutePath().normalize(), host.loggerFor(definition)),
-            events,
-            host.clientVersion,
+    private fun newSession(definition: LanguageServerDefinition, root: Path, projectRoot: Path): LspSession {
+        val self = arrayOfNulls<LspSession>(1)
+        val context = Context(
+            root, projectRoot.toAbsolutePath().normalize(), host.loggerFor(definition),
+            onConfigurationChanged = { self[0]?.let { s -> starter.execute { s.configurationChanged() } } },
+            onRestart = { self[0]?.let(::restartSession) },
         )
+        return LspSession(definition, context, events, host.clientVersion).also { self[0] = it }
+    }
+
+    /**
+     * Shut [session] down at a plugin's request. The slot stays, with its failure history, so a plugin cannot
+     * restart its way past the crash-loop budget; a closed session is replaced by the next request, and the open
+     * editors are told to ask again, which is what does that.
+     */
+    private fun restartSession(session: LspSession) {
+        if (closed) return
+        val open = session.openDocuments().mapTo(HashSet()) { it.path }
+        starter.execute {
+            session.shutdown()
+            host.diagnosticsChanged(open)
+        }
+    }
 
     private fun launch(session: LspSession) {
         if (closed) return
@@ -223,7 +239,12 @@ class LspSessionManager(
         override val root: Path,
         override val projectRoot: Path,
         override val logger: Logger,
-    ) : LanguageServerContext
+        private val onConfigurationChanged: () -> Unit = {},
+        private val onRestart: () -> Unit = {},
+    ) : LanguageServerContext {
+        override fun notifyConfigurationChanged() = onConfigurationChanged()
+        override fun restart() = onRestart()
+    }
 
     companion object {
         /** Failures within [RESTART_WINDOW_MS] that mean a crash loop rather than a server that was killed. */

@@ -1013,6 +1013,19 @@ How it behaves, so you can plan around it:
   three minutes) leaves it down until the project is reopened, which the user is told once. A server Android
   killed in the background (Android 12 and later stop an app's child processes there) comes back every time.
   `start` returning null (no toolchain yet) is asked again after 30 seconds.
+- **Your plugin can reach its running server** (since SPI 3.10.0), through the `LanguageServerContext` it was
+  started with. Keep the context `start` receives, then:
+  - `context.notifyConfigurationChanged()` sends the whole of `configuration(null, context)` again as
+    `workspace/didChangeConfiguration`. Use it when the answer changed under a running server, for example a
+    package was installed and the interpreter's search paths grew. It does nothing while the server is not
+    running, and one asked for while it is still starting is sent as soon as it is ready.
+  - `context.restart()` shuts the server down; the next request for one of its files starts it afresh, and
+    open editors are told to ask again. Use it for what a running server cannot absorb (a new interpreter, a
+    changed toolchain), and for a server that reads a setting only from `initializationOptions`, since that is
+    sent once, at `initialize`. A restart does not reset the crash-loop budget above.
+
+  Both are safe from any thread. A host older than 3.10.0 does not have them, so calling one there throws a
+  `NoSuchMethodError`; a plugin that must also run on a 3.9 host catches it.
 - **Every request is timed.** A request slower than 1.5 s or an answer over about 1 MB is always logged
   (`lsp-perf ... (slow or large)`), with the time the client spent parsing it. With Settings > Analysis >
   Advanced > "Log analysis timings" on, every request is, and a per-method summary is logged when the server

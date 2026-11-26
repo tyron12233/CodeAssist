@@ -449,8 +449,13 @@ const val PLUGIN_API_VERSION: Int = 4
  * needs read: the source walk read only `.java` and `.kt`, so an index over `.swift` or `.dart` files was never
  * handed one. Those files are now walked under the source roots and re-indexed on save and create. Additive; an
  * older host never reads the suffixes, and naming the key there throws a `LinkageError` a plugin can catch.
+ *
+ * `3.10.0` lets a language-server plugin reach its running server: `LanguageServerContext.notifyConfigurationChanged()`
+ * re-sends the definition's configuration as `workspace/didChangeConfiguration` (a package was installed and the
+ * search paths grew), and `LanguageServerContext.restart()` shuts the server down so the next request starts it
+ * afresh. Defaulted no-ops; an older host never calls them, and a plugin that does there throws a `LinkageError`.
  */
-const val PLUGIN_SPI_VERSION: String = "3.9.0"
+const val PLUGIN_SPI_VERSION: String = "3.10.0"
 
 /**
  * A plugin's identity and load-order metadata. Built-ins construct this as a Kotlin literal on their entry
