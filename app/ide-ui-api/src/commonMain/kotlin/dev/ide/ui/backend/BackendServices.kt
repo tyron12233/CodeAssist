@@ -1926,6 +1926,12 @@ data class UiPluginInfo(
     val missingRequired: List<String> = emptyList(),
     /** The [optionalDependsOn] ids not installed on this device: what it does with them is unavailable. */
     val missingOptional: List<String> = emptyList(),
+    /** For a built-in: what this part of the IDE is and does, a few plain sentences (blank lines separate paragraphs). */
+    val about: String = "",
+    /** For a built-in: what turning it on gets you, one concrete thing per entry. Installed plugins show [capabilities] instead. */
+    val adds: List<String> = emptyList(),
+    /** For a built-in: what stops working if it is turned off, or, for an essential one, why the IDE cannot do without it. */
+    val ifOff: String = "",
 )
 
 /** An installed plugin app's facts, read from the package manager rather than from anything it declares. */

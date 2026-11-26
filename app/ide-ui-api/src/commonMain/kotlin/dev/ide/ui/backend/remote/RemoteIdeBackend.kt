@@ -5910,6 +5910,9 @@ internal fun w336(o: RemoteOut, v: dev.ide.ui.backend.UiPluginInfo) {
     o.list(v.optionalDependsOn) { e761 -> o.string(e761) }
     o.list(v.missingRequired) { e762 -> o.string(e762) }
     o.list(v.missingOptional) { e763 -> o.string(e763) }
+    o.string(v.about)
+    o.list(v.adds) { e764 -> o.string(e764) }
+    o.string(v.ifOff)
 }
 internal fun r336(i: RemoteIn): dev.ide.ui.backend.UiPluginInfo = dev.ide.ui.backend.UiPluginInfo(
     id = i.str(),
@@ -5932,6 +5935,9 @@ internal fun r336(i: RemoteIn): dev.ide.ui.backend.UiPluginInfo = dev.ide.ui.bac
     optionalDependsOn = i.list { i.str() },
     missingRequired = i.list { i.str() },
     missingOptional = i.list { i.str() },
+    about = i.str(),
+    adds = i.list { i.str() },
+    ifOff = i.str(),
 )
 
 internal fun w337(o: RemoteOut, v: dev.ide.ui.backend.UiPluginApp) {

@@ -1733,6 +1733,8 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="plugins_detail_enabled_hint">Takes effect when CodeAssist restarts.</string>
     <string name="plugins_detail_builtin">Ships inside CodeAssist.</string>
     <string name="plugins_detail_adds">What it adds</string>
+    <string name="plugins_detail_if_off">If you turn it off</string>
+    <string name="plugins_detail_why_required">Why it is always on</string>
     <string name="plugins_detail_adds_none">It declares nothing it adds.</string>
     <string name="plugins_detail_details">Details</string>
     <string name="plugins_detail_id">ID</string>
