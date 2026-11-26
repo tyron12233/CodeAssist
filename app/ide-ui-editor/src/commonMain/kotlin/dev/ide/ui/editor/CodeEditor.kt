@@ -28,6 +28,7 @@ import androidx.compose.runtime.NonSkippableComposable
 import androidx.compose.runtime.State
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.CoroutineScope
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -156,6 +157,8 @@ fun CodeEditor(
     onOtherFileEdits: suspend (Map<String, List<UiTextEdit>>) -> Unit = { },
     /** Whether typing auto-opens the completion popup (Settings → Completion); Ctrl-Space always works. */
     completionAutoPopup: Boolean = true,
+    /** Enter (as well as Tab) accepts the highlighted completion; off = Enter starts a new line. */
+    completionEnterAccepts: Boolean = true,
     /** Debounce (ms) before an auto-popup completion request (Settings → Completion → Advanced). */
     completionDelayMs: Int = 110,
     /**
@@ -213,6 +216,7 @@ fun CodeEditor(
             onFontScaleChange,
             onPreview,
             completionAutoPopup,
+            completionEnterAccepts,
             completionDelayMs,
             twoAxisScroll,
             pinchZoom,
@@ -248,6 +252,8 @@ private fun CodeEditorContent(
     onFontScaleChange: (Float) -> Unit = {},
     onPreview: (variantId: String) -> Unit = {},
     completionAutoPopup: Boolean = true,
+    /** Enter (as well as Tab) accepts the highlighted completion; off = Enter starts a new line. */
+    completionEnterAccepts: Boolean = true,
     completionDelayMs: Int = 110,
     twoAxisScroll: Boolean = isMobilePlatform,
     pinchZoom: Boolean = true,
@@ -1293,13 +1299,30 @@ private fun CodeEditorContent(
                 completion.selected = (safeSelected - 1).coerceAtLeast(0); true
             }
 
-            Key.Tab, Key.Enter -> {
+            Key.Tab -> {
                 accept(); true
             }
+
+            Key.Enter -> if (completionEnterAccepts) { accept(); true } else false
 
             else -> false
         }
     }
+
+    // The soft keyboard's Enter (the web bridge delivers it as text, not as a key event): the same choices the
+    // hardware Enter makes in the preview handler above, then a plain newline if none of them applies.
+    fun softEnter(): Boolean {
+        if (acts.menuOpen) { acts.applyAt(acts.menuSelected); return true }
+        if (popups.inlineRename != null) { commitInlineRename(); return true }
+        val sn = snippet
+        if (sn != null && !showPopup) { if (!sn.next()) snippet = null; return true }
+        if (showPopup && completionEnterAccepts) { accept(); return true }
+        return false
+    }
+    // Re-registered after every composition: the handler reads this composition's popup and selection, and a handler
+    // registered once would keep seeing the first one's.
+    SideEffect { editorSession.ime.onSoftEnter = ::softEnter }
+    DisposableEffect(editorSession) { onDispose { editorSession.ime.onSoftEnter = null } }
 
     Box(
         modifier
@@ -1646,7 +1669,9 @@ private fun CodeEditorContent(
             metrics = metrics,
             gutterWidthPx = gutterWidthPx,
             safeSelected = safeSelected,
-            onAccept = { accept(it) },
+            // A tap on a row is a touch on the editor's popup, not on its text: claim the keyboard for it, or the page
+            // takes the tap for one outside the editor and closes the keyboard.
+            onAccept = { accept(it); if (interaction.lastInputWasTouch) editorSession.ime.show() },
         )
 
         EditorDialogsLayer(

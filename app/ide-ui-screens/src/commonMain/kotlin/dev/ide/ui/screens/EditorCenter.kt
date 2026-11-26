@@ -484,6 +484,7 @@ internal fun EditorCenter(
                                 fontScale = state.editorFontScale,
                                 onFontScaleChange = { state.editorFontScale = it },
                                 completionAutoPopup = state.completionAutoPopup,
+                                completionEnterAccepts = state.completionEnterAccepts,
                                 completionDelayMs = state.completionDelayMs,
                                 // scrollable2D has no wheel handling, so the free-pan mode is touch-only.
                                 twoAxisScroll = state.twoAxisScrollEnabled && isMobilePlatform,

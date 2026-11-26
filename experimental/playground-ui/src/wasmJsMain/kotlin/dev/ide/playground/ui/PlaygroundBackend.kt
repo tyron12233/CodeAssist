@@ -5,7 +5,10 @@ package dev.ide.playground.ui
 
 import dev.ide.platform.JsonReader
 import dev.ide.ui.StubBackend
+import dev.ide.ui.backend.UiCaret
 import dev.ide.ui.backend.UiCompletionItem
+import dev.ide.ui.backend.UiSnippet
+import dev.ide.ui.backend.UiSnippetStop
 import dev.ide.ui.backend.UiCompletionKind
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiAction
@@ -64,6 +67,21 @@ open class PlaygroundBackend(
                 additionalEdits = (it["edits"] as? List<*>).orEmpty().mapNotNull { e ->
                     val t = e as? List<*> ?: return@mapNotNull null
                     UiTextEdit((t[0] as Number).toInt(), (t[1] as Number).toInt(), t[2] as String)
+                },
+                // Where the caret lands (`map { | }`), and the tab stops of a snippet: the engine's, as they are.
+                caret = (it["caret"] as? List<*>)?.let { c -> UiCaret((c[0] as Number).toInt(), (c[1] as Number).toInt()) },
+                snippet = (it["snippet"] as? Map<*, *>)?.let { sn ->
+                    UiSnippet(
+                        stops = (sn["stops"] as? List<*>).orEmpty().mapNotNull { st ->
+                            val a = st as? List<*> ?: return@mapNotNull null
+                            UiSnippetStop(
+                                index = (a[0] as Number).toInt(),
+                                ranges = (a[1] as List<*>).map { r -> val p = r as List<*>; UiTextRange((p[0] as Number).toInt(), (p[1] as Number).toInt()) },
+                                choices = (a[2] as List<*>).map { c -> c as String },
+                            )
+                        },
+                        finalCaretOffset = (sn["final"] as? Number)?.toInt() ?: 0,
+                    )
                 },
             )
         }

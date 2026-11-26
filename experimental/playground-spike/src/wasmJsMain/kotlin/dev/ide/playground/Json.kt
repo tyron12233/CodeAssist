@@ -37,7 +37,21 @@ internal fun completionsJson(r: CompletionOutcome): String = buildString {
             if (j > 0) append(',')
             append("[").append(from).append(',').append(to).append(',').append(jsonString(text)).append(']')
         }
-        append("]}")
+        append("]")
+        if (o.caretOffset >= 0) append(",\"caret\":[").append(o.caretOffset).append(',').append(o.caretSelect).append(']')
+        o.snippet?.let { sn ->
+            append(",\"snippet\":{\"final\":").append(sn.finalOffset).append(",\"stops\":[")
+            sn.stops.forEachIndexed { k, (index, ranges, choices) ->
+                if (k > 0) append(',')
+                append('[').append(index).append(",[")
+                ranges.forEachIndexed { m, (s, e) -> if (m > 0) append(','); append('[').append(s).append(',').append(e).append(']') }
+                append("],[")
+                choices.forEachIndexed { m, c -> if (m > 0) append(','); append(jsonString(c)) }
+                append("]]")
+            }
+            append("]}")
+        }
+        append('}')
     }
     append("]}")
 }

@@ -56,6 +56,7 @@ class SettingsStore(
             softKeyboardSuggestions = bool("editor.softKeyboardSuggestions", d.softKeyboardSuggestions),
             symbolBar = bool("editor.symbolBar", d.symbolBar),
             completionAutoPopup = bool("completion.autoPopup", d.completionAutoPopup),
+            completionEnterAccepts = bool("completion.enterAccepts", d.completionEnterAccepts),
             completionDelayMs = int("completion.delayMs", d.completionDelayMs).coerceIn(MIN_COMPLETION_DELAY_MS, MAX_COMPLETION_DELAY_MS),
             completionMaxItems = int("completion.maxItems", d.completionMaxItems).coerceIn(MIN_COMPLETION_MAX_ITEMS, MAX_COMPLETION_MAX_ITEMS),
             postfixTemplates = bool("completion.postfixTemplates", d.postfixTemplates),
@@ -176,6 +177,7 @@ class SettingsStore(
         put("editor.softKeyboardSuggestions", s.softKeyboardSuggestions.toString())
         put("editor.symbolBar", s.symbolBar.toString())
         put("completion.autoPopup", s.completionAutoPopup.toString())
+        put("completion.enterAccepts", s.completionEnterAccepts.toString())
         put("completion.delayMs", s.completionDelayMs.toString())
         put("completion.maxItems", s.completionMaxItems.toString())
         put("completion.postfixTemplates", s.postfixTemplates.toString())

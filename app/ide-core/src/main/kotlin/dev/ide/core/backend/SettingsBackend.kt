@@ -668,6 +668,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         semanticHighlighting = semanticHighlighting,
         codeFolding = codeFolding,
         completionAutoPopup = completionAutoPopup,
+        completionEnterAccepts = completionEnterAccepts,
         completionDelayMs = completionDelayMs,
         completionMaxItems = completionMaxItems,
         postfixTemplates = postfixTemplates,

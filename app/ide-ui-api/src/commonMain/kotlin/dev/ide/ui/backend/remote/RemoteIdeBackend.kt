@@ -6026,6 +6026,7 @@ internal fun w341(o: RemoteOut, v: dev.ide.ui.backend.UiSettings) {
     o.bool(v.semanticHighlighting)
     o.bool(v.codeFolding)
     o.bool(v.completionAutoPopup)
+    o.bool(v.completionEnterAccepts)
     o.int(v.completionDelayMs)
     o.int(v.completionMaxItems)
     o.bool(v.postfixTemplates)
@@ -6061,6 +6062,7 @@ internal fun r341(i: RemoteIn): dev.ide.ui.backend.UiSettings = dev.ide.ui.backe
     semanticHighlighting = i.bool(),
     codeFolding = i.bool(),
     completionAutoPopup = i.bool(),
+    completionEnterAccepts = i.bool(),
     completionDelayMs = i.int(),
     completionMaxItems = i.int(),
     postfixTemplates = i.bool(),

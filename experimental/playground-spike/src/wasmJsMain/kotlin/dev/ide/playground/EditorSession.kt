@@ -56,7 +56,16 @@ class CompletionOffer(
     val container: String?,
     /** `[from, to, text]` edits against the ORIGINAL text, applied together with the insertion. */
     val additionalEdits: List<Triple<Int, Int, String>>,
+    /** Where the caret lands, in characters into [insertText] (`map { | }`); -1 = after it. */
+    val caretOffset: Int = -1,
+    /** Characters selected from [caretOffset] on (a placeholder to overtype); 0 = just a caret. */
+    val caretSelect: Int = 0,
+    /** Tab stops to step through after the insertion (a snippet or template item); null for a plain item. */
+    val snippet: SnippetOffer? = null,
 )
+
+/** A snippet's tab stops: `[index, [[start, end], ...], [choice, ...]]` per stop, offsets into the insert text. */
+class SnippetOffer(val finalOffset: Int, val stops: List<Triple<Int, List<Pair<Int, Int>>, List<String>>>)
 
 class CompletionOutcome(val from: Int, val to: Int, val incomplete: Boolean, val items: List<CompletionOffer>, val millis: Long)
 
@@ -212,6 +221,15 @@ class EditorSession(classpath: List<String>) {
                 CompletionOffer(
                     it.label, it.insertText, it.kind.name, it.detail, it.container,
                     it.additionalEdits.map { e -> Triple(e.range.start, e.range.end, e.newText) },
+                    caretOffset = when (val c = it.caret) {
+                        is dev.ide.lang.completion.CaretAction.At -> c.offset
+                        is dev.ide.lang.completion.CaretAction.Select -> c.offset
+                        else -> -1
+                    },
+                    caretSelect = (it.caret as? dev.ide.lang.completion.CaretAction.Select)?.length ?: 0,
+                    snippet = (it.caret as? dev.ide.lang.completion.CaretAction.ExpandSnippet)?.expansion?.let { x ->
+                        SnippetOffer(x.finalCaretOffset, x.stops.map { st -> Triple(st.index, st.ranges.map { r -> r.start to r.end }, st.choices) })
+                    },
                 )
             },
             millis = started.elapsedNow().inWholeMilliseconds,

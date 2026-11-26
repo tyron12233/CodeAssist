@@ -45,7 +45,7 @@ actual fun Modifier.editorTextInput(
         val attached = imeAttach { kind, data ->
             when (kind) {
                 "text" -> session.commitText(data)
-                "enter" -> session.commitText("\n")
+                "enter" -> if (ime.onSoftEnter?.invoke() != true) session.commitText("\n")
                 "backspace" -> session.backspace(false)
                 "backspace-word" -> session.backspace(true)
                 "delete" -> session.deleteForward(false)

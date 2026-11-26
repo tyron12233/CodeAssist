@@ -2262,6 +2262,8 @@ data class UiSettings(
     val semanticHighlighting: Boolean = true,
     val codeFolding: Boolean = true,
     val completionAutoPopup: Boolean = true,
+    /** Enter (as well as Tab) accepts the highlighted completion; off = Enter always starts a new line. */
+    val completionEnterAccepts: Boolean = true,
     val completionDelayMs: Int = 110,
     val completionMaxItems: Int = 200,
     val postfixTemplates: Boolean = true,

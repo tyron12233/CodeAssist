@@ -309,6 +309,7 @@ object BuiltInSettingsPages {
     private val completion = page(COMPLETION, "Code Completion", "sparkle", 20) {
         listOf(
             SettingControl.Toggle("autoPopup", "Auto-show suggestions", "Pop the list up while typing (off = Ctrl-Space only)", default = d.completionAutoPopup),
+            SettingControl.Toggle("enterAccepts", "Enter accepts a suggestion", "Enter picks the highlighted suggestion, as Tab does (off = Enter always starts a new line)", default = d.completionEnterAccepts),
             SettingControl.Toggle("postfixTemplates", "Postfix templates", "Offer .val / .if / .notnull / … completions", default = d.postfixTemplates),
             SettingControl.Toggle("wordCompletion", "Word completion", "Offer words already in the file as a fallback", default = d.wordCompletion),
             SettingControl.IntSlider("delayMs", "Auto-popup delay", "How long after a keystroke the list appears", default = d.completionDelayMs, min = IdeSettings.MIN_COMPLETION_DELAY_MS, max = IdeSettings.MAX_COMPLETION_DELAY_MS, step = 10, unit = "ms", advanced = true),
