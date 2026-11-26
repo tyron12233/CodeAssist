@@ -120,6 +120,14 @@ class BackendTextCoverageTest {
                 add("Other")
                 // Plugins screen: a bundled plugin's name and description.
                 manager.env.pluginCatalog.all.forEach { m -> add(m.name); add(m.description) }
+                // And the page the Plugins screen writes for each built-in: its summary replaces the description above on
+                // screen, the paragraphs are translated one at a time, and the rest are shown whole.
+                dev.ide.core.plugins.BUILT_IN_PLUGIN_DOCS.values.forEach { d ->
+                    add(d.summary)
+                    d.about.split("\n\n").forEach { add(it) }
+                    d.adds.forEach { add(it) }
+                    add(d.ifOff)
+                }
                 // Settings: every page, built-in or contributed by a bundled plugin, with a project open.
                 backend.settings.settingsPages().forEach { page ->
                     add(page.title)

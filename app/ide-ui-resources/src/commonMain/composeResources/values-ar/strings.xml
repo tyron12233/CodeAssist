@@ -2344,6 +2344,8 @@
     <!-- Code Completion -->
     <string name="set_completion_auto">إظهار الاقتراحات تلقائيًا</string>
     <string name="set_completion_auto_desc">إظهار القائمة أثناء الكتابة (إيقاف = Ctrl-Space فقط)</string>
+    <string name="set_completion_enter">Enter يقبل اقتراحًا</string>
+    <string name="set_completion_enter_desc">يختار Enter الاقتراح المحدد، كما يفعل Tab (إيقاف = يبدأ Enter سطرًا جديدًا دائمًا)</string>
     <string name="set_completion_postfix">قوالب لاحقة</string>
     <string name="set_completion_postfix_desc">توفير إكمالات .val / .if / .notnull / …</string>
     <string name="set_completion_word">إكمال الكلمات</string>
@@ -3104,6 +3106,8 @@
     <string name="plugins_detail_enabled_hint">يسري التغيير عند إعادة تشغيل CodeAssist.</string>
     <string name="plugins_detail_builtin">مضمَّنة في CodeAssist.</string>
     <string name="plugins_detail_adds">ما تضيفه</string>
+    <string name="plugins_detail_if_off">إذا عطّلتها</string>
+    <string name="plugins_detail_why_required">لماذا هي مفعّلة دائمًا</string>
     <string name="plugins_detail_adds_none">لا تُعلن عن أي شيء تضيفه.</string>
     <string name="plugins_detail_details">التفاصيل</string>
     <string name="plugins_detail_id">المعرّف</string>

@@ -1298,6 +1298,8 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="set_editor_close_unsaved_discard">Jangan simpan</string>
     <string name="set_completion_auto">Tampilkan saran otomatis</string>
     <string name="set_completion_auto_desc">Munculkan daftar saat mengetik (nonaktif = hanya Ctrl-Space)</string>
+    <string name="set_completion_enter">Enter menerima saran</string>
+    <string name="set_completion_enter_desc">Enter memilih saran yang disorot, seperti Tab (nonaktif = Enter selalu memulai baris baru)</string>
     <string name="set_completion_postfix">Template postfix</string>
     <string name="set_completion_postfix_desc">Tawarkan penyelesaian .val / .if / .notnull / …</string>
     <string name="set_completion_word">Penyelesaian kata</string>
@@ -2193,6 +2195,8 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="plugins_detail_enabled_hint">Berlaku saat CodeAssist dimulai ulang.</string>
     <string name="plugins_detail_builtin">Disertakan di dalam CodeAssist.</string>
     <string name="plugins_detail_adds">Yang ditambahkan</string>
+    <string name="plugins_detail_if_off">Jika Anda menonaktifkannya</string>
+    <string name="plugins_detail_why_required">Mengapa selalu aktif</string>
     <string name="plugins_detail_adds_none">Plugin ini tidak mendeklarasikan tambahan apa pun.</string>
     <string name="plugins_detail_details">Detail</string>
     <string name="plugins_detail_id">ID</string>

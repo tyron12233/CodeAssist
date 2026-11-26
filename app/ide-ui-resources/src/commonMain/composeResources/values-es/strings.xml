@@ -1409,6 +1409,8 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="set_editor_close_unsaved_discard">No guardar</string>
     <string name="set_completion_auto">Mostrar sugerencias automáticamente</string>
     <string name="set_completion_auto_desc">Muestra la lista mientras escribes (desactivado = solo con Ctrl-Space)</string>
+    <string name="set_completion_enter">Enter acepta una sugerencia</string>
+    <string name="set_completion_enter_desc">Enter elige la sugerencia resaltada, igual que Tab (desactivado = Enter siempre inicia una nueva línea)</string>
     <string name="set_completion_postfix">Plantillas postfix</string>
     <string name="set_completion_postfix_desc">Ofrece autocompletados .val / .if / .notnull / …</string>
     <string name="set_completion_word">Autocompletado de palabras</string>
@@ -2421,6 +2423,8 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="plugins_detail_enabled_hint">Se aplica cuando CodeAssist se reinicia.</string>
     <string name="plugins_detail_builtin">Viene incluido en CodeAssist.</string>
     <string name="plugins_detail_adds">Qué agrega</string>
+    <string name="plugins_detail_if_off">Si lo desactivas</string>
+    <string name="plugins_detail_why_required">Por qué siempre está activado</string>
     <string name="plugins_detail_adds_none">No declara nada que agregue.</string>
     <string name="plugins_detail_details">Detalles</string>
     <string name="plugins_detail_id">ID</string>

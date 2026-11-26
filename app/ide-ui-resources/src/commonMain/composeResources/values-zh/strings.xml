@@ -2178,6 +2178,8 @@
     <!-- Code Completion -->
     <string name="set_completion_auto">自动显示建议</string>
     <string name="set_completion_auto_desc">键入时自动弹出列表（关闭 = 仅 Ctrl-Space）</string>
+    <string name="set_completion_enter">Enter 接受建议</string>
+    <string name="set_completion_enter_desc">Enter 选中高亮的建议，与 Tab 相同（关闭 = Enter 始终换行）</string>
     <string name="set_completion_postfix">后缀模板</string>
     <string name="set_completion_postfix_desc">提供 .val / .if / .notnull / … 等补全</string>
     <string name="set_completion_word">单词补全</string>
@@ -2608,6 +2610,8 @@
     <string name="plugins_detail_enabled_hint">重启 CodeAssist 后生效。</string>
     <string name="plugins_detail_builtin">随 CodeAssist 内置。</string>
     <string name="plugins_detail_adds">新增功能</string>
+    <string name="plugins_detail_if_off">如果你将它关闭</string>
+    <string name="plugins_detail_why_required">为什么它始终开启</string>
     <string name="plugins_detail_adds_none">它没有声明任何新增功能。</string>
     <string name="plugins_detail_details">详情</string>
     <string name="plugins_detail_id">ID</string>

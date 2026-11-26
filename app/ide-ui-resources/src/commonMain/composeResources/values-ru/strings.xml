@@ -1298,6 +1298,8 @@
     <string name="set_editor_close_unsaved_discard">Не сохранять</string>
     <string name="set_completion_auto">Автопоказ подсказок</string>
     <string name="set_completion_auto_desc">Всплывающий список при вводе (выкл = только Ctrl-Space)</string>
+    <string name="set_completion_enter">Enter принимает подсказку</string>
+    <string name="set_completion_enter_desc">Enter выбирает выделенную подсказку, как Tab (выкл = Enter всегда начинает новую строку)</string>
     <string name="set_completion_postfix">Постфиксные шаблоны</string>
     <string name="set_completion_postfix_desc">Предлагать автодополнения .val / .if / .notnull / …</string>
     <string name="set_completion_word">Дополнение по словам</string>
@@ -2330,6 +2332,8 @@
     <string name="plugins_detail_enabled_hint">Вступит в силу после перезапуска CodeAssist.</string>
     <string name="plugins_detail_builtin">Поставляется в составе CodeAssist.</string>
     <string name="plugins_detail_adds">Что он добавляет</string>
+    <string name="plugins_detail_if_off">Если выключить</string>
+    <string name="plugins_detail_why_required">Почему он всегда включён</string>
     <string name="plugins_detail_adds_none">Плагин не объявляет никаких дополнений.</string>
     <string name="plugins_detail_details">Сведения</string>
     <string name="plugins_detail_id">ID</string>
