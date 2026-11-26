@@ -73,6 +73,9 @@ class Interpreter(
      *  later `.current` (a re-minted instance) mismatch and the default lambda throws ("No JetsnackColorPalette
      *  provided" — the out-of-process custom-theme preview rendered grey). Sharing the map keeps identity stable. */
     topLevelPropertyStore: MutableMap<String, Any?> = HashMap(),
+    /** The runaway bounds. The default is the preview's: tight, because a preview runs on the app's UI thread.
+     *  A host that runs a program off the UI thread (the Playground) passes its own. */
+    private val limits: RunLimits = RunLimits.PREVIEW,
 ) {
     /** Source classes indexed by fully-qualified name and by simple name (a constructor callee carries the
      *  simple name; an object/enum reference carries the resolved FQN). */
@@ -301,16 +304,16 @@ class Interpreter(
         // surfaces an error. The bound gives a clean early abort on a large-stack thread (the composition/main
         // thread); a smaller-stack thread (recompose/bridge) can overflow sooner, so the real backstop is the
         // StackOverflowError catch below — the depth guard can't be a single value safe across every stack size.
-        if (++f.depth > MAX_CALL_DEPTH) {
+        if (++f.depth > limits.callDepth) {
             f.depth--
-            throw InterpreterException("call depth exceeded $MAX_CALL_DEPTH frames (unbounded recursion) — aborting to avoid crashing the preview")
+            throw InterpreterException("call depth exceeded ${limits.callDepth} frames (unbounded recursion) — aborting to avoid crashing the preview")
         }
         // Arm a whole-pass wall-clock deadline at the outermost interpreted call. The per-loop guard bounds any
         // single loop; this additionally bounds a broad/deep call tree, many sequential loops, or heavy library
         // work that no single loop guard sees — so the composition thread can't freeze past an ANR. Disarmed on
         // the managed bridge thread (a legitimate long-running cooperative timer lives there).
         if (f.depth == 1) f.deadlineNanos =
-            if (SuspendContext.isActive) 0L else System.nanoTime() + MAX_RENDER_NANOS
+            if (SuspendContext.isActive) 0L else System.nanoTime() + limits.passNanos
         else checkDeadline(f)
         val env = Env()
         env.defineReified(reifiedTypes)
@@ -335,7 +338,7 @@ class Interpreter(
     private fun checkDeadline(f: Frame) {
         val dl = f.deadlineNanos
         if (dl != 0L && System.nanoTime() > dl)
-            throw InterpreterException("preview interpretation ran longer than ${MAX_RENDER_NANOS / 1_000_000}ms — aborting to avoid hanging the preview")
+            throw InterpreterException("preview interpretation ran longer than ${limits.passNanos / 1_000_000}ms — aborting to avoid hanging the preview")
     }
 
     /**
@@ -1563,6 +1566,17 @@ class Interpreter(
         fun receiver(): Any? =
             eval(call.receiver ?: throw InterpreterException("`$name` has no receiver"), env)
         return when {
+            // `print(x)` / `println(x)` / `println()` — @InlineOnly over `System.out`, so no method exists to
+            // reflect. Written through Kotlin's own `print`/`println`, i.e. this process's `System.out`: the
+            // terminal on a JVM, and inside `:jvm-vm` whatever stdout the host handed the VM.
+            name == "println" && call.dispatch == DispatchKind.TOP_LEVEL && args.size <= 1 -> {
+                if (args.isEmpty()) println() else println(eval(args[0].value, env))
+                Handled(Unit)
+            }
+            name == "print" && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 1 -> {
+                print(eval(args[0].value, env))
+                Handled(Unit)
+            }
             // repeat(times) { index -> … }
             name == "repeat" && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 2 -> {
                 val times = (eval(args[0].value, env) as? Number)?.toInt()
@@ -3804,18 +3818,18 @@ class Interpreter(
             b.startNanos = System.nanoTime()
             return
         }
-        if (++b.iterations >= MAX_LOOP_ITERATIONS)
-            throw InterpreterException("loop exceeded $MAX_LOOP_ITERATIONS iterations — aborting to avoid hanging the preview")
+        if (++b.iterations >= limits.loopIterations)
+            throw InterpreterException("loop exceeded ${limits.loopIterations} iterations — aborting to avoid hanging the preview")
         // Check wall-clock EVERY iteration: a loop of few iterations but with an expensive body (nested work,
         // heavy reflective dispatch) would slip a sampled check and freeze far past the budget. A pure spin loop
         // trips the iteration count first, so the added nanoTime cost only lands on loops doing real work, where
         // the body dominates it. Bound by BOTH the per-loop budget and the captured whole-pass deadline (so
         // several sequential loops in one pass can't sum past an ANR).
         val now = System.nanoTime()
-        if (now - b.startNanos > MAX_LOOP_NANOS)
-            throw InterpreterException("loop ran longer than ${MAX_LOOP_NANOS / 1_000_000}ms — aborting to avoid hanging the preview")
+        if (now - b.startNanos > limits.loopNanos)
+            throw InterpreterException("loop ran longer than ${limits.loopNanos / 1_000_000}ms — aborting to avoid hanging the preview")
         if (b.deadlineNanos != 0L && now > b.deadlineNanos)
-            throw InterpreterException("preview interpretation ran longer than ${MAX_RENDER_NANOS / 1_000_000}ms — aborting to avoid hanging the preview")
+            throw InterpreterException("preview interpretation ran longer than ${limits.passNanos / 1_000_000}ms — aborting to avoid hanging the preview")
     }
 
     /** Carries a non-`Throwable` value thrown by interpreted `throw` (e.g. a source exception object), so a
@@ -3837,12 +3851,7 @@ class Interpreter(
     private fun unwrapFailure(t: Throwable?): Any? = (t as? InterpretedFailure)?.thrown ?: t
 
     private companion object {
-        /** Runaway-loop guard bounds (see [guardLoop]). Generous enough that a real preview's loops never trip
-         *  them, tight enough that a runaway loop can't hang the app past an ANR. */
-        const val MAX_LOOP_ITERATIONS = 1_000_000
-        const val MAX_LOOP_NANOS =
-            3_000_000_000L // 3s wall-clock — well under Android's 5s input-dispatch ANR
-        const val FRAME_MILLIS =
+                const val FRAME_MILLIS =
             16L // simulated ~60fps cadence for `withFrameNanos`/`withFrameMillis`
 
             /** The `kotlin.Result` readers modeled beside `runCatching`. Every one is inline on a value class,
@@ -3857,11 +3866,8 @@ class Interpreter(
                 "isSuccess", "isFailure", "fold", "recover", "onSuccess", "onFailure",
             )
 
-        /** Recursion + whole-pass bounds (see [call]). [MAX_CALL_DEPTH] gives a clean early abort on a large-stack
+        /** Recursion + whole-pass bounds (see [call]). [RunLimits.callDepth] gives a clean early abort on a large-stack
          *  thread; the StackOverflowError catch in [call] is the backstop for smaller stacks. */
-        const val MAX_CALL_DEPTH = 500
-        const val MAX_RENDER_NANOS =
-            4_000_000_000L // 4s per render pass — under the 5s input-dispatch ANR
 
         /** Pre-allocated (no allocation once the stack is exhausted) for the StackOverflowError backstop in [call].
          *  Reused across threads/renders — safe, since it is thrown, not mutated. */
@@ -3911,6 +3917,7 @@ class Interpreter(
          *  coroutine [SuspendBridge]). */
         val INLINE_INTRINSIC_FACADES = setOf(
             "kotlin.StandardKt", "kotlin.text.StringsKt", "kotlin.collections.CollectionsKt",
+            "kotlin.io.ConsoleKt", // `print`/`println` are @InlineOnly: no JVM method, only an inlined System.out call
             "kotlin.collections.MapsKt", // MutableMap `+=`/`-=` (plusAssign/minusAssign) are @InlineOnly here
             // Arrays carry the SAME @InlineOnly HOFs (`find`/`sumOf`/`flatMapIndexed`/…) on their own facade; the
             // intrinsics dispatch by receiver shape ([forEachElement]/[elementListOrNull]), so an array receiver is
@@ -4078,4 +4085,23 @@ private fun singletonFields(cls: Class<*>): SingletonFields {
     )
     synchronized(singletonFieldCache) { singletonFieldCache[cls] = found }
     return found
+}
+
+/**
+ * The bounds on a runaway program (see `Interpreter.guardLoop` and `Interpreter.call`): how many iterations and
+ * how long one loop may run, how long a whole pass may take, and how deep interpreted calls may nest.
+ *
+ * [PREVIEW] is generous enough that a real preview's loops never trip it and tight enough that a runaway loop
+ * cannot hang the app past an ANR, since a preview interprets on the UI thread.
+ */
+class RunLimits(
+    val loopIterations: Int,
+    val loopNanos: Long,
+    val passNanos: Long,
+    val callDepth: Int,
+) {
+    companion object {
+        /** A preview on the app's UI thread: 1M iterations or 3 s per loop, 4 s per pass (under Android's 5 s ANR). */
+        val PREVIEW = RunLimits(loopIterations = 1_000_000, loopNanos = 3_000_000_000L, passNanos = 4_000_000_000L, callDepth = 500)
+    }
 }
