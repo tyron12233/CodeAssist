@@ -70,6 +70,7 @@ private external fun wantsEditorOnly(): Boolean
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    showLoading("app")
     ComposeViewport("app") { if (wantsEditorOnly()) PlaygroundApp() else PlaygroundIdeApp() }
 }
 

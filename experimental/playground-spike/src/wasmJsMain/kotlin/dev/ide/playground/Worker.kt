@@ -49,10 +49,12 @@ private external fun post(type: String, id: Int, a: String, b: String, c: String
  * happily run them in parallel, but each is held as a string while it is decoded and the peak is what matters.
  */
 @JsFun(
-    """(base, onFile, onDone, onError) => {
+    """(base, onProgress, onFile, onDone, onError) => {
     (async () => {
         const names = await (await fetch(base + 'manifest.json')).json();
-        for (const name of names) {
+        for (let i = 0; i < names.length; i++) {
+            const name = names[i];
+            onProgress(i, names.length, name);
             const res = await fetch(base + name);
             if (!res.ok) throw new Error('fetch ' + name + ': HTTP ' + res.status);
             const blob = await res.blob();
@@ -68,7 +70,7 @@ private external fun post(type: String, id: Int, a: String, b: String, c: String
     })().catch((e) => onError(String(e && e.message || e)));
 }""",
 )
-private external fun fetchAll(base: String, onFile: (String, String) -> Unit, onDone: () -> Unit, onError: (String) -> Unit)
+private external fun fetchAll(base: String, onProgress: (Int, Int, String) -> Unit, onFile: (String, String) -> Unit, onDone: () -> Unit, onError: (String) -> Unit)
 
 private const val CLASSPATH_DIR = "/classpath"
 private var engine: PlaygroundEngine? = null
@@ -87,14 +89,15 @@ private fun init(base: String) {
     val paths = ArrayList<String>()
     fetchAll(
         base,
+        onProgress = { i, n, name -> post("status", 0, "libs $i $n $name", "", "", "") },
         onFile = { name, b64 ->
             val path = "$CLASSPATH_DIR/$name"
             MemoryFileSystem.write(path, Base64.decode(b64))
             paths.add(path)
-            post("status", 0, "loaded $name", "", "", "")
         },
         onDone = {
             try {
+                post("status", 0, "indexing", "", "", "")
                 engine = PlaygroundEngine(paths)
                 editor = EditorSession(paths.filter(::isUserLibrary))
                 post("ready", 0, started.elapsedNow().inWholeMilliseconds.toString(), "", "", "")

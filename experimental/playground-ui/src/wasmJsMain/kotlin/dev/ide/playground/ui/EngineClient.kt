@@ -20,11 +20,15 @@ private external fun postToWorker(w: JsAny, type: String, id: Int, source: Strin
 @JsFun("(w) => w.terminate()")
 private external fun terminateWorker(w: JsAny)
 
-@JsFun("() => new URL('./jars/', location.href).href")
+@JsFun("() => new URL('./jars' + (window.PLAYGROUND_ASSETS ? '-' + window.PLAYGROUND_ASSETS : '') + '/', location.href).href")
 private external fun jarsBaseUrl(): String
 
-@JsFun("() => new URL('./worker/codeassist-playground-spike.mjs', location.href).href")
+@JsFun("() => new URL('./worker' + (window.PLAYGROUND_ASSETS ? '-' + window.PLAYGROUND_ASSETS : '') + '/codeassist-playground-spike.mjs', location.href).href")
 private external fun workerUrl(): String
+
+/** The page's loading screen (index.html): [text] is a stage change ("app", "boot", "libs 3 12 name", "indexing", "ready", "failed ..."). */
+@JsFun("(text) => { if (window.playgroundStatus) window.playgroundStatus(text); }")
+external fun showLoading(text: String)
 
 /** What a run produced: stdout, the entry's value, the error (empty when none), and "lower/run" milliseconds. */
 class RunResult(val stdout: String, val result: String, val error: String, val timing: String)
@@ -51,10 +55,11 @@ class EngineClient(
         worker = createWorker(workerUrl()) { type, id, a, b, c, d ->
             when (type) {
                 // The worker's handler is installed: only now may it be spoken to (see Worker.kt).
-                "boot" -> postToWorker(worker!!, "init", 0, "", 0, jarsBaseUrl(), 0, "")
-                "status" -> onStatus(a)
-                "ready" -> { isReady = true; onStatus("ready (engine loaded in ${a.toLongOrNull()?.div(100)?.div(10.0) ?: a} s)"); ready?.resume(Unit); ready = null; onReady() }
+                "boot" -> { showLoading("boot"); postToWorker(worker!!, "init", 0, "", 0, jarsBaseUrl(), 0, "") }
+                "status" -> { showLoading(a); onStatus(a) }
+                "ready" -> { showLoading("ready"); isReady = true; onStatus("ready (engine loaded in ${a.toLongOrNull()?.div(100)?.div(10.0) ?: a} s)"); ready?.resume(Unit); ready = null; onReady() }
                 "fatal" -> {
+                    showLoading("failed $a")
                     lastFatal = a + " [in flight: " + inFlight.values.joinToString() + "]"; onStatus("engine failed: $a"); failAll()
                     // A worker that was up and died (a crash mid-run) is replaced; one that never came up is not retried.
                     if (isReady) stop()

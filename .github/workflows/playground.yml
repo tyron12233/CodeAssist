@@ -1,0 +1,63 @@
+name: Playground
+
+on:
+  pull_request:
+    paths:
+      - "experimental/playground-*/**"
+      - "lang/**"
+      - "run/jvm-vm/**"
+      - "run/interp-core/**"
+      - "app/ide-ui*/**"
+      - ".github/workflows/playground.yml"
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+# The browser Playground (docs/playground.md): the engine's tests under Node, then the production web build.
+# Unlike ci.yml this builds the Compose shells, so CI_CORE_ONLY is NOT set and the runner's Android SDK is needed
+# just to configure the build (ubuntu-latest has one). Node and Binaryen come from the machine: the settings'
+# repository policy forbids Gradle's own downloads of them.
+env:
+  JAVA_VERSION: "25"
+
+concurrency:
+  group: playground-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  playground:
+    name: Playground (wasm tests + production build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Binaryen (wasm-opt)
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+
+      - name: Engine tests under Node
+        run: ./gradlew :playground-spike:wasmJsNodeTest --console=plain --stacktrace
+
+      - name: Production build
+        run: ./gradlew :playground-ui:assemblePlaygroundProduction --console=plain --stacktrace
+
+      - name: Size report
+        run: |
+          du -sh experimental/playground-ui/build/playground-web-prod
+          ls -lh experimental/playground-ui/build/playground-web-prod/*.wasm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: playground-web
+          path: experimental/playground-ui/build/playground-web-prod
+          retention-days: 14

@@ -7,10 +7,118 @@
 <style>
   html, body { margin: 0; height: 100%; background: #111418; }
   #app { position: fixed; inset: 0; }
+  /* The loading screen: above the app and swallowing every touch until the engine is up, so nothing can be typed or
+     run into a half-loaded page. It is plain HTML so it shows at once, while the 48 MB of the app is still arriving. */
+  #boot { position: fixed; inset: 0; z-index: 10; background: #111418; color: #c9d1d9; display: flex; align-items: center;
+          justify-content: center; font: 15px/1.45 system-ui, -apple-system, sans-serif; transition: opacity .25s; touch-action: none; }
+  #boot.done { opacity: 0; pointer-events: none; }
+  #boot .card { width: min(380px, calc(100vw - 48px)); }
+  #boot h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; color: #e6edf3; }
+  #boot .sub { margin: 0 0 22px; color: #7d8590; font-size: 13px; }
+  #boot ol { list-style: none; margin: 0; padding: 0; }
+  #boot li { display: flex; align-items: baseline; gap: 10px; padding: 7px 0; color: #7d8590; }
+  #boot li .mark { width: 16px; flex: none; text-align: center; }
+  #boot li.active { color: #e6edf3; }
+  #boot li.done { color: #8b949e; }
+  #boot li.done .mark { color: #7ee787; }
+  #boot li .detail { margin-left: auto; font-size: 12px; font-variant-numeric: tabular-nums; color: #7d8590; white-space: nowrap; }
+  #boot .bar { height: 3px; background: #21262d; border-radius: 2px; margin: 18px 0 0; overflow: hidden; }
+  #boot .bar i { display: block; height: 100%; width: 0; background: #7ee787; transition: width .2s; }
+  #boot.failed .bar i { background: #f85149; }
+  #boot .err { margin-top: 16px; color: #f85149; font-size: 13px; word-break: break-word; display: none; }
+  #boot.failed .err { display: block; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  #boot li.active .mark { animation: pulse 1s infinite; }
 </style>
 </head>
 <body>
 <div id="app"></div>
-<script src="playground-ui.js"></script>
+<div id="boot" role="status" aria-live="polite">
+  <div class="card">
+    <h1>Kotlin Playground</h1>
+    <p class="sub">Everything runs in your browser. Loading it takes a moment the first time.</p>
+    <ol>
+      <li data-step="app"><span class="mark">&#9675;</span><span>The editor and the app</span><span class="detail"></span></li>
+      <li data-step="boot"><span class="mark">&#9675;</span><span>Starting the language engine</span><span class="detail"></span></li>
+      <li data-step="libs"><span class="mark">&#9675;</span><span>Loading the Kotlin libraries</span><span class="detail"></span></li>
+      <li data-step="indexing"><span class="mark">&#9675;</span><span>Indexing them for completion</span><span class="detail"></span></li>
+    </ol>
+    <div class="bar"><i></i></div>
+    <div class="err"></div>
+  </div>
+</div>
+<script>
+  window.PLAYGROUND_ASSETS = "@ASSETS@";
+  (function () {
+    var boot = document.getElementById('boot'), bar = boot.querySelector('.bar i'), err = boot.querySelector('.err');
+    var order = ['app', 'boot', 'libs', 'indexing'], started = Date.now(), finished = false;
+    var items = {};
+    order.forEach(function (k) { items[k] = boot.querySelector('[data-step="' + k + '"]'); });
+    // Everything before `step` is done, `step` is running, the rest wait.
+    function at(step, detail) {
+      var i = order.indexOf(step);
+      order.forEach(function (k, j) {
+        var li = items[k], mark = li.querySelector('.mark');
+        li.className = j < i ? 'done' : j === i ? 'active' : '';
+        mark.innerHTML = j < i ? '&#10003;' : j === i ? '&#9679;' : '&#9675;';
+        if (j !== i) li.querySelector('.detail').textContent = '';
+      });
+      if (detail !== undefined) items[step].querySelector('.detail').textContent = detail;
+    }
+    function progress(f) { bar.style.width = Math.round(f * 100) + '%'; }
+    at('app'); progress(0.05);
+    window.playgroundStatus = function (text) {
+      if (finished) return;
+      if (text === 'app') { at('boot'); progress(0.35); }
+      else if (text === 'boot') { at('libs', ''); progress(0.4); }
+      else if (text.indexOf('libs ') === 0) {
+        var p = text.split(' '), i = +p[1], n = +p[2];
+        at('libs', (i + 1) + ' / ' + n + '  ' + p.slice(3).join(' ').replace(/\.jar$/, ''));
+        progress(0.4 + 0.45 * (i / n));
+      }
+      else if (text === 'indexing') { at('indexing', ''); progress(0.9); }
+      else if (text === 'ready') {
+        finished = true; progress(1);
+        order.forEach(function (k) { items[k].className = 'done'; items[k].querySelector('.mark').innerHTML = '&#10003;'; });
+        boot.classList.add('done');
+        setTimeout(function () { boot.style.display = 'none'; }, 400);
+      }
+      else if (text.indexOf('failed ') === 0) {
+        boot.classList.add('failed'); err.textContent = 'The engine did not start: ' + text.substring(7) + ' Reload the page to try again.';
+      }
+    };
+    // The app is a 48 MB download: say so while nothing else can, and say if it is slow.
+    setTimeout(function () { if (!finished && items.app.className === 'active') items.app.querySelector('.detail').textContent = 'downloading, ' + Math.round((Date.now() - started) / 1000) + ' s'; }, 3000);
+    window.addEventListener('error', function (e) { if (!finished && items.app.className === 'active') window.playgroundStatus('failed ' + (e.message || 'the app could not start')); });
+  })();
+</script>
+<script>
+  // iOS Safari shows the keyboard only for a focus() made synchronously inside a touch handler. Compose focuses its
+  // hidden text field after the tap, through coroutines, which is too late: the field is focused and no keyboard comes.
+  // So a tap (not a scroll or a drag) focuses a stand-in field of ours right away, inside the handler, which raises the
+  // keyboard; Compose then moves focus to its own field, and the keyboard stays up for it. If Compose did not take the
+  // focus (the tap was on a button, not the editor), the stand-in is dropped again and the keyboard goes away.
+  (function () {
+    if (!window.matchMedia || !matchMedia('(pointer: coarse)').matches) return;
+    var stand = document.createElement('input');
+    stand.type = 'text'; stand.setAttribute('aria-hidden', 'true'); stand.tabIndex = -1;
+    stand.setAttribute('autocapitalize', 'off'); stand.setAttribute('autocorrect', 'off'); stand.setAttribute('spellcheck', 'false');
+    // 16px or larger, or iOS zooms the page when it is focused. Invisible and out of the way, but not display:none.
+    stand.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;font-size:16px;border:0;padding:0;pointer-events:none;';
+    document.body.appendChild(stand);
+    var x0 = 0, y0 = 0;
+    document.addEventListener('touchstart', function (e) { var t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; }, { capture: true, passive: true });
+    document.addEventListener('touchend', function (e) {
+      var t = e.changedTouches[0];
+      if (Math.abs(t.clientX - x0) > 10 || Math.abs(t.clientY - y0) > 10) return;
+      if (document.getElementById('boot') && document.getElementById('boot').style.display !== 'none') return;
+      var before = document.activeElement;
+      if (before && before !== stand && /^(textarea|input)$/i.test(before.tagName)) return; // already editing: nothing to raise
+      stand.focus({ preventScroll: true });
+      setTimeout(function () { if (document.activeElement === stand) stand.blur(); }, 700);
+    }, { capture: true, passive: true });
+  })();
+</script>
+<script src="playground-ui.js?v=@ASSETS@"></script>
 </body>
 </html>

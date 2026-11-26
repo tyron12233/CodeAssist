@@ -1,4 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.targets.wasm.binaryen.BinaryenEnvSpec
+import org.jetbrains.kotlin.gradle.targets.wasm.binaryen.BinaryenPlugin
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsEnvSpec
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsPlugin
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
@@ -42,12 +44,28 @@ plugins {
 // forbids. Needed on the root project (the shared env spec) and on every project that has the target.
 plugins.withType<WasmNodeJsPlugin> { extensions.configure<WasmNodeJsEnvSpec> { download.set(false) } }
 
+// The production Playground (`wasmJsBrowserDistribution`) shrinks the wasm with Binaryen's `wasm-opt`. Its download
+// is a project repository too, so it comes from the machine as well: `BINARYEN_HOME` (the directory holding
+// `bin/wasm-opt`), else wherever `wasm-opt` is on the PATH (`brew install binaryen`, `apt install binaryen`).
+// Without one the production task fails; the development distribution (`assemblePlayground`) never needs it.
+val binaryenHome: File? = (System.getenv("BINARYEN_HOME")?.let(::File)
+    ?: System.getenv("PATH").orEmpty().split(File.pathSeparator)
+        .map { File(it, "wasm-opt") }.firstOrNull { it.canExecute() }?.canonicalFile?.parentFile?.parentFile)
+fun Project.useLocalBinaryen() = plugins.withType<BinaryenPlugin> {
+    extensions.configure<BinaryenEnvSpec> {
+        download.set(false)
+        binaryenHome?.let { installationDirectory.set(it) }
+    }
+}
+useLocalBinaryen()
+
 // The npm lock (kotlin-js-store/) records every wasm module's test tooling, so it changes whenever a module gains
 // the target, and the check that it is current fails the build over it. Nothing here is published from that
 // lock, so skip the check.
 tasks.matching { it.name == "kotlinWasmStorePackageLock" }.configureEach { enabled = false }
 
 subprojects {
+    useLocalBinaryen()
     plugins.withType<WasmNodeJsPlugin> { extensions.configure<WasmNodeJsEnvSpec> { download.set(false) } }
 
     group = "dev.ide"
