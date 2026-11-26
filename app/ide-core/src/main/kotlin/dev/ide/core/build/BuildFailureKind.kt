@@ -24,13 +24,22 @@ internal object BuildFailureKind {
     // build that R8 or D8 failed for lack of heap was counted as a generic tool failure.
     private val OOM_TOKENS = listOf("OutOfMemoryError", "OutOfMemory", "ran out of memory")
 
+    /** The build process was killed under the build (RemoteBuildRunner's death notes), with no cause recorded. */
+    const val PROCESS_DIED = "process_died"
+
+    // The line RemoteBuildRunner writes when the :build process dies mid-build, and the phrase the OS-recorded cause
+    // carries for a kill by the low-memory killer (both its LOW_MEMORY and SIGKILL wordings). A killed process throws
+    // no OutOfMemoryError and leaves no diagnostic, so without these the memory kills counted as no_diagnostic.
+    private const val PROCESS_DIED_NOTE = "Build process stopped"
+    private const val LOW_MEMORY_KILL = "low-memory killer"
+
     fun classify(diagnostics: List<BuildDiagnosticUi>, log: List<BuildLogLine>): String {
         val errors = diagnostics.filter { it.severity == UiSeverity.Error }
         // OOM first: it can masquerade as any other failure and is the memory-pressure signal we most want.
         val oom = errors.any { hitsOom(it.message) || hitsOom(it.detail) } ||
             log.any { it.level == UiLogLevel.Error && hitsOom(it.message) }
-        if (oom) return "oom"
-        if (errors.isEmpty()) return NO_DIAGNOSTIC
+        if (oom || log.any { LOW_MEMORY_KILL in it.message }) return "oom"
+        if (errors.isEmpty()) return if (log.any { PROCESS_DIED_NOTE in it.message }) PROCESS_DIED else NO_DIAGNOSTIC
         // Bucket by the dominant error-producing stage. Compiler/resource errors are almost always the user's
         // own code/XML (the healthy inner loop); dex/packaging/signing point at our pipeline or device limits.
         val kinds = errors.map { it.kind.lowercase() }.toSet()
