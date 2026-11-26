@@ -3,6 +3,8 @@ package dev.ide.ui.platform
 import android.app.Activity
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.areStatusBarsVisible
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
 import androidx.compose.runtime.Composable
@@ -63,4 +65,13 @@ actual fun hiddenSystemBarsWidth(): Dp {
     fun WindowInsets.horizontal() = getLeft(density, direction) + getRight(density, direction)
     val hiddenPx = WindowInsets.systemBarsIgnoringVisibility.horizontal() - WindowInsets.systemBars.horizontal()
     return if (hiddenPx <= 0) 0.dp else with(density) { hiddenPx.toDp() }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+actual fun transientStatusBarHeight(): Dp {
+    val density = LocalDensity.current
+    val showing = WindowInsets.areStatusBarsVisible
+    val full = WindowInsets.statusBarsIgnoringVisibility.getTop(density)
+    return if (!showing || full <= 0) 0.dp else with(density) { full.toDp() }
 }

@@ -6,7 +6,16 @@ import dev.ide.ui.backend.TestOutput
 import dev.ide.ui.LocalPluginFileOpener
 import dev.ide.ui.LocalPluginNavigator
 import dev.ide.ui.theme.Ide
+import androidx.compose.animation.AnimatedVisibility
+import dev.ide.ui.platform.transientStatusBarHeight
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -243,9 +252,16 @@ internal fun EditorCenter(
     val rightPrimary = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).firstOrNull()
     val claudeLink = dev.ide.ui.components.rememberClaudeLinkState(state.backend)
     Box(modifier) {
-        Column(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
+        // Zen mode hid the status bar, and a swipe in from the top shows it again floating over the window, on top of
+        // the tabs strip and its controls. The strip moves down for as long as it is there.
+        val barPad by androidx.compose.animation.core.animateDpAsState(
+            if (state.zenMode) transientStatusBarHeight() else 0.dp,
+            tween(Motion.BASE, easing = Motion.quiet),
+            label = "zenStatusBar",
+        )
+        Column(Modifier.fillMaxSize().background(Ide.colors.editorBg).padding(top = barPad)) {
             // Zen mode drops the bar; the tabs strip carries its way out.
-            if (!state.zenMode) EditorTopBar(
+            ChromeSlide(!state.zenMode) { EditorTopBar(
                 projectName = project.name,
                 indexStatus = indexStatus,
                 onToggleNav = { state.toggleLeftSidebar() },
@@ -310,7 +326,7 @@ internal fun EditorCenter(
                 onUseWithClaude = if (claudeLink.available) {
                     { pluginNavigator(dev.ide.ui.backend.AgentService.SCREEN_USE_WITH_CLAUDE) }
                 } else null,
-            )
+            ) }
             // Everything under the top bar: the editor proper. A wide layout lays it out between its tool-window
             // stripes and panes (via [frame]) so the bar spans the whole window above them, IntelliJ-style.
             val editorBody: @Composable () -> Unit = {
@@ -422,11 +438,18 @@ internal fun EditorCenter(
                         onCloseToLeft = { state.closeToLeft(it) },
                         onCloseAll = { state.closeAll() },
                         backend = state.backend,
-                        trailing = if (state.zenMode) ({ ZenExitButton { state.setZen(false) } }) else null,
+                        trailing = if (state.zenMode) ({
+                            // The breadcrumb row went with the rest of the chrome; its view switch stays, so a tab
+                            // can still change between code, blocks and preview.
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (active != null) ActiveViewModeToggle(state, active, hasPreview)
+                                ZenExitButton { state.setZen(false) }
+                            }
+                        }) else null,
                     )
                     if (active != null) {
                         EditorDaemonEffect(state, active, indexStatus) { hasPreview = it }
-                        if (!state.zenMode) BreadcrumbBar(state, active, hasPreview)
+                        ChromeSlide(!state.zenMode) { BreadcrumbBar(state, active, hasPreview) }
                         // The code editor and the preview, each as a Modifier-parameterized slot, so the single-pane modes
                         // and the Split layout can place the SAME surfaces without duplicating their (long) wiring.
                         // The editor is covered when an app-level overlay sits on top of it: the command palette or a
@@ -631,6 +654,19 @@ internal fun EditorCenter(
             }
         }
     }
+}
+
+/**
+ * Slides a piece of editor chrome (the top bar, the breadcrumb row) away and back as zen mode turns on and off,
+ * so the editor grows into its room instead of the whole screen jumping.
+ */
+@Composable
+private fun ColumnScope.ChromeSlide(visible: Boolean, content: @Composable () -> Unit) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = expandVertically(tween(Motion.BASE, easing = Motion.quiet)) + fadeIn(tween(Motion.BASE, easing = Motion.soft)),
+        exit = shrinkVertically(tween(Motion.BASE, easing = Motion.quiet)) + fadeOut(tween(Motion.FAST, easing = Motion.soft)),
+    ) { content() }
 }
 
 /** Zen mode's way out, at the end of the tabs strip. It opts out of the screen edge's back-gesture zone, which

@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -488,9 +489,9 @@ internal fun ExpandedLayout(
             Column(Modifier.fillMaxSize()) {
                 // One hairline under the bar, across the stripes too, like IntelliJ's main toolbar border. Zen mode
                 // has no bar and no stripes.
-                if (!state.zenMode) Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                ChromeFade(!state.zenMode) { Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant)) }
                 Row(Modifier.weight(1f).fillMaxWidth()) {
-                    if (!state.zenMode) ActivityRail(
+                    RailSlide(!state.zenMode) { ActivityRail(
                         panels = leftWindows,
                         selectedId = state.shownOn(ToolWindowSide.Left),
                         onSelect = toggle,
@@ -505,7 +506,7 @@ internal fun ExpandedLayout(
                             if (pluginMoreActions.isNotEmpty()) StripeMoreMenu(moreLabel, pluginMoreActions, stripeHost)
                             RailActionItem(CaIcons.gear, settingsLabel, onClick = onOpenHub)
                         },
-                    )
+                    ) }
                     // Centre column spanning the width between the two stripes: the side panes and the editor, and
                     // the bottom pane under them. The stripes stay full-height, so the bottom group and the footer
                     // sit in the lower corner.
@@ -520,7 +521,7 @@ internal fun ExpandedLayout(
                     }
                     // The right stripe shows while a window docks on the right, unless the user hid it (Settings >
                     // Appearance brings it back). During a drag it shows anyway, as a place to drop on.
-                    if (!state.zenMode && ((rightWindows.isNotEmpty() && state.rightStripeVisible) || drag.dragging != null)) {
+                    RailSlide(!state.zenMode && ((rightWindows.isNotEmpty() && state.rightStripeVisible) || drag.dragging != null)) {
                         ActivityRail(
                             panels = rightWindows,
                             selectedId = state.shownOn(ToolWindowSide.Right),
@@ -961,4 +962,28 @@ private fun Modifier.onPress(onPress: () -> Unit): Modifier = pointerInput(Unit)
             if (awaitPointerEvent(PointerEventPass.Initial).type == PointerEventType.Press) onPress()
         }
     }
+}
+
+/** A tool-window stripe sliding in from, and back out to, its edge as zen mode ends and begins. */
+@Composable
+private fun RowScope.RailSlide(visible: Boolean, content: @Composable () -> Unit) {
+    androidx.compose.animation.AnimatedVisibility(
+        visible = visible,
+        enter = androidx.compose.animation.expandHorizontally(tween(Motion.BASE, easing = Motion.quiet)) +
+            androidx.compose.animation.fadeIn(tween(Motion.BASE, easing = Motion.soft)),
+        exit = androidx.compose.animation.shrinkHorizontally(tween(Motion.BASE, easing = Motion.quiet)) +
+            androidx.compose.animation.fadeOut(tween(Motion.FAST, easing = Motion.soft)),
+    ) { content() }
+}
+
+/** The hairline under the top bar, fading with it. */
+@Composable
+private fun ColumnScope.ChromeFade(visible: Boolean, content: @Composable () -> Unit) {
+    androidx.compose.animation.AnimatedVisibility(
+        visible = visible,
+        enter = androidx.compose.animation.expandVertically(tween(Motion.BASE, easing = Motion.quiet)) +
+            androidx.compose.animation.fadeIn(tween(Motion.BASE)),
+        exit = androidx.compose.animation.shrinkVertically(tween(Motion.BASE, easing = Motion.quiet)) +
+            androidx.compose.animation.fadeOut(tween(Motion.FAST)),
+    ) { content() }
 }

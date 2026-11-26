@@ -249,6 +249,10 @@ Nunca recopilamos su código, nombres de archivos o proyectos, lo que escribe o 
     <string name="filetree_copy_to">Copiar a…</string>
     <string name="filetree_select_all">Seleccionar todo</string>
     <string name="filetree_clear_selection">Borrar selección</string>
+    <string name="filetree_select">Seleccionar</string>
+    <string name="filetree_group_edit">Editar</string>
+    <string name="filetree_group_organize">Organizar</string>
+    <string name="filetree_group_file_manager">Gestor de archivos</string>
     <string name="filetree_more_selection">Más acciones para la selección</string>
     <string name="filetree_paste_into">Pegar en %1$s</string>
     <string name="filetree_clear_clipboard">Vaciar portapapeles</string>

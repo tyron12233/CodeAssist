@@ -235,6 +235,10 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, o que você digita o
     <string name="filetree_copy_to">Copiar para…</string>
     <string name="filetree_select_all">Selecionar tudo</string>
     <string name="filetree_clear_selection">Limpar seleção</string>
+    <string name="filetree_select">Selecionar</string>
+    <string name="filetree_group_edit">Editar</string>
+    <string name="filetree_group_organize">Organizar</string>
+    <string name="filetree_group_file_manager">Gerenciador de arquivos</string>
     <string name="filetree_more_selection">Mais ações para a seleção</string>
     <string name="filetree_paste_into">Colar em %1$s</string>
     <string name="filetree_clear_clipboard">Limpar área de transferência</string>

@@ -33,3 +33,11 @@ expect fun HideSystemBars(hidden: Boolean)
  */
 @Composable
 expect fun hiddenSystemBarsWidth(): Dp
+
+/**
+ * The height of the status bar while it is showing over an app that has hidden it (zen mode, after a swipe in from
+ * the top edge), else zero. A transient bar floats over the window instead of resizing it, so the layout's own
+ * inset stays zero and content under it is covered. Android only; elsewhere it is zero.
+ */
+@Composable
+expect fun transientStatusBarHeight(): Dp

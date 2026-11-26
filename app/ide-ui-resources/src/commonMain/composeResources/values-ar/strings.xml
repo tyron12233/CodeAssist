@@ -386,6 +386,10 @@
     <string name="filetree_copy_to">نسخ إلى…</string>
     <string name="filetree_select_all">تحديد الكل</string>
     <string name="filetree_clear_selection">مسح التحديد</string>
+    <string name="filetree_select">تحديد</string>
+    <string name="filetree_group_edit">تحرير</string>
+    <string name="filetree_group_organize">تنظيم</string>
+    <string name="filetree_group_file_manager">مدير الملفات</string>
     <string name="filetree_more_selection">المزيد من الإجراءات للعناصر المحددة</string>
     <string name="filetree_paste_into">لصق في %1$s</string>
     <string name="filetree_clear_clipboard">مسح الحافظة</string>

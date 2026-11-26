@@ -208,6 +208,10 @@
     <string name="filetree_copy_to">Копировать в…</string>
     <string name="filetree_select_all">Выделить всё</string>
     <string name="filetree_clear_selection">Снять выделение</string>
+    <string name="filetree_select">Выбрать</string>
+    <string name="filetree_group_edit">Правка</string>
+    <string name="filetree_group_organize">Организация</string>
+    <string name="filetree_group_file_manager">Файловый менеджер</string>
     <string name="filetree_more_selection">Дополнительные действия для выделенного</string>
     <string name="filetree_paste_into">Вставить в %1$s</string>
     <string name="filetree_clear_clipboard">Очистить буфер обмена</string>

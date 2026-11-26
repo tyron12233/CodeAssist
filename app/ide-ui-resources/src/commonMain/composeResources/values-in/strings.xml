@@ -232,6 +232,10 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek, apa yang Anda ketik,
     <string name="filetree_copy_to">Salin ke…</string>
     <string name="filetree_select_all">Pilih semua</string>
     <string name="filetree_clear_selection">Hapus pilihan</string>
+    <string name="filetree_select">Pilih</string>
+    <string name="filetree_group_edit">Edit</string>
+    <string name="filetree_group_organize">Atur</string>
+    <string name="filetree_group_file_manager">Pengelola file</string>
     <string name="filetree_more_selection">Tindakan lainnya untuk pilihan</string>
     <string name="filetree_paste_into">Tempel ke %1$s</string>
     <string name="filetree_clear_clipboard">Kosongkan papan klip</string>

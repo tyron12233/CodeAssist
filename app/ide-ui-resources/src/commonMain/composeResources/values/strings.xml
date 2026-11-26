@@ -348,6 +348,10 @@ We never collect your code, file or project names, what you type, or anything th
     <string name="filetree_copy_to">Copy To…</string>
     <string name="filetree_select_all">Select All</string>
     <string name="filetree_clear_selection">Clear selection</string>
+    <string name="filetree_select">Select</string>
+    <string name="filetree_group_edit">Edit</string>
+    <string name="filetree_group_organize">Organize</string>
+    <string name="filetree_group_file_manager">File manager</string>
     <string name="filetree_more_selection">More actions for the selection</string>
     <string name="filetree_paste_into">Paste into %1$s</string>
     <string name="filetree_clear_clipboard">Clear clipboard</string>

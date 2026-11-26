@@ -17,3 +17,6 @@ actual fun HideSystemBars(hidden: Boolean) {
 
 @Composable
 actual fun hiddenSystemBarsWidth(): Dp = 0.dp
+
+@Composable
+actual fun transientStatusBarHeight(): Dp = 0.dp

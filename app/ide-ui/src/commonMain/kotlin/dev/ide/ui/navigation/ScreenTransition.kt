@@ -37,22 +37,29 @@ fun ScreenHost(
      * pop as "deeper" slides the user the way they did not come.
      */
     back: Boolean = false,
-    content: @Composable (Screen) -> Unit,
+    /**
+     * What a screen is showing when one destination hosts many pages (a plugin's screen opening another
+     * plugin screen, or one entry of it opening the next with a different argument). A change in it is a
+     * move like any other, so the page animates instead of swapping in place. Handed back to [content]
+     * so an outgoing page keeps rendering the page it was, not whatever the app state says by then.
+     */
+    subRoute: Any? = null,
+    content: @Composable (Screen, Any?) -> Unit,
 ) {
     AnimatedContent(
-        targetState = screen,
+        targetState = screen to subRoute,
         modifier = modifier,
         transitionSpec = { if (isMobilePlatform) mobileSharedAxis(back) else desktopFade() },
         label = "screen",
-    ) { target -> content(target) }
+    ) { target -> content(target.first, target.second) }
 }
 
 /** Mobile shared-axis X — directional slide + fade. `targetState`/`initialState` come from the scope. */
-private fun androidx.compose.animation.AnimatedContentTransitionScope<Screen>.mobileSharedAxis(
+private fun androidx.compose.animation.AnimatedContentTransitionScope<Pair<Screen, Any?>>.mobileSharedAxis(
     back: Boolean,
 ): ContentTransform {
     // The enum's order is the fallback for every screen pair that only ever moves one way.
-    val forward = !back && targetState.ordinal >= initialState.ordinal
+    val forward = !back && targetState.first.ordinal >= initialState.first.ordinal
     val dir = if (forward) 1 else -1
     val enter = slideInHorizontally(
         tween(

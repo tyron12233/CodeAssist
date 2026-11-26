@@ -340,6 +340,10 @@
     <string name="filetree_copy_to">复制到…</string>
     <string name="filetree_select_all">全选</string>
     <string name="filetree_clear_selection">取消选择</string>
+    <string name="filetree_select">选择</string>
+    <string name="filetree_group_edit">编辑</string>
+    <string name="filetree_group_organize">整理</string>
+    <string name="filetree_group_file_manager">文件管理器</string>
     <string name="filetree_more_selection">所选项的更多操作</string>
     <string name="filetree_paste_into">粘贴到 %1$s</string>
     <string name="filetree_clear_clipboard">清空剪贴板</string>
