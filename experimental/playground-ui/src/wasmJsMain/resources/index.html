@@ -48,6 +48,49 @@
   </div>
 </div>
 <script>
+  // `?debug` puts a diagnostics panel over the page: the frame rate, what the editor asks the engine per second, and
+  // the touch, focus and keyboard events, for a problem that only shows on a device nobody can attach a debugger to.
+  (function () {
+    if (!/[?&]debug\b/.test(location.search)) return;
+    var box = document.createElement('pre');
+    box.style.cssText = 'position:fixed;left:0;right:0;bottom:0;max-height:38vh;overflow:hidden;margin:0;padding:4px 6px;z-index:2147483647;background:rgba(0,0,0,.78);color:#9f9;font:10px/1.25 ui-monospace,Menlo,monospace;pointer-events:none;white-space:pre-wrap;word-break:break-all;';
+    var lines = [], t0 = performance.now();
+    function ts() { return ((performance.now() - t0) / 1000).toFixed(2); }
+    function log(m) { lines.push(ts() + ' ' + m); if (lines.length > 40) lines.shift(); }
+    var head = '', frames = 0, worst = 0, last = 0, fps = 0, msgs = {}, msgsSec = '';
+    function draw() { box.textContent = head + '\n' + lines.slice(-24).join('\n'); }
+    function tag(e) { return e && e.tagName ? e.tagName.toLowerCase() + (e.getAttribute && e.getAttribute('aria-hidden') ? '(ime)' : '') : String(e); }
+    document.addEventListener('DOMContentLoaded', function () { document.body.appendChild(box); });
+    (function f(t) { if (last) { frames++; worst = Math.max(worst, t - last); } last = t; requestAnimationFrame(f); })(0);
+    setInterval(function () {
+      fps = frames; frames = 0;
+      msgsSec = Object.keys(msgs).map(function (k) { return k + ':' + msgs[k]; }).join(' ') || '-'; msgs = {};
+      var vv = window.visualViewport;
+      head = 'fps ' + fps + '  worst frame ' + Math.round(worst) + 'ms  to-engine/s ' + msgsSec +
+        '\ndpr ' + window.devicePixelRatio + ' (real ' + (window.__realDpr || '?') + ')  coarse ' + (window.playgroundIme && window.playgroundIme.coarse) +
+        '  vv ' + (vv ? Math.round(vv.width) + 'x' + Math.round(vv.height) + '@' + vv.scale.toFixed(2) : '-') +
+        '  focus ' + tag(document.activeElement) + '  sw ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'yes' : 'no');
+      worst = 0; draw();
+    }, 1000);
+    var post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (m) { try { var k = (m && m.type) || '?'; msgs[k] = (msgs[k] || 0) + 1; } catch (e) {} return post.apply(this, arguments); };
+    ['touchstart', 'touchend', 'touchcancel', 'pointerdown', 'pointerup', 'pointercancel', 'click'].forEach(function (ev) {
+      document.addEventListener(ev, function (e) {
+        var t = e.touches ? (e.changedTouches && e.changedTouches[0]) : e;
+        log(ev + ' ' + tag(e.target) + (e.pointerType ? ' ' + e.pointerType : '') + (t ? ' @' + Math.round(t.clientX) + ',' + Math.round(t.clientY) : '') + (e.defaultPrevented ? ' PREVENTED' : '') + (e.cancelable === false ? ' (not cancelable)' : ''));
+        if (ev === 'touchend') setTimeout(function () { log('  +800ms focus=' + tag(document.activeElement)); }, 800);
+      }, { capture: true, passive: true });
+    });
+    ['focusin', 'focusout', 'beforeinput', 'compositionstart', 'compositionend'].forEach(function (ev) {
+      document.addEventListener(ev, function (e) { log(ev + ' ' + tag(e.target) + (e.inputType ? ' ' + e.inputType : '') + (e.data ? ' "' + e.data + '"' : '')); }, true);
+    });
+    window.addEventListener('error', function (e) { log('ERROR ' + e.message); });
+    window.addEventListener('unhandledrejection', function (e) { log('REJECT ' + (e.reason && e.reason.message || e.reason)); });
+    window.__debugLog = log;
+    log('UA ' + navigator.userAgent.slice(0, 90));
+  })();
+</script>
+<script>
   window.PLAYGROUND_ASSETS = "@ASSETS@";
   (function () {
     var boot = document.getElementById('boot'), bar = boot.querySelector('.bar i'), err = boot.querySelector('.err');
@@ -151,14 +194,15 @@
         if (boot && boot.style.display !== 'none') return;
         if (!ta) make();
         ta.focus({ preventScroll: true });
-        setTimeout(function () { if (!claimed && document.activeElement === ta) ta.blur(); }, 700);
+        if (window.__debugLog) window.__debugLog('touchend: focus ime -> active=' + (document.activeElement === ta ? 'ime' : document.activeElement && document.activeElement.tagName));
+        setTimeout(function () { if (window.__debugLog) window.__debugLog('700ms: claimed=' + claimed); if (!claimed && document.activeElement === ta) ta.blur(); }, 700);
       }, { capture: true, passive: true });
     }
     return {
       coarse: coarse,
-      attach: function (h) { handler = h; return coarse; },
+      attach: function (h) { handler = h; if (window.__debugLog) window.__debugLog('ime.attach coarse=' + coarse); return coarse; },
       detach: function () { handler = null; claimed = false; if (ta && document.activeElement === ta) ta.blur(); },
-      show: function () { if (!coarse || !handler) return; if (!ta) make(); claimed = true; if (document.activeElement !== ta) { reset(); ta.focus({ preventScroll: true }); } },
+      show: function () { if (window.__debugLog) window.__debugLog('ime.show coarse=' + coarse + ' handler=' + !!handler + ' active=' + (document.activeElement && document.activeElement.tagName)); if (!coarse || !handler) return; if (!ta) make(); claimed = true; if (document.activeElement !== ta) { reset(); ta.focus({ preventScroll: true }); } },
       hide: function () { claimed = false; if (ta && document.activeElement === ta) ta.blur(); }
     };
   })();
@@ -171,6 +215,7 @@
     var want = parseFloat(new URLSearchParams(location.search).get('dpr'));
     var coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
     var real = window.devicePixelRatio || 1;
+    window.__realDpr = real;
     var use = want > 0 ? want : (coarse ? Math.min(real, 2) : real);
     if (use !== real) Object.defineProperty(window, 'devicePixelRatio', { get: function () { return use; }, configurable: true });
   })();
