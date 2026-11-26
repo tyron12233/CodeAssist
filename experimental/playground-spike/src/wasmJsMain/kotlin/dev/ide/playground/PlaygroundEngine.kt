@@ -23,6 +23,10 @@ class RunOutcome(
     val error: String?,
     val lowerMillis: Long,
     val runMillis: Long,
+    /** Bytecode instructions the VM executed for the run: how much interpreting a program cost, whatever the clock says. */
+    val vmSteps: Long = 0,
+    /** With `profile = true`: the methods that executed the most bytecode, with the instructions run in each. */
+    val hot: List<Pair<String, Long>> = emptyList(),
 )
 
 /**
@@ -52,7 +56,7 @@ class PlaygroundEngine(
     private val classPath = ClassPath(classpath)
     private val stdlib = classpath.single { it.substringAfterLast('/').startsWith("kotlin-stdlib-") }
 
-    fun run(source: String): RunOutcome {
+    fun run(source: String, profile: Boolean = false): RunOutcome {
         val out = StringBuilder()
         val start = TimeSource.Monotonic.markNow()
         var lowered = 0L
@@ -61,7 +65,7 @@ class PlaygroundEngine(
             lowered = start.elapsedNow().inWholeMilliseconds
             val vm = Vm(classPath, stdout = { out.append(it) })
             val result = vm.invokeStatic("dev/ide/interp/VmProgramEntry", "run", "([BJI)Ljava/lang/String;", blob, budgetMillis, callDepth) as String
-            RunOutcome(out.toString(), result, null, lowered, start.elapsedNow().inWholeMilliseconds - lowered)
+            RunOutcome(out.toString(), result, null, lowered, start.elapsedNow().inWholeMilliseconds - lowered, vm.steps, if (profile) vm.hotMethods(30) else emptyList())
         } catch (e: Throwable) {
             RunOutcome(out.toString(), null, e.message ?: e.toString(), lowered, start.elapsedNow().inWholeMilliseconds - lowered)
         }

@@ -166,6 +166,8 @@ class VmMethod internal constructor(
     internal val access: Int,
 ) {
     internal var code: ByteArray? = null
+    /** Bytecode instructions executed IN this method (not in what it called), over the VM's life: see [Vm.hotMethods]. */
+    @kotlin.jvm.JvmField internal var selfSteps = 0L
     internal var maxStack = 0
     internal var maxLocals = 0
     internal var handlers: Array<ExceptionHandler> = NO_HANDLERS

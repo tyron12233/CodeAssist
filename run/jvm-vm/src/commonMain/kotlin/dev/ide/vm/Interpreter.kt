@@ -565,6 +565,7 @@ internal fun Vm.execute(m: VmMethod, t: VmThread, bp: Int) {
         t.depth--
         t.top = savedTop
         t.steps += steps
+        m.selfSteps += steps
     }
 }
 

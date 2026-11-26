@@ -80,4 +80,36 @@ class PlaygroundPipelineTest {
             stdout,
         )
     }
+
+    /** How many VM steps one interpreted loop iteration / call costs: the multiplier a compiler would remove. */
+    @Test
+    fun whatInterpretingCostsInVmSteps() {
+        mountHostFiles(VmClasspath.entries)
+        val engine = PlaygroundEngine(VmClasspath.entries, budgetMillis = 120_000)
+        fun steps(label: String, body: String, iterations: Int): Long {
+            val o = engine.run("package demo\nfun main() {\n$body\n}\n")
+            check(o.error == null) { "$label: ${o.error}" }
+            println("COST $label: ${o.vmSteps} steps, ${o.runMillis} ms for $iterations iterations")
+            return o.vmSteps
+        }
+        val base = steps("empty", "", 1)
+        val a = steps("loop 2000", "var s = 0L\nfor (i in 1..2000) { s += i }\nprintln(s)", 2000)
+        val b = steps("loop 4000", "var s = 0L\nfor (i in 1..4000) { s += i }\nprintln(s)", 4000)
+        println("COST per iteration of `s += i`: ${(b - a) / 2000} VM steps")
+        val c = steps("while 2000", "var i = 0\nvar acc = 1\nwhile (i < 2000) { acc = acc * 3 % 1000003 + i; i++ }\nprintln(acc)", 2000)
+        val d = steps("while 4000", "var i = 0\nvar acc = 1\nwhile (i < 4000) { acc = acc * 3 % 1000003 + i; i++ }\nprintln(acc)", 4000)
+        println("COST per iteration of `acc = acc * 3 % 1000003 + i; i++` + `i < n`: ${(d - c) / 2000} VM steps")
+        println("COST startup (empty main): $base steps")
+    }
+
+    @Test
+    fun whereTheStepsGo() {
+        mountHostFiles(VmClasspath.entries)
+        val engine = PlaygroundEngine(VmClasspath.entries, budgetMillis = 120_000)
+        val o = engine.run("package demo\nfun main() {\nvar s = 0L\nfor (i in 1..4000) { s += i }\nprintln(s)\n}\n", profile = true)
+        check(o.error == null) { "${o.error}" }
+        val total = o.vmSteps.toDouble()
+        println("HOT total ${o.vmSteps} steps")
+        for ((name, steps) in o.hot) println("HOT ${(steps * 1000 / total).toInt() / 10.0}% ${steps} $name")
+    }
 }
