@@ -1779,6 +1779,9 @@ private fun EditorCanvasLayer(
                 },
             )
             .drawBehind {
+                // Observed so a re-bin of the overlays (colours, hints) that arrives without an edit redraws: see
+                // EditorRenderState.overlayEpoch.
+                @Suppress("UNUSED_VARIABLE") val overlayEpoch = renderState.overlayEpoch
                 // Interpolate the drawn selection span for an in-flight expand animation (reads snapshot
                 // state → this draw re-runs per frame while it animates). Before the tween has started for
                 // this request, treat progress as 0 (draw the pre-expand span) so the final range never

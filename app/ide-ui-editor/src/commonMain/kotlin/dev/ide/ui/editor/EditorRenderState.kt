@@ -2,6 +2,9 @@ package dev.ide.ui.editor
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
@@ -58,6 +61,18 @@ internal class EditorRenderState(private val session: EditorSession) {
 
     /** Keeps the render cache's semantic / inlay / decoration overlays in step with the session. */
     internal val overlays = OverlayBinner()
+
+    /**
+     * Moves each time [overlays] re-bins into the render cache, and the canvas reads it while drawing.
+     *
+     * The render cache is a plain object. When the daemon lands new semantic tokens or inlay hints with no edit
+     * to go with them, composition re-bins them into it, but nothing the canvas observes has changed, so the
+     * canvas is not redrawn until something else invalidates it (a keystroke, a pointer over it). A caret blink
+     * or typing usually does, which is why this went unseen; an editor that is unfocused when its first results
+     * arrive shows plain text until the pointer moves over it. Reading this in the draw makes the cache's
+     * change an invalidation of its own.
+     */
+    var overlayEpoch by mutableIntStateOf(0)
 
     internal lateinit var measurer: TextMeasurer
     internal lateinit var compositeCache: HashMap<Int, CompositeEntry>
@@ -274,7 +289,7 @@ internal fun rememberEditorRenderState(
     // strikethrough decorations layer OVER the semantic tokens (see mergeSpanLayers), and its geometric ones
     // go to the canvas as `decoByLine`.
     val inlayStyle = remember(editorColors, colors) { editorColors.inlayHintStyle(colors.textTertiary) }
-    state.overlays.sync(session, state.renderCache, editorColors, colors, inlayStyle)
+    if (state.overlays.sync(session, state.renderCache, editorColors, colors, inlayStyle)) state.overlayEpoch++
     state.decoByLine = state.overlays.decoByLine
 
     val foldPlaceholderStyle = remember(editorColors, colors) {
