@@ -45,6 +45,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import dev.ide.ui.platform.isMobilePlatform
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -460,7 +461,7 @@ fun FileNavigator(
             undo = fileOps?.onUndo,
             escape = { if (selection.hasSelection()) { selection.clear(); true } else false },
         )
-        PullToRefreshBox(
+        RefreshableBox(
             isRefreshing = isRefreshing,
             onRefresh = {
                 refreshScope.launch {
@@ -1623,4 +1624,25 @@ private fun gitColor(status: GitStatus): Color = when (status) {
     GitStatus.Modified -> Ide.colors.gitModified
     GitStatus.Deleted -> Ide.colors.gitDeleted
     GitStatus.Untracked -> Ide.colors.gitUntracked
+}
+
+/**
+ * Pull-to-refresh where there is a finger to pull with; a plain [Box] elsewhere. On Compose for web the
+ * Material3 [PullToRefreshBox] keeps showing the content it first composed: a later recomposition of its
+ * `content` (a new row in the list, a moved highlight) never reaches the screen until the panel is rebuilt.
+ * A mouse has no use for the gesture anyway (the tree's menu has Refresh).
+ *
+ * `inline` matters: the plain [Box] then composes [content] in the caller's own scope, so a changed row list or active
+ * file reaches the screen with the caller's recomposition, as it would not through a scope of its own.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private inline fun RefreshableBox(
+    isRefreshing: Boolean,
+    noinline onRefresh: () -> Unit,
+    modifier: Modifier,
+    crossinline content: @Composable BoxScope.() -> Unit,
+) {
+    if (isMobilePlatform) PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = onRefresh, modifier = modifier) { content() }
+    else Box(modifier) { content() }
 }
