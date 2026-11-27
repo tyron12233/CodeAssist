@@ -207,7 +207,7 @@ object KotlinSymbols {
     ): Symbol {
         val scope = outerScope + declaration.typeParameters.associate { it.id to it.name }
         val receiver = declaration.receiverType
-        val receiverFqn = receiver?.let { receiverInfo(it, declaration.typeParameters) }
+        val receiverFqn = receiver?.let { receiverInfo(it, declaration.typeParameters, scope) }
         val parameters = declaration.parameters.joinToString(", ") {
             "${it.name}: ${typeText(it.varargElementType ?: it.type, scope)}"
         }
@@ -247,7 +247,7 @@ object KotlinSymbols {
     ): Symbol {
         val scope = outerScope + declaration.typeParameters.associate { it.id to it.name }
         val receiver = declaration.receiverType
-        val receiverFqn = receiver?.let { receiverInfo(it, declaration.typeParameters) }
+        val receiverFqn = receiver?.let { receiverInfo(it, declaration.typeParameters, scope) }
         return Symbol(
             name = declaration.name,
             kind = SymbolKind.FIELD,
@@ -298,6 +298,7 @@ object KotlinSymbols {
     private fun receiverInfo(
         receiver: KotlinType,
         declared: List<KotlinTypeParameter>,
+        scope: Map<Int, String>,
     ): Pair<String?, String?> {
         if (!receiver.isTypeParameter) return receiver.classifier to null
         // Matched by id when the metadata numbered the reference and by name when it named it. Matching on
@@ -306,7 +307,10 @@ object KotlinSymbols {
         val parameter = declared.firstOrNull { it.id == receiver.typeParameterId }
             ?: declared.firstOrNull { it.name == receiver.typeParameterName }
         val bound = parameter?.upperBounds?.firstNotNullOfOrNull { classifierFqn(it) } ?: "kotlin.Any"
-        return bound to parameter?.name
+        // A member extension such as `val T.size` on `class Builder<T>` takes its receiver from the CLASS, so it
+        // is not among the declaration's own parameters; the enclosing scope names it.
+        val name = parameter?.name ?: scope[receiver.typeParameterId] ?: receiver.typeParameterName
+        return bound to name
     }
 
     /**
