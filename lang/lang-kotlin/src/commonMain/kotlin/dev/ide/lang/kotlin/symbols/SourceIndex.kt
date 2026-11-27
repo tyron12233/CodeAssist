@@ -215,6 +215,10 @@ class RawClass(
      *  interface/enum/annotation/object. Such a class cannot be extended (Kotlin classes are final by default),
      *  driving the final-supertype check. An `object` (which also can't be extended) is signalled by [isObject]. */
     val isFinalClass: Boolean = false,
+    /** True for an `expect class`: a declaration with no bodies, whose `actual` in a platform source set is the one
+     *  to resolve members against and to run. [ModuleSourceModel.classByFqn] never lets it displace an `actual`,
+     *  whatever order the files were listed in. */
+    val isExpect: Boolean = false,
     /** True for a LOCAL type: an anonymous object (`object : T { }` / `object { }`) or a class/object declared
      *  inside a function/initializer body. Its [fqn] is a synthetic, deterministic key ([SourceIndexBuilder.
      *  localTypeFqn]) that the resolver recomputes from the same PSI, so member enumeration / diagnostics flow
@@ -292,7 +296,7 @@ internal fun RawClass.carried(
     typeParameterBounds = typeParameterBounds, typeParameterVariance = typeParameterVariance,
     enumEntries = enumEntries, companionObjectName = companionObjectName, isCompanion = isCompanion,
     isInterface = isInterface, isEnum = isEnum, isAnnotation = isAnnotation, isAbstract = isAbstract,
-    isSealed = isSealed, isFinalClass = isFinalClass, isLocal = isLocal, isPrivate = isPrivate,
+    isSealed = isSealed, isFinalClass = isFinalClass, isExpect = isExpect, isLocal = isLocal, isPrivate = isPrivate,
     annotationNames = annotationNames, annotationFqns = annotationFqns, optInLevel = optInLevel,
     superClassText = superClassText,
 ).also { it.nodeSource = nodeSource }
@@ -364,7 +368,7 @@ private fun sameClass(a: RawClass, b: RawClass): Boolean =
         a.typeParameterVariance == b.typeParameterVariance && a.enumEntries == b.enumEntries &&
         a.companionObjectName == b.companionObjectName && a.isCompanion == b.isCompanion &&
         a.isInterface == b.isInterface && a.isEnum == b.isEnum && a.isAnnotation == b.isAnnotation &&
-        a.isAbstract == b.isAbstract && a.isSealed == b.isSealed && a.isFinalClass == b.isFinalClass &&
+        a.isAbstract == b.isAbstract && a.isSealed == b.isSealed && a.isFinalClass == b.isFinalClass && a.isExpect == b.isExpect &&
         a.isLocal == b.isLocal && a.isPrivate == b.isPrivate && a.annotationNames == b.annotationNames &&
         a.annotationFqns == b.annotationFqns && a.optInLevel == b.optInLevel && a.superClassText == b.superClassText
 
@@ -375,11 +379,18 @@ private fun sameAlias(a: TypeAliasDecl, b: TypeAliasDecl): Boolean =
 class ModuleSourceModel(val files: List<SourceFile>) {
     /** A classifier one FILE declares twice under one name (CLASSIFIER_REDECLARATION) resolves to its first
      *  declaration there, as K2 does: `sealed interface SE` then `abstract class SE` leaves `: SE` naming the
-     *  interface. Across files the later file's declaration is kept, as before. */
+     *  interface. Across files the later file's declaration is kept, as before, except that an `expect class` never
+     *  replaces its `actual` (nor is kept over one): which of the two a directory listing yields last is an accident
+     *  of the file system (sorted on APFS, hash order on ext4), and only the `actual` has members with bodies. */
     val classByFqn: Map<String, RawClass> = LinkedHashMap<String, RawClass>().also { m ->
         for (f in files) {
             val seen = HashSet<String>()
-            for (c in f.classes) if (seen.add(c.fqn)) m[c.fqn] = c
+            for (c in f.classes) {
+                if (!seen.add(c.fqn)) continue
+                val kept = m[c.fqn]
+                if (c.isExpect && kept != null && !kept.isExpect) continue
+                m[c.fqn] = c
+            }
         }
     }
     val topLevel: List<RawCallable> = files.flatMap { it.topLevel }
@@ -875,6 +886,7 @@ object SourceIndexBuilder {
                     !it.hasModifier(KtTokens.OPEN_KEYWORD) && !it.hasModifier(KtTokens.ABSTRACT_KEYWORD) &&
                     !it.hasModifier(KtTokens.SEALED_KEYWORD)
             } == true,
+            isExpect = c.hasModifier(KtTokens.EXPECT_KEYWORD),
             isLocal = isLocal,
             isPrivate = c.hasModifier(KtTokens.PRIVATE_KEYWORD),
             annotationNames = c.annotationEntries.mapNotNull { it.shortName?.asString() },
