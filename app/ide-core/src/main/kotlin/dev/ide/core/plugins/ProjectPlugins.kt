@@ -57,7 +57,7 @@ object ProjectPlugins {
     fun read(root: Path): List<Entry> = runCatching {
         val f = file(root)
         if (!Files.isRegularFile(f)) return emptyList()
-        val doc = Json.parse(Files.readString(f)) as? Map<*, *> ?: return emptyList()
+        val doc = Json.parse(String(Files.readAllBytes(f), Charsets.UTF_8)) as? Map<*, *> ?: return emptyList()
         (doc["required"] as? List<*>).orEmpty().mapNotNull { e ->
             val m = e as? Map<*, *> ?: return@mapNotNull null
             val id = (m["id"] as? String)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
@@ -76,7 +76,7 @@ object ProjectPlugins {
         )
         Files.createDirectories(f.parent)
         val tmp = f.resolveSibling("$FILE.tmp")
-        Files.writeString(tmp, Json.write(doc))
+        Files.write(tmp, Json.write(doc).toByteArray(Charsets.UTF_8))
         Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
     }
 

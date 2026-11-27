@@ -67,9 +67,16 @@ class CaretLayerTest {
             scene.sendPointerEvent(PointerEventType.Release, at, type = PointerType.Mouse)
             pump(150)
             val shown = scene.render(frame)
-            // The caret hides 530 ms after it last moved and shows again 530 ms after that.
-            pump(650)
-            val hidden = scene.render(frame)
+            // The caret hides 530 ms after it last moved, which on a slow or busy machine is later than that, because
+            // the blink's clock starts when focus lands, not when the click is sent. So look through a window for
+            // the frame where it is hidden instead of sampling one instant, which made this test fail on main too.
+            var hidden = shown
+            var waited = 0L
+            while (waited < 3_000L && diffBounds(shown, hidden) == null) {
+                pump(4 * FRAME_MS)
+                waited += 4 * FRAME_MS
+                hidden = scene.render(frame)
+            }
             return shown to hidden
         } finally {
             scene.close()
