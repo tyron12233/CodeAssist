@@ -32,6 +32,9 @@ import kotlin.test.fail
  *
  * The same command re-records after the fixture itself changes (a Kotlin upgrade replaces the stdlib jar).
  *
+ * Not covered: `java.classLocator`, whose values are the owning jar's absolute path (`normalizedJarKey`), so its segments
+ * differ with the machine's Gradle cache directory and a hash recorded on one machine fails on every other, CI included.
+ *
  * Not covered: a library `res/` folder. The resource index stores each declaring file's absolute path, so its
  * segments differ with the directory they were built in and have no stable hash.
  */
@@ -71,6 +74,11 @@ class IndexFormatFingerprintTest {
         if (stale.isNotEmpty()) {
             fail("index-fingerprints.txt is behind the indexers:\n  " + stale.joinToString("\n  ") + "\nRe-record it:\n  $update")
         }
+    }
+
+    private companion object {
+        /** Indexes whose segments embed an absolute path, so they have no hash that holds across machines. */
+        val PATH_DEPENDENT = setOf("java.classLocator")
     }
 
     private data class Entry(val version: Int, val hash: String)
@@ -123,7 +131,7 @@ class IndexFormatFingerprintTest {
                 service.close()
             }
             // An indexer with nothing to say about these inputs still writes an (empty) segment, so it is recorded too.
-            val indexes = BUILT_IN_INDEX_EXTENSIONS.associate { ext ->
+            val indexes = BUILT_IN_INDEX_EXTENSIONS.filter { it.id.value !in PATH_DEPENDENT }.associate { ext ->
                 val md = MessageDigest.getInstance("SHA-256")
                 val root = cache.resolve(ext.id.value)
                 val segments = if (!Files.isDirectory(root)) emptyList() else Files.walk(root).use { s ->
