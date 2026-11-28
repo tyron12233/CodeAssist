@@ -240,6 +240,17 @@ class CodeAssistAppState(
     var pluginsFocus: String? by mutableStateOf(null)
         private set
 
+    /**
+     * A project the picker held back because a plugin it needs is not working here, and what is missing: asked
+     * about (get it, turn it on, or open anyway) before the project opens as one this IDE cannot build.
+     */
+    var pluginGate: PluginGate? by mutableStateOf(null)
+        private set
+
+    /** True while the open project is closed and opened again: the editor stays put instead of leaving for Home. */
+    var reopening by mutableStateOf(false)
+        private set
+
     /** Where the Settings and Tools hub returns on Back: the picker (opened with no project) or the editor. */
     var hubReturn: Screen by mutableStateOf(Screen.Editor)
         private set
@@ -635,9 +646,9 @@ class CodeAssistAppState(
         screen = Screen.PluginScreen
     }
 
-    /** Home's "Get plugins" card: the Plugins screen on its download tab, back to Home. */
-    fun openGetPlugins() {
-        pluginsReturn = Screen.Projects
+    /** Home's "Get plugins" card: the Plugins screen on its download tab, back to Home (or [returnTo]). */
+    fun openGetPlugins(returnTo: Screen = Screen.Projects) {
+        pluginsReturn = returnTo
         pluginsStartTab = dev.ide.ui.screens.PluginsTab.Get
         // The hub's own return too: the Plugins screen is one of its panes, and every Back path that goes
         // through the hub (the wide layout's, the phone's Plugins -> Hub -> back) must land on Home, not on an
@@ -661,11 +672,13 @@ class CodeAssistAppState(
 
     /**
      * The Plugins screen on its Installed tab, back to Home: where a "plugin was turned off after it crashed"
-     * or "started without plugins" notification leads, so the user can see which and turn it back on.
+     * or "started without plugins" notification leads, so the user can see which and turn it back on. A project
+     * that needs a plugin which is not allowed (or did not load) sends the user here too, back to [returnTo].
      */
-    fun openInstalledPlugins() {
-        pluginsReturn = Screen.Projects
+    fun openInstalledPlugins(returnTo: Screen = Screen.Projects) {
+        pluginsReturn = returnTo
         pluginsStartTab = dev.ide.ui.screens.PluginsTab.Installed
+        pluginsFocus = null
         hubReturn = Screen.Projects
         screen = Screen.Plugins
     }
@@ -751,7 +764,77 @@ class CodeAssistAppState(
 
     fun openProject(project: ProjectInfo) {
         resumeSuperseded = true
-        scope.launch { if (backend.projects.openProject(project.rootPath)) enterEditor() }
+        openChecked(project.rootPath)
+    }
+
+    /** Open [rootPath] into the editor, unless a plugin it needs is missing: then [pluginGate] asks first. */
+    private fun openChecked(rootPath: String, onRefused: () -> Unit = {}) {
+        scope.launch {
+            val check = runCatching { backend.projects.projectPluginCheck(rootPath) }.getOrNull()
+            // The project still loaded behind the picker, and all it lacks is a plugin that arrived since: back into
+            // its editor, whose notice offers the reopen (which saves its open files first).
+            val onlyArrivedSince = check != null && check.unknownModuleTypes.isEmpty() &&
+                check.plugins.all { it.state == dev.ide.ui.backend.UiProjectPluginState.NOT_LOADED }
+            if (check != null && !check.ok && !onlyArrivedSince) {
+                pluginGate = PluginGate(rootPath, check)
+                return@launch
+            }
+            if (backend.projects.openProject(rootPath)) enterEditor() else onRefused()
+        }
+    }
+
+    /** The gated project's "Open anyway": it opens with what it has, and its editor keeps saying what is missing. */
+    fun openGatedProject() {
+        val gate = pluginGate ?: return
+        pluginGate = null
+        scope.launch { if (backend.projects.openProject(gate.rootPath)) enterEditor() else refreshProjects() }
+    }
+
+    fun dismissPluginGate() {
+        pluginGate = null
+    }
+
+    /**
+     * The gated project's fix for [plugin]: download it, or turn it on (and open the project once that is all
+     * it needed), or review it on the Plugins screen. Null is a project that names only module types nothing
+     * provides: the Get plugins page.
+     */
+    fun resolveGatedPlugin(plugin: dev.ide.ui.backend.UiProjectPlugin?) {
+        val gate = pluginGate ?: return
+        when (plugin?.state) {
+            null -> { pluginGate = null; openGetPlugins() }
+            dev.ide.ui.backend.UiProjectPluginState.NOT_INSTALLED -> { pluginGate = null; openGetPlugin(plugin.id) }
+            dev.ide.ui.backend.UiProjectPluginState.TURNED_OFF -> scope.launch {
+                withContext(ioDispatcher) { backend.settings.setPluginEnabled(plugin.id, true) }
+                pluginGate = null
+                openChecked(gate.rootPath)
+            }
+            else -> { pluginGate = null; openInstalledPlugins() }
+        }
+    }
+
+    /** The editor notice's fix for [plugin], for the steps that leave the editor (turning one on happens in place). */
+    fun resolveProjectPlugin(plugin: dev.ide.ui.backend.UiProjectPlugin?) {
+        when (plugin?.state) {
+            null -> openGetPlugins(returnTo = screen)
+            dev.ide.ui.backend.UiProjectPluginState.NOT_INSTALLED -> openGetPlugin(plugin.id)
+            else -> openInstalledPlugins(returnTo = screen)
+        }
+    }
+
+    /**
+     * Close the open project and open it again, after [saveAll] has written its edits: the way a project takes
+     * up a plugin that started running since it was opened. The editor stays on screen through the close.
+     */
+    fun reopenProject(saveAll: () -> Unit) {
+        if (reopening) return
+        saveAll()
+        reopening = true
+        scope.launch {
+            val ok = runCatching { backend.projects.reopenProject() }.getOrDefault(false)
+            reopening = false
+            if (ok) enterEditor() else navigateTo(Screen.Projects)
+        }
     }
 
     fun deleteProject(project: ProjectInfo) {
@@ -823,9 +906,7 @@ class CodeAssistAppState(
      */
     fun openInstalledProject(rootPath: String) {
         resumeSuperseded = true
-        scope.launch {
-            if (backend.projects.openProject(rootPath)) enterEditor() else refreshProjects()
-        }
+        openChecked(rootPath, onRefused = { refreshProjects() })
     }
 
     fun createProject(templateId: String? = null) {
@@ -1623,3 +1704,6 @@ internal fun isDarkTheme(settings: UiSettings, systemDark: Boolean): Boolean = w
     "system" -> systemDark
     else -> true
 }
+
+/** A project held back from opening ([CodeAssistAppState.pluginGate]): where it is, and what it is missing. */
+data class PluginGate(val rootPath: String, val check: dev.ide.ui.backend.UiProjectPluginCheck)

@@ -1,6 +1,7 @@
 package dev.ide.ui
 
 import androidx.compose.runtime.staticCompositionLocalOf
+import dev.ide.ui.backend.BackendText
 import dev.ide.ui.backend.FileActions
 
 /**
@@ -32,3 +33,13 @@ val LocalPluginFileOpener = staticCompositionLocalOf<(String, Int) -> Unit> { { 
  * takes the user to the setting it is about. Default no-op.
  */
 val LocalSettingsPageOpener = staticCompositionLocalOf<(String) -> Unit> { {} }
+
+/**
+ * The translation table for the text the backend writes in English (see [BackendText]), for the language the
+ * UI is showing. Empty, so everything passes through as written, until the table has loaded and for every
+ * language that has none.
+ *
+ * Read it where the text is shown, not where it is fetched: the table loads after the first frames, and text
+ * translated while it was still empty would stay English for as long as that value is kept.
+ */
+val LocalBackendText = staticCompositionLocalOf { BackendText.EMPTY }

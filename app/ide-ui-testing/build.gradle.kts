@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // StubBackend: an `IdeBackend` that answers with empty, so a test can render a component, an editor or a
@@ -27,6 +28,9 @@ kotlin {
     // has to build for the iOS targets too.
     iosSimulatorArm64()
     iosArm64()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { browser() }
 
     sourceSets {
         commonMain.dependencies {

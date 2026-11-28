@@ -4,6 +4,10 @@ import dev.ide.store.PendingSubmission
 import dev.ide.store.StoreModerationService
 import dev.ide.store.StoreResult
 import dev.ide.ui.backend.UiListingEdit
+import dev.ide.ui.backend.UiListingState
+import dev.ide.ui.backend.UiModeratedItem
+import dev.ide.ui.backend.UiModeratedReport
+import dev.ide.ui.backend.UiModeratedVersion
 import dev.ide.ui.backend.UiModerationQueue
 import dev.ide.ui.backend.UiPendingSubmission
 import dev.ide.ui.backend.UiReportedContent
@@ -91,6 +95,12 @@ class StoreModeration(private val moderation: StoreModerationService) {
                     reviewStars = it.reviewStars,
                     reviewText = it.reviewText,
                     reviewHidden = it.reviewStatus == "hidden",
+                    itemState = it.itemStatus?.let { s -> listingState(s, it.itemHoldKind) },
+                    itemOpenReports = it.itemOpenReports,
+                    isPublisherReport = it.isPublisherReport,
+                    publisherHandle = it.publisherHandle,
+                    publisherName = it.publisherName,
+                    publisherBanned = it.publisherBanned,
                 )
             }
             else -> emptyList()
@@ -98,6 +108,48 @@ class StoreModeration(private val moderation: StoreModerationService) {
 
     fun resolveReport(reportId: String, actioned: Boolean): String? =
         message(moderation.resolveReport(reportId, actioned))
+
+    fun item(slug: String): UiModeratedItem? =
+        (moderation.item(slug) as? StoreResult.Ok)?.value?.let { m ->
+            UiModeratedItem(
+                slug = m.slug,
+                title = m.title,
+                state = listingState(m.status, m.holdKind),
+                holdReason = m.holdReason,
+                purgeAtMs = m.purgeAt?.let { parseInstantMs(it) },
+                editorsChoice = m.editorsChoice,
+                publisherHandle = m.publisherHandle,
+                publisherName = m.publisherName,
+                publisherBanned = m.publisherBanned,
+                publisherVerified = m.publisherVerified,
+                versions = m.versions.map { UiModeratedVersion(it.version, it.versionCode, it.current) },
+                openReports = m.openReports.map { UiModeratedReport(it.reason, it.detail) },
+            )
+        }
+
+    fun setEditorsChoice(slug: String, on: Boolean): String? = message(moderation.setEditorsChoice(slug, on))
+
+    fun archive(slug: String, archived: Boolean, reason: String?): String? =
+        message(moderation.archive(slug, archived, reason))
+
+    fun remove(slug: String, reason: String): String? = message(moderation.remove(slug, reason))
+
+    fun rollback(slug: String, versionCode: Int, reason: String): String? =
+        message(moderation.rollback(slug, versionCode, reason))
+
+    fun setPublisherBanned(handle: String, banned: Boolean): String? =
+        message(moderation.setPublisherBanned(handle, banned))
+
+    fun setPublisherVerified(handle: String, verified: Boolean): String? =
+        message(moderation.setPublisherVerified(handle, verified))
+
+    /** The backend's listing status (and why an unlisted one is held) as the UI's state. */
+    private fun listingState(status: String, holdKind: String?): UiListingState = when (status) {
+        "approved" -> UiListingState.LISTED
+        "unlisted" -> if (holdKind == "reports") UiListingState.HELD_FOR_REPORTS else UiListingState.ARCHIVED
+        "removed" -> UiListingState.REMOVED
+        else -> UiListingState.OTHER
+    }
 
     fun setReviewHidden(itemSlug: String, authorId: String, hidden: Boolean): String? =
         message(moderation.setReviewHidden(itemSlug, authorId, hidden))

@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // The app shell: the navigation graph, the overlay stack, the root composable, and the application state
@@ -38,6 +39,9 @@ kotlin {
     // its own backend and calls `CodeAssistApp`, exactly as :ide-desktop and :ide-android do.
     iosSimulatorArm64()
     iosArm64()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { browser() }
 
     sourceSets {
         commonMain.dependencies {

@@ -4,6 +4,7 @@ import dev.ide.ui.editor.core.MergeConflict
 import dev.ide.ui.backend.UiFeatures
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.withTransform
 import dev.ide.ui.backend.UiDiagnostic
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.input.pointer.pointerInput
@@ -27,6 +28,7 @@ import androidx.compose.runtime.NonSkippableComposable
 import androidx.compose.runtime.State
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.CoroutineScope
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -155,6 +157,8 @@ fun CodeEditor(
     onOtherFileEdits: suspend (Map<String, List<UiTextEdit>>) -> Unit = { },
     /** Whether typing auto-opens the completion popup (Settings → Completion); Ctrl-Space always works. */
     completionAutoPopup: Boolean = true,
+    /** Enter (as well as Tab) accepts the highlighted completion; off = Enter starts a new line. */
+    completionEnterAccepts: Boolean = true,
     /** Debounce (ms) before an auto-popup completion request (Settings → Completion → Advanced). */
     completionDelayMs: Int = 110,
     /**
@@ -212,6 +216,7 @@ fun CodeEditor(
             onFontScaleChange,
             onPreview,
             completionAutoPopup,
+            completionEnterAccepts,
             completionDelayMs,
             twoAxisScroll,
             pinchZoom,
@@ -247,6 +252,8 @@ private fun CodeEditorContent(
     onFontScaleChange: (Float) -> Unit = {},
     onPreview: (variantId: String) -> Unit = {},
     completionAutoPopup: Boolean = true,
+    /** Enter (as well as Tab) accepts the highlighted completion; off = Enter starts a new line. */
+    completionEnterAccepts: Boolean = true,
     completionDelayMs: Int = 110,
     twoAxisScroll: Boolean = isMobilePlatform,
     pinchZoom: Boolean = true,
@@ -290,6 +297,9 @@ private fun CodeEditorContent(
         snapshotFlow { geometry.visibleLineRange() }.collect { session.viewportLines = it }
     }
     val interaction = rememberEditorInteraction(session, geometry, wordWrap)
+    // The committed size has arrived: the pinch preview (a scale of the old layout) is over. Until it has, the preview
+    // factor is `pinchTarget / zoom`, which is 1 the moment zoom reaches the target, so nothing jumps in between.
+    LaunchedEffect(zoom) { interaction.pinchTarget = 0f }
     val metrics = renderState.metrics
     val gutterWidthPx = renderState.gutterWidthPx
     // Read the viewport so this composable re-subscribes to resize (keeps the geometry per-frame values fresh)
@@ -1289,13 +1299,30 @@ private fun CodeEditorContent(
                 completion.selected = (safeSelected - 1).coerceAtLeast(0); true
             }
 
-            Key.Tab, Key.Enter -> {
+            Key.Tab -> {
                 accept(); true
             }
+
+            Key.Enter -> if (completionEnterAccepts) { accept(); true } else false
 
             else -> false
         }
     }
+
+    // The soft keyboard's Enter (the web bridge delivers it as text, not as a key event): the same choices the
+    // hardware Enter makes in the preview handler above, then a plain newline if none of them applies.
+    fun softEnter(): Boolean {
+        if (acts.menuOpen) { acts.applyAt(acts.menuSelected); return true }
+        if (popups.inlineRename != null) { commitInlineRename(); return true }
+        val sn = snippet
+        if (sn != null && !showPopup) { if (!sn.next()) snippet = null; return true }
+        if (showPopup && completionEnterAccepts) { accept(); return true }
+        return false
+    }
+    // Re-registered after every composition: the handler reads this composition's popup and selection, and a handler
+    // registered once would keep seeing the first one's.
+    SideEffect { editorSession.ime.onSoftEnter = ::softEnter }
+    DisposableEffect(editorSession) { onDispose { editorSession.ime.onSoftEnter = null } }
 
     Box(
         modifier
@@ -1642,7 +1669,9 @@ private fun CodeEditorContent(
             metrics = metrics,
             gutterWidthPx = gutterWidthPx,
             safeSelected = safeSelected,
-            onAccept = { accept(it) },
+            // A tap on a row is a touch on the editor's popup, not on its text: claim the keyboard for it, or the page
+            // takes the tap for one outside the editor and closes the keyboard.
+            onAccept = { accept(it); if (interaction.lastInputWasTouch) editorSession.ime.show() },
         )
 
         EditorDialogsLayer(
@@ -1779,6 +1808,9 @@ private fun EditorCanvasLayer(
                 },
             )
             .drawBehind {
+                // Observed so a re-bin of the overlays (colours, hints) that arrives without an edit redraws: see
+                // EditorRenderState.overlayEpoch.
+                @Suppress("UNUSED_VARIABLE") val overlayEpoch = renderState.overlayEpoch
                 // Interpolate the drawn selection span for an in-flight expand animation (reads snapshot
                 // state → this draw re-runs per frame while it animates). Before the tween has started for
                 // this request, treat progress as 0 (draw the pre-expand span) so the final range never
@@ -1792,42 +1824,50 @@ private fun EditorCanvasLayer(
                         mn to mx
                     } else null
                 } else null
-                caretClip.codeTop = drawEditor(
-                    session = editorSession,
-                    metrics = metrics,
-                    gutterWidth = gutterWidthPx,
-                    gutterEdge = geometry.gutterEdge(),
-                    vOff = geometry.vOffset.floatValue,
-                    hOff = geometry.hOffset.floatValue,
-                    layoutFor = renderState::layoutFor,
-                    compositeLayoutFor = renderState::compositeLayoutFor,
-                    rawToVisual = renderState.renderCache::rawToVisual,
-                    foldModel = editorSession.foldModel,
-                    vlayout = geometry.vlayout,
-                    wrap = geometry.wrapActive,
-                    foldableStartLines = renderState.foldableStartLines,
-                    foldStripWidth = renderState.foldStripPx,
-                    hoveredLine = interaction.hoveredLine,
-                    numberLayout = renderState::numberLayout,
-                    diagByLine = diagByLine,
-                    bracketPair = bracketPair,
-                    findMatches = if (find.open) find.matches else emptyList(),
-                    currentMatch = find.currentIndex,
-                    occurrences = occurrences.reads,
-                    occurrenceWrites = occurrences.writes,
-                    conflicts = conflicts,
-                    templateFields = templateFields(),
-                    decoByLine = renderState.decoByLine,
-                    filePath = path,
-                    painters = painters,
-                    indentColsFor = renderState::indentColsFor,
-                    stickyHeadersFor = { renderState.stickyHeadersFor(geometry.editorStructure.value, it) },
-                    colors = drawColors,
-                    handlesVisible = interaction.handlesVisible && interaction.lastInputWasTouch,
-                    handleColor = handleColor,
-                    animatedSelection = animatedSel,
-                    season = season,
-                )
+                // A pinch in progress paints the layout as it is, scaled about the document's origin (where the committed
+                // size will put it), instead of re-shaping every line per touch event: see EditorInteraction.pinchTarget.
+                val pinch = interaction.pinchTarget
+                val committed = liveScale.value
+                val previewScale = if (pinch > 0f && committed > 0f) pinch / committed else 1f
+                val pivot = Offset(gutterWidthPx - geometry.hOffset.floatValue, -geometry.vOffset.floatValue)
+                withTransform({ if (previewScale != 1f) scale(previewScale, previewScale, pivot) }) {
+                    caretClip.codeTop = drawEditor(
+                session = editorSession,
+                metrics = metrics,
+                gutterWidth = gutterWidthPx,
+                gutterEdge = geometry.gutterEdge(),
+                vOff = geometry.vOffset.floatValue,
+                hOff = geometry.hOffset.floatValue,
+                layoutFor = renderState::layoutFor,
+                compositeLayoutFor = renderState::compositeLayoutFor,
+                rawToVisual = renderState.renderCache::rawToVisual,
+                foldModel = editorSession.foldModel,
+                vlayout = geometry.vlayout,
+                wrap = geometry.wrapActive,
+                foldableStartLines = renderState.foldableStartLines,
+                foldStripWidth = renderState.foldStripPx,
+                hoveredLine = interaction.hoveredLine,
+                numberLayout = renderState::numberLayout,
+                diagByLine = diagByLine,
+                bracketPair = bracketPair,
+                findMatches = if (find.open) find.matches else emptyList(),
+                currentMatch = find.currentIndex,
+                occurrences = occurrences.reads,
+                occurrenceWrites = occurrences.writes,
+                conflicts = conflicts,
+                templateFields = templateFields(),
+                decoByLine = renderState.decoByLine,
+                filePath = path,
+                painters = painters,
+                indentColsFor = renderState::indentColsFor,
+                stickyHeadersFor = { renderState.stickyHeadersFor(geometry.editorStructure.value, it) },
+                colors = drawColors,
+                handlesVisible = interaction.handlesVisible && interaction.lastInputWasTouch,
+                handleColor = handleColor,
+                animatedSelection = animatedSel,
+                season = season,
+            )
+                }
             },
     )
 }

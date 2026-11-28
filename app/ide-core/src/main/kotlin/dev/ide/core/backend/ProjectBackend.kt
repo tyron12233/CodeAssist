@@ -9,6 +9,7 @@ import dev.ide.core.project.ImportableKind
 import dev.ide.core.project.CaprojFormat
 import dev.ide.core.project.ProjectIconLocator
 import dev.ide.core.project.ProjectPackaging
+import dev.ide.core.plugins.ProjectPlugins
 import dev.ide.model.impl.ModelPersistence
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateParameter
@@ -28,6 +29,9 @@ import dev.ide.ui.backend.UiPackagedEntry
 import dev.ide.ui.backend.UiPackagedModule
 import dev.ide.ui.backend.UiProjectArchive
 import dev.ide.ui.backend.UiProjectIcon
+import dev.ide.ui.backend.UiProjectPlugin
+import dev.ide.ui.backend.UiProjectPluginCheck
+import dev.ide.ui.backend.UiProjectPluginState
 import dev.ide.ui.backend.UiOpenTab
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiConvertResult
@@ -132,6 +136,55 @@ internal class ProjectBackend(
     }
 
     override suspend fun openProject(rootPath: String): Boolean = openProjectAt(movedProject(rootPath))
+
+    override suspend fun projectPluginCheck(rootPath: String): UiProjectPluginCheck {
+        val mgr = ctx.manager ?: return UiProjectPluginCheck()
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val root = Paths.get(movedProject(rootPath))
+                if (!ModelPersistence.exists(root.toString())) return@runCatching UiProjectPluginCheck()
+                val env = mgr.env
+                val isOpen = ctx.servicesOrNull?.workspaceRoot?.let { runCatching { it.toRealPath() == root.toRealPath() }.getOrDefault(false) } == true
+                val check = ProjectPlugins.check(
+                    root = root,
+                    registry = env.platform.extensions,
+                    present = env.pluginCatalog.all.mapTo(HashSet()) { it.id },
+                    disabled = mgr.disabledPlugins(),
+                    consented = mgr.consentedPlugins(),
+                    installedExternally = env.installedPlugins.mapTo(HashSet()) { it.manifest.id },
+                    isRunning = env::isPluginRunning,
+                    takenUp = if (isOpen) {
+                        val atOpen = ctx.pluginsAtOpen
+                        { id -> atOpen[id] == env.pluginLoadGeneration(id) }
+                    } else null,
+                    workspace = runCatching { ModelPersistence.load(root.toString()) }.getOrNull(),
+                )
+                UiProjectPluginCheck(
+                    plugins = check.missing.map { UiProjectPlugin(it.id, it.name, UiProjectPluginState.valueOf(it.state.name)) },
+                    unknownModuleTypes = check.unknownModuleTypes,
+                )
+            }.getOrElse { e ->
+                log.warn("Couldn't check the plugins the project at $rootPath needs", e)
+                UiProjectPluginCheck()
+            }
+        }
+    }
+
+    override suspend fun reopenProject(): Boolean {
+        val mgr = ctx.manager ?: return false
+        val root = ctx.servicesOrNull?.workspaceRoot?.toString() ?: return false
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                // Closed first: two engines on one folder would race on its caches and index.
+                ctx.closeEngine()
+                ctx.swapEngine(mgr.open(root))
+                true
+            }.getOrElse { e ->
+                log.error("Couldn't reopen the project at $root", e)
+                false
+            }
+        }
+    }
 
     /**
      * [rootPath], or where that project is now when the folder that held every project has moved since the

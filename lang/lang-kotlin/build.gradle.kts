@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // lang-kotlin — the Kotlin LanguageBackend: editor-time code intelligence (member completion, name/type
@@ -28,6 +29,9 @@ kotlin {
     iosSimulatorArm64()
 
     iosArm64()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { nodejs() }
 
     sourceSets {
         commonMain.dependencies {

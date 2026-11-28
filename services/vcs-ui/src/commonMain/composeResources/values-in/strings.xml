@@ -13,7 +13,7 @@
     <string name="vcs_no_project">Buka proyek untuk memakai kontrol versi.</string>
     <string name="vcs_clean_title">Tidak ada yang perlu di-commit</string>
     <string name="vcs_clean_body">Working tree Anda sama dengan commit terakhir.</string>
-    <string name="vcs_branch">Branch</string>
+    <string name="vcs_branch">Cabang</string>
     <string name="vcs_detached">Detached HEAD</string>
     <string name="vcs_no_commits">Belum ada commit</string>
     <string name="vcs_no_repo_branch">Tidak ada repositori</string>

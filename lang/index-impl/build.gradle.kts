@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // index-impl — the pragmatic engine behind index-api: in-memory term dictionary + postings + trigram
@@ -27,6 +28,9 @@ kotlin {
     iosSimulatorArm64()
 
     iosArm64()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { nodejs() }
 
     sourceSets {
         commonMain.dependencies {

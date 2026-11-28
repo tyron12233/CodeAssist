@@ -127,6 +127,23 @@ class SupabaseReviewService(
         ),
     )
 
+    override fun reportPublisher(
+        handle: String,
+        reason: dev.ide.store.ReportReason,
+        detail: String?,
+    ): StoreResult<Unit> = unit(
+        rpc(
+            "store_report_publisher",
+            buildString {
+                append('{')
+                append(""""p_handle":""").append(jsonStr(handle)).append(',')
+                append(""""p_reason":""").append(jsonStr(reason.wire)).append(',')
+                append(""""p_detail":""").append(detail?.let { jsonStr(it) } ?: "null")
+                append('}')
+            },
+        ),
+    )
+
     override fun reportItem(
         itemSlug: String,
         reason: dev.ide.store.ReportReason,

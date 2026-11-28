@@ -912,6 +912,7 @@ class IdeUiState(
     var codeFoldingEnabled by mutableStateOf(true)
     /** Pop completion up automatically while typing (off = explicit Ctrl-Space only). */
     var completionAutoPopup by mutableStateOf(true)
+    var completionEnterAccepts by mutableStateOf(true)
     /** Debounce (ms) after a keystroke before the completion popup requests suggestions. */
     var completionDelayMs by mutableStateOf(110)
     /** Run diagnostics as you type (off = the highlighting daemon skips the diagnostics pass). */
@@ -1015,6 +1016,7 @@ class IdeUiState(
         semanticHighlightingEnabled = s.semanticHighlighting
         codeFoldingEnabled = s.codeFolding
         completionAutoPopup = s.completionAutoPopup
+        completionEnterAccepts = s.completionEnterAccepts
         completionDelayMs = s.completionDelayMs
         analyzeOnTheFly = s.analyzeOnTheFly
         reparseDelayMs = s.reparseDelayMs

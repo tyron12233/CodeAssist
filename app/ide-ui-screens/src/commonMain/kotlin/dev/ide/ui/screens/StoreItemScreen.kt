@@ -94,6 +94,8 @@ import dev.ide.ui.components.motifFor
 import dev.ide.ui.components.pressScale
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.back
+import dev.ide.ui.generated.resources.report_thanks
+import dev.ide.ui.generated.resources.store_more_actions
 import dev.ide.ui.generated.resources.store_coming_soon
 import dev.ide.ui.generated.resources.store_create
 import dev.ide.ui.generated.resources.store_hero_download
@@ -230,6 +232,11 @@ fun StoreItemScreen(
     var tab by remember(item.id) { mutableStateOf(StoreTab.Overview) }
     var reviewSheet by remember(item.id) { mutableStateOf(false) }
     var signInForReview by remember(item.id) { mutableStateOf(false) }
+    // The "more" sheet (report, and a moderator's actions), the report sheet it leads to, and what it said.
+    var actionsSheet by remember(item.id) { mutableStateOf(false) }
+    var reportingItem by remember(item.id) { mutableStateOf(false) }
+    val itemReportedNote = stringResource(Res.string.report_thanks)
+    val signedIn = backend.store.authState().collectAsState().value.signedIn
     // Bumped after a write so the panel refetches; the aggregate changes too, so re-reading is the point.
     var reviewsRefresh by remember(item.id) { mutableStateOf(0) }
     var myReview by remember(item.id) { mutableStateOf<dev.ide.ui.backend.UiStoreReview?>(null) }
@@ -284,6 +291,8 @@ fun StoreItemScreen(
                     onBack = onBack,
                     onToggleSaved = onToggleSaved,
                     onShare = onShare?.let { { it(item) } },
+                    // A bundled template has nobody behind it to report or moderate.
+                    onMore = if (item.templateId == null) ({ actionsSheet = true }) else null,
                 )
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) { distinctKeys {
                     item("hero") {
@@ -434,6 +443,27 @@ fun StoreItemScreen(
                 onDone = { reviewSheet = false; reviewsRefresh++ },
             )
         }
+        if (actionsSheet) {
+            StoreItemActionsSheet(
+                backend = backend,
+                itemId = item.id,
+                onReport = {
+                    actionsSheet = false
+                    // Reporting needs an account, so a report is never anonymous noise.
+                    if (signedIn) reportingItem = true else signInForReview = true
+                },
+                onChanged = {},
+                onDismiss = { actionsSheet = false },
+            )
+        }
+        if (reportingItem) {
+            ReportItemSheet(
+                backend = backend,
+                itemId = item.id,
+                onDismiss = { reportingItem = false },
+                onReported = { reportingItem = false; message = itemReportedNote },
+            )
+        }
         if (signInForReview) {
             StoreSignInSheet(
                 backend = backend,
@@ -464,6 +494,8 @@ internal fun DetailTopBar(
     onBack: () -> Unit,
     onToggleSaved: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
+    /** Opens the page's "more" sheet (report, moderate). Null hides the button. */
+    onMore: (() -> Unit)? = null,
 ) {
     val c = MaterialTheme.colorScheme
     Row(
@@ -508,6 +540,14 @@ internal fun DetailTopBar(
                 contentAlignment = Alignment.Center,
             ) {
                 Symbol(CaSymbols.share, contentDescription = null, size = 21.dp, tint = c.onSurface)
+            }
+        }
+        if (onMore != null) {
+            Box(
+                Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onMore),
+                contentAlignment = Alignment.Center,
+            ) {
+                Symbol(CaSymbols.moreVert, stringResource(Res.string.store_more_actions), size = 22.dp, tint = c.onSurface)
             }
         }
     }

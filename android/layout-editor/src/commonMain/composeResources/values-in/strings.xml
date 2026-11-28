@@ -68,7 +68,7 @@
     <string name="le_prop_text_style">Gaya teks</string>
     <string name="le_prop_image">Gambar</string>
     <string name="le_prop_scale_type">Tipe skala</string>
-    <string name="le_prop_tint">Tint</string>
+    <string name="le_prop_tint">Rona</string>
     <string name="le_prop_background">Latar belakang</string>
     <string name="le_prop_background_tint">Tint latar belakang</string>
     <string name="le_prop_orientation">Orientasi</string>
@@ -80,7 +80,7 @@
     <string name="le_prop_description">Deskripsi</string>
     <string name="le_attr_text_size_hint">16sp</string>
     <string name="le_attr_unset">Hapus</string>
-    <string name="le_attr_default">Default</string>
+    <string name="le_attr_default">Bawaan</string>
     <string name="le_box_all">Semua sisi</string>
     <string name="le_box_horizontal">Awal + akhir</string>
     <string name="le_box_vertical">Atas + bawah</string>

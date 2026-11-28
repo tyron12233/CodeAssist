@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kotlin Playground (IDE editor)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111418; overflow: hidden; overscroll-behavior: none; touch-action: none; -webkit-text-size-adjust: 100%; -webkit-touch-callout: none; }
+  #app { position: fixed; inset: 0; touch-action: none; }
+  /* The loading screen: above the app and swallowing every touch until the engine is up, so nothing can be typed or
+     run into a half-loaded page. It is plain HTML so it shows at once, while the 48 MB of the app is still arriving. */
+  #boot { position: fixed; inset: 0; z-index: 10; background: #111418; color: #c9d1d9; display: flex; align-items: center;
+          justify-content: center; font: 15px/1.45 system-ui, -apple-system, sans-serif; transition: opacity .25s; touch-action: none; }
+  #boot.done { opacity: 0; pointer-events: none; }
+  #boot .card { width: min(380px, calc(100vw - 48px)); }
+  #boot h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; color: #e6edf3; }
+  #boot .sub { margin: 0 0 22px; color: #7d8590; font-size: 13px; }
+  #boot ol { list-style: none; margin: 0; padding: 0; }
+  #boot li { display: flex; align-items: baseline; gap: 10px; padding: 7px 0; color: #7d8590; }
+  #boot li .mark { width: 16px; flex: none; text-align: center; }
+  #boot li.active { color: #e6edf3; }
+  #boot li.done { color: #8b949e; }
+  #boot li.done .mark { color: #7ee787; }
+  #boot li .detail { margin-left: auto; font-size: 12px; font-variant-numeric: tabular-nums; color: #7d8590; white-space: nowrap; }
+  #boot .bar { height: 3px; background: #21262d; border-radius: 2px; margin: 18px 0 0; overflow: hidden; }
+  #boot .bar i { display: block; height: 100%; width: 0; background: #7ee787; transition: width .2s; }
+  #boot.failed .bar i { background: #f85149; }
+  #boot .err { margin-top: 16px; color: #f85149; font-size: 13px; word-break: break-word; display: none; }
+  #boot.failed .err { display: block; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  #boot li.active .mark { animation: pulse 1s infinite; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="boot" role="status" aria-live="polite">
+  <div class="card">
+    <h1>Kotlin Playground</h1>
+    <p class="sub">Everything runs in your browser. Loading it takes a moment the first time.</p>
+    <ol>
+      <li data-step="app"><span class="mark">&#9675;</span><span>The editor and the app</span><span class="detail"></span></li>
+      <li data-step="boot"><span class="mark">&#9675;</span><span>Starting the language engine</span><span class="detail"></span></li>
+      <li data-step="libs"><span class="mark">&#9675;</span><span>Loading the Kotlin libraries</span><span class="detail"></span></li>
+      <li data-step="indexing"><span class="mark">&#9675;</span><span>Indexing them for completion</span><span class="detail"></span></li>
+    </ol>
+    <div class="bar"><i></i></div>
+    <div class="err"></div>
+  </div>
+</div>
+<script>
+  // `?debug` puts a diagnostics panel over the page: the frame rate, what the editor asks the engine per second, and
+  // the touch, focus and keyboard events, for a problem that only shows on a device nobody can attach a debugger to.
+  (function () {
+    if (!/[?&]debug\b/.test(location.search)) return;
+    var box = document.createElement('pre');
+    box.style.cssText = 'position:fixed;left:0;right:0;bottom:0;max-height:38vh;overflow:hidden;margin:0;padding:4px 6px;z-index:2147483647;background:rgba(0,0,0,.78);color:#9f9;font:10px/1.25 ui-monospace,Menlo,monospace;pointer-events:none;white-space:pre-wrap;word-break:break-all;';
+    var lines = [], t0 = performance.now();
+    function ts() { return ((performance.now() - t0) / 1000).toFixed(2); }
+    function log(m) { lines.push(ts() + ' ' + m); if (lines.length > 40) lines.shift(); }
+    var head = '', frames = 0, worst = 0, last = 0, fps = 0, msgs = {}, msgsSec = '';
+    function draw() { box.textContent = head + '\n' + lines.slice(-24).join('\n'); }
+    function tag(e) { return e && e.tagName ? e.tagName.toLowerCase() + (e.getAttribute && e.getAttribute('aria-hidden') ? '(ime)' : '') : String(e); }
+    document.addEventListener('DOMContentLoaded', function () { document.body.appendChild(box); });
+    var lastEvent = '-', lastEventAt = 0, resizes = 0, gcLike = 0;
+    function note(what) { lastEvent = what; lastEventAt = performance.now(); }
+    (function f(t) {
+      if (last) {
+        frames++; worst = Math.max(worst, t - last);
+        if (t - last > 100) log('SLOW FRAME ' + Math.round(t - last) + 'ms  last event: ' + lastEvent + ' ' + Math.round(performance.now() - lastEventAt) + 'ms ago');
+      }
+      last = t; requestAnimationFrame(f);
+    })(0);
+    window.addEventListener('resize', function () { resizes++; note('resize'); log('resize ' + innerWidth + 'x' + innerHeight + ' vv ' + (visualViewport ? Math.round(visualViewport.height) : '-')); });
+    if (window.visualViewport) visualViewport.addEventListener('resize', function () { note('vv.resize'); log('vv.resize ' + Math.round(visualViewport.width) + 'x' + Math.round(visualViewport.height) + ' scale ' + visualViewport.scale.toFixed(2)); });
+    window.addEventListener('scroll', function () { note('page scroll'); log('PAGE scroll ' + scrollX + ',' + scrollY); }, true);
+    setInterval(function () {
+      fps = frames; frames = 0;
+      msgsSec = Object.keys(msgs).map(function (k) { return k + ':' + msgs[k]; }).join(' ') || '-'; msgs = {};
+      var vv = window.visualViewport;
+      head = 'fps ' + fps + '  worst frame ' + Math.round(worst) + 'ms  to-engine/s ' + msgsSec +
+        '\ndpr ' + window.devicePixelRatio + ' (real ' + (window.__realDpr || '?') + ')  coarse ' + (window.playgroundIme && window.playgroundIme.coarse) +
+        '  vv ' + (vv ? Math.round(vv.width) + 'x' + Math.round(vv.height) + '@' + vv.scale.toFixed(2) : '-') +
+        '  focus ' + tag(document.activeElement) + '  sw ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'yes' : 'no');
+      worst = 0; draw();
+    }, 1000);
+    var post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (m) { try { var k = (m && m.type) || '?'; msgs[k] = (msgs[k] || 0) + 1; note('to-engine ' + k); } catch (e) {} return post.apply(this, arguments); };
+    ['touchstart', 'touchend', 'touchcancel', 'pointerdown', 'pointerup', 'pointercancel', 'click'].forEach(function (ev) {
+      document.addEventListener(ev, function (e) {
+        note(ev);
+        var t = e.touches ? (e.changedTouches && e.changedTouches[0]) : e;
+        log(ev + ' ' + tag(e.target) + (e.pointerType ? ' ' + e.pointerType : '') + (t ? ' @' + Math.round(t.clientX) + ',' + Math.round(t.clientY) : '') + (e.defaultPrevented ? ' PREVENTED' : '') + (e.cancelable === false ? ' (not cancelable)' : ''));
+        if (ev === 'touchend') setTimeout(function () { log('  +800ms focus=' + tag(document.activeElement)); }, 800);
+      }, { capture: true, passive: true });
+    });
+    ['focusin', 'focusout', 'beforeinput', 'compositionstart', 'compositionend'].forEach(function (ev) {
+      document.addEventListener(ev, function (e) { log(ev + ' ' + tag(e.target) + (e.inputType ? ' ' + e.inputType : '') + (e.data ? ' "' + e.data + '"' : '')); }, true);
+    });
+    window.addEventListener('error', function (e) { log('ERROR ' + e.message); });
+    window.addEventListener('unhandledrejection', function (e) { log('REJECT ' + (e.reason && e.reason.message || e.reason)); });
+    window.__debugLog = log;
+    log('UA ' + navigator.userAgent.slice(0, 90));
+  })();
+</script>
+<script>
+  window.PLAYGROUND_ASSETS = "@ASSETS@";
+  (function () {
+    var boot = document.getElementById('boot'), bar = boot.querySelector('.bar i'), err = boot.querySelector('.err');
+    var order = ['app', 'boot', 'libs', 'indexing'], started = Date.now(), finished = false;
+    var items = {};
+    order.forEach(function (k) { items[k] = boot.querySelector('[data-step="' + k + '"]'); });
+    // Everything before `step` is done, `step` is running, the rest wait.
+    function at(step, detail) {
+      var i = order.indexOf(step);
+      order.forEach(function (k, j) {
+        var li = items[k], mark = li.querySelector('.mark');
+        li.className = j < i ? 'done' : j === i ? 'active' : '';
+        mark.innerHTML = j < i ? '&#10003;' : j === i ? '&#9679;' : '&#9675;';
+        if (j !== i) li.querySelector('.detail').textContent = '';
+      });
+      if (detail !== undefined) items[step].querySelector('.detail').textContent = detail;
+    }
+    function progress(f) { bar.style.width = Math.round(f * 100) + '%'; }
+    at('app'); progress(0.05);
+    window.playgroundStatus = function (text) {
+      if (finished) return;
+      if (text === 'app') { at('boot'); progress(0.35); }
+      else if (text === 'boot') { at('libs', ''); progress(0.4); }
+      else if (text.indexOf('libs ') === 0) {
+        var p = text.split(' '), i = +p[1], n = +p[2];
+        at('libs', (i + 1) + ' / ' + n + '  ' + p.slice(3).join(' ').replace(/\.jar$/, ''));
+        progress(0.4 + 0.45 * (i / n));
+      }
+      else if (text === 'indexing') { at('indexing', ''); progress(0.9); }
+      else if (text === 'ready') {
+        finished = true; progress(1);
+        order.forEach(function (k) { items[k].className = 'done'; items[k].querySelector('.mark').innerHTML = '&#10003;'; });
+        boot.classList.add('done');
+        setTimeout(function () { boot.style.display = 'none'; }, 400);
+      }
+      else if (text.indexOf('failed ') === 0) {
+        boot.classList.add('failed'); err.textContent = 'The engine did not start: ' + text.substring(7) + ' Reload the page to try again.';
+      }
+    };
+    // The app is a 48 MB download: say so while nothing else can, and say if it is slow.
+    setTimeout(function () { if (!finished && items.app.className === 'active') items.app.querySelector('.detail').textContent = 'downloading, ' + Math.round((Date.now() - started) / 1000) + ' s'; }, 3000);
+    window.addEventListener('error', function (e) { if (!finished && items.app.className === 'active') window.playgroundStatus('failed ' + (e.message || 'the app could not start')); });
+  })();
+</script>
+<script>
+  // The soft keyboard on a touch device. The editor draws its own text on a canvas, so there is no text field for the
+  // keyboard to type into: this hidden <textarea> is it, and what is typed in it is handed to the editor
+  // (EditorTextInput.wasmJs.kt registers a handler through window.playgroundIme).
+  //
+  // iOS Safari raises the keyboard only for a focus() made synchronously inside a touch handler, and the editor
+  // learns of the tap later, through coroutines. So every tap focuses the field at once, here; the editor then
+  // "claims" it (show). A tap the editor did not claim (a button, say) drops the focus again and the keyboard with it.
+  window.playgroundIme = (function () {
+    var coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+    var ta = null, handler = null, claimed = false, composing = false, SENTINEL = '\u200b';
+    function make() {
+      ta = document.createElement('textarea');
+      ta.setAttribute('aria-hidden', 'true'); ta.tabIndex = -1; ta.rows = 1;
+      ta.setAttribute('autocapitalize', 'off'); ta.setAttribute('autocorrect', 'off'); ta.setAttribute('autocomplete', 'off'); ta.setAttribute('spellcheck', 'false');
+      ta.setAttribute('enterkeyhint', 'enter'); ta.setAttribute('inputmode', 'text');
+      // 16px or larger, or iOS zooms the page when it is focused. Invisible and out of the way, but not display:none.
+      ta.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;font-size:16px;border:0;padding:0;margin:0;resize:none;overflow:hidden;pointer-events:none;caret-color:transparent;';
+      reset();
+      document.body.appendChild(ta);
+      // Everything arrives as beforeinput; cancelling it keeps the field at its sentinel, so Backspace always has
+      // something to delete (a field that is empty sends nothing) and the editor stays the only copy of the text.
+      ta.addEventListener('beforeinput', function (e) {
+        if (!handler || composing) return;
+        var t = e.inputType, d = e.data;
+        if (t === 'insertText' || t === 'insertReplacementText' || t === 'insertFromPaste' || t === 'insertFromYank') {
+          if (d == null && e.dataTransfer) d = e.dataTransfer.getData('text/plain');
+          if (d) handler('text', d);
+        } else if (t === 'insertLineBreak' || t === 'insertParagraph') handler('enter', '');
+        else if (t === 'deleteContentBackward' || t === 'deleteWordBackward' || t === 'deleteSoftLineBackward') handler(t === 'deleteContentBackward' ? 'backspace' : 'backspace-word', '');
+        else if (t === 'deleteContentForward' || t === 'deleteWordForward') handler('delete', '');
+        else return;
+        e.preventDefault();
+      });
+      // A composition (predictive text, a dead key, CJK) is not cancellable: let it run in the field and commit its
+      // result when it ends.
+      ta.addEventListener('compositionstart', function () { composing = true; });
+      ta.addEventListener('compositionend', function (e) {
+        composing = false;
+        if (handler && e.data) handler('text', e.data);
+        reset();
+      });
+      // Keys typed on a hardware keyboard are the field's now; the editor's own key handler must not take them a
+      // second time.
+      ta.addEventListener('keydown', function (e) { if (handler) e.stopPropagation(); }, true);
+      ta.addEventListener('keyup', function (e) { if (handler) e.stopPropagation(); }, true);
+    }
+    function reset() { ta.value = SENTINEL; try { ta.setSelectionRange(1, 1); } catch (e) {} }
+    var x0 = 0, y0 = 0;
+    if (coarse) {
+      // The claim is reset when a touch starts: the editor's own pointer-up (show) arrives before this page's touchend.
+      document.addEventListener('touchstart', function (e) { var t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; claimed = false; }, { capture: true, passive: true });
+      document.addEventListener('touchend', function (e) {
+        var t = e.changedTouches[0];
+        if (Math.abs(t.clientX - x0) > 10 || Math.abs(t.clientY - y0) > 10) return; // a scroll or a drag, not a tap
+        var boot = document.getElementById('boot');
+        if (boot && boot.style.display !== 'none') return;
+        if (!ta) make();
+        ta.focus({ preventScroll: true });
+        if (window.__debugLog) window.__debugLog('touchend: focus ime -> active=' + (document.activeElement === ta ? 'ime' : document.activeElement && document.activeElement.tagName));
+        setTimeout(function () { if (window.__debugLog) window.__debugLog('700ms: claimed=' + claimed); if (!claimed && document.activeElement === ta) ta.blur(); }, 700);
+      }, { capture: true, passive: true });
+    }
+    // A tap is followed by synthesized mouse events, and a mouse press moves the focus to the app's own focusable element,
+    // which took it from the field a few milliseconds after the keyboard was asked for and sent the keyboard away
+    // (seen on an iPhone: focusout on the field, focusin on a div, before the click). Refuse that focus change while the
+    // editor holds the field, and if it happened anyway take the focus back in the click, which iOS also accepts.
+    if (coarse) {
+      document.addEventListener('mousedown', function (e) {
+        if (handler && claimed && ta && document.activeElement === ta) e.preventDefault();
+      }, true);
+      document.addEventListener('click', function () {
+        if (handler && claimed && ta && document.activeElement !== ta) {
+          ta.focus({ preventScroll: true });
+          if (window.__debugLog) window.__debugLog('click: took the focus back -> active=' + (document.activeElement === ta ? 'ime' : document.activeElement && document.activeElement.tagName));
+        }
+      }, true);
+    }
+    return {
+      coarse: coarse,
+      attach: function (h) { handler = h; if (window.__debugLog) window.__debugLog('ime.attach coarse=' + coarse); return coarse; },
+      detach: function () { handler = null; claimed = false; if (ta && document.activeElement === ta) ta.blur(); },
+      show: function () { if (window.__debugLog) window.__debugLog('ime.show coarse=' + coarse + ' handler=' + !!handler + ' active=' + (document.activeElement && document.activeElement.tagName)); if (!coarse || !handler) return; if (!ta) make(); claimed = true; if (document.activeElement !== ta) { reset(); ta.focus({ preventScroll: true }); } },
+      hide: function () { claimed = false; if (ta && document.activeElement === ta) ta.blur(); }
+    };
+  })();
+</script>
+<script>
+  // The app draws everything itself, on a canvas as many device pixels wide as the screen. A phone at 3x pixel density
+  // makes that 2.25 times the pixels of one at 2x, and a frame is paid for per pixel. On touch devices the density the
+  // app sees is capped at 2 (text is a little softer); `?dpr=3` asks for the real one, `?dpr=1.5` for less.
+  (function () {
+    var want = parseFloat(new URLSearchParams(location.search).get('dpr'));
+    var coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+    var real = window.devicePixelRatio || 1;
+    window.__realDpr = real;
+    var use = want > 0 ? want : (coarse ? Math.min(real, 2) : real);
+    if (use !== real) Object.defineProperty(window, 'devicePixelRatio', { get: function () { return use; }, configurable: true });
+  })();
+</script>
+<script>
+  // Repeat visits: a service worker keeps the content-hashed engine, libraries and wasm (sw.js). It needs https or
+  // localhost; elsewhere the browser's own HTTP cache does the same job, given long cache headers on those files.
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+</script>
+<script src="playground-ui.js?v=@ASSETS@"></script>
+</body>
+</html>

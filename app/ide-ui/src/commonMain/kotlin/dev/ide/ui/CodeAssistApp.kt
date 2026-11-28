@@ -190,7 +190,7 @@ fun CodeAssistApp(
             // Translations of the text the backend writes in English (lessons, templates, settings pages).
             val backendText = dev.ide.ui.screens.rememberBackendText()
             CompositionLocalProvider(
-                dev.ide.ui.screens.LocalBackendText provides backendText,
+                dev.ide.ui.LocalBackendText provides backendText,
                 LocalSeason provides season,
                 dev.ide.ui.holiday.LocalHolidayLedger provides app.holidayLedger,
                 LocalAds provides app.adController,
@@ -286,6 +286,15 @@ fun CodeAssistApp(
                             onConvert = { app.importGradleProject(convert = true) },
                             onDismiss = app::dismissImportModeChoice,
                         )
+                        // A project the picker held back: a plugin it was made with is not working here.
+                        app.pluginGate?.let { gate ->
+                            MissingPluginsDialog(
+                                check = gate.check,
+                                onResolve = app::resolveGatedPlugin,
+                                onOpenAnyway = app::openGatedProject,
+                                onDismiss = app::dismissPluginGate,
+                            )
+                        }
                         // A plugin just installed (from Get plugins) is asked about the moment the user is back,
                         // and runs once allowed, with no restart. Not over the first-run sheets.
                         if (!app.showOnboarding && !app.showMigration && !app.showAnalytics) {

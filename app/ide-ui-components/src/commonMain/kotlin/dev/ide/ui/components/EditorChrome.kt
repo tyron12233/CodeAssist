@@ -507,7 +507,7 @@ private fun EditorOverflowMenu(
     var variantItems by remember(open) { mutableStateOf(emptyList<String>()) }
     Box {
         IconButtonCa(CaIcons.ellipsis, stringResource(Res.string.edchrome_more_actions), { open = true })
-        CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        CaDropdownMenu(expanded = open, onDismissRequest = { open = false }, iconsTrailing = true) {
             if (hasActiveFile) {
                 OverflowItem(CaIcons.search, stringResource(Res.string.edchrome_find_replace)) { open = false; onFind() }
                 OverflowItem(CaIcons.braces, stringResource(Res.string.edchrome_reformat_code)) { open = false; onReformat() }
@@ -516,6 +516,9 @@ private fun EditorOverflowMenu(
                     OverflowItem(CaIcons.clock, stringResource(Res.string.edchrome_local_history)) { open = false; onLocalHistory() }
                 }
             }
+            // Three groups, set apart by dividers: what acts on the code, the tools around it, and the view.
+            val toolsShown = !editOnly || rightToolIconId != null || onUseWithClaude != null
+            if (hasActiveFile && toolsShown) OverflowMenuDivider()
             if (!editOnly) OverflowItem(CaIcons.command, stringResource(Res.string.edchrome_command_palette)) { open = false; onOpenPalette() }
             // The AI assistant panel — a toggle, its on-state accented like the other tool windows.
             if (rightToolIconId != null) {
@@ -523,6 +526,10 @@ private fun EditorOverflowMenu(
                     open = false; onToggleRightTool()
                 }
             }
+            if (onUseWithClaude != null) OverflowItem(CaIcons.share, stringResource(Res.string.edchrome_use_with_claude)) {
+                open = false; onUseWithClaude()
+            }
+            if (hasActiveFile || toolsShown) OverflowMenuDivider()
             OverflowItem(
                 CaIcons.eye,
                 if (inlayHintsOn) stringResource(Res.string.edchrome_hide_inlay_hints) else stringResource(Res.string.edchrome_show_inlay_hints),
@@ -536,9 +543,6 @@ private fun EditorOverflowMenu(
             }
             if (hasActiveFile && onZenMode != null) OverflowItem(CaIcons.expand, stringResource(Res.string.zen_mode)) {
                 open = false; onZenMode()
-            }
-            if (onUseWithClaude != null) OverflowItem(CaIcons.share, stringResource(Res.string.edchrome_use_with_claude)) {
-                open = false; onUseWithClaude()
             }
             // The build-variant (flavor) switcher — a flyout submenu of the module's variants, shown only for an
             // Android module (a non-null active variant). Picking one closes the whole menu.
@@ -571,7 +575,7 @@ private fun EditorOverflowMenu(
 @Composable
 private fun OverflowMenuDivider() {
     Box(
-        Modifier.fillMaxWidth().height(1.dp).padding(vertical = 4.dp)
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).height(1.dp)
             .background(MaterialTheme.colorScheme.outlineVariant)
     )
 }

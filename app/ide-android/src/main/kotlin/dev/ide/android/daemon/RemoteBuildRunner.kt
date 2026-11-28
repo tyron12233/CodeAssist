@@ -233,6 +233,9 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         // App-log deltas are no longer streamed from the daemon — the UI channel is fed directly by the sink and
         // read via `services` above (BuildDaemonClient's onAppLog/onAppLogState default to no-ops).
         onConnected = ::onDaemonConnected,
+        // Without this a bound-but-disconnected client kept `connected` true, so a Run sent its `open` into a null
+        // binder (dropped) and waited for a reply nobody would send. Not connected, it binds and drives on connect.
+        onDisconnected = { connected = false },
         onDeath = { pid ->
             var failedBuild = false
             _buildState.update {
@@ -394,7 +397,13 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         noteActivity()
         // Not bound yet (a low-memory device defers the bind to the first Run): binding now connects, and
         // onDaemonConnected drives the pending build.
-        if (!client.isBound) client.bind {}
+        if (connected && !client.hasDaemon) {
+            // `connected` outlived the binder: the open below would go nowhere. Take the not-connected path and
+            // bind afresh; onDaemonConnected drives the pending build once the new connection is up.
+            connected = false
+            log.warn("ui: build daemon binder is gone while marked connected; rebinding before the build")
+            client.rebind {}
+        } else if (!client.isBound) client.bind {}
         // Pass the current model revision: if the UI committed a config change (e.g. minifyEnabled) since the
         // daemon last opened, this differs and the daemon reloads module.toml before building — otherwise the
         // build would run against the daemon's stale, frozen-at-first-open model.
@@ -420,6 +429,13 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
                 if (st.status != RunStatus.Running || st.steps.isNotEmpty()) return@launch
                 if (System.currentTimeMillis() - lastActivityMs > WATCHDOG_SILENCE_MS) {
                     synchronized(pendingLock) { pending = null }
+                    // Press Run again must reach a live daemon, not the one that just went silent. A hung process
+                    // (an open that never returns holds its lock for good) keeps serving the same dead service, so
+                    // it is killed and the system restarts it for the binding still held. When it cannot be killed
+                    // (no pid known), reconnect to a fresh service instead.
+                    connected = false
+                    log.warn("ui: build daemon silent for ${WATCHDOG_SILENCE_MS / 1000}s before the first step; restarting it")
+                    if (!client.killDaemon()) client.rebind {}
                     _buildState.update {
                         if (it.status == RunStatus.Running && it.steps.isEmpty()) {
                             it.copy(

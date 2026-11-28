@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.LocalBackendText
 import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -449,7 +450,7 @@ private fun ChartsSection(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                section.title ?: stringResource(Res.string.store_top_charts),
+                LocalBackendText.current.trOrNull(section.title) ?: stringResource(Res.string.store_top_charts),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
@@ -498,7 +499,7 @@ private fun PersonalizedRow(
     Column {
         Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 26.dp, bottom = 10.dp)) {
             Text(
-                section.title,
+                LocalBackendText.current.tr(section.title),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
@@ -506,7 +507,7 @@ private fun PersonalizedRow(
             )
             section.subtitle?.let {
                 Text(
-                    it,
+                    LocalBackendText.current.tr(it),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp),
@@ -651,7 +652,7 @@ private fun LazyListScope.shelfSection(
 private fun ShelfHeader(section: UiFeedSection.Shelf) {
     if (section.eyebrow != null) {
         Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 26.dp)) {
-            Eyebrow(section.eyebrow!!)
+            Eyebrow(LocalBackendText.current.tr(section.eyebrow!!))
         }
         SectionHeaderTight(section.title.orEmpty(), section.subtitle)
     } else {
@@ -664,13 +665,13 @@ private fun ShelfHeader(section: UiFeedSection.Shelf) {
 private fun SectionHeaderTight(title: String, subtitle: String?) {
     Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 8.dp)) {
         Text(
-            title,
+            LocalBackendText.current.tr(title),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
         if (subtitle != null) {
             Text(
-                subtitle,
+                LocalBackendText.current.tr(subtitle),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,

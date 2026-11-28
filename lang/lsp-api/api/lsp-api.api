@@ -29,6 +29,13 @@ dev/ide/lsp/LanguageServerContext
 	method abstract getLogger()Ldev/ide/platform/log/Logger;
 	method abstract getProjectRoot()Ljava/nio/file/Path;
 	method abstract getRoot()Ljava/nio/file/Path;
+	method notifyConfigurationChanged()V
+	method restart()V
+dev/ide/lsp/LanguageServerContext$DefaultImpls
+	kind class
+	super java/lang/Object
+	method static notifyConfigurationChanged(Ldev/ide/lsp/LanguageServerContext;)V
+	method static restart(Ldev/ide/lsp/LanguageServerContext;)V
 dev/ide/lsp/LanguageServerDefinition
 	kind interface
 	method abstract getId()Ljava/lang/String;

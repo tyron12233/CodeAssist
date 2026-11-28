@@ -74,6 +74,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -658,6 +659,19 @@ class IdeServicesBackend(
                     // in-process value would be an earlier build's.
                     val svc = activeServices
                     val peak = svc?.takeIf { buildRunnerFor(it) === it.buildRunner }?.build?.lastBuildPeak
+                    // A build whose process was killed is Failed the moment the death is seen, but the OS's reason
+                    // for it (the low-memory killer, a crash) is filed a moment later and lands in the log as a
+                    // "Cause:" line. Sent now, that kill would always read as an unexplained death, so wait briefly
+                    // for the cause; a new build, or the wait running out, sends what is known.
+                    val fin = if (bs.status == dev.ide.ui.backend.RunStatus.Failed &&
+                        BuildFailureKind.classify(bs.diagnostics, bs.log) == BuildFailureKind.PROCESS_DIED
+                    ) {
+                        kotlinx.coroutines.withTimeoutOrNull(DEATH_CAUSE_WAIT_MS) {
+                            build.buildState.first { st ->
+                                st.status != dev.ide.ui.backend.RunStatus.Failed || st.log.any { "Cause:" in it.message }
+                            }
+                        }?.takeIf { it.status == dev.ide.ui.backend.RunStatus.Failed } ?: bs
+                    } else bs
                     track(
                         dev.ide.analytics.Events.BUILD_RESULT,
                         mapOf(
@@ -675,9 +689,9 @@ class IdeServicesBackend(
                         // On failure, categorize WHY (compile vs resource vs tool vs oom vs no-diagnostic):
                         // the ok=false bit alone can't tell a user's compile error from our pipeline throwing.
                         + (if (bs.status == dev.ide.ui.backend.RunStatus.Failed)
-                            mapOf("failure_kind" to BuildFailureKind.classify(bs.diagnostics, bs.log))
+                            mapOf("failure_kind" to BuildFailureKind.classify(fin.diagnostics, fin.log))
                           else emptyMap())
-                        + dev.ide.core.build.R8BuildFacts.props(bs.log),
+                        + dev.ide.core.build.R8BuildFacts.props(fin.log),
                     )
                 }
                 prev = bs.status
@@ -1112,6 +1126,8 @@ class IdeServicesBackend(
         const val ANALYTICS_CONSENT_PREF = "analytics.consent"
         const val ANALYTICS_SCOPE_PREF = "analytics.consent.scope"
         const val ANALYTICS_SCOPE_USAGE = "usage"
+        /** How long a build killed under it waits for the OS's reason before its result is sent (the runner polls ~3s for it). */
+        const val DEATH_CAUSE_WAIT_MS = 4_000L
         /** The notification route that opens Settings > Plugins on its Installed tab. */
         const val PLUGINS_ROUTE = "plugins"
     }
@@ -1124,6 +1140,7 @@ class IdeServicesBackend(
         // Point the shared application environment at the now-active engine, for app-level extension callbacks
         // (command actions, synthetic-R, the XML resource host) that resolve the open project through it.
         manager?.env?.activeEngine = next
+        recordProjectPlugins(next)
         followFileSystem(next)
         _projectEpoch.value = ++epochsIssued
         // Publish the project lifecycle for plugin subscribers, on the same app bus. Opened for the new engine;
@@ -1136,6 +1153,28 @@ class IdeServicesBackend(
             }
         }
         if (prev !== next) runCatching { prev?.close() }
+    }
+
+    override var pluginsAtOpen: Map<String, Int> = emptyMap()
+        private set
+
+    /**
+     * Note which plugins [next] needs while they are present (see [dev.ide.core.plugins.ProjectPlugins]), so an
+     * open after one of them is gone can say which, and what was running as it opened.
+     */
+    private fun recordProjectPlugins(next: IdeServices) {
+        val env = manager?.env ?: return
+        val catalog = env.pluginCatalog
+        pluginsAtOpen = catalog.all.map { it.id }.filter { env.isPluginRunning(it) }.associateWith { env.pluginLoadGeneration(it) }
+        runCatching {
+            dev.ide.core.plugins.ProjectPlugins.record(
+                root = next.workspaceRoot,
+                projects = next.store.workspace.projects,
+                registry = env.platform.extensions,
+                candidates = catalog.all.filterNot { catalog.isEssential(it.id) }.associate { it.id to it.name },
+                isRunning = env::isPluginRunning,
+            )
+        }.onFailure { log.warn("Couldn't record the plugins ${next.workspaceRoot} needs", it) }
     }
 
     /** The last [projectEpoch] a swap handed out. Never reused, so a reopen after [closeEngine] (which sets the

@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // The reusable widgets the IDE is assembled from: buttons, sheets, dialogs, the file tree, the build
@@ -28,6 +29,9 @@ kotlin {
     // iOS. Nothing here is platform-specific: the components are Compose over :ide-ui-core's theme.
     iosSimulatorArm64()
     iosArm64()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { browser() }
 
     sourceSets {
         commonMain.dependencies {

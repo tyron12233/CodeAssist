@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // The Compose resources the IDE UI is built from — the bundled fonts (JetBrains Mono, Material Symbols),
@@ -42,6 +43,9 @@ kotlin {
     // it once the whole UI graph compiles, and costs nothing but build time.
     iosSimulatorArm64()
     iosArm64()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { browser() }
 
     sourceSets {
         commonMain.dependencies {

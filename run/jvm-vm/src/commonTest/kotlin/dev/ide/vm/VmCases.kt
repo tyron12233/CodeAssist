@@ -33,5 +33,13 @@ internal val vmCases: List<Case> = listOf(
     Case(COMPOSE, "composeAndRecompose", "()Ljava/lang/String;", emptyList(), "values=0;1; runs=2 invalidated=true rememberSurvived=true"),
 )
 
-internal fun newTestVm(out: StringBuilder? = null): Vm =
-    Vm(ClassPath(TestClasspath.entries), stdout = { if (out != null) out.append(it) else print(it) })
+/**
+ * Make [TestClasspath.entries] readable through the portable file seam. A no-op where the jars are on the
+ * real disk (the JVM, the iOS simulator); the browser build copies them into its in-memory file system.
+ */
+internal expect fun mountTestClasspath()
+
+internal fun newTestVm(out: StringBuilder? = null): Vm {
+    mountTestClasspath()
+    return Vm(ClassPath(TestClasspath.entries), stdout = { if (out != null) out.append(it) else print(it) })
+}

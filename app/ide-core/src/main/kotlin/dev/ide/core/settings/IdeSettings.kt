@@ -76,6 +76,8 @@ data class IdeSettings(
     // ---- completion ----
     /** Pop the completion list up automatically while typing; off = only on explicit trigger (Ctrl-Space). */
     val completionAutoPopup: Boolean = true,
+    /** Enter (as well as Tab) accepts the highlighted completion; off = Enter always starts a new line. **On by default**, like IntelliJ. */
+    val completionEnterAccepts: Boolean = true,
     /** Debounce after a keystroke before the auto-popup requests completion. */
     val completionDelayMs: Int = 110,
     /** Hard ceiling on the number of completions shown after ranking. */

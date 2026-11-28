@@ -6,6 +6,7 @@ import dev.ide.agent.LlmEffort
 import dev.ide.agent.LlmMessage
 import dev.ide.agent.LlmModelInfo
 import dev.ide.agent.LlmProvider
+import dev.ide.agent.ProviderCredentials
 import dev.ide.agent.LlmRequest
 import dev.ide.agent.LlmRole
 import dev.ide.agent.LlmStreamEvent
@@ -39,6 +40,7 @@ class OpenAiProvider(
 ) : LlmProvider {
     override val id: String = "openai"
     override val displayName: String = "OpenAI"
+    override val credentials: ProviderCredentials = ProviderCredentials(keyPlaceholder = "sk-...", keyUrl = "https://platform.openai.com/api-keys")
     override val models: List<LlmModelInfo> = listOf(
         LlmModelInfo("gpt-5", "GPT-5"),
         LlmModelInfo("gpt-5-mini", "GPT-5 mini"),

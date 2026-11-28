@@ -21,6 +21,13 @@ private const val SIDE_OF_HORIZONTAL = Gravity.TOP or Gravity.CENTER_HORIZONTAL
 actual fun DialogFoldEffect() {
     val fold = rememberWindowFold()
     val view = LocalView.current
+    // A Compose dialog is a bare window, and a window with no animation style appears and vanishes in one frame.
+    // The platform's dialog animation (a fade with a small scale) plays both ways, so closing is animated too:
+    // it is the window's own exit that runs when the dialog leaves composition.
+    DisposableEffect(view) {
+        (view.parent as? DialogWindowProvider)?.window?.setWindowAnimations(android.R.style.Animation_Dialog)
+        onDispose { }
+    }
     DisposableEffect(fold, view) {
         val window = (view.parent as? DialogWindowProvider)?.window
         if (window == null) {

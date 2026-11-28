@@ -59,6 +59,8 @@ dependencyResolutionManagement {
                 // multiplatform artifact publishes each variant as its own module, so a filter naming only
                 // the root coordinate resolves the metadata and then finds no jar.
                 includeModuleByRegex("org\\.jetbrains", "syntax-api.*")
+                // The wasm variant of syntax-api (the browser Playground) depends on this sibling module.
+                includeModuleByRegex("org\\.jetbrains", "multiplatform.*")
             }
         }
         maven("https://cache-redirector.jetbrains.com/intellij-repository/releases") {
@@ -179,6 +181,8 @@ include(
     // against the real one over android.jar. A decoder agreeing with ASM's API is not the same claim as
     // the CONSUMER producing the same symbols.
     ":kotlin-symbols",
+    // The browser Playground spike: source text -> parse + lower (wasm) -> run in :jvm-vm -> output.
+    ":playground-spike",
 )
 
 // The IDE shells (Compose Multiplatform + AGP). These apply the Android Gradle plugin / Compose KMP plugin,
@@ -205,6 +209,9 @@ if (System.getenv("CI_CORE_ONLY") != "true") {
         ":ide-ui-screens", // the destinations: home, store, Learn, challenges, settings, run/logs, managers
         ":ide-ui-testing", // test-only: StubBackend, the empty IdeBackend every UI layer's tests render against
         ":ide-ui",
+        // The Playground with the IDE's OWN editor and shell (Compose Multiplatform on wasmJs, not CodeMirror). Here, not
+        // with :playground-spike above: it depends on :ide-ui, which a CI_CORE_ONLY build does not have.
+        ":playground-ui",
         ":agent-ui", // the AI agent's Compose UI as a self-contained plugin module (chat panel + provider sheet + permission overlay)
         ":vcs-ui", // the version-control Compose UI as a self-contained plugin module (Git panel, branches, history, sign-in, clone)
         ":layout-editor", // the Android layout editor: a built-in plugin written against the plugin SPI only (engine + UI facet)
@@ -296,7 +303,7 @@ val layers = mapOf(
     // Test-only harnesses, consumed via testImplementation.
     "tools" to listOf("test-support", "bench-support"),
     // Work that is not part of the product yet: built and tested by CI, imported by nothing.
-    "experimental" to listOf("kotlin-syntax", "kotlin-symbols"),
+    "experimental" to listOf("kotlin-syntax", "kotlin-symbols", "playground-spike", "playground-ui"),
 )
 
 // `samples` holds plugins built as their own apps; it is already a directory, so it needs no mapping.

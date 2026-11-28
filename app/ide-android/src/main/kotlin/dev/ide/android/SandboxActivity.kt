@@ -3,10 +3,14 @@ package dev.ide.android
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.Text
@@ -20,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.android.plugins.DevApkPluginSource
 import dev.ide.android.plugins.SandboxProcess
@@ -35,104 +40,61 @@ import kotlinx.coroutines.withContext
 class SandboxActivity : MainActivity()
 
 /**
- * The plugin sandbox's marker: its status-bar band tinted, with the plugin under test named in it, so it is never
- * mistaken for the IDE it was started from. Drawn over the status bar only, so the app's own layout is untouched.
+ * The marker band for a window that must not be mistaken for the plain IDE: while the plugin sandbox is running,
+ * or the Claude link or the local MCP server is on (another app can then change the open project without asking,
+ * and nothing else on screen shows it). The status bar is tinted and a strip carrying the label sits directly
+ * BELOW it, so the text is never under the clock, the notification and system icons, or a camera cutout, whatever
+ * the device puts in the bar. [content] gets the rest of the window and its status-bar inset already consumed, so
+ * the app's own `safeDrawing` padding does not pad for the bar a second time.
  */
 @Composable
-internal fun SandboxBand() {
+internal fun StatusBand(inSandbox: Boolean, agent: dev.ide.ui.backend.AgentService, content: @Composable () -> Unit) {
+    val relay by agent.mcpRelay.collectAsState()
+    val host by agent.mcpHost.collectAsState()
     val context = LocalContext.current
-    val name by produceState<String?>(null) {
+    val sandboxName by produceState<String?>(null, inSandbox) {
+        if (!inSandbox) return@produceState
         value = withContext(Dispatchers.IO) {
             runCatching {
                 SandboxProcess.currentApk(context)?.let { DevApkPluginSource(context, it).manifest()?.name }
             }.getOrNull()
         }
     }
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .windowInsetsTopHeight(WindowInsets.statusBars)
-            .background(SANDBOX_BAND),
-    ) {
-        BandLabel(name?.let { "Plugin sandbox · $it" } ?: "Plugin sandbox")
-    }
-}
-
-/**
- * The same band for the agent's outside connections: while the Claude link or the local MCP server is on, the
- * status bar says so, because another app can then change the open project without asking and nothing else on
- * screen shows it. It names the state that matters: Claude at work, connected and idle, or not connected.
- */
-@Composable
-internal fun McpBand(agent: dev.ide.ui.backend.AgentService) {
-    val relay by agent.mcpRelay.collectAsState()
-    val host by agent.mcpHost.collectAsState()
-    val (label, color) = mcpBandContent(relay, host.running) ?: return
-    Box(
-        Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(color),
-    ) {
-        BandLabel(label)
-    }
-}
-
-/**
- * A status-bar band's label, where it can be read. The middle of the bar when nothing is there: the clock sits
- * at one end and the system icons at the other, and on a narrow phone (360dp) a full-width label ran under the
- * icons. A camera cutout in the middle hides a centred label, so with one the label goes in the wider of the two
- * gaps beside it.
- */
-@androidx.compose.runtime.Composable
-private fun androidx.compose.foundation.layout.BoxScope.BandLabel(text: String) {
-    val view = androidx.compose.ui.platform.LocalView.current
-    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.matchParentSize()) {
-        val width = constraints.maxWidth.toFloat()
-        val (start, end) = bandLabelSpan(width, topCutout(view, width))
-        val density = androidx.compose.ui.platform.LocalDensity.current
-        Box(
-            Modifier
-                .fillMaxHeight()
-                .offset { androidx.compose.ui.unit.IntOffset(start.toInt(), 0) }
-                .width(with(density) { (end - start).toDp() }),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = text, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            )
+    val band: Pair<String, Color>? =
+        if (inSandbox) (sandboxName?.let { "Plugin sandbox · $it" } ?: "Plugin sandbox") to SANDBOX_BAND
+        else mcpBandContent(relay, host.running)
+    androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+        if (band != null) {
+            Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(band.second))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .background(band.second)
+                    // Beside a cutout in landscape, or a side bar: the label stays in the safe area.
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .height(20.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = band.first, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+            }
+        }
+        Box(Modifier.weight(1f).fillMaxWidth().then(if (band != null) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier)) {
+            content()
         }
     }
-}
-
-/** The horizontal extent, in px, of a display cutout that lies across the middle of the top edge; null for none. */
-private fun topCutout(view: android.view.View, width: Float): Pair<Float, Float>? {
-    if (android.os.Build.VERSION.SDK_INT < 28 || width <= 0f) return null
-    // The window handle Android draws there on a device with desktop windowing is not reported as an inset, so
-    // a label can still sit under that one.
-    val rect = view.rootWindowInsets?.displayCutout?.boundingRects
-        ?.firstOrNull { it.top <= 0 && it.left < width * 0.71f && it.right > width * 0.29f } ?: return null
-    return rect.left.toFloat() to rect.right.toFloat()
-}
-
-/**
- * Where a band's label goes across a bar [width] px wide: the middle 42% with no [cutout], else the wider gap
- * between the cutout and the clock (the first fifth of the bar) or the system icons (the last fifth).
- */
-internal fun bandLabelSpan(width: Float, cutout: Pair<Float, Float>?): Pair<Float, Float> {
-    if (cutout == null) return width * 0.29f to width * 0.71f
-    val margin = width * 0.02f
-    val left = width * 0.20f to cutout.first - margin
-    val right = cutout.second + margin to width * 0.80f
-    return if (right.second - right.first > left.second - left.first) right else left
 }
 
 /** What the band says and its colour, or null when nothing outside is connected. The relay outranks the local server. */
 internal fun mcpBandContent(relay: dev.ide.ui.backend.UiMcpRelay, localRunning: Boolean): Pair<String, Color>? = when {
     relay.enabled -> when (relay.status) {
         dev.ide.ui.backend.UiMcpRelayStatus.CONNECTED ->
-            if (relay.inFlight > 0) "Claude is working" to MCP_BAND_ACTIVE else "Claude link on" to MCP_BAND_ON
-        dev.ide.ui.backend.UiMcpRelayStatus.SIGNED_OUT -> "Claude link · sign in" to MCP_BAND_WAITING
-        dev.ide.ui.backend.UiMcpRelayStatus.IN_USE, dev.ide.ui.backend.UiMcpRelayStatus.REPLACED -> "Claude link · stopped" to MCP_BAND_WAITING
-        else -> "Claude link · connecting" to MCP_BAND_WAITING
+            if (relay.inFlight > 0) "AI app is working" to MCP_BAND_ACTIVE else "AI link on" to MCP_BAND_ON
+        dev.ide.ui.backend.UiMcpRelayStatus.SIGNED_OUT -> "AI link · sign in" to MCP_BAND_WAITING
+        dev.ide.ui.backend.UiMcpRelayStatus.IN_USE, dev.ide.ui.backend.UiMcpRelayStatus.REPLACED -> "AI link · stopped" to MCP_BAND_WAITING
+        else -> "AI link · connecting" to MCP_BAND_WAITING
     }
     localRunning -> "MCP server on" to MCP_BAND_ON
     else -> null

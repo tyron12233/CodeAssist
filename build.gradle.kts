@@ -1,4 +1,8 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.targets.wasm.binaryen.BinaryenEnvSpec
+import org.jetbrains.kotlin.gradle.targets.wasm.binaryen.BinaryenPlugin
+import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsEnvSpec
+import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsPlugin
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 // AGP 9.2.1's bundled R8 (9.2.14) crashes with an NPE when shrinking the app (`minifyMinifiedWithR8`: "Cannot
@@ -35,7 +39,30 @@ plugins {
     alias(libs.plugins.android.kmp.library) apply false
 }
 
+// The `wasmJs` targets (browser Playground) run their tests under Node. Node comes from the machine, not a
+// Gradle download: the download registers a project repository, which the settings' FAIL_ON_PROJECT_REPOS
+// forbids. Needed on the root project (the shared env spec) and on every project that has the target.
+plugins.withType<WasmNodeJsPlugin> { extensions.configure<WasmNodeJsEnvSpec> { download.set(false) } }
+
+// The production Playground (`wasmJsBrowserDistribution`) shrinks the wasm with Binaryen's `wasm-opt`. Its download is a
+// project repository too, so it is not downloaded: with the download off, the Kotlin plugin runs the bare command
+// `wasm-opt`, which therefore has to be on the PATH (`brew install binaryen`; on CI a release, see
+// .github/workflows/playground.yml). Without one the production task fails; the development distribution
+// (`assemblePlayground`) never needs it.
+fun Project.useLocalBinaryen() = plugins.withType<BinaryenPlugin> {
+    extensions.configure<BinaryenEnvSpec> { download.set(false) }
+}
+useLocalBinaryen()
+
+// The npm lock (kotlin-js-store/) records every wasm module's test tooling, so it changes whenever a module gains
+// the target, and the check that it is current fails the build over it. Nothing here is published from that
+// lock, so skip the check.
+tasks.matching { it.name == "kotlinWasmStorePackageLock" }.configureEach { enabled = false }
+
 subprojects {
+    useLocalBinaryen()
+    plugins.withType<WasmNodeJsPlugin> { extensions.configure<WasmNodeJsEnvSpec> { download.set(false) } }
+
     group = "dev.ide"
     version = "3.6.0"
 

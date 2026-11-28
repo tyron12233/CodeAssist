@@ -118,8 +118,11 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         val catalogued = catalog.all.map { m ->
             val fromSource = installed[m.id]
             val essential = catalog.isEssential(m.id)
+            // A built-in has a page written for the person using the IDE; the manifest's own one-liner is for plugin authors.
+            val docs = if (fromSource == null) dev.ide.core.plugins.BUILT_IN_PLUGIN_DOCS[m.id] else null
             UiPluginInfo(
-                id = m.id, name = m.name, version = m.version, description = m.description,
+                id = m.id, name = m.name, version = m.version, description = docs?.summary ?: m.description,
+                about = docs?.about.orEmpty(), adds = docs?.adds.orEmpty(), ifOff = docs?.ifOff.orEmpty(),
                 essential = essential, enabled = essential || m.id !in disabled, dependsOn = m.dependsOn,
                 builtIn = fromSource == null,
                 origin = fromSource?.origin?.label ?: "",
@@ -668,6 +671,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         semanticHighlighting = semanticHighlighting,
         codeFolding = codeFolding,
         completionAutoPopup = completionAutoPopup,
+        completionEnterAccepts = completionEnterAccepts,
         completionDelayMs = completionDelayMs,
         completionMaxItems = completionMaxItems,
         postfixTemplates = postfixTemplates,

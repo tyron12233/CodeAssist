@@ -47,6 +47,14 @@ class Vm(
     /** Classes linked so far. */
     val loadedClassCount: Int get() = classes.size
 
+    /**
+     * The methods that executed the most bytecode, as `class.method(descriptor)` with the instructions run in them
+     * themselves (not in their callees): where a program's time goes, in a unit that does not depend on the clock.
+     */
+    fun hotMethods(limit: Int = 25): List<Pair<String, Long>> =
+        classes.values.flatMap { c -> c.methods.values.filter { it.selfSteps > 0 }.map { m -> "${javaName(c.name)}.${m.name}${m.descriptor}" to m.selfSteps } }
+            .sortedByDescending { it.second }.take(limit)
+
     /** The internal names of every class read from the class path so far (not the JDK floor's). */
     fun loadedClassNames(): List<String> = classes.values.filter { !it.isNative && !it.isArray && !it.isPrimitive }.map { it.name }
 

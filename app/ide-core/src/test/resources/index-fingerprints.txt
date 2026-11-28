@@ -6,7 +6,6 @@ android.resources v4 9cedd9e89da87ab4
 annotations.binary v1 0b289bf9911abd27
 annotations.javaSource v1 9cedd9e89da87ab4
 annotations.kotlinSource v1 9cedd9e89da87ab4
-java.classLocator v1 623df7a6ba9c110f
 java.classNames v5 884a41339262cb90
 java.mains v1 9cedd9e89da87ab4
 java.members v2 8e36536dd5359a5b
@@ -28,7 +27,7 @@ kotlin.packages v1 9cedd9e89da87ab4
 kotlin.pkgDecls v4 309e08dbe3bdcc1c
 kotlin.sourceDoc v5 7da3c292876df129
 kotlin.sourceSymbols v1 9cedd9e89da87ab4
-kotlin.typeShape v29 19f99c7c2b27033c
+kotlin.typeShape v30 7263a4170e501e44
 source.memberUsage v1 9cedd9e89da87ab4
 subtypes.binary v1 b94aba51a85b4155
 subtypes.javaSource v1 9cedd9e89da87ab4

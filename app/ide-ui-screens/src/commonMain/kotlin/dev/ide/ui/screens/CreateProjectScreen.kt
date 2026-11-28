@@ -2,6 +2,7 @@
 
 package dev.ide.ui.screens
 
+import dev.ide.ui.LocalBackendText
 import dev.ide.ui.distinctKeys
 import dev.ide.ui.itemsKeyed
 import dev.ide.ui.backend.localized

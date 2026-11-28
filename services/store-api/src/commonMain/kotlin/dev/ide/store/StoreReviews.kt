@@ -77,6 +77,8 @@ enum class ReportReason(val wire: String) {
     COPYRIGHT("copyright"),
     INAPPROPRIATE("inappropriate"),
     BROKEN("broken"),
+    /** A publisher pretending to be someone else. Only for reporting a publisher. */
+    IMPERSONATION("impersonation"),
     OTHER("other"),
 }
 
@@ -170,6 +172,13 @@ interface StoreReviewService {
     /** Flag a whole project rather than one of its reviews. */
     fun reportItem(
         itemSlug: String,
+        reason: ReportReason,
+        detail: String? = null,
+    ): StoreResult<Unit> = StoreResult.Unavailable("No store endpoint")
+
+    /** Flag a publisher (spam accounts, impersonation). Same quiet idempotence as [report]. */
+    fun reportPublisher(
+        handle: String,
         reason: ReportReason,
         detail: String? = null,
     ): StoreResult<Unit> = StoreResult.Unavailable("No store endpoint")

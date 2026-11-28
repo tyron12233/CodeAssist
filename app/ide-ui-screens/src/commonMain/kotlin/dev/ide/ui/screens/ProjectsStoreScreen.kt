@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.LocalBackendText
 import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -352,7 +353,7 @@ internal fun SectionHeader(title: String, subtitle: String? = null, onSeeAll: ((
     Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 26.dp, bottom = 8.dp)) {
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                title,
+                LocalBackendText.current.tr(title),
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
@@ -368,7 +369,7 @@ internal fun SectionHeader(title: String, subtitle: String? = null, onSeeAll: ((
         }
         if (subtitle != null) {
             Text(
-                subtitle,
+                LocalBackendText.current.tr(subtitle),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,

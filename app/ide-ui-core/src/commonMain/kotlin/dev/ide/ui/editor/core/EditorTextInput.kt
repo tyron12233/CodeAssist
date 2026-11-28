@@ -68,6 +68,13 @@ class EditorImeHandle {
      */
     var caretGeometryProvider: (() -> EditorCaretGeometry?)? = null
 
+    /**
+     * What the editor does when the soft keyboard's Enter is pressed, ahead of a plain newline: accept the highlighted
+     * completion, confirm a rename, advance a template field. True when it took the key. Set by the editor; a platform
+     * whose keyboard delivers Enter as a key event (Android) never needs it, the web bridge's text field does.
+     */
+    var onSoftEnter: (() -> Boolean)? = null
+
     /** Ask the platform to raise the soft keyboard for the editor (no-op until the node is attached/focused). */
     fun show() { onShow?.invoke() }
 

@@ -93,6 +93,9 @@ class StoreReviews(private val reviews: StoreReviewService) {
     fun reportItem(itemId: String, reason: UiReportReason, detail: String?): String? =
         message(reviews.reportItem(itemId, reason.toWire(), detail))
 
+    fun reportPublisher(handle: String, reason: UiReportReason, detail: String?): String? =
+        message(reviews.reportPublisher(handle, reason.toWire(), detail))
+
     fun setHidden(itemId: String, authorId: String, hidden: Boolean): String? =
         message(reviews.setReviewHidden(itemId, authorId, hidden))
 
@@ -109,6 +112,7 @@ class StoreReviews(private val reviews: StoreReviewService) {
         UiReportReason.COPYRIGHT -> dev.ide.store.ReportReason.COPYRIGHT
         UiReportReason.INAPPROPRIATE -> dev.ide.store.ReportReason.INAPPROPRIATE
         UiReportReason.BROKEN -> dev.ide.store.ReportReason.BROKEN
+        UiReportReason.IMPERSONATION -> dev.ide.store.ReportReason.IMPERSONATION
         UiReportReason.OTHER -> dev.ide.store.ReportReason.OTHER
     }
 

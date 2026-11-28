@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.LocalBackendText
 import dev.ide.ui.generated.resources.cancel
 import dev.ide.ui.generated.resources.plugins_leftover_confirm_body
 import dev.ide.ui.generated.resources.plugins_leftovers_confirm_all_title
@@ -38,6 +39,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -99,6 +101,8 @@ import dev.ide.ui.generated.resources.plugins_change_updated
 import dev.ide.ui.generated.resources.plugins_changes_more
 import dev.ide.ui.generated.resources.plugins_detail_adds
 import dev.ide.ui.generated.resources.plugins_detail_adds_none
+import dev.ide.ui.generated.resources.plugins_detail_if_off
+import dev.ide.ui.generated.resources.plugins_detail_why_required
 import dev.ide.ui.generated.resources.plugins_detail_api
 import dev.ide.ui.generated.resources.plugins_detail_app_info
 import dev.ide.ui.generated.resources.plugins_detail_app_version
@@ -223,6 +227,10 @@ fun PluginsScreen(
     val installed = plugins.filterNot { it.builtIn }
     var tab by remember { mutableStateOf(startTab ?: if (installed.isNotEmpty()) PluginsTab.Installed else PluginsTab.Get) }
     var query by remember { mutableStateOf("") }
+    // One scroll position per list, held here rather than inside the list: opening a plugin's page leaves the list
+    // out of the composition, and a position kept inside it would be thrown away with it, so coming back landed at the top.
+    val installedScroll = rememberScrollState()
+    val builtInScroll = rememberScrollState()
     // The plugin whose page is open, by id, so the page follows the list as it is re-read after a change.
     var detailId by remember { mutableStateOf<String?>(null) }
     val detail = detailId?.let { id -> plugins.firstOrNull { it.id == id } }
@@ -315,7 +323,8 @@ fun PluginsScreen(
                         val all = if (tab == PluginsTab.BuiltIn) builtIn else installed
                         val shown = if (query.isBlank()) all else all.filter { it.matches(query) }
                         Column(
-                            Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
+                            Modifier.fillMaxWidth().weight(1f)
+                                .verticalScroll(if (tab == PluginsTab.BuiltIn) builtInScroll else installedScroll)
                                 .padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
@@ -626,7 +635,7 @@ private fun PluginCard(
             PluginGlyph(p.name, p.id)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    p.name,
+                    LocalBackendText.current.tr(p.name),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -635,7 +644,7 @@ private fun PluginCard(
                 )
                 if (p.description.isNotBlank()) {
                     Text(
-                        p.description,
+                        LocalBackendText.current.tr(p.description),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
@@ -711,7 +720,7 @@ private fun PluginDetail(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             PluginGlyph(p.name, p.id, size = 64.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(p.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = c.onSurface)
+                Text(LocalBackendText.current.tr(p.name), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = c.onSurface)
                 val sub = listOfNotNull(p.version.takeIf { it.isNotBlank() }?.let { "v$it" }, p.origin.takeIf { it.isNotBlank() })
                 if (sub.isNotEmpty()) Text(sub.joinToString("  ·  "), style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -722,7 +731,15 @@ private fun PluginDetail(
             }
         }
         if (p.description.isNotBlank()) {
-            Text(p.description, style = MaterialTheme.typography.bodyMedium, color = c.onSurface)
+            Text(LocalBackendText.current.tr(p.description), style = MaterialTheme.typography.titleSmall, color = c.onSurface)
+        }
+        // What this part of the IDE is for, in a few sentences (a built-in's page; an installed plugin has only its summary).
+        if (p.about.isNotBlank()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                p.about.split("\n\n").forEach { paragraph ->
+                    Text(LocalBackendText.current.tr(paragraph), style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant)
+                }
+            }
         }
 
         p.error?.let { error ->
@@ -775,10 +792,22 @@ private fun PluginDetail(
         }
 
         Section(title = stringResource(Res.string.plugins_detail_adds)) {
-            if (p.capabilities.isEmpty()) {
-                Text(stringResource(Res.string.plugins_detail_adds_none), style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant)
-            } else {
-                CapabilityList(p.capabilities)
+            when {
+                // A built-in says what it adds in plain sentences; an installed plugin's claims are its declared capabilities.
+                p.adds.isNotEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    p.adds.forEach { PluginBullet(LocalBackendText.current.tr(it)) }
+                }
+                p.capabilities.isEmpty() ->
+                    Text(stringResource(Res.string.plugins_detail_adds_none), style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant)
+                else -> CapabilityList(p.capabilities)
+            }
+        }
+
+        // What it is worth to the person: for a plugin with a switch, what stops working without it; for one without,
+        // why the IDE cannot do without it.
+        if (p.ifOff.isNotBlank()) {
+            Section(title = stringResource(if (p.essential) Res.string.plugins_detail_why_required else Res.string.plugins_detail_if_off)) {
+                Text(LocalBackendText.current.tr(p.ifOff), style = MaterialTheme.typography.bodyMedium, color = c.onSurface)
             }
         }
 
@@ -786,6 +815,15 @@ private fun PluginDetail(
             DetailsTable(p)
         }
         Spacer(Modifier.size(12.dp))
+    }
+}
+
+@Composable
+private fun PluginBullet(text: String) {
+    val c = MaterialTheme.colorScheme
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+        Box(Modifier.padding(top = 8.dp).size(5.dp).background(c.primary, CircleShape))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = c.onSurface, modifier = Modifier.weight(1f))
     }
 }
 

@@ -853,6 +853,16 @@ interface ProjectService {
     /** Open the existing project rooted at [rootPath]; becomes active (bumps [projectEpoch]). */
     suspend fun openProject(rootPath: String): Boolean = false
 
+    /**
+     * The plugins the project at [rootPath] needs that are not working for it on this device, read before it is
+     * opened (so the picker can offer them first) or for the open project (its editor notice). Nothing missing,
+     * or a host that cannot tell, is [UiProjectPluginCheck.ok].
+     */
+    suspend fun projectPluginCheck(rootPath: String): UiProjectPluginCheck = UiProjectPluginCheck()
+
+    /** Close the open project and open it again, so it takes up a plugin that arrived since it was opened. */
+    suspend fun reopenProject(): Boolean = false
+
     /** Permanently delete the project rooted at [rootPath] from disk. */
     suspend fun deleteProject(rootPath: String): Boolean = false
 
@@ -1003,6 +1013,39 @@ interface ProjectService {
     /** Raw bytes of the image at [path], for previewing a file the user picked outside any project (the
      *  export screen's screenshots). Null when it isn't a readable image of a sane size. */
     suspend fun imageBytes(path: String): ByteArray? = null
+}
+
+/** Why a plugin a project needs is not working for it. */
+enum class UiProjectPluginState {
+    /** Not on this device: it has to be downloaded. */
+    NOT_INSTALLED,
+
+    /** On this device, turned off. */
+    TURNED_OFF,
+
+    /** Installed, and not allowed to run yet. */
+    NEEDS_PERMISSION,
+
+    /** On this device and allowed, but it did not load. */
+    FAILED,
+
+    /** Running, but it arrived after the open project was opened: opening the project again takes it up. */
+    NOT_LOADED,
+}
+
+/** A plugin a project needs: [name] as it was when the project last had it. */
+data class UiProjectPlugin(val id: String, val name: String, val state: UiProjectPluginState)
+
+/**
+ * What a project needs from this device's plugins and does not get: the plugins it was last opened with that are
+ * missing ([plugins]), or, for a project with no such record, the module types nothing here provides
+ * ([unknownModuleTypes]).
+ */
+data class UiProjectPluginCheck(
+    val plugins: List<UiProjectPlugin> = emptyList(),
+    val unknownModuleTypes: List<String> = emptyList(),
+) {
+    val ok: Boolean get() = plugins.isEmpty() && unknownModuleTypes.isEmpty()
 }
 
 /**
@@ -1440,6 +1483,13 @@ interface StoreService {
         detail: String? = null,
     ): String? = "Reviews are not available in this build"
 
+    /** Flag a publisher (a spam account, someone pretending to be someone else). Quiet when repeated. */
+    suspend fun reportPublisher(
+        handle: String,
+        reason: UiReportReason,
+        detail: String? = null,
+    ): String? = "Reporting is not available in this build"
+
     /** Flag a whole project rather than one of its reviews. */
     suspend fun reportItem(
         itemId: String,
@@ -1557,6 +1607,38 @@ interface StoreService {
      * queue while they decide about the account behind it.
      */
     suspend fun resolveReport(reportId: String, actioned: Boolean): String? =
+        "Moderation is not available in this build"
+
+    /**
+     * A moderator's view of project [slug]: its listing state, whether it is an Editor's Choice, its publisher,
+     * the versions it can be rolled back to and its open reports. Null for anyone who is not a moderator, or
+     * when it could not be read.
+     */
+    suspend fun moderatedItem(slug: String): UiModeratedItem? = null
+
+    /** Put project [slug] in Editor's Choice, or take it out. Null when it went, else why not. */
+    suspend fun setEditorsChoice(slug: String, on: Boolean): String? = "Moderation is not available in this build"
+
+    /**
+     * Archive project [slug]: off Explore, search and shelves, while its page, its link and the copies people
+     * installed stay. [reason] is sent to its publisher and is required. With [archived] false, an archived,
+     * held or removed project goes back in the listings.
+     */
+    suspend fun archiveItem(slug: String, archived: Boolean, reason: String?): String? =
+        "Moderation is not available in this build"
+
+    /** Remove project [slug] from the store at once; it is deleted for good after 30 days unless restored. */
+    suspend fun removeItem(slug: String, reason: String): String? = "Moderation is not available in this build"
+
+    /** Serve project [slug]'s earlier approved version [versionCode] from now on, telling its publisher [reason]. */
+    suspend fun rollbackItem(slug: String, versionCode: Int, reason: String): String? =
+        "Moderation is not available in this build"
+
+    /** Ban or unban publisher [handle]: a banned publisher's projects leave the store. */
+    suspend fun setPublisherBanned(handle: String, banned: Boolean): String? = "Moderation is not available in this build"
+
+    /** Give or take the verified tick of publisher [handle]. */
+    suspend fun setPublisherVerified(handle: String, verified: Boolean): String? =
         "Moderation is not available in this build"
 
     /**
@@ -1844,6 +1926,12 @@ data class UiPluginInfo(
     val missingRequired: List<String> = emptyList(),
     /** The [optionalDependsOn] ids not installed on this device: what it does with them is unavailable. */
     val missingOptional: List<String> = emptyList(),
+    /** For a built-in: what this part of the IDE is and does, a few plain sentences (blank lines separate paragraphs). */
+    val about: String = "",
+    /** For a built-in: what turning it on gets you, one concrete thing per entry. Installed plugins show [capabilities] instead. */
+    val adds: List<String> = emptyList(),
+    /** For a built-in: what stops working if it is turned off, or, for an essential one, why the IDE cannot do without it. */
+    val ifOff: String = "",
 )
 
 /** An installed plugin app's facts, read from the package manager rather than from anything it declares. */
@@ -2467,6 +2555,9 @@ interface AgentService {
          * the shell's entry points (the editor menu, Settings, Home) and the plugin agree on the route.
          */
         const val SCREEN_USE_WITH_CLAUDE: String = "agent.claude"
+
+        /** The agent UI's provider and key manager, reached from Settings (AI) and the chat. */
+        const val SCREEN_PROVIDERS: String = "agent.providers"
     }
 
     /** A no-op agent for backends that wire none. */

@@ -21,7 +21,6 @@ import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
@@ -88,7 +87,7 @@ fun HalloweenBackdrop(modifier: Modifier = Modifier) {
                 // A round gradient squashed into a wide, low bank: it fades to nothing on every side, where
                 // a flattened oval over an unsquashed gradient would cut it off with a hard top and bottom.
                 scale(1f, 0.32f, pivot = center) {
-                    drawCircle(Brush.radialGradient(listOf(fog, Color.Transparent), center, radius), radius, center)
+                    drawRadialGlow(listOf(fog, Color.Transparent), center, radius)
                 }
             }
         }

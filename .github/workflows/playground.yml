@@ -1,0 +1,69 @@
+name: Playground
+
+on:
+  pull_request:
+    paths:
+      - "experimental/playground-*/**"
+      - "lang/**"
+      - "run/jvm-vm/**"
+      - "run/interp-core/**"
+      - "app/ide-ui*/**"
+      - ".github/workflows/playground.yml"
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+# The browser Playground (docs/playground.md): the engine's tests under Node, then the production web build.
+# Unlike ci.yml this builds the Compose shells, so CI_CORE_ONLY is NOT set and the runner's Android SDK is needed
+# just to configure the build (ubuntu-latest has one). Node and Binaryen come from the PATH: the settings'
+# repository policy forbids Gradle's own downloads of them.
+env:
+  JAVA_VERSION: "25"
+
+concurrency:
+  group: playground-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  playground:
+    name: Playground (wasm tests + production build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The release, not apt's package: Ubuntu's is too old for the flags Kotlin/Wasm passes (`--enable-stack-switching`).
+      # Pinned to the version the production build was verified with. With Gradle's own download off, the Kotlin plugin runs
+      # the bare command `wasm-opt`, so it has to be on the PATH.
+      - name: Install Binaryen (wasm-opt)
+        run: |
+          curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz | tar xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/binaryen-version_133/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/binaryen-version_133/bin/wasm-opt" --version
+
+      - name: Engine tests under Node
+        run: ./gradlew :playground-spike:wasmJsNodeTest --console=plain --stacktrace
+
+      - name: Production build
+        run: ./gradlew :playground-ui:assemblePlaygroundProduction --console=plain --stacktrace
+
+      - name: Size report
+        run: |
+          du -sh experimental/playground-ui/build/playground-web-prod
+          ls -lh experimental/playground-ui/build/playground-web-prod/*.wasm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: playground-web
+          path: experimental/playground-ui/build/playground-web-prod
+          retention-days: 14

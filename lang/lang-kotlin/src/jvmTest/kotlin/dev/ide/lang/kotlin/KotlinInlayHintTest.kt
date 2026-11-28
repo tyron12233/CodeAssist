@@ -32,6 +32,56 @@ class KotlinInlayHintTest {
         )
     }
 
+    /** The inferred type of `val a = <expr>` in [body], as its inlay hint says it. */
+    private fun typeOfA(body: String, prelude: String = ""): String? =
+        hints("Use.kt", "data class P(val x: Int, val y: Int)\n${prelude}fun f(ps: List<P>) {\n$body\n}")
+            .firstOrNull { it.second == InlayHintKind.TYPE && it.first.startsWith(": ") }?.first?.removePrefix(": ")
+
+    /**
+     * A lambda's result is the common type of everything it yields: its last expression AND every
+     * `return@label value`. A `return@map x + y` as the LAST statement is `Nothing` as an expression, and typing
+     * the lambda from that statement alone made `map { …; return@map x + y }` a `List<Nothing>`.
+     */
+    @Test
+    fun aLabeledReturnAsTheLastStatementYieldsItsValue() {
+        assertEquals("List<Int>", typeOfA("    val a = ps.map { it.x + it.y }"), "the baseline: a plain last expression")
+        assertEquals("List<Int>", typeOfA("    val a = ps.map {\n        val (x, y) = it\n        return@map x + y\n    }"))
+        assertEquals("List<Int>", typeOfA("    val a = ps.map {\n        return@map it.x + it.y\n    }"))
+        assertEquals("List<String>", typeOfA("    val a = ps.map { p ->\n        return@map \"\${p.x}\"\n    }"))
+    }
+
+    @Test
+    fun anEarlyLabeledReturnJoinsWithTheLastExpression() {
+        // Same type both ways: unchanged.
+        assertEquals("List<Int>", typeOfA("    val a = ps.map {\n        if (it.x > 1) return@map 1\n        it.y\n    }"))
+        // Different types: the early return is part of the result, no longer silently dropped (`List<Int>`).
+        val joined = typeOfA("    val a = ps.map {\n        if (it.x > 1) return@map \"big\"\n        it.y\n    }")
+        assertTrue(joined != null && joined != "List<Int>" && joined != "List<Nothing>", "the String return must count; got $joined")
+    }
+
+    @Test
+    fun aLambdaThatOnlyThrowsStaysNothing() {
+        assertEquals("List<Nothing>", typeOfA("    val a = ps.map {\n        throw IllegalStateException()\n    }"))
+    }
+
+    @Test
+    fun aReturnFromAnInnerLambdaDoesNotCountForTheOuterOne() {
+        // The inner `return@forEach` returns from the forEach lambda; the outer lambda's value is its last line.
+        assertEquals(
+            "List<Int>",
+            typeOfA("    val a = ps.map { p ->\n        listOf(1).forEach { if (it > 0) return@forEach }\n        p.x\n    }"),
+        )
+    }
+
+    @Test
+    fun aPlainReturnDoesNotJoinTheLambdaResult() {
+        // A plain `return` leaves `g`, it does not yield a value from the lambda.
+        assertEquals(
+            "List<Int>",
+            typeOfA("    val a = ps.map { if (it.x > 9) return emptyList(); it.y }", prelude = ""),
+        )
+    }
+
     @Test
     fun explicitlyTypedLocalGetsNoHint() {
         assertTrue(hints("Use.kt", "fun f() { val n: Int = 1 }").isEmpty(), "an explicit type needs no hint")

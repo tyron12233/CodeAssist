@@ -120,6 +120,7 @@ class LspSession(
             val nowReady = synchronized(this) {
                 if (state == State.STARTING) { state = State.READY; true } else false
             }
+            if (nowReady && configurationStale) { configurationStale = false; sendConfiguration(jsonRpc) }
             val info = result?.obj("serverInfo")
             log.info("$name started for ${context.root}" + (info?.str("name")?.let { " ($it ${info.str("version").orEmpty()})" } ?: ""))
             if (nowReady) {
@@ -163,6 +164,27 @@ class LspSession(
      */
     fun noteAskedWhileStarting(path: Path) {
         if (state == State.NEW || state == State.STARTING) askedWhileStarting.add(path)
+    }
+
+    /**
+     * Push the definition's current whole configuration to a running server (`workspace/didChangeConfiguration`).
+     * Not ready yet: nothing to do, the handshake reads the configuration when it gets there.
+     */
+    fun configurationChanged() {
+        val connection = rpc
+        if (state != State.READY || connection == null || connection.isClosed) {
+            // Starting: the handshake may already have read the old configuration, so send again once ready.
+            if (state == State.NEW || state == State.STARTING) configurationStale = true
+            return
+        }
+        sendConfiguration(connection)
+    }
+
+    @Volatile private var configurationStale = false
+
+    private fun sendConfiguration(connection: JsonRpcConnection) {
+        val settings = parseJsonOrNull(runCatching { definition.configuration(null, context) }.getOrNull()) ?: JsonNull
+        connection.notify("workspace/didChangeConfiguration", buildJsonObject { put("settings", settings) })
     }
 
     /** `shutdown` + `exit`, then release the connection. Idempotent; safe from any thread. */

@@ -62,8 +62,14 @@ object InterpProfile {
     }
 
     /** Tally [n] against the counter [name] on the current pass (no-op when disabled or outside a [trace]). */
-    fun count(name: String, n: Long = 1L) {
-        if (enabled) current.get()?.count(name, n)
+    inline fun count(name: String, n: Long = 1L) {
+        // Inline, so a counter on the hot path (every node, every Env) is one flag read when profiling is off, with
+        // no call and no default-argument bridge to pay for.
+        if (enabled) tally(name, n)
+    }
+
+    fun tally(name: String, n: Long) {
+        current.get()?.count(name, n)
     }
 
     // --- internals (public so the inline functions above can reach them; not block-taking, so legal) ---

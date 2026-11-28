@@ -76,6 +76,45 @@ class PluginLiveInstallTest {
     }
 
     @Test
+    fun `a plugin allowed before it was uninstalled runs again when it is reinstalled while the app runs`() {
+        // The app launched without the plugin, so the launch's catalog kept none of the user's answer about it.
+        ApplicationEnvironment(consentedPluginIds = setOf(id)).use { env ->
+            assertIs<ApplicationEnvironment.PluginArrival.Listed>(env.pluginAppeared(first()))
+
+            assertFalse(env.pluginCatalog.needsConsent(id), "it was allowed before: nothing to ask")
+            assertTrue(env.pluginCatalog.isEnabled(id))
+            assertIs<ApplicationEnvironment.PluginReload.Reloaded>(env.loadPluginNow(id))
+            assertTrue(env.isPluginRunning(id))
+        }
+    }
+
+    @Test
+    fun `each load while the app runs is a new generation, so an open project can tell it has not taken it up`() {
+        ApplicationEnvironment(consentedPluginIds = setOf(id)).use { env ->
+            env.pluginAppeared(first())
+            env.loadPluginNow(id)
+            val atOpen = env.pluginLoadGeneration(id)
+
+            env.pluginRemoved(id)
+            env.pluginAppeared(first())
+            env.loadPluginNow(id)
+
+            assertTrue(env.isPluginRunning(id))
+            assertTrue(env.pluginLoadGeneration(id) != atOpen, "running again, but not the load the project opened with")
+        }
+    }
+
+    @Test
+    fun `a plugin turned off before it was uninstalled stays off when it is reinstalled`() {
+        ApplicationEnvironment(disabledPluginIds = setOf(id), consentedPluginIds = setOf(id)).use { env ->
+            env.pluginAppeared(first())
+
+            assertFalse(env.pluginCatalog.isEnabled(id))
+            assertFalse(env.pluginCatalog.needsConsent(id), "a refusal is not asked again")
+        }
+    }
+
+    @Test
     fun `allowing it loads it in place, with its UI`() {
         ApplicationEnvironment().use { env ->
             env.pluginAppeared(first())

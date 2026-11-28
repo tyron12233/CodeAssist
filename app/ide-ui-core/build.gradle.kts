@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // The layer the rest of the IDE UI is built on: the theme, the platform expect/actual surface, the editor's
@@ -35,6 +36,9 @@ kotlin {
     // secondary click, the clock, and the editor's IME) is resolved for iOS in `src/iosMain`.
     iosSimulatorArm64()
     iosArm64()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { browser() }
 
     sourceSets {
         commonMain.dependencies {

@@ -141,6 +141,36 @@ class PluginsScreenSnapshot {
         override suspend fun pluginDownloads(): UiPluginDownloads = DownloadsBackend().pluginDownloads()
     }
 
+    /** A built-in's page as the IDE writes it for a person: what it is, what it adds, and why it is on (or what turning it off costs). */
+    private class BuiltInPagesBackend(essential: Boolean) : StubBackend() {
+        private val list = if (essential) listOf(
+            UiPluginInfo(
+                "platform", "Platform", "1.0.0", "The basics every project needs: file icons in the project tree, and Markdown files.",
+                essential = true, enabled = true,
+                about = "The foundation the other plugins build on. It supplies the default icons shown beside files and folders in the project tree, and it tells the IDE that .md and .markdown files are Markdown documents.",
+                adds = listOf(
+                    "Default icons for files and folders in the project tree",
+                    "Recognizes .md and .markdown files as Markdown, so they open as text and are never checked as if they were Java",
+                ),
+                ifOff = "Without it the project tree would have no file icons and a Markdown file would be mistaken for source code, and the other plugins load on top of it.",
+            ),
+        ) else listOf(
+            UiPluginInfo(
+                "gradle-support", "Gradle Support", "1.0.0", "Opens Gradle and Amper projects, and writes dependency changes back to their build files.",
+                essential = false, enabled = true,
+                about = "Lets you open a project that already has a Gradle or Amper build. It reads the build scripts without running Gradle, so a project opens right away.\n\nWhen you add a dependency in the IDE, it is written back into the build file, which stays the source of truth.",
+                adds = listOf(
+                    "Opens Gradle projects by reading build.gradle and build.gradle.kts",
+                    "Opens JetBrains Amper projects from project.yaml and module.yaml",
+                    "Writes added and removed dependencies back into the Gradle build file",
+                    "Kotlin Multiplatform templates in Create Project",
+                ),
+                ifOff = "Gradle and Amper folders are no longer recognized: they open as empty workspaces instead of as projects.",
+            ),
+        )
+        override fun pluginCatalog(): List<UiPluginInfo> = list
+    }
+
     /** With nothing installed, the Installed tab still exists and shows its empty state. */
     private class NoInstalledBackend : StubBackend() {
         override fun pluginCatalog(): List<UiPluginInfo> = listOf(
@@ -152,6 +182,16 @@ class PluginsScreenSnapshot {
     @Test
     fun renderBuiltInTab() {
         snapshot("plugins.png", FakeBackend(), startTab = PluginsTab.BuiltIn)
+    }
+
+    @Test
+    fun renderBuiltInPageEssential() {
+        snapshot("plugins-builtin-page-essential.png", BuiltInPagesBackend(essential = true), startTab = PluginsTab.BuiltIn, click = FIRST_CARD, height = 2000)
+    }
+
+    @Test
+    fun renderBuiltInPageWithSwitch() {
+        snapshot("plugins-builtin-page-switch.png", BuiltInPagesBackend(essential = false), startTab = PluginsTab.BuiltIn, click = FIRST_CARD, height = 2000)
     }
 
     @Test

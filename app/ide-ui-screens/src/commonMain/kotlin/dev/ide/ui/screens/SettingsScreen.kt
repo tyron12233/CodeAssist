@@ -112,6 +112,9 @@ private val WIDE_BREAKPOINT = 720.dp
 
 /** Keys the screen handles with a UI flow rather than [IdeBackend.invokeSettingAction] (built-in Privacy). */
 private const val ACTION_VIEW_LOGS = "viewLogs"
+
+/** The AI page's "manage providers" button; the agent plugin's screen at [dev.ide.ui.backend.AgentService.SCREEN_PROVIDERS]. */
+private const val ACTION_AI_PROVIDERS = "openProviders"
 private const val ACTION_BACKUP = "backup"
 /** Build Runtime page action: re-request the runtime notification permission (mirrors
  *  `BuiltInSettingsPages.BUILD_NOTIFICATIONS`). Needs the platform permission launcher, so it's handled here. */
@@ -211,6 +214,7 @@ fun SettingsScreen(
     }
     // The build-notification permission re-request (Build Runtime page); the launcher lives in composition.
     val notifController = rememberNotificationPermissionController()
+    val openPluginScreen = dev.ide.ui.LocalPluginNavigator.current
 
     val onSet: (String, String, String) -> Unit = { pageId, key, encoded ->
         state.set(pageId, key, encoded, onSettingsChanged)
@@ -221,6 +225,7 @@ fun SettingsScreen(
             AD_PRIVACY_KEY -> ads?.showPrivacyOptions()
             AD_INSPECTOR_KEY -> ads?.openAdInspector()
             ACTION_VIEW_LOGS -> onOpenLogs()
+            ACTION_AI_PROVIDERS -> openPluginScreen(dev.ide.ui.backend.AgentService.SCREEN_PROVIDERS)
             ACTION_BACKUP -> state.backupProjects(fileActions::share)
             // Re-request the notification permission; if the OS won't re-prompt (permanently denied), route to
             // the app's notification settings so the user can still enable it. Isolated builds resume on the

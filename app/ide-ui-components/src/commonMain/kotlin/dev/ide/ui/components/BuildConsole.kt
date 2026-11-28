@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.LocalBackendText
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
@@ -636,7 +637,7 @@ private fun ConsoleTabs(
             ) { onSelect(BuildTab.Logcat) }
             // Plugin-contributed BOTTOM tool windows.
             pluginTabs.forEach { tw ->
-                TabItem(tw.title, activePluginTab == tw.id) { onSelectPlugin(tw.id) }
+                TabItem(LocalBackendText.current.tr(tw.title), activePluginTab == tw.id) { onSelectPlugin(tw.id) }
             }
         }
         if (!inline) Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))

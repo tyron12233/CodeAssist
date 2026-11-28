@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // language-api — the SPI a language backend implements, and (as of the multiplatform split) mostly a set of
@@ -29,6 +30,9 @@ kotlin {
 
     iosArm64()
 
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { nodejs() }
+
     sourceSets {
         commonMain.dependencies {
             // The DOM and the symbol model moved to :model-api (packages unchanged) so that they can be named
@@ -40,6 +44,9 @@ kotlin {
             api(project(":vfs-api"))
             api(project(":platform-core"))
         }
+
+        // The shared tests under src/commonTest use kotlin.test; without it they only ever compiled for the JVM.
+        commonTest.dependencies { implementation(kotlin("test")) }
 
         jvmTest.dependencies {
             implementation(kotlin("test"))

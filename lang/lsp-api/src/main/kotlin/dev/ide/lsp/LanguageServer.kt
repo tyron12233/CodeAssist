@@ -85,6 +85,22 @@ interface LanguageServerContext {
 
     /** Where to report what the server does; attributed to the plugin that registered the definition. */
     val logger: Logger
+
+    /**
+     * Tell the running server that [LanguageServerDefinition.configuration] now answers differently, e.g. a
+     * package was installed and the interpreter's search paths grew. Sends `workspace/didChangeConfiguration`
+     * with the current whole configuration. Does nothing while the server is not running (it reads the
+     * configuration when it starts) and for a context that is not backed by a session. Safe from any thread.
+     * Since SPI 3.10.0.
+     */
+    fun notifyConfigurationChanged() {}
+
+    /**
+     * Shut this server down so the next request for one of its files starts it afresh. It does not reset the
+     * crash-loop budget, so it cannot be used to restart past it. For a change a running server cannot
+     * absorb (a new interpreter, a changed toolchain). Safe from any thread; does nothing for a context that is not backed by a session. Since SPI 3.10.0.
+     */
+    fun restart() {}
 }
 
 /**

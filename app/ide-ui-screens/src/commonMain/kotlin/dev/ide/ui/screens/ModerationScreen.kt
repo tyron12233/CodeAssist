@@ -1,5 +1,15 @@
 package dev.ide.ui.screens
 
+import androidx.compose.ui.graphics.Color
+import org.jetbrains.compose.resources.pluralStringResource
+import dev.ide.ui.backend.UiListingState
+import dev.ide.ui.generated.resources.moderation_report_publisher
+import dev.ide.ui.generated.resources.moderation_item_archived
+import dev.ide.ui.generated.resources.moderation_item_held
+import dev.ide.ui.generated.resources.moderation_item_removed
+import dev.ide.ui.generated.resources.mod_ban
+import dev.ide.ui.generated.resources.mod_unban
+import dev.ide.ui.generated.resources.mod_open_reports
 import dev.ide.ui.distinctKeys
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -103,6 +113,8 @@ fun ModerationScreen(
     // The submission a Reject tap is composing a note for. A dialog rather than an inline field because
     // the note is the whole of what its publisher receives, and it should be written deliberately.
     var rejecting by remember { mutableStateOf<UiPendingSubmission?>(null) }
+    // A publisher about to be banned from the report queue, waiting for the moderator to confirm.
+    var banning by remember { mutableStateOf<UiReportedContent?>(null) }
     // Set when an approval needs the one question the engine cannot answer for itself.
     var iconQuestion by remember { mutableStateOf<UiPendingSubmission?>(null) }
     var working by remember { mutableStateOf(false) }
@@ -180,6 +192,12 @@ fun ModerationScreen(
                         onResolve = { report, actioned ->
                             decide { backend.store.resolveReport(report.reportId, actioned) }
                         },
+                        onOpenPublisher = onOpenPublisher,
+                        onBan = { report, banned ->
+                            val handle = report.publisherHandle ?: return@ReportList
+                            if (banned) banning = report
+                            else decide { backend.store.setPublisherBanned(handle, false) }
+                        },
                     )
 
                     ModerationTab.Learn -> LearnReportList(
@@ -189,6 +207,17 @@ fun ModerationScreen(
                     )
                 }
             }
+        }
+    }
+
+    banning?.let { report ->
+        val handle = report.publisherHandle
+        ConfirmBanDialog(
+            name = report.publisherName ?: handle.orEmpty(),
+            onDismiss = { banning = null },
+        ) {
+            banning = null
+            if (handle != null) decide { backend.store.setPublisherBanned(handle, true) }
         }
     }
 
@@ -634,6 +663,8 @@ private fun ReportList(
     onOpenItem: (String) -> Unit,
     onHide: (UiReportedContent, Boolean) -> Unit,
     onResolve: (UiReportedContent, Boolean) -> Unit,
+    onOpenPublisher: ((String) -> Unit)? = null,
+    onBan: (UiReportedContent, Boolean) -> Unit = { _, _ -> },
 ) {
     val c = MaterialTheme.colorScheme
     if (reports.isEmpty()) {
@@ -662,14 +693,20 @@ private fun ReportList(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Column(Modifier.weight(1f)) {
                             Text(
-                                report.itemTitle ?: report.itemSlug.orEmpty(),
+                                if (report.isPublisherReport) {
+                                    report.publisherName ?: report.publisherHandle.orEmpty()
+                                } else {
+                                    report.itemTitle ?: report.itemSlug.orEmpty()
+                                },
                                 style = MaterialTheme.typography.titleSmall,
                                 color = c.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                if (report.isItemReport) {
+                                if (report.isPublisherReport) {
+                                    stringResource(Res.string.moderation_report_publisher)
+                                } else if (report.isItemReport) {
                                     stringResource(Res.string.moderation_report_project)
                                 } else {
                                     stringResource(Res.string.moderation_report_review)
@@ -683,6 +720,24 @@ private fun ReportList(
                     if (report.reviewHidden) {
                         Spacer(Modifier.height(6.dp))
                         Chip(stringResource(Res.string.moderation_already_hidden))
+                    }
+                    // Where the project stands, and how many people flagged it: a held or archived one has
+                    // already left the listings, and three reports read differently from one.
+                    val stateLabel = when (report.itemState) {
+                        UiListingState.ARCHIVED -> stringResource(Res.string.moderation_item_archived)
+                        UiListingState.HELD_FOR_REPORTS -> stringResource(Res.string.moderation_item_held)
+                        UiListingState.REMOVED -> stringResource(Res.string.moderation_item_removed)
+                        else -> null
+                    }
+                    if (stateLabel != null || (report.isItemReport && report.itemOpenReports > 1) || report.publisherBanned) {
+                        Spacer(Modifier.height(6.dp))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            stateLabel?.let { Chip(it) }
+                            if (report.isItemReport && report.itemOpenReports > 1) {
+                                Chip(pluralStringResource(Res.plurals.mod_open_reports, report.itemOpenReports, report.itemOpenReports))
+                            }
+                            if (report.publisherBanned) Chip(stringResource(Res.string.moderation_flag_banned))
+                        }
                     }
                     report.reviewText?.takeIf { it.isNotBlank() }?.let {
                         Spacer(Modifier.height(10.dp))
@@ -708,6 +763,22 @@ private fun ReportList(
                         report.itemSlug?.let { slug ->
                             TextButton(onClick = { onOpenItem(slug) }) {
                                 Text(stringResource(Res.string.moderation_open_listing))
+                            }
+                        }
+                        // A publisher report: their page (none while banned), and the ban itself.
+                        val handle = report.publisherHandle
+                        if (report.isPublisherReport && handle != null) {
+                            if (!report.publisherBanned && onOpenPublisher != null) {
+                                TextButton(onClick = { onOpenPublisher(handle) }) {
+                                    Text(stringResource(Res.string.moderation_view_publisher))
+                                }
+                            }
+                            TextButton(onClick = { onBan(report, !report.publisherBanned) }, enabled = enabled) {
+                                val name = report.publisherName ?: handle
+                                Text(
+                                    stringResource(if (report.publisherBanned) Res.string.mod_unban else Res.string.mod_ban, name),
+                                    color = if (report.publisherBanned) Color.Unspecified else c.error,
+                                )
                             }
                         }
                         // Only for a review report: an item report has no review to hide, and the action

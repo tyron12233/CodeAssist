@@ -62,7 +62,6 @@ internal fun BreadcrumbBar(
     hasPreview: Boolean,
 ) {
     var crumbs by remember(active.path) { mutableStateOf(breadcrumbFor(state, active)) }
-    val blocksHere = remember(active.path) { state.blocksEnabled && state.backend.blocks.blocksSupport(active.path) }
     val caretOffset = active.session.selection.start
     LaunchedEffect(active.path, active.session.textRevision, caretOffset) {
         delay(200.milliseconds)
@@ -76,11 +75,6 @@ internal fun BreadcrumbBar(
         crumbs = if (structure.isEmpty()) breadcrumbFor(state, active)
         else listOfNotNull(state.backend.files.moduleNameForFile(active.path)) + structure
     }
-    val canPreview = isPreviewable(active.path) ||
-            isMarkdownPreviewable(active.path) || hasPreview ||
-            // A plugin's contributed pane counts as previewable too, or the toggle would omit Preview for
-            // exactly the files a plugin added it for.
-            EditorPreviewRegistry.forPath(active.path) != null
     Row(
         Modifier.fillMaxWidth()
             .background(Ide.colors.editorBg)
@@ -99,15 +93,30 @@ internal fun BreadcrumbBar(
         }
         // Tapping the location line opens the Structure panel in the left sidebar (IntelliJ-style outline).
         Box(Modifier.weight(1f).clickable { state.selectLeftPanel(LeftPanelId.STRUCTURE) }) { Breadcrumb(crumbs) }
-        ViewModeToggle(
-            mode = active.viewMode,
-            canPreview = canPreview,
-            blocksEnabled = blocksHere,
-            contributed = ViewModeRegistry.forFile(active.path),
-        ) {
-            if (it != active.viewMode) state.countViewMode(active.path, it)
-            active.viewMode = it
-        }
+        ActiveViewModeToggle(state, active, hasPreview)
+    }
+}
+
+/**
+ * The view-mode switch for [active] (Code / Blocks / Preview / Split), with whichever of those the file has. In
+ * the breadcrumb row, and in the tabs strip while zen mode has no row, so a tab can still change surface.
+ */
+@Composable
+internal fun ActiveViewModeToggle(state: IdeUiState, active: OpenFile, hasPreview: Boolean) {
+    val blocksHere = remember(active.path) { state.blocksEnabled && state.backend.blocks.blocksSupport(active.path) }
+    val canPreview = isPreviewable(active.path) ||
+            isMarkdownPreviewable(active.path) || hasPreview ||
+            // A plugin's contributed pane counts as previewable too, or the toggle would omit Preview for
+            // exactly the files a plugin added it for.
+            EditorPreviewRegistry.forPath(active.path) != null
+    ViewModeToggle(
+        mode = active.viewMode,
+        canPreview = canPreview,
+        blocksEnabled = blocksHere,
+        contributed = ViewModeRegistry.forFile(active.path),
+    ) {
+        if (it != active.viewMode) state.countViewMode(active.path, it)
+        active.viewMode = it
     }
 }
 

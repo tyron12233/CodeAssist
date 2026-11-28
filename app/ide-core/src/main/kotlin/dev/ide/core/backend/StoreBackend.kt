@@ -408,6 +408,12 @@ internal class StoreBackend(
         detail: String?,
     ): String? = withContext(storeIo) { reviewState.reportItem(itemId, reason, detail) }
 
+    override suspend fun reportPublisher(
+        handle: String,
+        reason: dev.ide.ui.backend.UiReportReason,
+        detail: String?,
+    ): String? = withContext(storeIo) { reviewState.reportPublisher(handle, reason, detail) }
+
     override suspend fun setReviewHidden(itemId: String, authorId: String, hidden: Boolean): String? =
         withContext(storeIo) { reviewState.setHidden(itemId, authorId, hidden) }
 
@@ -735,6 +741,27 @@ internal class StoreBackend(
 
     override suspend fun resolveReport(reportId: String, actioned: Boolean): String? =
         withContext(storeIo) { moderationState.resolveReport(reportId, actioned) }
+
+    override suspend fun moderatedItem(slug: String): dev.ide.ui.backend.UiModeratedItem? =
+        withContext(storeIo) { moderationState.item(slug) }
+
+    override suspend fun setEditorsChoice(slug: String, on: Boolean): String? =
+        withContext(storeIo) { moderationState.setEditorsChoice(slug, on) }
+
+    override suspend fun archiveItem(slug: String, archived: Boolean, reason: String?): String? =
+        withContext(storeIo) { moderationState.archive(slug, archived, reason) }
+
+    override suspend fun removeItem(slug: String, reason: String): String? =
+        withContext(storeIo) { moderationState.remove(slug, reason) }
+
+    override suspend fun rollbackItem(slug: String, versionCode: Int, reason: String): String? =
+        withContext(storeIo) { moderationState.rollback(slug, versionCode, reason) }
+
+    override suspend fun setPublisherBanned(handle: String, banned: Boolean): String? =
+        withContext(storeIo) { moderationState.setPublisherBanned(handle, banned) }
+
+    override suspend fun setPublisherVerified(handle: String, verified: Boolean): String? =
+        withContext(storeIo) { moderationState.setPublisherVerified(handle, verified) }
 
     override suspend fun submissionImageFile(storagePath: String): String? =
         media.submissionImage(storagePath)

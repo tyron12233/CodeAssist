@@ -164,8 +164,20 @@ class ApplicationEnvironment(
     var pluginCatalog: PluginCatalog
         private set
 
+    /** How many times installed plugin a plugin was loaded while the app ran: 0 for one loaded at launch (or never). */
+    private val liveLoads = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
     /** Every installed plugin known now, by id: what [loadPluginNow] loads from. */
     private val discoveredById = java.util.concurrent.ConcurrentHashMap<String, DiscoveredPlugin>()
+
+    /**
+     * The user's disabled and consented sets as saved, unfiltered. [PluginCatalog] keeps only the ids of plugins
+     * present when it is built, so the catalog of a launch without a plugin has forgotten that the user allowed
+     * it. A plugin installed while the app runs ([pluginAppeared]) is judged against these instead: one allowed
+     * before it was uninstalled loads again, as it would on a launch, rather than waiting with no question asked.
+     */
+    private var savedDisabled: Set<String>
+    private var savedConsented: Set<String>
 
     /** The built-ins' ids, lowercased: an installed plugin that appears later may not claim one. */
     private lateinit var builtInIdsLower: Set<String>
@@ -264,6 +276,8 @@ class ApplicationEnvironment(
             failures[d.manifest.id] = "it was turned off after it crashed CodeAssist (version $crashedVersion). " +
                 "It turns back on when a new version is installed, or turn it on here to try again."
         }
+        savedDisabled = disabledPluginIds - liftedCrashSuspensions
+        savedConsented = consentedPluginIds
         pluginCatalog = PluginCatalog(
             all = builtIns.map { it.engine.manifest } + discovered.map { it.manifest },
             disabledIds = disabledPluginIds - liftedCrashSuspensions,
@@ -424,6 +438,7 @@ class ApplicationEnvironment(
         enabledUiPlugins = enabledUiPlugins.filter { it.id != id } + listOfNotNull(ui)
         discoveredById[id] = replacement
         pluginCatalog = catalogWith(manifest)
+        if (failure == null) liveLoads.merge(id, 1, Int::plus)
         return if (failure != null) PluginReload.Failed(failure, unloaded = true) else PluginReload.Reloaded(manifest, ui)
     }
 
@@ -441,6 +456,13 @@ class ApplicationEnvironment(
 
     /** Whether installed plugin [id] is loaded and registered in this process right now. */
     fun isPluginRunning(id: String): Boolean = pluginManager.loadedIds.any { it.value == id }
+
+    /**
+     * Which load of plugin [id] is running: it changes each time the plugin is loaded, reloaded or loaded again
+     * after an uninstall while the app runs. An open project took the plugin's contributions as it opened, so a
+     * different value now means it has not taken up the plugin that runs.
+     */
+    fun pluginLoadGeneration(id: String): Int = liveLoads[id] ?: 0
 
     /**
      * A plugin app was installed, or installed over, while the app runs: list it straight away instead of at the
@@ -492,6 +514,8 @@ class ApplicationEnvironment(
     /** Apply the user's current disabled and consented sets to [pluginCatalog]. Loads and unloads nothing. */
     @Synchronized
     fun setPluginChoices(disabled: Set<String>, consented: Set<String>) {
+        savedDisabled = disabled
+        savedConsented = consented
         val c = pluginCatalog
         pluginCatalog = PluginCatalog(c.all, disabled, c.externalIds, consented)
     }
@@ -531,6 +555,7 @@ class ApplicationEnvironment(
         }
         markRow(id, failure ?: uiFailure)
         enabledUiPlugins = enabledUiPlugins.filter { it.id != id } + listOfNotNull(ui)
+        if (failure == null) liveLoads.merge(id, 1, Int::plus)
         return if (failure != null) PluginReload.Failed(failure, unloaded = true) else PluginReload.Reloaded(d.manifest, ui)
     }
 
@@ -560,9 +585,9 @@ class ApplicationEnvironment(
         val c = pluginCatalog
         return PluginCatalog(
             all = c.all.filter { it.id != manifest.id } + manifest,
-            disabledIds = c.disabledIds,
+            disabledIds = savedDisabled,
             externalIds = c.externalIds + manifest.id,
-            consentedIds = c.consentedIds,
+            consentedIds = savedConsented,
         )
     }
 

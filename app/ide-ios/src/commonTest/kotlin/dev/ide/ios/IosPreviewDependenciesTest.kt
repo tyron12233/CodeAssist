@@ -147,6 +147,16 @@ class IosPreviewDependenciesTest {
             androidVariant(dep("androidx.compose.runtime", "runtime", "1.10.5")) + "," + jvmVariant(at = at(rt, "runtime-desktop", "1.10.5")))
         publishModule(central, rt, "runtime-desktop", "1.10.5",
             jvmVariant(files = """{ "name": "r.jar", "url": "runtime-desktop-1.10.5.jar" }"""), jar = true)
+        // The IDE's own Compose is a version floor under every preview (runtime, ui, foundation at the version
+        // it is built with), so the repository has to publish it or the floor resolves to nothing and, being the
+        // newest, takes the real runtime with it.
+        for ((group, name) in listOf("runtime" to "runtime", "ui" to "ui", "foundation" to "foundation")) {
+            val g = "org.jetbrains.compose.$group"
+            versions(central, g, name, "1.11.1")
+            publishModule(central, g, name, "1.11.1", jvmVariant(at = at(g, "$name-desktop", "1.11.1")))
+            publishModule(central, g, "$name-desktop", "1.11.1",
+                jvmVariant(files = """{ "name": "f.jar", "url": "$name-desktop-1.11.1.jar" }"""), jar = true)
+        }
         maven.publishStdlib()
 
         val jars = IosPreviewDependencies(root, maven).classpath(listOf(Coordinate("androidx.compose.material3", "material3", "1.4.0")))

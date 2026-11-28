@@ -4,6 +4,7 @@ import dev.ide.agent.LlmClient
 import dev.ide.agent.LlmEffort
 import dev.ide.agent.LlmModelInfo
 import dev.ide.agent.LlmProvider
+import dev.ide.agent.ProviderCredentials
 import dev.ide.agent.LlmRequest
 import dev.ide.agent.LlmStreamEvent
 import dev.ide.agent.ProviderConfig
@@ -24,6 +25,7 @@ import kotlinx.serialization.json.put
 class GeminiProvider(private val transport: LlmTransport) : LlmProvider {
     override val id: String = "gemini"
     override val displayName: String = "Google Gemini"
+    override val credentials: ProviderCredentials = ProviderCredentials(keyPlaceholder = "AIza...", keyUrl = "https://aistudio.google.com/apikey")
     // Flash first: it is what a free API key can actually use. Google took 2.5 Pro off the free tier entirely
     // (limit 0) and closed the 2.5 family to new projects, so a Pro default failed a fresh key's first request.
     override val models: List<LlmModelInfo> = listOf(

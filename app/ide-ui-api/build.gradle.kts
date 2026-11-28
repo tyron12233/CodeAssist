@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // ide-ui-api — the neutral contracts the reusable UI (:ide-ui) and its host (:ide-core) share: the `IdeBackend`
@@ -32,6 +33,9 @@ kotlin {
     // so the iOS target compiles commonMain unchanged.
     iosSimulatorArm64()
     iosArm64()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs { browser() }
 
     sourceSets {
         commonMain.dependencies {

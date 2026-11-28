@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.LocalBackendText
 import dev.ide.ui.backend.localized
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable

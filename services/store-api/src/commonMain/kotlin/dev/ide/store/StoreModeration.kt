@@ -116,7 +116,47 @@ data class ReportedContent(
     val reviewText: String? = null,
     /** `visible` or `hidden`, so the action can say Hide or Restore. */
     val reviewStatus: String? = null,
+    /** The reported project's listing state (`approved`, `unlisted`, `removed`), so the actions fit it. */
+    val itemStatus: String? = null,
+    /** Why an `unlisted` project is held: `archived` by a moderator, or `reports`. */
+    val itemHoldKind: String? = null,
+    /** How many reports are open on the project, this one included. */
+    val itemOpenReports: Int = 0,
+    /** True when a publisher was reported rather than a project or a review. */
+    val isPublisherReport: Boolean = false,
+    val publisherHandle: String? = null,
+    val publisherName: String? = null,
+    val publisherBanned: Boolean = false,
 )
+
+/**
+ * A moderator's view of one project: what its menu offers depends on all of it.
+ *
+ * [status] is the listing state (`approved`, `unlisted`, `removed`, ...); [holdKind] says why an unlisted one
+ * is held (`archived` or `reports`); [holdReason] is what its publisher was told. [purgeAt] is when a removed
+ * one is deleted for good.
+ */
+data class ModeratedItem(
+    val slug: String,
+    val title: String,
+    val status: String,
+    val holdKind: String? = null,
+    val holdReason: String? = null,
+    val purgeAt: String? = null,
+    val editorsChoice: Boolean = false,
+    val publisherHandle: String? = null,
+    val publisherName: String? = null,
+    val publisherBanned: Boolean = false,
+    val publisherVerified: Boolean = false,
+    /** Its approved versions, newest first: what it can be rolled back to. */
+    val versions: List<ModeratedVersion> = emptyList(),
+    /** The open reports on it, oldest first. */
+    val openReports: List<ModeratedReport> = emptyList(),
+)
+
+data class ModeratedVersion(val version: String, val versionCode: Int, val current: Boolean)
+
+data class ModeratedReport(val reason: String, val detail: String? = null, val createdAt: String? = null)
 
 /**
  * The moderation port.
@@ -185,6 +225,37 @@ interface StoreModerationService {
      * queue while they decide about the account behind it.
      */
     fun resolveReport(reportId: String, actioned: Boolean): StoreResult<Unit> =
+        StoreResult.Unavailable("Moderation is not available in this build")
+
+    /** The moderator's view of project [slug], or null when there is no such project. */
+    fun item(slug: String): StoreResult<ModeratedItem?> =
+        StoreResult.Unavailable("Moderation is not available in this build")
+
+    /** Put project [slug] in Editor's Choice, or take it out. */
+    fun setEditorsChoice(slug: String, on: Boolean): StoreResult<String> =
+        StoreResult.Unavailable("Moderation is not available in this build")
+
+    /**
+     * Archive project [slug] (off the listings, its page and installs kept), telling its publisher [reason],
+     * or with [archived] false put an archived, held or removed one back in the listings.
+     */
+    fun archive(slug: String, archived: Boolean, reason: String?): StoreResult<String> =
+        StoreResult.Unavailable("Moderation is not available in this build")
+
+    /** Remove project [slug]: gone at once, deleted for good after the grace period. [reason] goes to its publisher. */
+    fun remove(slug: String, reason: String): StoreResult<String> =
+        StoreResult.Unavailable("Moderation is not available in this build")
+
+    /** Serve project [slug]'s earlier approved version [versionCode] from now on, telling its publisher [reason]. */
+    fun rollback(slug: String, versionCode: Int, reason: String): StoreResult<String> =
+        StoreResult.Unavailable("Moderation is not available in this build")
+
+    /** Ban or unban the publisher [handle]: a banned publisher's projects leave the store. */
+    fun setPublisherBanned(handle: String, banned: Boolean): StoreResult<Unit> =
+        StoreResult.Unavailable("Moderation is not available in this build")
+
+    /** Give or take the verified tick of the publisher [handle]. */
+    fun setPublisherVerified(handle: String, verified: Boolean): StoreResult<Unit> =
         StoreResult.Unavailable("Moderation is not available in this build")
 
     /**

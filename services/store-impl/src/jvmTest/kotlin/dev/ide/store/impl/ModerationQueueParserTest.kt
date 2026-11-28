@@ -152,4 +152,60 @@ class ModerationQueueParserTest {
         assertEquals(1, report.reviewStars)
         assertEquals("visible", report.reviewStatus)
     }
+
+    @Test
+    fun aPublisherReportAndAHeldProjectCarryWhatTheirActionsNeed() {
+        // The keys store_report_queue added with the moderation actions (20261126000100): a publisher report
+        // names the publisher, and a project report says where the project stands and how many flagged it.
+        val publisher = assertNotNull(
+            SupabaseModerationService.parseReport(
+                dev.ide.platform.JsonReader.parse(
+                    """{"id":"r2","reason":"impersonation","is_item_report":false,"is_publisher_report":true,
+                       "publisher_handle":"fake-dev","publisher_name":"Fake Dev","publisher_banned":false,
+                       "publisher_verified":false,"item_open_reports":0}""",
+                ),
+            ),
+        )
+        assertTrue(publisher.isPublisherReport)
+        assertEquals("fake-dev", publisher.publisherHandle)
+        assertEquals("Fake Dev", publisher.publisherName)
+        assertFalse(publisher.publisherBanned)
+
+        val held = assertNotNull(
+            SupabaseModerationService.parseReport(
+                dev.ide.platform.JsonReader.parse(
+                    """{"id":"r3","reason":"broken","item_slug":"b-app","is_item_report":true,
+                       "item_status":"unlisted","item_hold_kind":"reports","item_open_reports":3,
+                       "is_publisher_report":false}""",
+                ),
+            ),
+        )
+        assertEquals("unlisted", held.itemStatus)
+        assertEquals("reports", held.itemHoldKind)
+        assertEquals(3, held.itemOpenReports)
+    }
+
+    @Test
+    fun theModeratorsViewOfAProjectParsesItsCamelCaseDocument() {
+        val item = assertNotNull(
+            SupabaseModerationService.parseModeratedItem(
+                dev.ide.platform.JsonReader.parse(
+                    """{"slug":"c-app","title":"C App","status":"removed","holdKind":null,
+                       "holdReason":"malware","purgeAt":"2026-12-26T10:00:00+00:00","editorsChoice":false,
+                       "publisher":{"handle":"cdev","name":"C Dev","banned":true,"verified":false},
+                       "versions":[{"version":"1.1.0","versionCode":3,"current":true},
+                                   {"version":"1.0.0","versionCode":2,"current":false}],
+                       "openReports":[{"reason":"malware","detail":"steals tokens"}]}""",
+                ),
+            ),
+        )
+        assertEquals("removed", item.status)
+        assertEquals("malware", item.holdReason)
+        assertEquals("cdev", item.publisherHandle)
+        assertTrue(item.publisherBanned)
+        assertEquals(listOf(3, 2), item.versions.map { it.versionCode })
+        assertTrue(item.versions.first().current)
+        assertEquals("steals tokens", item.openReports.single().detail)
+        assertNull(SupabaseModerationService.parseModeratedItem(null), "store_mod_item answers null for no project")
+    }
 }

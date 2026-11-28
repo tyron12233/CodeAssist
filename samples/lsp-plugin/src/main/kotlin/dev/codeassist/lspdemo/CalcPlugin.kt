@@ -29,7 +29,22 @@ class CalcPlugin : Plugin {
             override val displayName = "Calc language server"
             override val languages = setOf(LanguageId(LANGUAGE))
 
+            /** The context of the running server: how a plugin reaches it later (SPI 3.10.0). */
+            @Volatile private var running: LanguageServerContext? = null
+
+            /**
+             * What a plugin calls when something its server depends on changed (a package was installed, a
+             * toolchain moved). [configuration] answers differently now, so the server is told; a change it
+             * cannot absorb restarts it. Calc's own server needs neither; a server with search paths does.
+             */
+            @Suppress("unused")
+            fun dependenciesChanged(needsRestart: Boolean) {
+                val context = running ?: return
+                if (needsRestart) context.restart() else context.notifyConfigurationChanged()
+            }
+
             override fun start(context: LanguageServerContext): LanguageServerConnection? {
+                running = context
                 val vm = LAUNCHERS.firstOrNull { File(it).exists() }
                 val apk = ownApk()
                 if (vm == null || apk == null) {

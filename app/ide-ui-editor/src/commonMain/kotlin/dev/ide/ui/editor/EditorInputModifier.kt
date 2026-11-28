@@ -110,16 +110,26 @@ internal fun Modifier.editorInput(
         if (!pinchZoom) Modifier else Modifier.pointerInput(Unit) {
             awaitEachGesture {
                 awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                // A new font size re-shapes every visible line (about a quarter of a second on a phone in the browser),
+                // so the size the fingers ask for is only recorded while they move: the editor paints its existing
+                // layout scaled to it (see EditorInteraction.pinchTarget), and the size is committed once, on lift.
+                var asked = liveScale.value
+                var pinched = false
                 do {
                     val event = awaitPointerEvent(PointerEventPass.Initial)
                     if (event.changes.count { it.pressed } >= 2) {
                         val z = event.calculateZoom()
-                        if (z != 1f) onFontScaleChange(clampFontScale(liveScale.value * z))
+                        if (z != 1f) { asked = clampFontScale(asked * z); interaction.pinchTarget = asked; pinched = true }
                         // Consume the whole 2-finger gesture (even on a no-zoom frame) so it stays a pure pinch —
                         // the scrollable/tap detectors below see consumed changes and skip it.
                         event.changes.forEach { if (it.pressed) it.consume() }
                     }
                 } while (event.changes.any { it.pressed })
+                if (pinched) {
+                    // Cleared by the editor once the committed size has arrived (until then the preview is what
+                    // keeps the text from jumping back); at once if the size did not change at all.
+                    if (asked == liveScale.value) interaction.pinchTarget = 0f else onFontScaleChange(asked)
+                }
             }
         },
     )

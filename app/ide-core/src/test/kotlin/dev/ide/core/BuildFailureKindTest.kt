@@ -74,4 +74,34 @@ class BuildFailureKindTest {
             listOf(line(UiLogLevel.Info, "> Task :compileJava")),
         ),
     )
+
+    @Test fun buildProcessKilledByLowMemoryKillerIsOom() = assertEquals(
+        "oom",
+        BuildFailureKind.classify(
+            emptyList(),
+            listOf(
+                line(UiLogLevel.Info, "Build process stopped (out of memory?). The IDE is unaffected — press Run to retry."),
+                line(UiLogLevel.Info, "Cause: Android's low-memory killer stopped the build process, while using 283MB."),
+            ),
+        ),
+    )
+
+    @Test fun buildProcessDeathWithoutACauseIsItsOwnBucket() = assertEquals(
+        BuildFailureKind.PROCESS_DIED,
+        BuildFailureKind.classify(
+            emptyList(),
+            listOf(line(UiLogLevel.Info, "Build process stopped (out of memory?). The IDE is unaffected — press Run to retry.")),
+        ),
+    )
+
+    @Test fun nativeCrashOfBuildProcessIsNotCountedAsOom() = assertEquals(
+        BuildFailureKind.PROCESS_DIED,
+        BuildFailureKind.classify(
+            emptyList(),
+            listOf(
+                line(UiLogLevel.Info, "Build process stopped (out of memory?). The IDE is unaffected — press Run to retry."),
+                line(UiLogLevel.Info, "Cause: the build process crashed in native code (SIGSEGV)."),
+            ),
+        ),
+    )
 }

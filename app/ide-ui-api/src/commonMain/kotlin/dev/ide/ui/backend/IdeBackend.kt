@@ -1024,6 +1024,10 @@ data class UiAgentProvider(
     val apiKey: String = "",
     /** Further keys, tried in order when [apiKey] (or the key before) hits a limit or is rejected. */
     val backupKeys: List<String> = emptyList(),
+    /** The key field's hint (the shape of this provider's keys), or blank. */
+    val keyPlaceholder: String = "",
+    /** Where the user creates a key for this provider, or null. */
+    val keyUrl: String? = null,
 )
 
 /** Provider/model selection and permission mode, for the chat drawer header, key manager, and settings. */
@@ -2258,6 +2262,8 @@ data class UiSettings(
     val semanticHighlighting: Boolean = true,
     val codeFolding: Boolean = true,
     val completionAutoPopup: Boolean = true,
+    /** Enter (as well as Tab) accepts the highlighted completion; off = Enter always starts a new line. */
+    val completionEnterAccepts: Boolean = true,
     val completionDelayMs: Int = 110,
     val completionMaxItems: Int = 200,
     val postfixTemplates: Boolean = true,

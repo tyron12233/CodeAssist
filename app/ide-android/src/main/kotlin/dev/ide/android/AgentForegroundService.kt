@@ -85,7 +85,7 @@ class AgentForegroundService : Service() {
             if (manager != null && manager.getNotificationChannel(CHANNEL_ID) == null) {
                 manager.createNotificationChannel(
                     NotificationChannel(CHANNEL_ID, "AI agent", NotificationManager.IMPORTANCE_LOW).apply {
-                        description = "Shown while the CodeAssist AI agent is working or the Claude link is on"
+                        description = "Shown while the CodeAssist AI agent is working or the AI link is on"
                     },
                 )
             }
@@ -178,7 +178,7 @@ object AgentForeground {
         if (relay.enabled) {
             val text = when (relay.status) {
                 UiMcpRelayStatus.CONNECTED ->
-                    if (relay.inFlight > 0) "Claude is working on the open project." else "Claude can reach the open project."
+                    if (relay.inFlight > 0) "An AI app is working on the open project." else "AI apps can reach the open project."
                 UiMcpRelayStatus.OFFLINE -> "No connection. Retrying…"
                 UiMcpRelayStatus.SIGNED_OUT -> "Sign in to CodeAssist again to reconnect."
                 UiMcpRelayStatus.IN_USE -> "This link belongs to another account."
@@ -186,7 +186,7 @@ object AgentForeground {
                 UiMcpRelayStatus.CONNECTING, UiMcpRelayStatus.OFF -> "Connecting…"
             }
             return AgentForegroundService.Content(
-                title = "Claude link is on", text = text,
+                title = "AI link is on", text = text,
                 stopAction = AgentForegroundService.ACTION_STOP_LINK, stopLabel = "Turn off",
             )
         }

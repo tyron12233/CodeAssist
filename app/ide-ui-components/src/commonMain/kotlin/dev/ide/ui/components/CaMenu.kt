@@ -10,13 +10,20 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -55,6 +62,12 @@ fun CaDropdownMenu(
      * menu that mixes the two otherwise reads as two lists that happen to share a panel.
      */
     iconLed: Boolean = false,
+    /**
+     * Put each row's icon at the trailing end, label first: the Material arrangement for the ⋮ overflow of a
+     * toolbar, where the menu is a list of commands read by their names. A menu of places or objects (a file's
+     * context menu) keeps its icons leading.
+     */
+    iconsTrailing: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     DropdownMenu(
@@ -62,18 +75,21 @@ fun CaDropdownMenu(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
         offset = offset,
-        shape = RoundedCornerShape(Ca.radius.md),
+        shape = RoundedCornerShape(CaMenuDefaults.ContainerRadius),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 0.dp,
         shadowElevation = 14.dp,
         border = BorderStroke(1.dp, Ide.colors.glassEdge),
     ) {
-        CompositionLocalProvider(LocalMenuIsIconLed provides iconLed) { content() }
+        CompositionLocalProvider(LocalMenuIsIconLed provides iconLed, LocalMenuIconsTrailing provides iconsTrailing) { content() }
     }
 }
 
 /** Whether the enclosing [CaDropdownMenu] holds its leading slot open for rows that have no icon. */
 internal val LocalMenuIsIconLed = compositionLocalOf { false }
+
+/** Whether the enclosing [CaDropdownMenu] puts its rows' icons after the label. */
+internal val LocalMenuIconsTrailing = compositionLocalOf { false }
 
 /**
  * A menu row that opens a native **flyout submenu** beside itself, rather than swapping the parent menu's
@@ -112,7 +128,7 @@ fun CaSubmenuItem(
             icon = icon,
             danger = danger,
             // The caret points into the flyout, which opens on the trailing side, so it mirrors with it.
-            trailing = { Icon(CaIcons.caretRight, null, Modifier.size(CaMenuDefaults.IconSize)) },
+            trailing = { Icon(CaIcons.caretRight, null, Modifier.size(CaMenuDefaults.CaretSize)) },
         )
         // Anchor the flyout to the row's top-right corner: shift it right by the row's width (less a hair so
         // it overlaps the row and leaves no dead gap a hovering pointer would fall through) and up by the row
@@ -139,7 +155,16 @@ object CaMenuDefaults {
      * only has to sit at the label's weight. The rows used to range over 14-16 dp per call site, which
      * reads as a ragged column of icons once a menu has more than a few entries.
      */
-    val IconSize = 16.dp
+    val IconSize = 24.dp
+
+    /** The caret that marks a row as opening a submenu: quieter than the row's own icon. */
+    val CaretSize = 16.dp
+
+    /** Corner of the menu panel; its rows are inset and rounded to sit inside it. */
+    val ContainerRadius = 20.dp
+
+    /** Corner of a row's hover/selected fill. */
+    val ItemRadius = 12.dp
 }
 
 /**
@@ -178,43 +203,59 @@ fun CaMenuItem(
     val scheme = MaterialTheme.colorScheme
     val labelColor = when {
         danger -> scheme.error
-        selected -> scheme.primary
+        selected -> scheme.onSecondaryContainer
         else -> scheme.onSurface
     }
     val iconColor = when {
         danger -> scheme.error
-        selected -> scheme.primary
+        selected -> scheme.onSecondaryContainer
         else -> scheme.onSurfaceVariant
     }
-    DropdownMenuItem(
-        text = {
-            Column {
-                // Left to wrap rather than ellipsized: a menu row is 280 dp at most, and a translated
-                // label routinely runs longer than its English original. Losing its tail is worse than a
-                // row that takes two lines.
-                Text(
-                    label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                )
-                if (supporting != null) {
-                    Text(supporting, style = MaterialTheme.typography.labelSmall, color = scheme.outline)
-                }
+    // Material 3's menu row: inset from the panel's edge with its own rounded fill (so hover, press and the
+    // selected entry read as pills inside the panel), 48dp tall, a 24dp icon and a 12dp gap, 12dp side padding.
+    val iconsTrailing = LocalMenuIconsTrailing.current && leading == null && trailing == null && icon != null
+    val leadingSlot: @Composable (() -> Unit)? = if (iconsTrailing) null else leading
+        ?: icon?.let { { Icon(it, null, Modifier.size(CaMenuDefaults.IconSize), tint = iconColor) } }
+        ?: if (LocalMenuIsIconLed.current) ({ Spacer(Modifier.size(CaMenuDefaults.IconSize)) }) else null
+    val shape = RoundedCornerShape(CaMenuDefaults.ItemRadius)
+    Row(
+        modifier
+            .padding(horizontal = 6.dp)
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(shape)
+            .background(if (selected) scheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent, shape)
+            .alpha(if (enabled) 1f else 0.38f)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (leadingSlot != null) {
+            leadingSlot()
+            Spacer(Modifier.width(12.dp))
+        }
+        // Left to wrap rather than ellipsized: a menu row is 280 dp at most, and a translated
+        // label routinely runs longer than its English original. Losing its tail is worse than a
+        // row that takes two lines.
+        Column(Modifier.weight(1f)) {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = labelColor,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            )
+            if (supporting != null) {
+                Text(supporting, style = MaterialTheme.typography.labelSmall, color = scheme.outline)
             }
-        },
-        onClick = onClick,
-        modifier = modifier,
-        leadingIcon = leading
-            ?: icon?.let { { Icon(it, null, Modifier.size(CaMenuDefaults.IconSize)) } }
-            ?: if (LocalMenuIsIconLed.current) ({ Spacer(Modifier.size(CaMenuDefaults.IconSize)) }) else null,
-        trailingIcon = trailing,
-        enabled = enabled,
-        colors = MenuDefaults.itemColors(
-            textColor = labelColor,
-            leadingIconColor = iconColor,
-            trailingIconColor = scheme.outline,
-        ),
-    )
+        }
+        if (iconsTrailing) {
+            Spacer(Modifier.width(12.dp))
+            Icon(icon!!, null, Modifier.size(CaMenuDefaults.IconSize), tint = iconColor)
+        } else if (trailing != null) {
+            Spacer(Modifier.width(12.dp))
+            CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides scheme.onSurfaceVariant) { trailing() }
+        }
+    }
 }
 
 /** The mark a menu puts on the entry currently in force, at the trailing end of its row. */

@@ -63,12 +63,17 @@ internal class OverlayBinner {
         editorColors: ResolvedColorScheme,
         colors: CodeAssistColors,
         inlayStyle: SpanStyle,
-    ) {
+    ): Boolean {
         val sink = renderSink?.takeIf { it.cache === cache } ?: RenderCacheSink(cache).also { renderSink = it }
-        syncInto(session, cache, sink, editorColors, colors, inlayStyle)
+        return syncInto(session, cache, sink, editorColors, colors, inlayStyle)
     }
 
-    /** [sync] against any [sink]; [key] identifies it, and a new one is filled from scratch. */
+    /**
+     * [sync] against any [sink]; [key] identifies it, and a new one is filled from scratch.
+     *
+     * Returns whether it changed what the sink holds. The sink is a plain cache, not snapshot state, so a caller
+     * that draws from it has to be told: see `EditorRenderState.overlayEpoch`.
+     */
     fun syncInto(
         session: EditorSession,
         key: Any,
@@ -76,7 +81,7 @@ internal class OverlayBinner {
         editorColors: ResolvedColorScheme,
         colors: CodeAssistColors,
         inlayStyle: SpanStyle,
-    ) {
+    ): Boolean {
         val d = session.doc
         val t = session.semanticTokens
         val h = session.inlayHints
@@ -86,7 +91,7 @@ internal class OverlayBinner {
         val sameTarget = key === sinkKey && editorColors == schemeColors && colors == chromeColors &&
             inlayStyle == this.inlayStyle && session.overlayGeneration == generation
         if (sameTarget && d === doc && t === tokens && h === hints && p === pluginHints && decos === decorations) {
-            return // nothing this reads has changed (a caret move, an unrelated recomposition)
+            return false // nothing this reads has changed (a caret move, an unrelated recomposition)
         }
         val styleCache = styles.takeIf { editorColors == schemeColors } ?: SemanticStyleCache(editorColors)
         val perLine = sameTarget && d !== doc && dirty != null && decos.isEmpty() && decorations.isNullOrEmpty()
@@ -109,6 +114,7 @@ internal class OverlayBinner {
         pluginHints = p
         decorations = decos
         styles = styleCache
+        return true
     }
 
     private fun rebinLines(

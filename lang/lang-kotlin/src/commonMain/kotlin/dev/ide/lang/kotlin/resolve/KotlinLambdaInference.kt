@@ -81,26 +81,38 @@ internal fun KotlinResolver.inferLambdaResult(lambda: KtLambdaExpression): TypeR
     // in turn makes a `by`-delegate on it invalid (Unit has no getValue/setValue). A non-empty body's result is
     // its last statement's type.
     if (statements.isEmpty()) return service.typeByFqn("kotlin.Unit")
+    val returns = returnsToItself(lambda)
     // A bare `return@label` aimed at this lambda returns Unit from it, which makes the whole lambda's result
     // Unit and coerces the last statement away: `run { if (p) return@run; completed() }` is a `Unit`, not the
     // `String` its last line computes.
-    if (hasBareReturnToItself(lambda)) return service.typeByFqn("kotlin.Unit")
-    return inferType(statements.last())
+    if (returns.any { it.returnedExpression == null }) return service.typeByFqn("kotlin.Unit")
+    val returned = returns.mapNotNull { it.returnedExpression }
+    if (returned.isEmpty()) return inferType(statements.last())
+    // `return@label value` is how a lambda yields a value from anywhere in its body, and its result is the
+    // common type of all of them AND the last expression. The last statement may itself be one of the returns
+    // (`map { …; return@map x + y }`), which as an expression is `Nothing`: the join leaves a `Nothing` out, so
+    // the value it carries is what counts. Typing the lambda from its last statement alone made that
+    // `List<Nothing>`, and ignored a `return@map "s"` earlier in the body altogether.
+    return inferBranchUnion(returned + statements.last())
 }
 
-private fun hasBareReturnToItself(lambda: KtLambdaExpression): Boolean {
-    val body = lambda.bodyExpression ?: return false
-    if (!body.text.contains("return@")) return false
+/**
+ * The `return@label` expressions in [lambda] that return FROM it: the label is the explicit one (`f@{ … }`) or the
+ * name of the call the lambda is passed to (`run`, `map`), and the nearest enclosing lambda is this one. A plain
+ * `return` leaves the enclosing function, not the lambda, so it is not here.
+ */
+private fun returnsToItself(lambda: KtLambdaExpression): List<KtReturnExpression> {
+    val body = lambda.bodyExpression ?: return emptyList()
+    if (!body.text.contains("return@")) return emptyList()
     val labels = HashSet<String>()
     (lambda.parent as? KtLabeledExpression)?.getLabelName()?.let { labels += it }
     // The implicit label is the name of the call the lambda is passed to (`run`, `forEach`).
     val arg = lambda.parent as? KtValueArgument ?: lambda.parent?.parent as? KtValueArgument
     val call = (arg?.parent as? KtValueArgumentList)?.parent as? KtCallExpression ?: arg?.parent as? KtCallExpression
     (call?.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()?.let { labels += it }
-    if (labels.isEmpty()) return false
-    return body.collectDescendantsOfType<KtReturnExpression>().any { r ->
-        r.returnedExpression == null && r.getLabelName() in labels &&
-            r.getStrictParentOfType<KtLambdaExpression>() === lambda
+    if (labels.isEmpty()) return emptyList()
+    return body.collectDescendantsOfType<KtReturnExpression>().filter { r ->
+        r.getLabelName() in labels && r.getStrictParentOfType<KtLambdaExpression>() === lambda
     }
 }
 

@@ -396,7 +396,7 @@ open class MainActivity : ComponentActivity() {
                 onDispose { registration?.dispose() }
             }
             androidx.compose.foundation.layout.Box {
-                if (b != null) androidx.compose.foundation.layout.Box {
+                if (b != null) StatusBand(inSandbox, b.agent) {
                     CodeAssistApp(
                         b,
                         fileActions = fileActions,
@@ -409,8 +409,6 @@ open class MainActivity : ComponentActivity() {
                         onNotificationTargetHandled = { notificationTarget.value = null },
                         onProjectOpenChange = { projectOpen.value = it },
                     )
-                    // The sandbox looks exactly like the IDE it was started from; say which one this is.
-                    if (inSandbox) SandboxBand() else McpBand(b.agent)
                 }
                 // Over the app while it composes its first frames, then fades out (see LaunchSplash).
                 if (!splashDone.value) {

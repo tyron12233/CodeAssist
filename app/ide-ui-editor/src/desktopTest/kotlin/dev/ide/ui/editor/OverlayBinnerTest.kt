@@ -165,4 +165,30 @@ class OverlayBinnerTest {
         assertEquals(1, rec.lineWrites, "one semantic line rewritten, and no inlay work with no inlays")
         assertEquals(expectedSemantic(s), rec.semantic)
     }
+
+    /**
+     * The binner reports whether it changed what the sink holds. The render cache is not snapshot state, so a canvas
+     * that draws from it learns of a change only through this (`EditorRenderState.overlayEpoch`): without it, tokens
+     * or hints that land with no edit are binned but never drawn until something else invalidates the canvas.
+     */
+    @Test
+    fun syncReportsWhetherItChangedWhatTheSinkHolds() {
+        val s = EditorSession("val a = 1\nval b = 2", CodeLanguage.Kotlin, TextRange(0))
+        val rec = Recorder()
+        s.onLinesShifted = { from, delta -> rec.shift(from, delta) }
+        val binner = OverlayBinner()
+        assertTrue(binner.syncInto(s, this, rec, scheme, chrome, inlayStyle), "the first sync fills the sink")
+        assertEquals(false, binner.syncInto(s, this, rec, scheme, chrome, inlayStyle), "nothing moved: no change to report")
+
+        s.applySemanticTokens(listOf(UiSemanticToken(4, 5, "property")))
+        assertTrue(binner.syncInto(s, this, rec, scheme, chrome, inlayStyle), "new semantic tokens, with no edit, are a change")
+        assertEquals(false, binner.syncInto(s, this, rec, scheme, chrome, inlayStyle))
+
+        s.applyInlayHints(randomHints(Random(3), s.doc.length))
+        assertTrue(binner.syncInto(s, this, rec, scheme, chrome, inlayStyle), "new inlay hints are a change")
+        assertEquals(false, binner.syncInto(s, this, rec, scheme, chrome, inlayStyle))
+
+        s.replaceRange(0, 0, "x", TextRange(1))
+        assertTrue(binner.syncInto(s, this, rec, scheme, chrome, inlayStyle), "an edit is a change")
+    }
 }

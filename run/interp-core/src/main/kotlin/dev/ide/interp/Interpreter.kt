@@ -73,6 +73,9 @@ class Interpreter(
      *  later `.current` (a re-minted instance) mismatch and the default lambda throws ("No JetsnackColorPalette
      *  provided" — the out-of-process custom-theme preview rendered grey). Sharing the map keeps identity stable. */
     topLevelPropertyStore: MutableMap<String, Any?> = HashMap(),
+    /** The runaway bounds. The default is the preview's: tight, because a preview runs on the app's UI thread.
+     *  A host that runs a program off the UI thread (the Playground) passes its own. */
+    private val limits: RunLimits = RunLimits.PREVIEW,
 ) {
     /** Source classes indexed by fully-qualified name and by simple name (a constructor callee carries the
      *  simple name; an object/enum reference carries the resolved FQN). */
@@ -212,10 +215,32 @@ class Interpreter(
      *  already holds the bare key, see `expandPreviewModel`), then the resolver-chosen overload (by declared
      *  arity) so an omitted-defaults call finds the full declaration rather than a same-named shorter overload;
      *  the exact call-arity key is the fallback when the declared arity isn't recorded. */
-    private fun sourceFunctionFor(callee: ResolvedCallable, argCount: Int): ResolvedFunction? =
-        (callee as? ResolvedCallable.Source)?.let { functions[it.declId] }
-            ?: declaredArity(callee)?.let { functions["${callee.displayName}/$it"] }
-            ?: functions["${callee.displayName}/$argCount"]
+    private fun sourceFunctionFor(callee: ResolvedCallable, argCount: Int): ResolvedFunction? {
+        // A call site resolves to the same function every time it runs, but finding it builds and hashes strings
+        // (the declId, then `name/arity` after parsing the arity out of the id). Remember the answer on the callee,
+        // for THIS interpreter (the tree can be shared by several, each with its own `functions`). Only the two
+        // lookups that do not depend on [argCount] are remembered; the fallback below does, so it is not.
+        if (callee is ResolvedCallable.Source) {
+            (callee.resolutionCache as? ResolvedHere)?.let { if (it.owner === this) return it.function }
+            val found = functions[callee.declId] ?: declaredArity(callee)?.let { functions["${callee.displayName}/$it"] }
+            if (found != null) {
+                callee.resolutionCache = ResolvedHere(this, found)
+                return found
+            }
+        } else {
+            declaredArity(callee)?.let { functions["${callee.displayName}/$it"] }?.let { return it }
+        }
+        return functions["${callee.displayName}/$argCount"]
+    }
+
+    /** What [sourceFunctionFor] remembers on a callee: the interpreter it was resolved in, and the function. */
+    private class ResolvedHere(val owner: Interpreter, val function: ResolvedFunction)
+
+    /** Whether [call]'s arguments are all plain positional ones, so nothing needs reordering into declared order. */
+    private fun plainArguments(call: RNode.Call): Boolean {
+        for (a in call.args) if (a.name != null || a.trailingLambda) return false
+        return true
+    }
 
     /** The [topLevelPropertyState] key when [node] is a read of a top-level `var` backing field (a no-arg
      *  TOP_LEVEL call to a source property whose function is [ResolvedFunction.mutableBackingField]) — the same
@@ -301,16 +326,16 @@ class Interpreter(
         // surfaces an error. The bound gives a clean early abort on a large-stack thread (the composition/main
         // thread); a smaller-stack thread (recompose/bridge) can overflow sooner, so the real backstop is the
         // StackOverflowError catch below — the depth guard can't be a single value safe across every stack size.
-        if (++f.depth > MAX_CALL_DEPTH) {
+        if (++f.depth > limits.callDepth) {
             f.depth--
-            throw InterpreterException("call depth exceeded $MAX_CALL_DEPTH frames (unbounded recursion) — aborting to avoid crashing the preview")
+            throw InterpreterException("call depth exceeded ${limits.callDepth} frames (unbounded recursion) — aborting to avoid crashing the preview")
         }
         // Arm a whole-pass wall-clock deadline at the outermost interpreted call. The per-loop guard bounds any
         // single loop; this additionally bounds a broad/deep call tree, many sequential loops, or heavy library
         // work that no single loop guard sees — so the composition thread can't freeze past an ANR. Disarmed on
         // the managed bridge thread (a legitimate long-running cooperative timer lives there).
         if (f.depth == 1) f.deadlineNanos =
-            if (SuspendContext.isActive) 0L else System.nanoTime() + MAX_RENDER_NANOS
+            if (SuspendContext.isActive) 0L else System.nanoTime() + limits.passNanos
         else checkDeadline(f)
         val env = Env()
         env.defineReified(reifiedTypes)
@@ -335,7 +360,7 @@ class Interpreter(
     private fun checkDeadline(f: Frame) {
         val dl = f.deadlineNanos
         if (dl != 0L && System.nanoTime() > dl)
-            throw InterpreterException("preview interpretation ran longer than ${MAX_RENDER_NANOS / 1_000_000}ms — aborting to avoid hanging the preview")
+            throw InterpreterException("preview interpretation ran longer than ${limits.passNanos / 1_000_000}ms — aborting to avoid hanging the preview")
     }
 
     /**
@@ -466,17 +491,36 @@ class Interpreter(
             // Kotlin's `Map.iterator()` is `entries.iterator()` (a Map isn't itself Iterable), so `for (e in map)`
             // / `for ((k, v) in map)` iterate the entry set; each element is a `Map.Entry`.
             val iterationSource = if (iterable is Map<*, *>) iterable.entries else iterable
-            val iterator = invoke0(iterationSource, "iterator")
-                ?: throw InterpreterException("no iterator() on ${iterable.javaClass.name}")
             val budget = LoopBudget()
             try {
-                while (invoke0(iterator, "hasNext") == true) {
-                    // Fresh per-iteration scope: the loop variable (and any closure capturing it) is bound anew
-                    // each pass, matching Kotlin's per-iteration capture rather than aliasing one shared slot.
-                    val iterEnv = Env(env)
-                    iterEnv.define(node.loopVar.slot, invoke0(iterator, "next"))
-                    runLoopBody(node.body, iterEnv, node.label)
-                    guardLoop(budget)
+                if (iterationSource is IntProgression) {
+                    // `for (i in a..b)`, `downTo`, `step`: count in Int rather than through an iterator object that is
+                    // then driven by reflection, which is what a range costs otherwise. Same order, same bounds.
+                    val step = iterationSource.step
+                    var i = iterationSource.first
+                    val last = iterationSource.last
+                    while (if (step > 0) i <= last else i >= last) {
+                        val iterEnv = Env(env)
+                        iterEnv.define(node.loopVar.slot, i)
+                        runLoopBody(node.body, iterEnv, node.label)
+                        guardLoop(budget)
+                        if (if (step > 0) i > last - step else i < last - step) break // the next step would pass `last` (or overflow)
+                        i += step
+                    }
+                } else {
+                    val iterator = invoke0(iterationSource, "iterator")
+                        ?: throw InterpreterException("no iterator() on ${iterable.javaClass.name}")
+                    // A real Iterator is driven directly: `invoke0` looks the method up by name and invokes it
+                    // reflectively, twice per element.
+                    val direct = iterator as? Iterator<*>
+                    while (if (direct != null) direct.hasNext() else invoke0(iterator, "hasNext") == true) {
+                        // Fresh per-iteration scope: the loop variable (and any closure capturing it) is bound anew
+                        // each pass, matching Kotlin's per-iteration capture rather than aliasing one shared slot.
+                        val iterEnv = Env(env)
+                        iterEnv.define(node.loopVar.slot, if (direct != null) direct.next() else invoke0(iterator, "next"))
+                        runLoopBody(node.body, iterEnv, node.label)
+                        guardLoop(budget)
+                    }
                 }
             } catch (b: BreakSignal) { /* break exits the loop */
             } catch (b: LabeledBreakSignal) {
@@ -902,6 +946,11 @@ class Interpreter(
                 }
             }
             val right = eval(call.args.first().value, env)
+            // Primitive arithmetic and comparison, by operator number: no string hashing, no promotion helper. Only
+            // the cases whose answer is plain Kotlin (Int/Long/Double operands, with Kotlin's own widening); anything
+            // else, including a source or value class, falls through to the general path below, unchanged.
+            val code = operatorCode(call, op)
+            if (code != OP_OTHER) numericOperator(code, left, right)?.let { return it }
             // A value-class arithmetic operator (`Size / 2f` → `Size.div-impl`, `Offset + o`, `Dp * n`): the
             // receiver is the UNBOXED underlying (a Long for Size/Offset, a Float for Dp), which IS a `Number`,
             // so the primitive-arithmetic shortcut below would silently misfire (dividing the packed bits as a
@@ -1066,10 +1115,9 @@ class Interpreter(
                     emptyList()
                 ).also { topLevelPropertyState[key] = it }
             }
-            val argv = reorderNamedArgs(
-                target.params.map { it.name },
-                call.args,
-                call.args.map { eval(it.value, env) })
+            val evaluated = call.args.map { eval(it.value, env) }
+            // Reordering is for named arguments and a trailing lambda that skips defaults; a plain call has neither.
+            val argv = if (plainArguments(call)) evaluated else reorderNamedArgs(target.params.map { it.name }, call.args, evaluated)
             val reified = reifiedBindingsFor(call, env)
             val invoke = { invokeFunction(target, NO_RECEIVER, argv, reified) }
             return if (callee.isComposable && composableInvoker != null) {
@@ -1563,6 +1611,17 @@ class Interpreter(
         fun receiver(): Any? =
             eval(call.receiver ?: throw InterpreterException("`$name` has no receiver"), env)
         return when {
+            // `print(x)` / `println(x)` / `println()` — @InlineOnly over `System.out`, so no method exists to
+            // reflect. Written through Kotlin's own `print`/`println`, i.e. this process's `System.out`: the
+            // terminal on a JVM, and inside `:jvm-vm` whatever stdout the host handed the VM.
+            name == "println" && call.dispatch == DispatchKind.TOP_LEVEL && args.size <= 1 -> {
+                if (args.isEmpty()) println() else println(eval(args[0].value, env))
+                Handled(Unit)
+            }
+            name == "print" && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 1 -> {
+                print(eval(args[0].value, env))
+                Handled(Unit)
+            }
             // repeat(times) { index -> … }
             name == "repeat" && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 2 -> {
                 val times = (eval(args[0].value, env) as? Number)?.toInt()
@@ -3372,6 +3431,53 @@ class Interpreter(
         return m.invoke(receiver)
     }
 
+    /** [call]'s operator as a number, from the cache on the node (see [RNode.Call.operatorCode]). */
+    private fun operatorCode(call: RNode.Call, op: String): Int {
+        var code = call.operatorCode
+        if (code < 0) {
+            code = when (op) {
+                "plus" -> OP_PLUS; "minus" -> OP_MINUS; "times" -> OP_TIMES; "div" -> OP_DIV; "rem" -> OP_REM
+                "lt" -> OP_LT; "le" -> OP_LE; "gt" -> OP_GT; "ge" -> OP_GE
+                "eq" -> OP_EQ; "ne" -> OP_NE
+                else -> OP_OTHER
+            }
+            call.operatorCode = code
+        }
+        return code
+    }
+
+    /**
+     * `left <op> right` for the operand pairs where Kotlin's answer is plain arithmetic, or null to leave it to the
+     * general path. Mixed Int/Long widens to Long and any Double widens to Double, as in Kotlin; `==` and `!=` are
+     * only taken for two Ints or two Longs (a Double's boxed `equals` and Int-vs-Long are the general path's call).
+     * Division by zero throws here exactly as it did through `applyI`/`applyL`.
+     */
+    private fun numericOperator(code: Int, a: Any?, b: Any?): Any? {
+        if (a is Int && b is Int) return when (code) {
+            OP_PLUS -> a + b; OP_MINUS -> a - b; OP_TIMES -> a * b; OP_DIV -> a / b; OP_REM -> a % b
+            OP_LT -> a < b; OP_LE -> a <= b; OP_GT -> a > b; OP_GE -> a >= b
+            OP_EQ -> a == b; OP_NE -> a != b
+            else -> null
+        }
+        if ((a is Long || a is Int) && (b is Long || b is Int)) {
+            val x = (a as Number).toLong()
+            val y = (b as Number).toLong()
+            return when (code) {
+                OP_PLUS -> x + y; OP_MINUS -> x - y; OP_TIMES -> x * y; OP_DIV -> x / y; OP_REM -> x % y
+                OP_LT -> x < y; OP_LE -> x <= y; OP_GT -> x > y; OP_GE -> x >= y
+                OP_EQ -> if (a is Long && b is Long) x == y else null
+                OP_NE -> if (a is Long && b is Long) x != y else null
+                else -> null
+            }
+        }
+        if (a is Double && b is Double) return when (code) {
+            OP_PLUS -> a + b; OP_MINUS -> a - b; OP_TIMES -> a * b; OP_DIV -> a / b; OP_REM -> a % b
+            OP_LT -> a < b; OP_LE -> a <= b; OP_GT -> a > b; OP_GE -> a >= b
+            else -> null
+        }
+        return null
+    }
+
     private fun arithmetic(op: String, a: Any?, b: Any?): Any {
         if (a !is Number || b !is Number) throw InterpreterException("non-numeric operands for `$op`: $a, $b")
         return when {
@@ -3804,18 +3910,18 @@ class Interpreter(
             b.startNanos = System.nanoTime()
             return
         }
-        if (++b.iterations >= MAX_LOOP_ITERATIONS)
-            throw InterpreterException("loop exceeded $MAX_LOOP_ITERATIONS iterations — aborting to avoid hanging the preview")
+        if (++b.iterations >= limits.loopIterations)
+            throw InterpreterException("loop exceeded ${limits.loopIterations} iterations — aborting to avoid hanging the preview")
         // Check wall-clock EVERY iteration: a loop of few iterations but with an expensive body (nested work,
         // heavy reflective dispatch) would slip a sampled check and freeze far past the budget. A pure spin loop
         // trips the iteration count first, so the added nanoTime cost only lands on loops doing real work, where
         // the body dominates it. Bound by BOTH the per-loop budget and the captured whole-pass deadline (so
         // several sequential loops in one pass can't sum past an ANR).
         val now = System.nanoTime()
-        if (now - b.startNanos > MAX_LOOP_NANOS)
-            throw InterpreterException("loop ran longer than ${MAX_LOOP_NANOS / 1_000_000}ms — aborting to avoid hanging the preview")
+        if (now - b.startNanos > limits.loopNanos)
+            throw InterpreterException("loop ran longer than ${limits.loopNanos / 1_000_000}ms — aborting to avoid hanging the preview")
         if (b.deadlineNanos != 0L && now > b.deadlineNanos)
-            throw InterpreterException("preview interpretation ran longer than ${MAX_RENDER_NANOS / 1_000_000}ms — aborting to avoid hanging the preview")
+            throw InterpreterException("preview interpretation ran longer than ${limits.passNanos / 1_000_000}ms — aborting to avoid hanging the preview")
     }
 
     /** Carries a non-`Throwable` value thrown by interpreted `throw` (e.g. a source exception object), so a
@@ -3837,12 +3943,7 @@ class Interpreter(
     private fun unwrapFailure(t: Throwable?): Any? = (t as? InterpretedFailure)?.thrown ?: t
 
     private companion object {
-        /** Runaway-loop guard bounds (see [guardLoop]). Generous enough that a real preview's loops never trip
-         *  them, tight enough that a runaway loop can't hang the app past an ANR. */
-        const val MAX_LOOP_ITERATIONS = 1_000_000
-        const val MAX_LOOP_NANOS =
-            3_000_000_000L // 3s wall-clock — well under Android's 5s input-dispatch ANR
-        const val FRAME_MILLIS =
+                const val FRAME_MILLIS =
             16L // simulated ~60fps cadence for `withFrameNanos`/`withFrameMillis`
 
             /** The `kotlin.Result` readers modeled beside `runCatching`. Every one is inline on a value class,
@@ -3857,25 +3958,41 @@ class Interpreter(
                 "isSuccess", "isFailure", "fold", "recover", "onSuccess", "onFailure",
             )
 
-        /** Recursion + whole-pass bounds (see [call]). [MAX_CALL_DEPTH] gives a clean early abort on a large-stack
+        /** Recursion + whole-pass bounds (see [call]). [RunLimits.callDepth] gives a clean early abort on a large-stack
          *  thread; the StackOverflowError catch in [call] is the backstop for smaller stacks. */
-        const val MAX_CALL_DEPTH = 500
-        const val MAX_RENDER_NANOS =
-            4_000_000_000L // 4s per render pass — under the 5s input-dispatch ANR
 
         /** Pre-allocated (no allocation once the stack is exhausted) for the StackOverflowError backstop in [call].
          *  Reused across threads/renders — safe, since it is thrown, not mutated. */
         val RECURSION_ABORT =
             InterpreterException("call stack overflowed (unbounded recursion) — aborting to avoid crashing the preview")
 
+        const val OP_OTHER = 0
+        const val OP_PLUS = 1
+        const val OP_MINUS = 2
+        const val OP_TIMES = 3
+        const val OP_DIV = 4
+        const val OP_REM = 5
+        const val OP_LT = 6
+        const val OP_LE = 7
+        const val OP_GT = 8
+        const val OP_GE = 9
+        const val OP_EQ = 10
+        const val OP_NE = 11
         val ARITHMETIC = setOf("plus", "minus", "times", "div", "rem")
         val COMPARISON = setOf("lt", "le", "gt", "ge")
         val BITWISE = setOf("and", "or", "xor", "shl", "shr", "ushr")
         /** Owners of the primitive-numeric arithmetic operators (`5 + 3`), computed as intrinsics — never a
          *  value-class member, so the value-class operator probe skips them to keep hot arithmetic class-load-free. */
+        /**
+         * The primitive numeric owners an operator's callee can carry. The resolver writes the SHORT name
+         * (`Int`, `Long`) on an operator callee, not the qualified one, so both spellings are here: with only the
+         * qualified names the "skip the value-class probe for primitive arithmetic" check never matched, and every
+         * `Int + Int` paid a class load attempt (`invokeUnboxedValueClassMember`) before the arithmetic it is.
+         */
         val PRIMITIVE_NUMERIC_FQNS = setOf(
             "kotlin.Int", "kotlin.Long", "kotlin.Float", "kotlin.Double", "kotlin.Short", "kotlin.Byte",
             "kotlin.Char", "kotlin.UInt", "kotlin.ULong", "kotlin.UShort", "kotlin.UByte",
+            "Int", "Long", "Float", "Double", "Short", "Byte", "Char", "UInt", "ULong", "UShort", "UByte",
         )
         val COMPONENT = Regex("component(\\d+)")
 
@@ -3911,6 +4028,7 @@ class Interpreter(
          *  coroutine [SuspendBridge]). */
         val INLINE_INTRINSIC_FACADES = setOf(
             "kotlin.StandardKt", "kotlin.text.StringsKt", "kotlin.collections.CollectionsKt",
+            "kotlin.io.ConsoleKt", // `print`/`println` are @InlineOnly: no JVM method, only an inlined System.out call
             "kotlin.collections.MapsKt", // MutableMap `+=`/`-=` (plusAssign/minusAssign) are @InlineOnly here
             // Arrays carry the SAME @InlineOnly HOFs (`find`/`sumOf`/`flatMapIndexed`/…) on their own facade; the
             // intrinsics dispatch by receiver shape ([forEachElement]/[elementListOrNull]), so an array receiver is
@@ -4078,4 +4196,23 @@ private fun singletonFields(cls: Class<*>): SingletonFields {
     )
     synchronized(singletonFieldCache) { singletonFieldCache[cls] = found }
     return found
+}
+
+/**
+ * The bounds on a runaway program (see `Interpreter.guardLoop` and `Interpreter.call`): how many iterations and
+ * how long one loop may run, how long a whole pass may take, and how deep interpreted calls may nest.
+ *
+ * [PREVIEW] is generous enough that a real preview's loops never trip it and tight enough that a runaway loop
+ * cannot hang the app past an ANR, since a preview interprets on the UI thread.
+ */
+class RunLimits(
+    val loopIterations: Int,
+    val loopNanos: Long,
+    val passNanos: Long,
+    val callDepth: Int,
+) {
+    companion object {
+        /** A preview on the app's UI thread: 1M iterations or 3 s per loop, 4 s per pass (under Android's 5 s ANR). */
+        val PREVIEW = RunLimits(loopIterations = 1_000_000, loopNanos = 3_000_000_000L, passNanos = 4_000_000_000L, callDepth = 500)
+    }
 }

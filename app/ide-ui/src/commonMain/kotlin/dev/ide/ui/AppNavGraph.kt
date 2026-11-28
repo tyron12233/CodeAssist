@@ -145,7 +145,9 @@ internal fun AppNavGraph(
         // On a wide window Settings and its destinations are ONE route: switching between them changes the
         // pane, not the screen, so the sidebar stays put instead of animating out and back in.
         val route = if (twoPane && app.isHubPane(app.screen)) Screen.Hub else app.screen
-        ScreenHost(route, back = app.navigatingBack, modifier = Modifier.fillMaxSize()) { s ->
+        // A plugin screen is one destination for every plugin page, so its page rides along as the sub-route.
+        val sub = if (route == Screen.PluginScreen) app.pluginScreenId to app.pluginScreenArgument else null
+        ScreenHost(route, back = app.navigatingBack, subRoute = sub, modifier = Modifier.fillMaxSize()) { s, page ->
             if (s == Screen.Hub && twoPane) {
                 HubPaneRoute(app, rememberHubSections(app, state), lastHubPane) { target ->
                     when (target) {
@@ -156,7 +158,7 @@ internal fun AppNavGraph(
             } else if (s == Screen.Projects) {
                 homeState.SaveableStateProvider(HOME_STATE_KEY) { AppRoute(s, app, state, fileActions, codeFont, dark, scope) }
             } else {
-                AppRoute(s, app, state, fileActions, codeFont, dark, scope)
+                AppRoute(s, app, state, fileActions, codeFont, dark, scope, page)
             }
         }
     }
@@ -295,6 +297,7 @@ private fun AppRoute(
     codeFont: FontFamily,
     dark: Boolean,
     scope: CoroutineScope,
+    page: Any? = null,
 ) {
     val backend = app.backend
     when (s) {
@@ -540,7 +543,8 @@ private fun AppRoute(
         // ([CodeAssistAppState.projectOpen]); this is the backstop for an engine unloaded under the editor, which
         // must not compose a screen whose backend throws "No project is open" (a wrong Back target did, in 3.40.0).
         Screen.Editor -> if (app.epoch <= 0) {
-            LaunchedEffect(Unit) { app.navigateTo(Screen.Projects) }
+            // A reopen closes the project for a moment; the editor comes back with it rather than leaving.
+            if (!app.reopening) LaunchedEffect(Unit) { app.navigateTo(Screen.Projects) }
         } else EditorScreen(
             state = state,
             onToggleTheme = { app.toggleTheme(dark) },
@@ -558,6 +562,19 @@ private fun AppRoute(
             onOpenRun = { app.navigateTo(Screen.Run) },
             onRunDockedChange = { app.runDocked = it },
             fileActions = fileActions,
+            // A plugin this project was made with is missing (it was opened anyway, resumed, or opened from
+            // somewhere that does not ask): say which, and offer the fix. Not in a lesson's workspace.
+            projectNotice = if (app.lessonInEditor) null else {
+                {
+                    MissingPluginsBanner(
+                        backend = state.backend,
+                        rootPath = state.backend.project.rootPath,
+                        epoch = app.epoch,
+                        onResolve = app::resolveProjectPlugin,
+                        onReopen = { app.reopenProject(state::saveAllNow) },
+                    )
+                }
+            },
             topBanner = app.currentLessonId?.takeIf { app.lessonInEditor }?.let { lessonId ->
                 {
                     LessonBanner(
@@ -612,18 +629,13 @@ private fun AppRoute(
         // A plugin-contributed screen (ScreenRegistry). The route is generic: the contribution renders its
         // own body against the backend, the host bridges, and a Back that pops to wherever it came from.
         Screen.PluginScreen -> {
-            // Hold the id this instance is showing rather than reading it live. Navigating away clears
-            // `pluginScreenId` while [ScreenHost]'s AnimatedContent still composes this branch for the
-            // exit animation, so reading it live would blank the screen mid-transition. It follows a
-            // change to another plugin screen (a diff opening that file's history), which stays on this
-            // same destination and so reuses this instance.
-            // The argument is held alongside for the same reason, and moves with the id: Back to an
-            // earlier entry of the same screen (one diff to another) changes only the argument.
-            var shown by remember { mutableStateOf(app.pluginScreenId to app.pluginScreenArgument) }
-            LaunchedEffect(app.pluginScreenId, app.pluginScreenArgument) {
-                app.pluginScreenId?.let { shown = it to app.pluginScreenArgument }
-            }
-            val (shownId, shownArgument) = shown
+            // The page this instance shows comes from the host (its sub-route) rather than live app state:
+            // navigating away clears `pluginScreenId` while [ScreenHost]'s AnimatedContent still composes this
+            // branch for the exit animation, and a move to another plugin screen (a diff opening that file's
+            // history) or Back to an earlier entry of the same one animates between two instances, each keeping
+            // the page it was.
+            @Suppress("UNCHECKED_CAST")
+            val (shownId, shownArgument) = (page as? Pair<String?, Any?>) ?: (null to null)
             val contribution = shownId?.let { ScreenRegistry.find(it) }
             if (contribution != null) {
                 val openInEditor = LocalPluginFileOpener.current
@@ -1041,7 +1053,7 @@ private fun ProjectPickerRoute(
             { fileActions.openUrl(BetaInfo.DISCORD_URL) }
         } else null,
         // Downloading is a browser's job, so the card is offered only where links open.
-        onGetPlugins = if (fileActions.canOpenUrl) app::openGetPlugins else null,
+        onGetPlugins = if (fileActions.canOpenUrl) ({ app.openGetPlugins() }) else null,
         onSponsor = if (fileActions.canOpenUrl) {
             { fileActions.openUrl(BetaInfo.SPONSOR_URL) }
         } else null,

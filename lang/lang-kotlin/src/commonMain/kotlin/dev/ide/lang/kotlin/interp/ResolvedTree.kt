@@ -142,7 +142,15 @@ sealed interface ResolvedCallable {
         override val isComposable: Boolean = false,
         override val typeParameterNames: List<String> = emptyList(),
         override val isSuspend: Boolean = false,
-    ) : ResolvedCallable
+    ) : ResolvedCallable {
+        /**
+         * The interpreter's cache of which function this callee resolves to (an immutable pair, so a reader on another
+         * thread sees an owner and its answer together, never one interpreter's owner with another's function).
+         * Outside the constructor: not part of the callee's value, and the codec and `equals` never see it.
+         */
+        @kotlin.concurrent.Volatile
+        var resolutionCache: Any? = null
+    }
 }
 
 /** One argument of a call. [name] is set for a named argument; [spread] for a `*array` vararg spread.
@@ -203,7 +211,16 @@ sealed interface RNode {
          *  with [callee]'s type parameters ([ResolvedCallable.typeParameterNames]). Empty for a non-generic call
          *  or when they couldn't be resolved. See [RTypeArg]. */
         val typeArguments: List<RTypeArg> = emptyList(),
-    ) : RNode
+    ) : RNode {
+        /**
+         * The interpreter's cache of which operator this call is (see `Interpreter.operatorCode`), so a hot `a + b` does
+         * not look its name up in string sets on every evaluation. Not part of the node's value: it is outside the
+         * constructor, so `equals`, `copy` and the wire codec never see it. Racy by design: the answer is a pure
+         * function of the callee's name, so two threads that both compute it write the same number.
+         */
+        @kotlin.concurrent.Volatile
+        var operatorCode: Int = -1
+    }
     data class PropertyGet(val receiver: RNode?, val binding: Binding, override val source: SourceSpan) : RNode
     data class PropertySet(val receiver: RNode?, val binding: Binding, val value: RNode, override val source: SourceSpan) : RNode
     data class If(val condition: RNode, val then: RNode, val otherwise: RNode?, override val source: SourceSpan) : RNode

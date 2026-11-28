@@ -13,7 +13,6 @@ import dev.ide.vm.javaFloatToString
 import dev.ide.vm.nanoTime
 import dev.ide.platform.epochMillis
 import dev.ide.vm.Call
-import kotlin.math.IEEErem
 import kotlin.math.abs
 import kotlin.math.acos
 import kotlin.math.asin
@@ -428,7 +427,7 @@ private fun dev.ide.vm.NativeClassBuilder.mathMethods() {
     static("floor", "(D)D") { ret(floor(d(0))) }
     static("ceil", "(D)D") { ret(ceil(d(0))) }
     static("rint", "(D)D") { ret(round(d(0))) }
-    static("IEEEremainder", "(DD)D") { ret(d(0).IEEErem(d(2))) }
+    static("IEEEremainder", "(DD)D") { ret(ieeeRemainder(d(0), d(2))) }
     static("round", "(F)I") { val v = f(0); ret(if (v.isNaN()) 0 else floor(v + 0.5f).let { if (it >= Int.MAX_VALUE.toFloat()) Int.MAX_VALUE else if (it <= Int.MIN_VALUE.toFloat()) Int.MIN_VALUE else it.toInt() }) }
     static("round", "(D)J") { val v = d(0); ret(if (v.isNaN()) 0L else floor(v + 0.5).toLong()) }
     static("signum", "(F)F") { ret(sign(f(0))) }
@@ -525,3 +524,25 @@ private fun checkRange(vm: dev.ide.vm.Vm, srcSize: Int, srcPos: Int, dstSize: In
 internal fun Call.cls(n: Int): VmClass = (r(n) as VmObject).native as VmClass
 
 
+
+/**
+ * `Math.IEEEremainder`: `x - y * n` where `n` is the integer nearest `x / y`, ties to even. `kotlin.math.IEEErem`
+ * is not in the common stdlib (Kotlin/Wasm lacks it), so this is the portable definition: `rem` is exact
+ * (C's fmod), and the step to the nearest multiple is exact too because the result lies within `|y|`.
+ */
+internal fun ieeeRemainder(x: Double, y: Double): Double {
+    if (x.isNaN() || y.isNaN() || x.isInfinite() || y == 0.0) return Double.NaN
+    if (y.isInfinite()) return x
+    var r = x.rem(y)
+    val ay = abs(y)
+    val half = ay / 2
+    val ar = abs(r)
+    if (ar > half) {
+        r -= if (r > 0) ay else -ay
+    } else if (ar == half) {
+        // A tie: the nearest multiple is the even one. x - r is the multiple of ay already chosen by rem.
+        val q = (x - r) / ay
+        if (q.rem(2.0) != 0.0) r -= if (r > 0) ay else -ay
+    }
+    return r
+}

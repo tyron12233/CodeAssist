@@ -45,8 +45,14 @@ object AgentUiPlugin : UiPlugin {
         // The reverse direction: Claude working on the project through the IDE's MCP server or the relay. A
         // screen so the shell can route to it from places this module cannot reach (the editor, Settings, Home).
         scope.screen(
-            ScreenContribution(AgentService.SCREEN_USE_WITH_CLAUDE, "Use with Claude") { ctx ->
+            ScreenContribution(AgentService.SCREEN_USE_WITH_CLAUDE, "Connect an AI app") { ctx ->
                 UseWithClaudeScreen(ctx.backend, onBack = ctx::back)
+            },
+        )
+        // The provider and key manager as a screen, so Settings → AI → Manage can route to it.
+        scope.screen(
+            ScreenContribution(AgentService.SCREEN_PROVIDERS, "AI providers") { ctx ->
+                AgentProvidersPage(ctx.backend, onClose = ctx::back)
             },
         )
         // The write-permission prompt (ASK_EACH): observes backend.agent.permissionRequest and shows only while
